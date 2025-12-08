@@ -787,7 +787,6 @@ const waylineProgress = ref<any>(null)
 const waylineJobDetail = ref<any>(null)
 
 // 地图更新定时器引用
-let mapUpdateTimerRef: number | null = null
 
 // 舱盖状态警报声相关
 const isAlarmPlaying = ref(false)
@@ -1253,7 +1252,6 @@ const drcStatus = ref({
   drc_mode: 'inactive' as 'active' | 'inactive',
   session: null as string | null
 })
-const drcStatusInterval = ref<number | null>(null)
 
 // DRC模式状态管理
 const isDrcModeActive = ref(false)
@@ -1288,7 +1286,6 @@ const currentGimbalDirection = ref<string | null>(null)
 const GIMBAL_CONTROL_INTERVAL_MS = 200 // 每200ms发送一次云台控制指令
 
 // DRC状态相关
-const DRC_STATUS_CHECK_INTERVAL = 5000 // 每5秒检查一次DRC状态
 
 // 设备状态轮询已合并到useDevicePolling中
 
@@ -1303,8 +1300,6 @@ const videoBid = ref<string | null>(null)
 const refreshingVideo = ref(false)
 
 // 视频流轮询相关
-const videoPollingTimer = ref<number | null>(null)
-const VIDEO_POLLING_INTERVAL = 5000 // 每5秒检查一次是否有无人机视频流
 
 // 视觉WebSocket相关状态
 const {
@@ -2882,77 +2877,50 @@ const reloadVideo = async () => {
     await nextTick()
     startVideoPlayback()
     
-    // 如果成功获取到视频流，停止轮询
-    stopVideoPolling()
   } else {
     // 没有无人机视频，直接不播放
   }
 }
 // 开始视频流轮询
-const startVideoPolling = () => {
-  // 如果已经有轮询定时器，先清除
-  stopVideoPolling()
-  
-  videoPollingTimer.value = setInterval(async () => {
-    // 检查当前是否已经有视频在播放
-    if (videoStreamUrl.value && videoElement.value && !videoElement.value.paused) {
-      return
-    }
-    
-    try {
-      // 尝试重新获取视频流
-      const droneVideoUrl = await refreshVideoCapacityAndCache()
-      
-      if (droneVideoUrl && droneVideoUrl !== videoStreamUrl.value) {
-        // 设置新的视频地址
-        videoStreamUrl.value = droneVideoUrl
-        
-        // 更新 video_streams 中的无人机视频流，保留其他视频流
-        try {
-          const streamsStr = localStorage.getItem('video_streams')
-          const streams = streamsStr ? JSON.parse(streamsStr) : []
-          
-          // 查找并更新无人机可见光视频流
-          const idx = streams.findIndex((s: any) => s.type === 'drone_visible')
-          if (idx >= 0) {
-            streams[idx].url = droneVideoUrl
-          } else {
-            streams.push({ type: 'drone_visible', url: droneVideoUrl, ai_enabled: false })
-          }
-          
-          // 确保机场视频流存在
-          if (!streams.find((s: any) => s.type === 'dock')) {
-            const dockStream = getVideoStream('dock')
-            if (dockStream) {
-              streams.push(dockStream)
-            }
-          }
-          
-          localStorage.setItem('video_streams', JSON.stringify(streams))
-        } catch (error) {
-          console.error('轮询检查：更新video_streams失败:', error)
-        }
-        
-        // 开始播放
-        await nextTick()
-        startVideoPlayback()
-        
-        // 成功获取到视频流，停止轮询
-        stopVideoPolling()
-      } else {
-        // 轮询检查：仍未发现可用的无人机视频流
-      }
-    } catch (error) {
-      // 轮询检查：获取视频流失败
-    }
-  }, VIDEO_POLLING_INTERVAL)
-}
+const startVideoPolling = async () => {
+  // 如果已经有视频在播放，则不再尝试刷新
+  if (videoStreamUrl.value && videoElement.value && !videoElement.value.paused) {
+    return
+  }
 
-// 停止视频流轮询
-const stopVideoPolling = () => {
-  if (videoPollingTimer.value) {
-    clearInterval(videoPollingTimer.value)
-    videoPollingTimer.value = null
+  try {
+    const droneVideoUrl = await refreshVideoCapacityAndCache()
+    if (droneVideoUrl && droneVideoUrl !== videoStreamUrl.value) {
+      videoStreamUrl.value = droneVideoUrl
+
+      try {
+        const streamsStr = localStorage.getItem('video_streams')
+        const streams = streamsStr ? JSON.parse(streamsStr) : []
+
+        const idx = streams.findIndex((s: any) => s.type === 'drone_visible')
+        if (idx >= 0) {
+          streams[idx].url = droneVideoUrl
+        } else {
+          streams.push({ type: 'drone_visible', url: droneVideoUrl, ai_enabled: false })
+        }
+
+        if (!streams.find((s: any) => s.type === 'dock')) {
+          const dockStream = getVideoStream('dock')
+          if (dockStream) {
+            streams.push(dockStream)
+          }
+        }
+
+        localStorage.setItem('video_streams', JSON.stringify(streams))
+      } catch (error) {
+        console.error('检查无人机视频：更新video_streams失败:', error)
+      }
+
+      await nextTick()
+      startVideoPlayback()
+    }
+  } catch (error) {
+    console.error('尝试获取无人机视频流失败:', error)
   }
 }
 
@@ -3932,10 +3900,10 @@ onMounted(async () => {
     })
     
     // 启动统一的设备状态轮询（包含条件轮询）
-    startUnifiedPolling()
+    await startUnifiedPolling()
     
-    // 启动DRC状态轮询
-    startDrcStatusPolling()
+    // 获取DRC状态
+    await checkDrcStatus()
     
     // 监听useDevicePolling中的航线进度数据变化
     watch(pollingWaylineProgress, (newProgress) => {
@@ -3962,35 +3930,22 @@ onMounted(async () => {
     }, { immediate: true })
     
     // 检查控制权限状态
-checkAuthorityStatus()
-
-// 启动权限状态轮询，每10秒检查一次（进一步降低频率，权限状态变化不频繁）
-const authorityInterval = setInterval(checkAuthorityStatus, 10000)
+    checkAuthorityStatus()
     
     // 在组件销毁时清理定时器
     onBeforeUnmount(() => {
       // 停止统一的设备状态轮询
       stopUnifiedPolling()
       
-      if (authorityInterval) {
-        clearInterval(authorityInterval)
-      }
       // 清理云台控制定时器
       if (gimbalControlInterval.value) {
         clearInterval(gimbalControlInterval.value)
         gimbalControlInterval.value = null
       }
-      // 清理视频流轮询定时器
-      stopVideoPolling()
       // 清理水印时间定时器
       if (watermarkTimer) {
         clearInterval(watermarkTimer)
         watermarkTimer = null
-      }
-      
-      // 清理地图标记更新定时器
-      if (mapUpdateTimerRef) {
-        clearInterval(mapUpdateTimerRef)
       }
       
       // 停止并清理警报声
@@ -4063,80 +4018,45 @@ const authorityInterval = setInterval(checkAuthorityStatus, 10000)
     }
     
     // 设置地图标记更新定时器（根据无人机在线状态动态调整更新频率）
-    const startMapUpdateTimer = () => {
-      // 清除现有定时器
-      if (mapUpdateTimerRef) {
-        clearInterval(mapUpdateTimerRef)
+    const refreshMapDisplay = async () => {
+      if (!amapInstance.value) {
+        return
       }
-      
-      // 根据无人机在线状态决定更新频率
-      const isDroneOnline = droneStatus.value?.isOnline
-      const updateInterval = isDroneOnline ? 2000 : 8000 // 在线时2秒，离线时8秒
-      
-      
-      
-      const mapUpdateTimer = setInterval(async () => {
-        
-        // 设备状态更新后，更新地图标记
-        if (amapInstance.value) {
-          updateMapMarkers()
-          // 更新无人机追踪位置
-          updateDroneTracking()
-          // 更新航线显示（只在状态或任务变化时重新绘制）
-          const currentTaskStatus = waylineTaskStatus.value
-          const currentJobId = waylineProgress.value?.job_id
-          // 仅在执行中/暂停/已下发(等待)显示航线
-          const shouldShowWayline = Boolean(currentJobId) && (
-            currentTaskStatus === 'running' ||
-            currentTaskStatus === 'paused' ||
-            currentTaskStatus === 'waiting'
-          )
-          
-          // 检查是否需要重新绘制航线
-          const hasWaylineDisplay = waylineMarkers.value.length > 0 || waylinePolyline.value
-          const stateChanged = waylineDisplayState.value.lastJobId !== currentJobId || 
-                             waylineDisplayState.value.lastTaskStatus !== currentTaskStatus
-          
-          if (shouldShowWayline && (!hasWaylineDisplay || stateChanged)) {
-            
-            await displayWayline()
-            // 更新状态跟踪
-            waylineDisplayState.value.isDisplayed = true
-            waylineDisplayState.value.lastJobId = currentJobId
-            waylineDisplayState.value.lastTaskStatus = currentTaskStatus
-          } else if (!shouldShowWayline && hasWaylineDisplay) {
-            
-            clearWaylineDisplay()
-            // 更新状态跟踪
-            waylineDisplayState.value.isDisplayed = false
-            waylineDisplayState.value.lastJobId = null
-            waylineDisplayState.value.lastTaskStatus = null
-          }
-        }
-      }, updateInterval)
-      
-      // 保存定时器引用以便清理
-      mapUpdateTimerRef = mapUpdateTimer as unknown as number
-    }
-    
-    // 启动地图更新定时器
-    startMapUpdateTimer()
-    
-    // 监听无人机状态变化，动态调整地图更新频率
-    watch(droneStatus, (newStatus) => {
-      if (amapInstance.value) {
-        
-        
-        // 立即更新地图标记，响应状态变化
-        updateMapMarkers()
-        
-        // 重新启动定时器
-        startMapUpdateTimer()
-      }
-    }, { deep: true })
-    
 
-    
+      updateMapMarkers()
+      updateDroneTracking()
+
+      const currentTaskStatus = waylineTaskStatus.value
+      const currentJobId = waylineProgress.value?.job_id
+      const shouldShowWayline = Boolean(currentJobId) && (
+        currentTaskStatus === 'running' ||
+        currentTaskStatus === 'paused' ||
+        currentTaskStatus === 'waiting'
+      )
+
+      const hasWaylineDisplay = waylineMarkers.value.length > 0 || waylinePolyline.value
+      const stateChanged = waylineDisplayState.value.lastJobId !== currentJobId ||
+                           waylineDisplayState.value.lastTaskStatus !== currentTaskStatus
+
+      if (shouldShowWayline && (!hasWaylineDisplay || stateChanged)) {
+        await displayWayline()
+        waylineDisplayState.value.isDisplayed = true
+        waylineDisplayState.value.lastJobId = currentJobId
+        waylineDisplayState.value.lastTaskStatus = currentTaskStatus
+      } else if (!shouldShowWayline && hasWaylineDisplay) {
+        clearWaylineDisplay()
+        waylineDisplayState.value.isDisplayed = false
+        waylineDisplayState.value.lastJobId = null
+        waylineDisplayState.value.lastTaskStatus = null
+      }
+    }
+
+    refreshMapDisplay()
+
+    watch(droneStatus, () => {
+      refreshMapDisplay()
+    }, { deep: true })
+
     loadTodayFlightStatistics()
   } catch (error) {
     console.error('无人机控制页面 - onMounted 执行出错:', error)
@@ -4223,25 +4143,6 @@ const checkDrcStatus = async () => {
   }
 }
 
-// 启动DRC状态轮询
-const startDrcStatusPolling = () => {
-  // 立即检查一次
-  checkDrcStatus()
-  
-  // 设置定时轮询
-  drcStatusInterval.value = setInterval(() => {
-    checkDrcStatus()
-  }, DRC_STATUS_CHECK_INTERVAL)
-  
-}
-
-// 停止DRC状态轮询
-const stopDrcStatusPolling = () => {
-  if (drcStatusInterval.value) {
-    clearInterval(drcStatusInterval.value)
-    drcStatusInterval.value = null
-  }
-}
 const getCachedCapacity = () => {
   const cachedData = localStorage.getItem('livestream_capacity')
   if (cachedData) {
@@ -5091,7 +4992,6 @@ const sendControlCommand = async (dockSn: string, type: string) => {
 // 组件卸载时清理定时器
 onBeforeUnmount(() => {
   stopControl()
-  stopDrcStatusPolling()
   stopVideoPlayback() // 停止视频播放
   disconnectVision() // 断开视觉WebSocket连接
   

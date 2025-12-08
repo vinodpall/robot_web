@@ -11,11 +11,8 @@ export const useTaskProgressStore = defineStore('taskProgress', () => {
   
   // 轮询状态
   const isPolling = ref(false)
-  const pollingTimer = ref<number | null>(null)
   
   // 轮询频率配置
-  const POLLING_INTERVAL_ACTIVE = 3000  // 有任务时：3秒
-  const POLLING_INTERVAL_IDLE = 10000   // 无任务时：10秒
   
   // 任务完成弹窗状态
   const showTaskCompletionDialog = ref(false)
@@ -141,7 +138,7 @@ export const useTaskProgressStore = defineStore('taskProgress', () => {
   }
   
   // 开始轮询任务进度
-  const startPolling = () => {
+  const startPolling = async () => {
     if (isPolling.value) return
     
     isPolling.value = true
@@ -187,44 +184,12 @@ export const useTaskProgressStore = defineStore('taskProgress', () => {
       }
     }
     
-    // 动态轮询函数
-    const startDynamicPolling = () => {
-      // 立即执行一次
-      pollTaskProgress()
-      
-      // 根据任务状态动态调整轮询频率
-      const adjustPollingInterval = () => {
-        // 清除当前定时器
-        if (pollingTimer.value) {
-          clearInterval(pollingTimer.value)
-        }
-        
-        // 根据是否有任务来决定轮询频率
-        const hasActiveTask = waylineProgress.value && waylineProgress.value.job_id
-        const interval = hasActiveTask ? POLLING_INTERVAL_ACTIVE : POLLING_INTERVAL_IDLE
-        
-        // 设置新的定时器
-        pollingTimer.value = setInterval(() => {
-          pollTaskProgress()
-          // 每次轮询后重新调整频率
-          adjustPollingInterval()
-        }, interval) as unknown as number
-      }
-      
-      // 启动动态轮询
-      adjustPollingInterval()
-    }
-    
-    // 启动动态轮询
-    startDynamicPolling()
+    await pollTaskProgress()
+    isPolling.value = false
   }
   
   // 停止轮询
   const stopPolling = () => {
-    if (pollingTimer.value) {
-      clearInterval(pollingTimer.value)
-      pollingTimer.value = null
-    }
     isPolling.value = false
   }
   

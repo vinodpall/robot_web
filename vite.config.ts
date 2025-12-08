@@ -7,14 +7,12 @@ import { resolve } from 'path'
 // 读取环境配置文件
 function loadEnvConfig() {
   try {
-    // 兼容多种启动目录：
-    // 1) 从仓库根目录启动（cwd=项目根），env.local 位于 dji-control-platform/env.local
-    // 2) 从子包目录启动（cwd= dji-control-platform），env.local 位于 ./env.local
-    // 3) 以 vite.config.ts 所在目录为基准
+    // ????????
+    // 1) ???????????cwd=?????env.local ?? ./env.local
+    // 2) ?? vite.config.ts ???????
     const configDir = fileURLToPath(new URL('.', import.meta.url))
     const candidates = [
       resolve(process.cwd(), 'env.local'),
-      resolve(process.cwd(), 'dji-control-platform', 'env.local'),
       resolve(configDir, 'env.local')
     ]
     const existing = candidates.find(p => existsSync(p))
@@ -56,8 +54,8 @@ export default defineConfig(({ mode }) => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     console.log('🔧 Vite配置 - 当前环境:', environment)
     if (environment === 'internet') {
-      console.log('🔧 Vite配置 - 使用外网代理:', 'http://10.10.1.37:8000')
-      return 'http://10.10.1.37:8000'
+      console.log('🔧 Vite配置 - 使用外网代理:', 'http://10.10.1.3:8000')
+      return 'http://10.10.1.3:8000'
     } else {
       console.log('🔧 Vite配置 - 使用内网代理:', 'http://172.16.88.152:8000')
       return 'http://172.16.88.152:8000'

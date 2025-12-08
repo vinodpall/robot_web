@@ -511,7 +511,6 @@ const currentWaypointMarker = ref<any>(null)
 const isDroneTracking = ref(false)
 
 // 地图更新定时器引用
-let mapUpdateTimerRef: number | null = null
 // 远程调试执行函数
 const executeRemoteDebug = async (method: string, params: any = {}) => {
   try {
@@ -1727,19 +1726,20 @@ onMounted(async () => {
   })
   
   // 启动统一的设备状态轮询（包含条件轮询）
-  startUnifiedPolling()
+  await startUnifiedPolling()
   
-  // 设置地图标记更新定时器（每2秒更新一次地图）
-  const mapUpdateTimer = setInterval(() => {
+  // Refresh dock map markers whenever state changes
+  const refreshDockMap = () => {
     if (amapInstance.value) {
       updateMapMarkers()
     }
-  }, 2000)
-  
-  // 保存定时器引用以便清理
-  const mapUpdateTimerRef = mapUpdateTimer
-  
-  // 舱盖状态监听
+  }
+
+  refreshDockMap()
+
+  watch([dockStatus, droneStatus], () => {
+    refreshDockMap()
+  }, { deep: true })
   watch(() => dockStatus.value?.coverState, (newCoverState) => {
     // 只要舱盖不是关闭状态（值不为0）就播放警报声
     if (newCoverState !== 0 && !isAlarmPlaying.value) {
@@ -1775,10 +1775,6 @@ onBeforeUnmount(() => {
   // 停止统一的设备状态轮询
   stopUnifiedPolling()
   
-  // 清理地图标记更新定时器
-  if (mapUpdateTimerRef) {
-    clearInterval(mapUpdateTimerRef)
-  }
   
   // 清理地图标记
   clearDockMarkers()

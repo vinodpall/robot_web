@@ -3,21 +3,24 @@
     <div class="header">
       <div class="header-left">
         <img src="/src/assets/source_data/plane_2.png" alt="logo" class="logo" />
-        <span class="title">无人机管控平台</span>
+        <span class="title">机器人管控平台</span>
       </div>
       
       <nav class="nav-menu">
         <router-link to="/dashboard/home" class="nav-item" :class="{ active: $route.path === '/dashboard/home' }">
           首页
         </router-link>
+        <router-link to="/dashboard/navigation" class="nav-item" :class="{ active: $route.path === '/dashboard/navigation' }">
+          导航管理
+        </router-link>
         <router-link to="/dashboard/drone-control" class="nav-item" :class="{ active: $route.path === '/dashboard/drone-control' || $route.path === '/dashboard/dock-control' }">
-          无人机控制
+          机器人管理
         </router-link>
         <router-link to="/dashboard/mission" class="nav-item" :class="{ active: $route.path.includes('mission') }">
           任务管理
         </router-link>
         <router-link to="/dashboard/device-manage" class="nav-item" :class="{ active: $route.path === '/dashboard/device-manage' || $route.path === '/dashboard/alarm-log' }">
-          设备管理
+          日志管理
         </router-link>
         <router-link to="/dashboard/users" class="nav-item" :class="{ active: $route.path.includes('users') || $route.path.includes('roles') }">
           系统管理
@@ -98,7 +101,6 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useDeviceStore } from '../stores/device'
-import { useDevices } from '../composables/useApi'
 import { dockApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 // 导入背景图片
@@ -214,16 +216,6 @@ onMounted(async () => {
   // 先尝试从本地缓存恢复设备列表
   deviceStore.hydrateFromCache()
 
-  // 如果没有设备，调用接口获取并缓存
-  if (!deviceStore.devices || deviceStore.devices.length === 0) {
-    try {
-      const { fetchDevices } = useDevices()
-      const list = await fetchDevices()
-      deviceStore.setDevices(list)
-    } catch (e) {
-      // 忽略网络错误，保持静默
-    }
-  }
 
   // 恢复并拉取选中机场的状态
   if (selectedDockSn.value) {
@@ -323,7 +315,7 @@ onMounted(async () => {
 .nav-menu {
   display: flex;
   align-items: flex-start;
-  gap: 0;
+  gap: clamp(12px, 2.2vw, 32px);
   position: relative;
   z-index: 1;
   flex: 1;
@@ -333,13 +325,13 @@ onMounted(async () => {
   height: 54px;
   margin-top: 26px;
   border-radius: 0;
-  padding-left: clamp(8vw, 12vw, 18vw); /* 增加内边距范围 */
-  padding-right: clamp(8vw, 12vw, 18vw);
+  padding-left: clamp(6vw, 9vw, 14vw); /* 保证六个菜单均匀分布 */
+  padding-right: clamp(6vw, 9vw, 14vw);
   min-width: 0;
 }
 
 .nav-item {
-  width: clamp(80px, 8vw, 120px); /* 使用clamp自动缩放宽度 */
+  width: clamp(70px, 6vw, 110px); /* 使用clamp自动缩放宽度 */
   height: 54px;
   background: url('/src/assets/source_data/bg_data/title_dark.png') no-repeat;
   background-position: bottom center;
@@ -353,7 +345,6 @@ onMounted(async () => {
   font-style: normal;
   text-transform: none;
   cursor: pointer;
-  margin-right: clamp(40px, 4vw, 70px); /* 使用clamp自动缩放间距 */
   text-decoration: none;
   flex-shrink: 0;
 }
@@ -366,10 +357,6 @@ onMounted(async () => {
   color: #ffffff;
   background: url('/src/assets/source_data/bg_data/title_light.png') no-repeat;
   background-position: bottom center;
-}
-
-.nav-item:last-child {
-  margin-right: 0;
 }
 
 .nav-item.active::after {
@@ -756,14 +743,7 @@ onMounted(async () => {
   .nav-menu {
     padding-left: 12vw;
     padding-right: 12vw;
-  }
-  
-  .nav-item {
-    margin-right: 55px;
-  }
-  
-  .nav-item:last-child {
-    margin-right: 0;
+    gap: clamp(18px, 2.5vw, 36px);
   }
   
   .header-left {
@@ -789,10 +769,10 @@ onMounted(async () => {
   .nav-menu {
     padding-left: 20vw;
     padding-right: 20vw;
+    gap: clamp(20px, 3vw, 40px);
   }
   
   .nav-item {
-    margin-right: 40px;
     width: 100px;
   }
   

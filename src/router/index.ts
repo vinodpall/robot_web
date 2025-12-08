@@ -36,8 +36,7 @@ const router = createRouter({
           name: 'Home',
           component: () => import('../views/Home.vue'),
           meta: { 
-            requiresAuth: true,
-            permission: 'home.view'
+            requiresAuth: true
           }
         },
         {
@@ -45,8 +44,7 @@ const router = createRouter({
           name: 'DroneControl',
           component: () => import('../views/DroneControl.vue'),
           meta: { 
-            requiresAuth: true,
-            permission: 'drone_control.view'
+            requiresAuth: true
           }
         },
         {
@@ -54,8 +52,7 @@ const router = createRouter({
           name: 'DockControl',
           component: () => import('../views/DockControl.vue'),
           meta: { 
-            requiresAuth: true,
-            permission: 'dock_control.view'
+            requiresAuth: true
           }
         },
         {
@@ -63,8 +60,7 @@ const router = createRouter({
           name: 'Mission',
           component: () => import('../views/Mission.vue'),
           meta: { 
-            requiresAuth: true,
-            permission: 'wayline_management.view'
+            requiresAuth: true
           }
         },
         {
@@ -90,8 +86,7 @@ const router = createRouter({
           name: 'DeviceManage',
           component: () => import('../views/DeviceManage.vue'),
           meta: { 
-            requiresAuth: true,
-            permission: 'device_management.view'
+            requiresAuth: true
           }
         },
         {
@@ -108,8 +103,7 @@ const router = createRouter({
           name: 'UserManage',
           component: () => import('../views/UserManage.vue'),
           meta: { 
-            requiresAuth: true,
-            permission: 'system_management.view'
+            requiresAuth: true
           }
         },
         {
@@ -117,8 +111,15 @@ const router = createRouter({
           name: 'RoleManage',
           component: () => import('../views/RoleManage.vue'),
           meta: { 
-            requiresAuth: true,
-            permission: 'role_management.view'
+            requiresAuth: true
+          }
+        },
+        {
+          path: 'navigation',
+          name: 'NavigationManage',
+          component: () => import('../views/NavigationManage.vue'),
+          meta: { 
+            requiresAuth: true
           }
         }
       ]
@@ -140,11 +141,7 @@ router.beforeEach((to, _from, next) => {
     
     // 验证token是否有效（可选：可以在这里添加token过期检查）
     try {
-      const userData = JSON.parse(user)
-      if (!userData || !userData.workspace_id) {
-        next('/login')
-        return
-      }
+      JSON.parse(user)
     } catch (error) {
       next('/login')
       return

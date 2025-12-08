@@ -5,30 +5,24 @@ import type { User, Dock, Drone, Mission, MissionRecord, Alert, Role, Device, Hm
 export const authApi = {
   // 用户登录 - 适配后端API
   login: (username: string, password: string) => {
-    // 使用原生fetch确保请求格式正确
-    const formData = new URLSearchParams()
-    formData.append('username', username)
-    formData.append('password', password)
+    console.log('??????:', { username, password })
     
-    console.log('登录请求参数:', { username, password })
-    console.log('登录请求体:', formData.toString())
-    
-    return fetch(`${API_BASE_URL}/login/access-token`, {
+    return fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/json'
       },
-      body: formData.toString()
+      body: JSON.stringify({ username, password })
     }).then(response => {
-      console.log('登录响应状态:', response.status)
+      console.log('??????:', response.status)
       if (!response.ok) {
         return response.json().then(errorData => {
-          console.error('登录失败:', response.status, errorData)
+          console.error('????:', response.status, errorData)
           throw new Error(`HTTP error! status: ${response.status}`)
         })
       }
       return response.json().then(data => {
-        console.log('登录成功响应:', data)
+        console.log('??????:', data)
         return data
       })
     })

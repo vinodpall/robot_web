@@ -8,7 +8,7 @@
       <div class="login-left">
         <div class="logo-section">
           <img src="/src/assets/source_data/plane_2.png" alt="logo" class="logo" />
-          <h1 class="title">无人机管控平台</h1>
+          <h1 class="title">机器人管控平台</h1>
         </div>
         <div class="drone-illustration">
           <img src="/src/assets/source_data/bg_data/main_pg_front.png" alt="drone" />
@@ -160,11 +160,11 @@ const handleLogin = async () => {
       debugPermissions()
       
       // 权限初始化完成后再跳转
-      router.push('/dashboard')
+      router.push('/dashboard/home')
     } catch (err) {
       console.error('权限初始化失败:', err)
       // 即使权限初始化失败，也允许用户进入系统
-      router.push('/dashboard')
+      router.push('/dashboard/home')
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '登录失败'

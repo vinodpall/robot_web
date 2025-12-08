@@ -2,181 +2,50 @@
   <div class="home-container">
     <!-- 左侧状态栏 -->
     <div class="left-box">
-      <!-- 无人机状态 -->
-      <div class="left-on1">
-        <div class="cardTitle">
-          <img src="@/assets/source_data/bg_data/card_logo.png" alt="" />
-          无人机状态
-        </div>
-        
-
-        
-        <div class="on1-bottom">
-          <div class="b-top">
-            <div class="b-top-left">
-              <div class="zhuangtai4">
-                <div>{{ droneStatus?.isOnline ? '在线' : '离线' }}</div>
-              </div>
-              <div class="img">
-                <img src="@/assets/source_data/plane_2.png" alt="" />
-              </div>
-            </div>
-            <div class="b-top-right">
-              <div class="b-top-rightCard">
-                <div class="b-top-rightDiv">
-                  <img src="@/assets/source_data/speed.png" alt="" />
-                  <div>
-                    <p>{{ formatSpeed(droneStatus?.horizontalSpeed) }}</p>
-                    <p>当前飞行速度</p>
-                  </div>
-                </div>
-                <div class="b-top-rightDiv">
-                  <img src="@/assets/source_data/today_time.png" alt="" />
-                  <div>
-                    <p>{{ formatAccTime(droneStatus?.totalFlightTime) }}</p>
-                    <p>累计运行时间</p>
-                  </div>
-                </div>
-                <div class="b-top-rightDiv">
-                  <img src="@/assets/source_data/total_miles.png" alt="" />
-                  <div>
-                    <p>{{ formatFlightDistance(droneStatus?.totalFlightDistance) }}</p>
-                    <p>累计飞行里程</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="b-bottom">
-            <div class="status-row">
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/longitude.svg" alt="经度" />
-                  <span class="label">经度</span>
-                </div>
-                <span class="value">{{ formatCoordinate(droneDisplayPosition?.longitude, 'longitude') }}</span>
-              </div>
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/latitude.svg" alt="纬度" />
-                  <span class="label">纬度</span>
-                </div>
-                <span class="value">{{ formatCoordinate(droneDisplayPosition?.latitude, 'latitude') }}</span>
-              </div>
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/altitude.svg" alt="高度" />
-                  <span class="label">高度</span>
-                </div>
-                <span class="value">{{ formatHeight(droneDisplayPosition?.height) }}</span>
-              </div>
-              <div class="status-item">
-                <div class="top-row">
-                  <img 
-                    :src="droneStatus?.chargeState === 1 ? droneBatteryChargeIcon : droneBatteryIcon" 
-                    alt="电量" 
-                  />
-                  <span class="label">电量</span>
-                </div>
-                <span class="value">{{ formatBattery(droneStatus?.batteryPercent) }}</span>
-              </div>
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/stars.svg" alt="搜星" />
-                  <span class="label">搜星</span>
-                </div>
-                <span class="value">{{ gpsStatus?.rtkNumber || 0 }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 机场状态 -->
-      <div class="left-on2">
+      <!-- 可见光视频 -->
+      <div class="left-video-card visible-video-card" @click="closeMenus">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          机场状态
+          可见光视频
         </div>
-        <div class="on2-bottom">
-          <div class="b-top">
-            <div class="b-top-left">
-              <div class="zhuangtai4">
-                <div>{{ dockStatus?.isOnline ? '在线' : '离线' }}</div>
-              </div>
-              <div class="img">
-                <img src="@/assets/source_data/dock3.png" alt="" />
-              </div>
-            </div>
-            <div class="b-top-right">
-              <div class="b-top-rightCard">
-                <div class="b-top-rightDiv">
-                  <img src="@/assets/source_data/speed.png" alt="" />
-                  <div>
-                    <p>{{ formatNetworkRate(dockStatus?.networkRate) }}</p>
-                    <p>机场网络速率</p>
-                  </div>
-                </div>
-                <div class="b-top-rightDiv">
-                  <img src="@/assets/source_data/today_time.png" alt="" />
-                  <div>
-                    <p>{{ dockStatus?.jobNumber || 0 }}次</p>
-                    <p>累计任务次数</p>
-                  </div>
-                </div>
-                <div class="b-top-rightDiv">
-                  <img src="@/assets/source_data/total_miles.png" alt="" />
-                  <div>
-                    <p>{{ formatAccTime(dockStatus?.accTime) }}</p>
-                    <p>累计运行时长</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="b-bottom">
-            <div class="status-row">
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/longitude.svg" alt="经度" />
-                  <span class="label">经度</span>
-                </div>
-                <span class="value">{{ formatCoordinate(position?.longitude, 'longitude') }}</span>
-              </div>
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/latitude.svg" alt="纬度" />
-                  <span class="label">纬度</span>
-                </div>
-                <span class="value">{{ formatCoordinate(position?.latitude, 'latitude') }}</span>
-              </div>
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/stock.svg" alt="舱盖" />
-                  <span class="label">舱盖</span>
-                </div>
-                <span class="value">{{ dockStatus?.coverText || '--' }}</span>
-              </div>
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/temperature.svg" alt="温度" />
-                  <span class="label">温度</span>
-                </div>
-                <span class="value">{{ formatTemperature(environment?.environmentTemperature) }}</span>
-              </div>
-              <div class="status-item">
-                <div class="top-row">
-                  <img src="@/assets/source_data/svg_data/humidity.svg" alt="湿度" />
-                  <span class="label">湿度</span>
-                </div>
-                <span class="value">{{ formatHumidity(environment?.humidity) }}</span>
-              </div>
-            </div>
+        <div class="video-card-body video-only-body">
+          <div class="video-only-wrapper">
+            <video 
+              ref="videoElement"
+              class="video-only-element"
+              muted
+              playsinline
+              webkit-playsinline
+            >
+              您的浏览器不支持视频播放
+            </video>
           </div>
         </div>
       </div>
 
-      <!-- 任务下发 -->
+      <!-- 红外视频 -->
+      <div class="left-video-card infrared-card">
+        <div class="cardTitle">
+          <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
+          红外视频
+        </div>
+        <div class="video-card-body video-only-body">
+          <div class="video-only-wrapper">
+            <video 
+              ref="infraredVideoElement"
+              class="video-only-element"
+              muted
+              autoplay
+              playsinline
+              webkit-playsinline
+            >
+              您的浏览器不支持视频播放
+            </video>
+          </div>
+        </div>
+      </div>
+
+<!-- 任务下发 -->
       <div class="left-on3">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
@@ -252,162 +121,30 @@
         </div>
       </div>
 
-      <!-- 环境状态 -->
-      <div class="left-on4">
-        <div class="cardTitle">
-          <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          环境状态
-        </div>
-        <div class="on4-bottom">
-          <div class="env-status">
-            <div class="env-item">
-              <img src="@/assets/source_data/svg_data/env_temperature.svg" alt="温度" />
-              <div class="env-info">
-                <div class="env-label">环境温度</div>
-                <div class="env-value">{{ formatTemperature(environment?.environmentTemperature) }}</div>
-              </div>
-            </div>
-            <div class="env-item">
-              <img src="@/assets/source_data/svg_data/env_wind.svg" alt="风速" />
-              <div class="env-info">
-                <div class="env-label">风速</div>
-                <div class="env-value">{{ formatWindSpeed(environment?.windSpeed) }}</div>
-              </div>
-            </div>
-            <div class="env-item">
-              <img src="@/assets/source_data/svg_data/env_rain.svg" alt="降水量" />
-              <div class="env-info">
-                <div class="env-label">降水量</div>
-                <div class="env-value">{{ formatRainfall(environment?.rainfall) }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- 中间区域 -->
     <div class="center-column">
       <!-- 视频播放区域 -->
       <div class="content-on1" @click="closeMenus">
-        <div class="boxGrid-box">
-          <div class="boxGrid-box-content">
-            <div class="player_container">
-              <div class="player_item">
-                <div class="player_box" id="player_box1">
-                  <!-- 视频播放器 -->
-                  <video 
-                    ref="videoElement"
-                    style="width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;"
-                    muted
-                    playsinline
-                    webkit-playsinline
-                  >
-                    您的浏览器不支持视频播放
-                  </video>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="boxGrid-box-bottom">
-            <div class="left-controls">
-              <!-- 视频时间显示 -->
-              <div class="video-time">
-                <span class="time-display">{{ currentTime }}</span>
-              </div>
-              <!-- 播放控制按钮 -->
-              <div class="play-controls">
-                <button 
-                  class="play-btn" 
-                  @click="togglePlay"
-                  :class="{ 'paused': !isVideoPlaying }"
-                >
-                  <svg v-if="isVideoPlaying" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                  </svg>
-                  <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                </button>
-                <!-- 全屏按钮放在播放按钮右侧 -->
-                <button class="fullscreen-btn" @click="toggleFullscreen" title="全屏">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                  </svg>
-                </button>
-                <!-- 清晰度设置按钮 -->
-                <div class="quality-btn-wrapper" style="display: inline-block;">
-                  <button class="quality-btn" @click.stop="toggleQualityMenu" title="设置清晰度">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
-                    </svg>
-                  </button>
-                </div>
-                <!-- 清晰度菜单 -->
-                <div v-if="showQualityMenu" class="quality-menu" :style="qualityMenuStyle">
-                  <div class="quality-menu-item" @click="handleQualityChange(0)">自适应</div>
-                  <div class="quality-menu-item" @click="handleQualityChange(1)">流畅</div>
-                  <div class="quality-menu-item" @click="handleQualityChange(2)">标清</div>
-                  <div class="quality-menu-item" @click="handleQualityChange(3)">高清</div>
-                  <div class="quality-menu-item" @click="handleQualityChange(4)">超清</div>
-                </div>
-                <!-- 云台切换按钮放在全屏按钮右侧 -->
-                <div class="gimbal-control">
-                  <button 
-                    class="gimbal-btn" 
-                    @click.stop="toggleGimbalMenu"
-                    :disabled="videoLoading"
-                    :class="{ 'loading': videoLoading }"
-                    title="切换视频源"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
-                    </svg>
-                  </button>
-                  <!-- 云台切换菜单 -->
-                  <div class="gimbal-menu" v-if="gimbalMenuVisible" @click.stop>
-                    <div 
-                      class="menu-item" 
-                      @click.stop="switchGimbal('dock')"
-                      :class="{ 'active': currentVideoType === 'dock' }"
-                    >
-                      机场视频
-                    </div>
-                    <div 
-                      class="menu-item" 
-                      @click.stop="switchGimbal('drone_visible')"
-                      :class="{ 'active': currentVideoType === 'drone_visible' }"
-                    >
-                      无人机可见光
-                    </div>
-                    <div 
-                      class="menu-item" 
-                      @click.stop="switchGimbal('drone_infrared')"
-                      :class="{ 'active': currentVideoType === 'drone_infrared' }"
-                    >
-                      无人机辅助相机
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="center-controls">
-            </div>
-            <div class="right-controls" @click="toggleScreenMenu">
-              <!-- 分屏选择菜单 -->
-              <div class="screen-menu" v-if="showScreenMenu">
-                <div class="menu-item" @click="selectScreenMode('一分屏')">一分屏</div>
-                <div class="menu-item" @click="selectScreenMode('二分屏')">二分屏</div>
-                <div class="menu-item" @click="selectScreenMode('四分屏')">四分屏</div>
-                <div class="menu-item" @click="selectScreenMode('六分屏')">六分屏</div>
-                <div class="menu-item" @click="selectScreenMode('九分屏')">九分屏</div>
-              </div>
-            </div>
+        <div class="pointcloud-wrapper">
+          <div class="pointcloud-view">
+            <canvas
+              ref="pointCloudCanvas"
+              class="pointcloud-canvas"
+              tabindex="0"
+              @wheel.prevent="handlePointCloudWheel"
+              @pointerdown="handlePointCloudPointerDown"
+              @keydown="handlePointCloudKeydown"
+              @contextmenu.prevent
+            ></canvas>
+            <div v-if="pointCloudLoading" class="pcd-overlay loading">点云加载中...</div>
+            <div v-else-if="pointCloudError" class="pcd-overlay error">{{ pointCloudError }}</div>
           </div>
         </div>
       </div>
 
-      <!-- 告警信息区域 -->
+<!-- 告警信息区域 -->
       <div class="content-on2">
         <div class="on2-top">
           <span :class="{ active: currentTab === 'device' }" @click="switchTab('device')">设备告警</span>
@@ -482,11 +219,100 @@
 
     <!-- 右侧区域 -->
     <div class="right-column">
-      <!-- 告警趋势卡片 -->
-      <div class="right-on1">
+      <!-- 无人机状态卡片 -->
+      <div class="right-on1 drone-status-card">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          航线报表
+          机器人状态
+        </div>
+        <div class="drone-card-body">
+          <div class="on1-bottom">
+            <div class="b-top">
+              <div class="b-top-left">
+                <div class="zhuangtai4">
+                  <div>{{ droneStatus?.isOnline ? '在线' : '离线' }}</div>
+                </div>
+                <div class="img">
+                  <img src="@/assets/source_data/plane_2.png" alt="" />
+                </div>
+              </div>
+              <div class="b-top-right">
+                <div class="b-top-rightCard">
+                  <div class="b-top-rightDiv">
+                    <img src="@/assets/source_data/speed.png" alt="" />
+                  <div>
+                    <p>{{ formatSpeed(droneStatus?.horizontalSpeed) }}</p>
+                      <p>当前飞行速度</p>
+                  </div>
+                </div>
+                <div class="b-top-rightDiv">
+                  <img src="@/assets/source_data/today_time.png" alt="" />
+                  <div>
+                    <p>{{ formatAccTime(droneStatus?.totalFlightTime) }}</p>
+                      <p>累计运行时间</p>
+                  </div>
+                </div>
+                <div class="b-top-rightDiv">
+                  <img src="@/assets/source_data/total_miles.png" alt="" />
+                  <div>
+                    <p>{{ formatFlightDistance(droneStatus?.totalFlightDistance) }}</p>
+                      <p>累计飞行里程</p>
+                  </div>
+                </div>
+                </div>
+              </div>
+            </div>
+            <div class="b-bottom">
+              <div class="status-row">
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/longitude.svg" alt="经度" />
+                    <span class="label">经度</span>
+                  </div>
+                  <span class="value">{{ formatCoordinate(droneDisplayPosition?.longitude, 'longitude') }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/latitude.svg" alt="纬度" />
+                    <span class="label">纬度</span>
+                  </div>
+                  <span class="value">{{ formatCoordinate(droneDisplayPosition?.latitude, 'latitude') }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/altitude.svg" alt="高度" />
+                    <span class="label">高度</span>
+                  </div>
+                  <span class="value">{{ formatHeight(droneDisplayPosition?.height) }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img 
+                      :src="droneStatus?.chargeState === 1 ? droneBatteryChargeIcon : droneBatteryIcon" 
+                      alt="电量" 
+                    />
+                    <span class="label">电量</span>
+                  </div>
+                  <span class="value">{{ formatBattery(droneStatus?.batteryPercent) }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/stars.svg" alt="搜星" />
+                    <span class="label">搜星</span>
+                  </div>
+                  <span class="value">{{ gpsStatus?.rtkNumber || 0 }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 传感器状态 -->
+      <div class="right-on2 flight-report-card">
+        <div class="cardTitle">
+          <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
+          传感器状态
         </div>
         <div class="chart-container">
           <div v-if="loadingFlightStats" class="loading-container">
@@ -499,11 +325,11 @@
         </div>
       </div>
 
-      <!-- 航线任务卡片 -->
-      <div class="right-on2">
+      <!-- 任务统计 -->
+      <div class="right-on3">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          航线任务
+          任务统计
         </div>
         <div class="chart-container">
           <div class="task-content">
@@ -523,8 +349,6 @@
               <div class="chart-box">
                 <div class="progress-circle-container">
                   <div class="progress-circle">
-                    <!-- 外环：进度显示环（按实际进度渲染蓝色已巡检比例） -->
-                    <!-- 独立的外部光晕层，避免被mask裁剪导致的阴影不可见问题 -->
                     <div 
                       class="progress-circle-outer-glow" 
                       :class="{ 'completed': waylineProgressPercent >= 100 }"
@@ -561,7 +385,6 @@
               <div class="chart-box">
                 <div class="progress-circle-container">
                   <div class="progress-circle">
-                    <!-- 外环：任务状态显示环 -->
                     <div class="task-status-outer-ring" :class="{ 'error': waylineTaskStatus === 'failed' }"></div>
                     <div class="progress-circle-center">
                       <div class="progress-text">
@@ -587,24 +410,8 @@
         </div>
       </div>
 
-      <!-- 地图信息卡片 -->
-      <div class="right-on3">
-        <div class="cardTitle">
-          <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          地图信息
-        </div>
-        <div class="map-container" ref="mapContainer">
-          <!-- 无人机追踪按钮 -->
-          <div class="drone-track-btn" @click="toggleDroneTracking" :class="{ 'active': isDroneTracking }" :title="isDroneTracking ? '取消追踪' : '追踪无人机'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
-  
+
   <!-- 下发任务弹窗 -->
   <div v-if="dispatchTaskDialog.visible" class="custom-dialog-mask">
     <div class="dispatch-task-modal">
@@ -733,14 +540,16 @@
           <button class="mission-btn mission-btn-pause" @click="onDispatchTaskConfirm">确定</button>
         </div>
       </div>
-          </div>
+
     </div>
+  </div>
     
     <!-- 大图显示模态框 -->
     <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
       <img :src="bigImageUrl" class="big-image" @click.stop />
     </div>
-  </template>
+  </div>
+</template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
@@ -758,6 +567,7 @@ import mapDroneIcon from '@/assets/source_data/svg_data/map_drone.svg'
 import droneArrowIcon from '@/assets/source_data/svg_data/drone_control_svg/drone_arrow.svg'
 import droneBatteryIcon from '@/assets/source_data/svg_data/drone_battery.svg'
 import droneBatteryChargeIcon from '@/assets/source_data/svg_data/drone_battery_charge.svg'
+const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 
 
 const router = useRouter()
@@ -934,6 +744,452 @@ const waylineJobDetail = computed(() => taskProgressStore.waylineJobDetail)
 const flightStatistics = ref<any>(null)
 const loadingFlightStats = ref(false)
 const flightStatsError = ref('')
+
+type PointCloudPoint = { x: number; y: number; z: number; intensity: number }
+type RawPointCloudPoint = { x: number; y: number; z?: number; intensityValue?: number }
+type PcdHeaderInfo = {
+  fields: string[]
+  size: number[]
+  type: string[]
+  count: number[]
+  points: number
+  width: number
+  height: number
+  dataType: string
+  dataStartIndex: number
+}
+const pointCloudCanvas = ref<HTMLCanvasElement | null>(null)
+const pointCloudData = ref<PointCloudPoint[]>([])
+const pointCloudLoading = ref(false)
+const pointCloudError = ref('')
+const pointCloudScale = ref(1)
+const pointCloudRotationX = ref(-(20 * Math.PI) / 180)
+const pointCloudRotationY = ref(0)
+const pointCloudPanX = ref(0)
+const pointCloudPanY = ref(0)
+const pointCloudPointSize = ref(0.5)
+const isPointCloudDragging = ref(false)
+let lastPointerX = 0
+let lastPointerY = 0
+let activePointerId: number | null = null
+let pointCloudDragMode: 'rotate' | 'pan' | null = null
+
+const generateMockPointCloud = (count = 800): PointCloudPoint[] => {
+  return Array.from({ length: count }, () => ({
+    x: Math.random(),
+    y: Math.random(),
+    z: Math.random(),
+    intensity: Math.random()
+  }))
+}
+
+const normalizePointCloud = (rawPoints: RawPointCloudPoint[]): PointCloudPoint[] => {
+  if (!rawPoints.length) return []
+
+  const xs = rawPoints.map(p => p.x)
+  const ys = rawPoints.map(p => p.y)
+  const zs = rawPoints.map(p => p.z ?? 0)
+
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const minZ = Math.min(...zs)
+  const maxZ = Math.max(...zs)
+
+  const rangeX = maxX - minX
+  const rangeY = maxY - minY
+  const rangeZ = maxZ - minZ
+  const maxRange = Math.max(rangeX, rangeY, rangeZ, 1e-6)
+
+  const centerX = (maxX + minX) / 2
+  const centerY = (maxY + minY) / 2
+  const centerZ = (maxZ + minZ) / 2
+
+  const intensityValues = rawPoints
+    .map(p => (p.intensityValue !== undefined && Number.isFinite(p.intensityValue) ? p.intensityValue : undefined))
+    .filter((val): val is number => typeof val === 'number')
+  const minIntensity = intensityValues.length ? Math.min(...intensityValues) : 0
+  const maxIntensity = intensityValues.length ? Math.max(...intensityValues) : 1
+  const intensityRange = maxIntensity - minIntensity || 1
+
+  return rawPoints.map(point => {
+    const centeredZ = point.z ?? centerZ
+    let normalizedIntensity: number
+    if (point.intensityValue !== undefined && Number.isFinite(point.intensityValue)) {
+      normalizedIntensity = (point.intensityValue - minIntensity) / intensityRange
+    } else if (point.z !== undefined && Number.isFinite(point.z)) {
+      normalizedIntensity = (point.z - minZ) / (rangeZ || 1)
+    } else {
+      normalizedIntensity = 0.5
+    }
+    normalizedIntensity = Math.min(1, Math.max(0, normalizedIntensity))
+
+    return {
+      x: (point.x - centerX) / maxRange,
+      y: (point.y - centerY) / maxRange,
+      z: (centeredZ - centerZ) / maxRange,
+      intensity: normalizedIntensity
+    }
+  })
+}
+
+const parseAsciiPcdContent = (content: string): PointCloudPoint[] => {
+  const lines = content.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0 && !line.startsWith('#'))
+  const dataIndex = lines.findIndex(line => line.toLowerCase().startsWith('data'))
+  if (dataIndex === -1) return []
+  const headerLines = lines.slice(0, dataIndex)
+  const dataLines = lines.slice(dataIndex + 1)
+  const fieldsLine = headerLines.find(line => line.toLowerCase().startsWith('fields'))
+  const fields = fieldsLine ? fieldsLine.split(/\s+/).slice(1) : []
+  const xIndex = fields.indexOf('x')
+  const yIndex = fields.indexOf('y')
+  const zIndex = fields.indexOf('z')
+  const intensityIndex = fields.findIndex(field => field === 'intensity' || field === 'rgb')
+  if (xIndex === -1 || yIndex === -1) return []
+
+  const rawPoints = dataLines.map(line => line.split(/\s+/))
+    .filter(parts => parts.length > Math.max(xIndex, yIndex))
+    .map(parts => {
+      const x = parseFloat(parts[xIndex])
+      const y = parseFloat(parts[yIndex])
+      const z = zIndex !== -1 ? parseFloat(parts[zIndex]) : 0
+      const intensityValue = intensityIndex !== -1 && parts[intensityIndex] !== undefined ? parseFloat(parts[intensityIndex]) : undefined
+      return { x, y, z, intensityValue }
+    })
+    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+
+  return normalizePointCloud(rawPoints)
+}
+
+const readBinaryValue = (view: DataView, offset: number, type: string, size: number) => {
+  switch (type) {
+    case 'F':
+      if (size === 8) return view.getFloat64(offset, true)
+      return view.getFloat32(offset, true)
+    case 'I':
+      if (size === 1) return view.getInt8(offset)
+      if (size === 2) return view.getInt16(offset, true)
+      return view.getInt32(offset, true)
+    case 'U':
+      if (size === 1) return view.getUint8(offset)
+      if (size === 2) return view.getUint16(offset, true)
+      return view.getUint32(offset, true)
+    default:
+      return view.getFloat32(offset, true)
+  }
+}
+
+const extractPcdHeaderInfo = (buffer: ArrayBuffer): PcdHeaderInfo => {
+  const bytes = new Uint8Array(buffer)
+  const decoder = new TextDecoder('utf-8')
+  let lineStart = 0
+  let dataStartIndex = buffer.byteLength
+  const headerInfo: PcdHeaderInfo = {
+    fields: [],
+    size: [],
+    type: [],
+    count: [],
+    points: 0,
+    width: 0,
+    height: 0,
+    dataType: 'ascii',
+    dataStartIndex: buffer.byteLength
+  }
+
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0x0a) {
+      const line = decoder.decode(bytes.slice(lineStart, i)).replace(/\r/g, '').trim()
+      const lowerLine = line.toLowerCase()
+      if (lowerLine.startsWith('fields')) {
+        headerInfo.fields = line.split(/\s+/).slice(1)
+      } else if (lowerLine.startsWith('size')) {
+        headerInfo.size = line.split(/\s+/).slice(1).map(val => Number(val) || 0)
+      } else if (lowerLine.startsWith('type')) {
+        headerInfo.type = line.split(/\s+/).slice(1).map(val => val.toUpperCase())
+      } else if (lowerLine.startsWith('count')) {
+        headerInfo.count = line.split(/\s+/).slice(1).map(val => Number(val) || 1)
+      } else if (lowerLine.startsWith('points')) {
+        const [, value] = line.split(/\s+/)
+        headerInfo.points = Number(value) || 0
+      } else if (lowerLine.startsWith('width')) {
+        const [, value] = line.split(/\s+/)
+        headerInfo.width = Number(value) || 0
+      } else if (lowerLine.startsWith('height')) {
+        const [, value] = line.split(/\s+/)
+        headerInfo.height = Number(value) || 0
+      } else if (lowerLine.startsWith('data')) {
+        const parts = line.split(/\s+/)
+        headerInfo.dataType = parts[1]?.toLowerCase() || 'ascii'
+        dataStartIndex = i + 1
+        break
+      }
+      lineStart = i + 1
+    }
+  }
+
+  headerInfo.dataStartIndex = dataStartIndex
+  if (!headerInfo.count.length && headerInfo.fields.length) {
+    headerInfo.count = headerInfo.fields.map(() => 1)
+  }
+  return headerInfo
+}
+
+const parseBinaryPcdContent = (buffer: ArrayBuffer, headerInfo: PcdHeaderInfo): PointCloudPoint[] => {
+  const counts = headerInfo.count.length ? headerInfo.count : headerInfo.fields.map(() => 1)
+  const stride = headerInfo.fields.reduce((sum, _, idx) => {
+    const size = headerInfo.size[idx] || 0
+    const count = counts[idx] || 1
+    return sum + size * count
+  }, 0)
+  if (!stride) return []
+
+  const bytesAvailable = buffer.byteLength - headerInfo.dataStartIndex
+  if (bytesAvailable <= 0) return []
+
+  const totalPoints = headerInfo.points || (headerInfo.width * headerInfo.height) || 0
+  const maxReadablePoints = Math.floor(bytesAvailable / stride)
+  const pointsToRead = totalPoints > 0 ? Math.min(totalPoints, maxReadablePoints) : maxReadablePoints
+
+  const view = new DataView(buffer, headerInfo.dataStartIndex)
+  const rawPoints: RawPointCloudPoint[] = []
+
+  for (let pointIndex = 0; pointIndex < pointsToRead; pointIndex++) {
+    const baseOffset = pointIndex * stride
+    let fieldOffset = 0
+    let truncated = false
+    const point: RawPointCloudPoint = { x: 0, y: 0, z: 0 }
+
+    for (let fieldIndex = 0; fieldIndex < headerInfo.fields.length; fieldIndex++) {
+      const field = headerInfo.fields[fieldIndex]
+      const size = headerInfo.size[fieldIndex] || 0
+      const repeat = counts[fieldIndex] || 1
+      const type = headerInfo.type[fieldIndex] || 'F'
+
+      for (let repeatIndex = 0; repeatIndex < repeat; repeatIndex++) {
+        const valueOffset = baseOffset + fieldOffset + repeatIndex * size
+        if (valueOffset + size > bytesAvailable) {
+          truncated = true
+          break
+        }
+
+        if (field === 'rgb') {
+          const rgbValue = view.getUint32(valueOffset, true)
+          const r = rgbValue & 0xff
+          const g = (rgbValue >> 8) & 0xff
+          const b = (rgbValue >> 16) & 0xff
+          point.intensityValue = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        } else {
+          const value = readBinaryValue(view, valueOffset, type, size)
+          if (field === 'x') point.x = value
+          else if (field === 'y') point.y = value
+          else if (field === 'z') point.z = value
+          else if (field === 'intensity') point.intensityValue = value
+        }
+      }
+
+      if (truncated) break
+      fieldOffset += size * repeat
+    }
+
+    if (truncated) break
+    if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
+      rawPoints.push(point)
+    }
+  }
+
+  return normalizePointCloud(rawPoints)
+}
+
+const parsePcdBuffer = (buffer: ArrayBuffer): PointCloudPoint[] => {
+  const headerInfo = extractPcdHeaderInfo(buffer)
+  if (!headerInfo.fields.length) return []
+
+  if (headerInfo.dataType === 'binary') {
+    return parseBinaryPcdContent(buffer, headerInfo)
+  }
+
+  if (headerInfo.dataType === 'binary_compressed') {
+    console.warn('暂不支持 binary_compressed PCD 数据')
+    return []
+  }
+
+  return parseAsciiPcdContent(new TextDecoder('utf-8').decode(buffer))
+}
+
+const clampPointCloudScale = (value: number) => {
+  const MIN_SCALE = 0.5
+  const MAX_SCALE = 3
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value))
+}
+
+const adjustPointCloudScale = (delta: number) => {
+  pointCloudScale.value = clampPointCloudScale(pointCloudScale.value + delta)
+}
+
+const clampPointCloudPointSize = (value: number) => {
+  const MIN_SIZE = 0.5
+  const MAX_SIZE = 3
+  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, value))
+}
+
+const handlePointCloudWheel = (event: WheelEvent) => {
+  const direction = event.deltaY < 0 ? 1 : -1
+  adjustPointCloudScale(direction * 0.1)
+  drawPointCloud()
+}
+
+const handlePointCloudKeydown = (event: KeyboardEvent) => {
+  const target = event.target as HTMLElement | null
+  const tagName = target?.tagName
+  const isTypingElement = tagName === 'INPUT' || tagName === 'TEXTAREA' || target?.isContentEditable
+  if (isTypingElement || event.ctrlKey || event.metaKey || event.altKey) {
+    return
+  }
+
+  if (event.key === '+' || event.key === '=') {
+    pointCloudPointSize.value = clampPointCloudPointSize(pointCloudPointSize.value + 0.1)
+    drawPointCloud()
+    event.preventDefault()
+  } else if (event.key === '-' || event.key === '_') {
+    pointCloudPointSize.value = clampPointCloudPointSize(pointCloudPointSize.value - 0.1)
+    drawPointCloud()
+    event.preventDefault()
+  }
+}
+
+const handlePointCloudPointerMove = (event: PointerEvent) => {
+  if (!isPointCloudDragging.value || (activePointerId !== null && event.pointerId !== activePointerId)) return
+  const deltaX = event.clientX - lastPointerX
+  const deltaY = event.clientY - lastPointerY
+  lastPointerX = event.clientX
+  lastPointerY = event.clientY
+  if (pointCloudDragMode === 'pan') {
+    const canvas = pointCloudCanvas.value
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    pointCloudPanX.value += deltaX / rect.width
+    pointCloudPanY.value += deltaY / rect.height
+  } else {
+    pointCloudRotationY.value += deltaX * 0.005
+    const nextPitch = pointCloudRotationX.value - deltaY * 0.005
+    const clampPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, nextPitch))
+    pointCloudRotationX.value = clampPitch
+  }
+  drawPointCloud()
+}
+
+const stopPointCloudDragging = () => {
+  if (!isPointCloudDragging.value) return
+  isPointCloudDragging.value = false
+  activePointerId = null
+  pointCloudDragMode = null
+  window.removeEventListener('pointermove', handlePointCloudPointerMove)
+  window.removeEventListener('pointerup', stopPointCloudDragging)
+  window.removeEventListener('pointercancel', stopPointCloudDragging)
+}
+
+const handlePointCloudPointerDown = (event: PointerEvent) => {
+  event.preventDefault()
+  if (isPointCloudDragging.value) return
+  lastPointerX = event.clientX
+  lastPointerY = event.clientY
+  isPointCloudDragging.value = true
+  activePointerId = event.pointerId
+  const shouldPan = event.button === 2 || (event.button === 0 && event.ctrlKey)
+  pointCloudDragMode = shouldPan ? 'pan' : 'rotate'
+  window.addEventListener('pointermove', handlePointCloudPointerMove)
+  window.addEventListener('pointerup', stopPointCloudDragging)
+  window.addEventListener('pointercancel', stopPointCloudDragging)
+}
+
+const drawPointCloud = () => {
+  const canvas = pointCloudCanvas.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return
+
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+  if ((ctx as any).resetTransform) {
+    ;(ctx as any).resetTransform()
+  } else {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+  }
+  ctx.scale(dpr, dpr)
+  ctx.fillStyle = '#020915'
+  ctx.fillRect(0, 0, rect.width, rect.height)
+
+  const yaw = pointCloudRotationY.value
+  const pitch = pointCloudRotationX.value
+  const cosYaw = Math.cos(yaw)
+  const sinYaw = Math.sin(yaw)
+  const cosPitch = Math.cos(pitch)
+  const sinPitch = Math.sin(pitch)
+  const baseScale = Math.min(rect.width, rect.height) * 0.8 * pointCloudScale.value
+  const panOffsetX = pointCloudPanX.value * rect.width
+  const panOffsetY = pointCloudPanY.value * rect.height
+  const cameraDistance = 2.2
+  const depthScale = 1.4
+
+  pointCloudData.value.forEach(point => {
+    const centeredX = point.x
+    const centeredY = -point.z
+    const centeredZ = point.y
+
+    const xzRotatedX = centeredX * cosYaw + centeredZ * sinYaw
+    const xzRotatedZ = -centeredX * sinYaw + centeredZ * cosYaw
+
+    const yRotatedY = centeredY * cosPitch - xzRotatedZ * sinPitch
+    const yRotatedZ = centeredY * sinPitch + xzRotatedZ * cosPitch
+
+    const perspectiveZ = yRotatedZ * depthScale
+    const perspective = cameraDistance / (cameraDistance - perspectiveZ)
+    const projectedX = xzRotatedX * baseScale * perspective + rect.width / 2 + panOffsetX
+    const projectedY = yRotatedY * baseScale * perspective + rect.height / 2 + panOffsetY
+
+    if (projectedX < -100 || projectedX > rect.width + 100 || projectedY < -100 || projectedY > rect.height + 100) {
+      return
+    }
+
+    const radius = (1.2 + point.intensity * 2) * perspective * pointCloudPointSize.value
+    const red = Math.floor(40 + point.intensity * 200)
+    const green = Math.floor(120 + point.intensity * 100)
+    const blue = 255
+    ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${0.35 + point.intensity * 0.4})`
+    ctx.beginPath()
+    ctx.arc(projectedX, projectedY, radius, 0, Math.PI * 2)
+    ctx.fill()
+  })
+}
+
+const refreshPointCloud = async () => {
+  pointCloudLoading.value = true
+  pointCloudError.value = ''
+  try {
+    const response = await fetch(tinymapPcdUrl)
+    if (!response.ok) {
+      throw new Error('PCD 文件加载失败')
+    }
+    const buffer = await response.arrayBuffer()
+    const parsedPoints = parsePcdBuffer(buffer)
+    pointCloudData.value = parsedPoints.length ? parsedPoints : generateMockPointCloud()
+    await nextTick()
+    drawPointCloud()
+  } catch (error) {
+    console.error('点云数据解析失败', error)
+    pointCloudError.value = '点云数据加载失败，请检查 tinyMap.pcd 文件'
+    pointCloudData.value = generateMockPointCloud()
+    await nextTick()
+    drawPointCloud()
+  } finally {
+    pointCloudLoading.value = false
+  }
+}
 
 // 设备状态刷新定时器
 let statusRefreshTimer: number | null = null
@@ -1885,6 +2141,12 @@ const updateMapMarkers = (shouldCenter = false) => {
 const isVideoPlaying = ref(false)
 const currentTime = ref('00:00')
 const totalTime = ref('00:00')
+const infraredVideoElement = ref<HTMLVideoElement | null>(null)
+const infraredVideoPlayer = ref<any>(null)
+const infraredStreamUrl = ref('')
+const infraredLoading = ref(false)
+const infraredError = ref('')
+let infraredPc: RTCPeerConnection | null = null
 
 // 初始化视频播放器
 const initVideoPlayer = () => {
@@ -2146,6 +2408,182 @@ const reloadVideo = () => {
   setTimeout(() => {
     startVideoPlayback()
   }, 500)
+}
+
+const initInfraredVideo = () => {
+  const stream = getVideoStream('drone_infrared')
+  if (stream) {
+    infraredStreamUrl.value = stream.url
+    infraredError.value = ''
+  } else {
+    infraredError.value = '未找到红外视频流'
+  }
+}
+
+const startInfraredPlayback = () => {
+  if (!infraredVideoElement.value || !infraredStreamUrl.value) return
+
+  infraredLoading.value = true
+  infraredError.value = ''
+
+  if (infraredVideoPlayer.value) {
+    infraredVideoPlayer.value.pause()
+    infraredVideoPlayer.value.unload()
+    infraredVideoPlayer.value.detachMediaElement()
+    infraredVideoPlayer.value.destroy()
+    infraredVideoPlayer.value = null
+  }
+
+  const videoEl = infraredVideoElement.value
+  videoEl.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+
+  if (infraredStreamUrl.value.startsWith('webrtc://')) {
+    startInfraredWebRTCPlayback()
+    return
+  }
+
+  if (infraredStreamUrl.value.startsWith('rtmp://')) {
+    if (flvjs.isSupported()) {
+      const flvUrl = infraredStreamUrl.value.replace(/^rtmp:\/\/[^\/]+/, config.api.domain)
+      infraredVideoPlayer.value = flvjs.createPlayer({
+        type: 'flv',
+        url: flvUrl,
+        isLive: true,
+        hasAudio: false,
+        hasVideo: true
+      }, {
+        enableStashBuffer: false,
+        stashInitialSize: 128,
+        enableWorker: true,
+        lazyLoad: false,
+        autoCleanupSourceBuffer: true
+      })
+      infraredVideoPlayer.value.attachMediaElement(videoEl)
+      infraredVideoPlayer.value.load()
+      infraredVideoPlayer.value.play().finally(() => {
+        infraredLoading.value = false
+      })
+    } else {
+      infraredError.value = '当前浏览器不支持红外流播放'
+      infraredLoading.value = false
+    }
+    return
+  }
+
+  videoEl.src = infraredStreamUrl.value
+  videoEl.load()
+  videoEl.play().then(() => {
+    infraredLoading.value = false
+  }).catch(() => {
+    infraredError.value = '红外视频加载失败'
+    infraredLoading.value = false
+  })
+}
+
+const startInfraredWebRTCPlayback = async () => {
+  const serverUrl = infraredStreamUrl.value
+  if (!serverUrl || !infraredVideoElement.value) {
+    infraredLoading.value = false
+    return
+  }
+
+  try {
+    stopInfraredWebRTCPlayback()
+    infraredPc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' }
+      ]
+    })
+
+    infraredPc.ontrack = (e) => {
+      if (!infraredVideoElement.value) return
+      infraredVideoElement.value.srcObject = e.streams[0]
+      infraredVideoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+      infraredVideoElement.value.play().catch(() => {
+        infraredError.value = '红外视频播放失败'
+      })
+      infraredLoading.value = false
+    }
+
+    infraredPc.oniceconnectionstatechange = () => {
+      if (infraredPc?.iceConnectionState === 'failed') {
+        infraredError.value = '红外连接失败'
+        stopInfraredWebRTCPlayback()
+      }
+    }
+
+    const offer = await infraredPc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true
+    })
+    await infraredPc.setLocalDescription(offer)
+    const apiUrl = buildApiUrl(serverUrl)
+    const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sdp: offer.sdp,
+        streamurl: serverUrl
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error('WebRTC信令失败')
+    }
+
+    const data = await response.json()
+    if (data.code !== 0) {
+      throw new Error(data.msg || 'WebRTC播放失败')
+    }
+
+    await infraredPc.setRemoteDescription({
+      type: 'answer',
+      sdp: data.sdp
+    })
+    infraredLoading.value = false
+  } catch (error) {
+    infraredError.value = '红外视频播放失败'
+    infraredLoading.value = false
+    stopInfraredWebRTCPlayback()
+  }
+}
+
+const stopInfraredWebRTCPlayback = () => {
+  if (infraredPc) {
+    infraredPc.close()
+    infraredPc = null
+  }
+}
+
+const stopInfraredPlayback = () => {
+  stopInfraredWebRTCPlayback()
+  if (infraredVideoPlayer.value) {
+    infraredVideoPlayer.value.pause()
+    infraredVideoPlayer.value.unload()
+    infraredVideoPlayer.value.detachMediaElement()
+    infraredVideoPlayer.value.destroy()
+    infraredVideoPlayer.value = null
+  }
+  if (infraredVideoElement.value) {
+    infraredVideoElement.value.pause()
+    infraredVideoElement.value.src = ''
+    infraredVideoElement.value.load()
+  }
+}
+
+const reloadInfraredStream = () => {
+  const stream = getVideoStream('drone_infrared')
+  if (!stream) {
+    infraredError.value = '未找到红外视频流'
+    return
+  }
+  stopInfraredPlayback()
+  infraredStreamUrl.value = ''
+  nextTick(() => {
+    infraredStreamUrl.value = stream.url
+  })
 }
 
 // 航线选择相关
@@ -3040,6 +3478,27 @@ watch(() => videoStreamUrl.value, (newUrl) => {
   }
 })
 
+watch(() => infraredStreamUrl.value, (newUrl) => {
+  if (!newUrl) return
+  nextTick(() => {
+    startInfraredPlayback()
+  })
+})
+
+watch(pointCloudData, () => {
+  nextTick(() => drawPointCloud())
+})
+
+watch(pointCloudCanvas, (canvas) => {
+  if (canvas && pointCloudData.value.length > 0) {
+    nextTick(() => drawPointCloud())
+  }
+})
+
+watch([pointCloudScale, pointCloudRotationX, pointCloudRotationY, pointCloudPanX, pointCloudPanY, pointCloudPointSize], () => {
+  nextTick(() => drawPointCloud())
+})
+
 // 组件挂载时初始化
 onMounted(async () => {
   console.log('开始初始化首页')
@@ -3070,6 +3529,8 @@ onMounted(async () => {
   
   // 初始化视频播放器
   initVideoPlayer()
+  initInfraredVideo()
+  await refreshPointCloud()
   
   // 初始化图表
   nextTick(() => {
@@ -3082,12 +3543,14 @@ onMounted(async () => {
 
   // 添加全局点击事件监听器，用于点击空白处关闭菜单
   document.addEventListener('click', handleGlobalClick)
+  window.addEventListener('keydown', handlePointCloudKeydown)
 
   window.addEventListener('resize', () => {
     alarmTrendChart?.resize()
     taskPieChart1?.resize()
     taskPieChart2?.resize()
     lineChart?.resize()
+    drawPointCloud()
   })
 
   console.log('数据加载完成，开始初始化地图')
@@ -3173,9 +3636,11 @@ onMounted(async () => {
 
 // 组件卸载时清理
 onUnmounted(() => {
-  // 移除全局点击事件监听器
+  // 移除全局事件监听
   document.removeEventListener('click', handleGlobalClick)
-  
+  window.removeEventListener('keydown', handlePointCloudKeydown)
+  stopPointCloudDragging()
+
   // 清理机场状态刷新定时器
   if (statusRefreshTimer) {
     clearInterval(statusRefreshTimer)
@@ -3211,6 +3676,7 @@ onUnmounted(() => {
   
   // 停止视频播放
   stopVideoPlayback()
+  stopInfraredPlayback()
   
   // 清理WebRTC资源
   if (pc) {
@@ -4006,12 +4472,21 @@ const centerToDroneMarker = () => {
 
 /* 左侧列样式 */
 .left-box {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 3.5fr 3.5fr 3fr;
   height: calc(100vh - 124px); /* 64px导航栏 + 20px间距 + 40px内边距 */
   overflow-y: auto;
   width: clamp(280px, 28vw, 480px);
   gap: 20px; /* 统一卡片间距 */
+}
+
+.left-box > * {
+  min-height: 0;
+}
+
+.left-box .left-video-card,
+.left-box .left-on3 {
+  min-height: 0;
 }
 
 /* 自定义滚动条样式 */
@@ -4034,7 +4509,7 @@ const centerToDroneMarker = () => {
 }
 
 /* 左侧卡片通用样式 */
-.left-on1, .left-on2, .left-on3, .left-on4 {
+.left-on1, .left-on2, .left-on3 {
   overflow: hidden;
   margin-bottom: 0; /* 移除margin-bottom，使用gap控制间距 */
 }
@@ -4055,17 +4530,11 @@ const centerToDroneMarker = () => {
 
 .left-on3 {
   width: 100%;
-  height: calc((100vh - 124px) * 0.2 - 20px);
   background-image: url('@/assets/source_data/bg_data/card_first_body.png');
   background-size: 100% 100%;
-}
-
-.left-on4 {
-  width: 100%;
-  height: calc((100vh - 124px) * 0.134);
-  background-image: url('@/assets/source_data/bg_data/card_first_body.png');
-  background-size: 100% 100%;
-  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .cardTitle {
@@ -4585,6 +5054,53 @@ const centerToDroneMarker = () => {
   z-index: 1;
 }
 
+.pointcloud-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  padding: 4px;
+  background: rgba(0, 12, 23, 0.2);
+  border-radius: 6px;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 2;
+}
+
+.pointcloud-view {
+  flex: 1;
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid rgba(89, 192, 252, 0.2);
+  background: radial-gradient(circle at 20% 20%, rgba(89, 192, 252, 0.2), transparent 45%),
+              radial-gradient(circle at 80% 10%, rgba(255, 128, 0, 0.12), transparent 40%),
+              radial-gradient(circle at 50% 80%, rgba(0, 225, 255, 0.2), transparent 50%),
+              #020915;
+  overflow: hidden;
+}
+
+.pointcloud-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.pcd-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 9, 21, 0.6);
+  color: #fff;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.pcd-overlay.error {
+  background: rgba(255, 77, 79, 0.2);
+  color: #ff6b6b;
+}
+
 .boxGrid-box {
   width: 100%;
   height: 100%;
@@ -4690,6 +5206,79 @@ const centerToDroneMarker = () => {
   background: rgba(0, 12, 23, .8);
   position: relative;
   z-index: 3;
+}
+
+.drone-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.drone-video-panel {
+  border: 1px solid rgba(89, 192, 252, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.infrared-card .infrared-video-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.infrared-video-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.infrared-refresh {
+  padding: 4px 14px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid rgba(89, 192, 252, 0.5);
+  color: #59c0fc;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.infrared-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.infrared-refresh:not(:disabled):hover {
+  background: rgba(89, 192, 252, 0.1);
+}
+
+.infrared-player-box {
+  min-height: 200px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(89, 192, 252, 0.2);
+  background: #000;
+  position: relative;
+}
+
+.infrared-player {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  background: #000;
+}
+
+.infrared-player video {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
 }
 
 /* 清晰度设置按钮样式（与无人机控制页一致） */
@@ -4898,12 +5487,16 @@ const centerToDroneMarker = () => {
 
 /* 右侧列样式 */
 .right-column {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 3.5fr 3.5fr 3fr;
   gap: 20px; /* 统一卡片间距 */
   height: calc(100vh - 124px);
   overflow-y: auto;
   width: clamp(280px, 28vw, 480px);
+}
+
+.right-column > * {
+  min-height: 0;
 }
 
 .right-column::-webkit-scrollbar {
@@ -4923,7 +5516,6 @@ const centerToDroneMarker = () => {
 .right-column::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 168, 255, 0.5);
 }
-
 .icon-back {
   width: 24px;
   height: 24px;
@@ -4976,44 +5568,50 @@ const centerToDroneMarker = () => {
 }
 
 /* 环境状态样式 */
-.env-status {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: clamp(15px, 2vh, 20px) clamp(15px, 2vw, 20px) clamp(15px, 2vh, 20px) clamp(8px, 1vw, 10px);
-  height: 100%;
-  gap: clamp(30px, 4vw, 40px);
-}
-
-.env-item {
-  display: flex;
-  align-items: center;
-  gap: clamp(10px, 1.5vw, 15px);
-}
-
-.env-item img {
-  width: clamp(32px, 4vw, 38px);
-  height: clamp(32px, 4vw, 38px);
-  filter: brightness(0) saturate(100%) invert(80%) sepia(33%) saturate(7493%) hue-rotate(157deg) brightness(101%) contrast(101%);
-}
-
-.env-info {
+.left-video-card {
+  width: 100%;
+  background-image: url('@/assets/source_data/bg_data/card_first_body.png');
+  background-size: 100% 100%;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
-  gap: clamp(4px, 0.8vh, 6px);
 }
 
-.env-label {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: clamp(12px, 1vw, 13px);
-  min-width: clamp(60px, 5vw, 65px);
-  white-space: nowrap;
+.left-video-card .cardTitle {
+  margin-bottom: 0;
 }
 
-.env-value {
-  color: #67d5fd;
-  font-size: clamp(16px, 1.2vw, 18px);
-  font-weight: 500;
+.video-card-body {
+  padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.video-only-body {
+  padding: 0;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.video-only-wrapper {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+  display: flex;
+  flex: 1;
+}
+
+.video-only-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .right-controls {
@@ -5103,6 +5701,11 @@ const centerToDroneMarker = () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 100%;
+}
+
+.right-on1 {
+  position: relative;
 }
 
 .cardTitle {
@@ -5124,24 +5727,6 @@ const centerToDroneMarker = () => {
   width: 18px;
   height: 18px;
   margin-right: 8px;
-}
-
-.right-on1,
-.right-on2 {
-  height: calc((100vh - 124px) * 0.333 - 20px);
-}
-
-.right-on3 {
-  flex: 1;
-  min-height: 0;
-  /* 保持卡片风格一致 */
-  width: 100%;
-  background-image: url('@/assets/source_data/bg_data/card_first_body.png');
-  background-size: 100% 100%;
-  margin-bottom: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 .chart-container {
@@ -5515,18 +6100,7 @@ const centerToDroneMarker = () => {
 
 
 /* 地图容器样式 */
-.map-container {
-  height: calc(100% - 41px - 10px); /* 41px为标题高度，10px为上下5px间距 */
-  margin: 5px;
-  overflow: hidden;
-  position: relative;
-  border-radius: 4px;
-  background: #0a1929;
-}
-
-:deep(.amap-copyright) {
-  display: none !important;
-}
+*** End Patch
 
 /* 航线任务卡片响应式样式 */
 @media (max-width: 1400px) {
@@ -5727,98 +6301,6 @@ const centerToDroneMarker = () => {
   font-size: 20px;
 }
 
-.map-search-input {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 220px;
-  height: 36px;
-  border-radius: 18px;
-  border: none;
-  padding: 0 16px;
-  font-size: 15px;
-  background: rgba(0,0,0,0.6);
-  color: #fff;
-  z-index: 20;
-  outline: none;
-}
-.map-search-list {
-  position: absolute;
-  top: 56px;
-  right: 16px;
-  width: 220px;
-  max-height: 200px;
-  overflow-y: auto;
-  background: #fff;
-  color: #333;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  z-index: 21;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.map-search-list li {
-  padding: 8px 16px;
-  cursor: pointer;
-}
-.map-search-list li:hover {
-  background: #f0f0f0;
-}
-
-.map-search-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.7);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 30;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.map-search-btn:hover {
-  background: #00a8ff;
-}
-.map-search-modal {
-  position: absolute;
-  top: 16px;
-  right: 64px;
-  background: rgba(0,0,0,0.92);
-  border-radius: 10px;
-  padding: 18px 48px 18px 18px;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.18);
-}
-.map-search-modal-input {
-  width: 220px;
-  height: 36px;
-  border-radius: 18px;
-  border: none;
-  padding: 0 16px;
-  font-size: 15px;
-  background: #fff;
-  color: #333;
-  outline: none;
-}
-.map-search-modal-close {
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  background: none;
-  border: none;
-  color: #888;
-  font-size: 22px;
-  cursor: pointer;
-  z-index: 41;
-}
 
 .video-time {
   display: flex;
@@ -6218,42 +6700,6 @@ const centerToDroneMarker = () => {
 
 .switch-container.active .switch-toggle {
   left: 21px;
-}
-
-.drone-track-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: rgba(22, 34, 51, 0.9);
-  border: 1px solid #164159;
-  border-radius: 50%;
-  color: #b8c7d9;
-  cursor: pointer;
-  transition: all 0.2s;
-  backdrop-filter: blur(4px);
-}
-
-.drone-track-btn:hover {
-  background: rgba(103, 213, 253, 0.1);
-  border-color: #67d5fd;
-  color: #67d5fd;
-}
-
-.drone-track-btn.active {
-  background: rgba(103, 213, 253, 0.2);
-  border-color: #67d5fd;
-  color: #67d5fd;
-}
-
-.drone-track-btn svg {
-  width: 16px;
-  height: 16px;
 }
 
 /* 时间提示样式 */

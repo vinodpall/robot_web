@@ -65,17 +65,17 @@ const internetConfig: EnvironmentConfig = {
     domain: '/api/v1' // 同域部署，使用相对路径
   },
   websocket: {
-    host: '10.10.1.37',
+    host: '10.10.1.3',
     port: 8000,
-    fullUrl: 'ws://10.10.1.37:8000'
+    fullUrl: 'ws://10.10.1.3:8000'
   },
   video: {
-    webrtcDomain: 'webrtc://10.10.1.37:8000',
-    rtmpDomain: 'rtmp://10.10.1.37:8000'
+    webrtcDomain: 'webrtc://10.10.1.3:8000',
+    rtmpDomain: 'rtmp://10.10.1.3:8000'
   },
   services: {
-    vision: 'http://10.10.1.37:8000',
-    livestream: 'http://10.10.1.37:8000'
+    vision: 'http://10.10.1.3:8000',
+    livestream: 'http://10.10.1.3:8000'
   }
 }
 
