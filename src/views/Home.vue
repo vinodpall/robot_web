@@ -53,69 +53,111 @@
         </div>
         <div class="on3-bottom">
           <div class="on3-bottom-center">
-            <div class="control-row">
-              <div class="div">航线名称：</div>
-              <div class="wayline-select-wrapper">
-                <select 
-                  v-model="selectedWayline" 
-                  class="wayline-select"
-                >
-                  <option value="">请选择</option>
-                  <option 
-                    v-for="wayline in waylineFiles"
-                    :key="wayline.wayline_id"
-                    :value="wayline.wayline_id"
-                  >
-                    {{ wayline.name }}
-                  </option>
-                </select>
-                <span class="wayline-custom-arrow">
-                  <svg width="12" height="12" viewBox="0 0 12 12">
-                    <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                  </svg>
-                </span>
-              </div>
-              <div class="button-group">
-                <span class="span" v-permission-click-dialog="'home.task.issue'" @click="handleDispatchTask">下发任务</span>
-                <span 
-                  class="span1" 
-                  v-permission-click-dialog="'home.task.cancel'"
-                  @click="handleCancelTask"
-                >
-                  取消任务
-                </span>
-              </div>
+            <div class="task-toggle-row">
+              <span class="task-toggle-button" @click="handleEnableNavigation">开启导航</span>
+              <span class="task-toggle-button" @click="handleEnableIns">开启INS</span>
+              <span class="task-toggle-button" @click="handleEnableMsf">开启MSF</span>
             </div>
-            <!-- 修改第二行的结构 -->
-            <div class="control-row second-row">
-              <span 
-                class="span" 
-                v-permission-click-dialog="'home.wayline.pause'"
-                @click="handlePauseRoute"
-              >
-                航线暂停
-              </span>
-              <span 
-                class="span" 
-                v-permission-click-dialog="'home.wayline.resume'"
-                @click="handleResumeRoute"
-              >
-                航线恢复
-              </span>
-              <span 
-                class="span" 
-                v-permission-click-dialog="'home.drone.return'"
-                @click="handleReturnHome"
-              >
-                一键返航
-              </span>
-              <span 
-                class="span1" 
-                v-permission-click-dialog="'home.drone.cancel_return'"
-                @click="handleCancelReturnHome"
-              >
-                取消返航
-              </span>
+            <div class="wayline-control-list">
+              <div class="control-row">
+                <div class="div">循迹任务：</div>
+                <div class="wayline-select-wrapper">
+                  <select 
+                    v-model="selectedWayline" 
+                    class="wayline-select"
+                  >
+                    <option value="">请选择</option>
+                    <option 
+                      v-for="wayline in waylineFiles"
+                      :key="wayline.wayline_id"
+                      :value="wayline.wayline_id"
+                    >
+                      {{ wayline.name }}
+                    </option>
+                  </select>
+                  <span class="wayline-custom-arrow">
+                    <svg width="12" height="12" viewBox="0 0 12 12">
+                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                    </svg>
+                  </span>
+                </div>
+                <div class="button-group">
+                  <span class="span" v-permission-click-dialog="'home.task.issue'" @click="handleDispatchTask">下发任务</span>
+                  <span 
+                    class="span1" 
+                    v-permission-click-dialog="'home.task.cancel'"
+                    @click="handleCancelTask"
+                  >
+                    取消任务
+                  </span>
+                </div>
+              </div>
+              <div class="control-row">
+                <div class="div">发布点任务：</div>
+                <div class="wayline-select-wrapper">
+                  <select 
+                    v-model="selectedPointTask" 
+                    class="wayline-select"
+                  >
+                    <option value="">请选择</option>
+                    <option 
+                      v-for="wayline in waylineFiles"
+                      :key="wayline.wayline_id"
+                      :value="wayline.wayline_id"
+                    >
+                      {{ wayline.name }}
+                    </option>
+                  </select>
+                  <span class="wayline-custom-arrow">
+                    <svg width="12" height="12" viewBox="0 0 12 12">
+                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                    </svg>
+                  </span>
+                </div>
+                <div class="button-group">
+                  <span class="span" v-permission-click-dialog="'home.task.issue'" @click="handleDispatchPointTask">下发任务</span>
+                  <span 
+                    class="span1" 
+                    v-permission-click-dialog="'home.task.cancel'"
+                    @click="handleCancelTask"
+                  >
+                    取消任务
+                  </span>
+                </div>
+              </div>
+              <div class="control-row">
+                <div class="div">多任务组：</div>
+                <div class="wayline-select-wrapper">
+                  <select 
+                    v-model="selectedMultiTask" 
+                    class="wayline-select"
+                  >
+                    <option value="">请选择</option>
+                    <option 
+                      v-for="wayline in waylineFiles"
+                      :key="wayline.wayline_id"
+                      :value="wayline.wayline_id"
+                    >
+                      {{ wayline.name }}
+                    </option>
+                  </select>
+                  <span class="wayline-custom-arrow">
+                    <svg width="12" height="12" viewBox="0 0 12 12">
+                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                    </svg>
+                  </span>
+                </div>
+                <div class="button-group">
+                  <span class="span" v-permission-click-dialog="'home.task.issue'" @click="handleDispatchMultiTask">下发任务</span>
+                  <span 
+                    class="span1" 
+                    v-permission-click-dialog="'home.task.cancel'"
+                    @click="handleCancelTask"
+                  >
+                    取消任务
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -161,7 +203,7 @@
                 <th v-if="currentTab === 'device'" title="告警时间">告警时间</th>
                 
                 <!-- 巡检告警列标题 -->
-                <th v-if="currentTab === 'inspection'" title="航线名称">航线名称</th>
+                <th v-if="currentTab === 'inspection'" title="循迹任务">循迹任务</th>
                 <th v-if="currentTab === 'inspection'" title="目标图片">目标图片</th>
                 <th v-if="currentTab === 'inspection'" title="目标数量">目标数量</th>
                 <th v-if="currentTab === 'inspection'" title="算法名称">算法名称</th>
@@ -773,6 +815,16 @@ let lastPointerX = 0
 let lastPointerY = 0
 let activePointerId: number | null = null
 let pointCloudDragMode: 'rotate' | 'pan' | null = null
+let pointCloudFrameRequested = false
+
+const schedulePointCloudRender = () => {
+  if (pointCloudFrameRequested) return
+  pointCloudFrameRequested = true
+  requestAnimationFrame(() => {
+    pointCloudFrameRequested = false
+    drawPointCloud()
+  })
+}
 
 const generateMockPointCloud = (count = 800): PointCloudPoint[] => {
   return Array.from({ length: count }, () => ({
@@ -1036,7 +1088,7 @@ const clampPointCloudPointSize = (value: number) => {
 const handlePointCloudWheel = (event: WheelEvent) => {
   const direction = event.deltaY < 0 ? 1 : -1
   adjustPointCloudScale(direction * 0.1)
-  drawPointCloud()
+  schedulePointCloudRender()
 }
 
 const handlePointCloudKeydown = (event: KeyboardEvent) => {
@@ -1049,11 +1101,11 @@ const handlePointCloudKeydown = (event: KeyboardEvent) => {
 
   if (event.key === '+' || event.key === '=') {
     pointCloudPointSize.value = clampPointCloudPointSize(pointCloudPointSize.value + 0.1)
-    drawPointCloud()
+    schedulePointCloudRender()
     event.preventDefault()
   } else if (event.key === '-' || event.key === '_') {
     pointCloudPointSize.value = clampPointCloudPointSize(pointCloudPointSize.value - 0.1)
-    drawPointCloud()
+    schedulePointCloudRender()
     event.preventDefault()
   }
 }
@@ -1076,7 +1128,7 @@ const handlePointCloudPointerMove = (event: PointerEvent) => {
     const clampPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, nextPitch))
     pointCloudRotationX.value = clampPitch
   }
-  drawPointCloud()
+  schedulePointCloudRender()
 }
 
 const stopPointCloudDragging = () => {
@@ -1179,13 +1231,13 @@ const refreshPointCloud = async () => {
     const parsedPoints = parsePcdBuffer(buffer)
     pointCloudData.value = parsedPoints.length ? parsedPoints : generateMockPointCloud()
     await nextTick()
-    drawPointCloud()
+    schedulePointCloudRender()
   } catch (error) {
     console.error('点云数据解析失败', error)
     pointCloudError.value = '点云数据加载失败，请检查 tinyMap.pcd 文件'
     pointCloudData.value = generateMockPointCloud()
     await nextTick()
-    drawPointCloud()
+    schedulePointCloudRender()
   } finally {
     pointCloudLoading.value = false
   }
@@ -2588,6 +2640,8 @@ const reloadInfraredStream = () => {
 
 // 航线选择相关
 const selectedWayline = ref('')
+const selectedPointTask = ref('')
+const selectedMultiTask = ref('')
 const showWaylineDropdown = ref(false)
 
 // 算法选项
@@ -2636,7 +2690,16 @@ const loadWaylineFiles = async () => {
     })
     // 默认选择第一条数据
     if (waylineFiles.value && waylineFiles.value.length > 0) {
-      selectedWayline.value = waylineFiles.value[0].wayline_id
+      const firstId = waylineFiles.value[0].wayline_id
+      if (!selectedWayline.value) {
+        selectedWayline.value = firstId
+      }
+      if (!selectedPointTask.value) {
+        selectedPointTask.value = firstId
+      }
+      if (!selectedMultiTask.value) {
+        selectedMultiTask.value = firstId
+      }
     }
   } catch (err) {
     // 静默处理错误
@@ -2649,37 +2712,32 @@ const getCurrentWaylineName = computed(() => {
   return currentWayline ? currentWayline.name : '请选择'
 })
 
-// 下发任务处理
-const handleDispatchTask = () => {
-  // 获取当前选中的航线信息
-  const currentWayline = waylineFiles.value.find(f => f.wayline_id === selectedWayline.value)
+const dispatchWaylineTask = (waylineId: string, taskLabel: string) => {
+  const currentWayline = waylineFiles.value.find(f => f.wayline_id === waylineId)
   if (!currentWayline) {
-    alert('请先选择一个航线')
+    alert(`请先选择一个${taskLabel}`)
     return
   }
-  
-  // 获取缓存的设备序列号
+
   const deviceSns = getCachedDeviceSns()
   if (!deviceSns.dockSns || deviceSns.dockSns.length === 0) {
     alert('未找到可用的设备')
     return
   }
 
-  // 低电量提示（小于30%时给予二次确认）
   const currentBatteryPercent = typeof droneStatus.value?.batteryPercent === 'number' 
     ? Math.round(droneStatus.value.batteryPercent as number) 
     : null
   if (currentBatteryPercent !== null && currentBatteryPercent < 30) {
-    const confirmContinue = window.confirm(`当前电量为${currentBatteryPercent}%，低于30%，不建议飞行。是否继续下发任务？`)
+    const confirmContinue = window.confirm(`当前电量为${currentBatteryPercent}%，低于30%，不建议飞行。是否继续下发${taskLabel}？`)
     if (!confirmContinue) {
       return
     }
   }
   
-  // 初始化弹窗数据
   dispatchTaskDialog.value.form = {
-    name: `航线任务_${Date.now()}`,
-    dock_sn: deviceSns.dockSns[0], // 使用第一个机场设备
+    name: `${taskLabel}_${Date.now()}`,
+    dock_sn: deviceSns.dockSns[0],
     file_id: currentWayline.wayline_id,
     task_type: 0,
     out_of_control_action: 0,
@@ -2698,6 +2756,31 @@ const handleDispatchTask = () => {
   }
   
   dispatchTaskDialog.value.visible = true
+}
+
+// 下发任务处理
+const handleDispatchTask = () => {
+  dispatchWaylineTask(selectedWayline.value, '航线任务')
+}
+
+const handleDispatchPointTask = () => {
+  dispatchWaylineTask(selectedPointTask.value, '发布点任务')
+}
+
+const handleDispatchMultiTask = () => {
+  dispatchWaylineTask(selectedMultiTask.value, '多任务')
+}
+
+const handleEnableNavigation = () => {
+  console.log('开启导航功能触发')
+}
+
+const handleEnableIns = () => {
+  console.log('开启INS功能触发')
+}
+
+const handleEnableMsf = () => {
+  console.log('开启MSF功能触发')
 }
 
 // 返回当前本地时间+4分钟（到分钟）的最小值，供 datetime-local 作为最小值
@@ -3486,17 +3569,17 @@ watch(() => infraredStreamUrl.value, (newUrl) => {
 })
 
 watch(pointCloudData, () => {
-  nextTick(() => drawPointCloud())
+  schedulePointCloudRender()
 })
 
 watch(pointCloudCanvas, (canvas) => {
   if (canvas && pointCloudData.value.length > 0) {
-    nextTick(() => drawPointCloud())
+    schedulePointCloudRender()
   }
 })
 
 watch([pointCloudScale, pointCloudRotationX, pointCloudRotationY, pointCloudPanX, pointCloudPanY, pointCloudPointSize], () => {
-  nextTick(() => drawPointCloud())
+  schedulePointCloudRender()
 })
 
 // 组件挂载时初始化
@@ -4885,22 +4968,49 @@ const centerToDroneMarker = () => {
   gap: clamp(10px, 2vh, 15px);
   height: 100%;
   padding: clamp(5px, 1vh, 10px) 0;
+  justify-content: flex-start;
+}
+
+.task-toggle-row {
+  display: flex;
+  gap: 12px;
+}
+
+.task-toggle-button {
+  flex: 1;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  border-radius: 4px;
+  background: #0c3c56;
+  color: #67d5fd;
+  font-size: 12px;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.task-toggle-button:hover {
+  background: #0c4666;
+  border-color: rgba(103, 213, 253, 0.8);
+}
+
+.wayline-control-list {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 2vh, 15px);
+  margin-top: auto;
 }
 
 .control-row {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
   width: 100%;
   justify-content: flex-start;
 }
 
-.control-row:first-child {
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.control-row:first-child .wayline-select-wrapper {
+.control-row .wayline-select-wrapper {
   flex: 3;
   margin: 0 10px;
   min-width: 150px;
@@ -4921,6 +5031,10 @@ const centerToDroneMarker = () => {
   color: rgba(255, 255, 255, 0.8);
   font-size: 12px;
   white-space: nowrap;
+  width: 72px;
+  text-align: right;
+  padding-right: 4px;
+  flex-shrink: 0;
 }
 
 .control-row .span {
@@ -5543,7 +5657,7 @@ const centerToDroneMarker = () => {
 
 .button-group {
   display: flex;
-  gap: 8px;
+  gap: 16px;
   flex-shrink: 0;
 }
 
