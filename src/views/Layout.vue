@@ -2,8 +2,8 @@
   <div class="layout-container">
     <div class="header">
       <div class="header-left">
-        <img src="/src/assets/source_data/plane_2.png" alt="logo" class="logo" />
-        <span class="title">机器人管控平台</span>
+        <img src="/src/assets/source_data/dog_logo.svg" alt="logo" class="logo" />
+        <span class="title">机器狗管控平台</span>
       </div>
       
       <nav class="nav-menu">
@@ -35,7 +35,7 @@
                @click.stop="toggleSelect">
             <div class="el-select__selection">
               <div class="el-select__selected-item el-select__placeholder">
-                <span>{{ selectedDock?.device_name || '选择机场' }}</span>
+                <span>{{ selectedDock?.device_name || '请选择' }}</span>
               </div>
             </div>
             <div class="el-select__suffix">
@@ -287,6 +287,7 @@ onMounted(async () => {
   height: clamp(24px, 3vw, 36px);
   filter: brightness(0) saturate(100%) invert(100%);
   flex-shrink: 0;
+  margin-left: 5px;
 }
 
 .title {

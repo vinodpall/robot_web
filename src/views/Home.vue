@@ -189,69 +189,37 @@
 <!-- 告警信息区域 -->
       <div class="content-on2">
         <div class="on2-top">
-          <span :class="{ active: currentTab === 'device' }" @click="switchTab('device')">设备告警</span>
-          <span :class="{ active: currentTab === 'inspection' }" @click="switchTab('inspection')">任务告警</span>
+          <span class="active">实时警情</span>
         </div>
         <div class="on2-bottom">
           <table class="tableOne">
             <thead>
               <tr>
-                <th v-if="currentTab === 'device'" title="设备名称">设备名称</th>
-                <th v-if="currentTab === 'device'" title="报警内容">报警内容</th>
-                <th v-if="currentTab === 'device'" title="报警类型">报警类型</th>
-                <th v-if="currentTab === 'device'" title="告警等级">告警等级</th>
-                <th v-if="currentTab === 'device'" title="告警时间">告警时间</th>
-                
-                <!-- 巡检告警列标题 -->
-                <th v-if="currentTab === 'inspection'" title="循迹任务">循迹任务</th>
-                <th v-if="currentTab === 'inspection'" title="目标图片">目标图片</th>
-                <th v-if="currentTab === 'inspection'" title="目标数量">目标数量</th>
-                <th v-if="currentTab === 'inspection'" title="算法名称">算法名称</th>
-                <th v-if="currentTab === 'inspection'" title="告警时间">告警时间</th>
+                <th title="相机名称">相机名称</th>
+                <th title="警情类型">警情类型</th>
+                <th title="图片">图片</th>
+                <th title="内容">内容</th>
+                <th title="报警时间">报警时间</th>
               </tr>
             </thead>
             <tbody>
-              <!-- 设备告警行 -->
-              <tr v-if="currentTab === 'device'" v-for="(item, index) in currentAlarmData" :key="`device-${index}`">
-                <td :title="item.deviceName || '--'">{{ item.deviceName }}</td>
-                <td :title="item.content || '--'">{{ item.content }}</td>
-                <td :title="item.type || '--'">{{ item.type }}</td>
-                <td :title="item.level || '--'">
-                  <span :style="{ color: item.level === '严重' ? '#FF8000' : '' }">
-                    {{ item.level }}
-                  </span>
+              <!-- 实时警情行 -->
+              <tr v-for="(item, index) in deviceAlarmData" :key="`alert-${index}`">
+                <td :title="item.deviceName || '--'">{{ item.deviceName || '--' }}</td>
+                <td :title="item.type || '--'">{{ item.type || '--' }}</td>
+                <td :title="item.imageUrl ? '点击查看大图' : '暂无图片'">
+                  <span v-if="!item.imageUrl" class="no-image">--</span>
+                  <img 
+                    v-else
+                    :src="item.imageUrl"
+                    alt="警情图片"
+                    class="target-image-small"
+                    @click="handleAlertImageClick(item.imageUrl)"
+                    style="cursor:pointer;"
+                  />
                 </td>
-                <td :title="item.time || '--'">{{ item.time }}</td>
-              </tr>
-              
-              <!-- 巡检告警行 -->
-              <tr v-if="currentTab === 'inspection'" v-for="(item, index) in currentAlarmData" :key="`inspection-${index}`">
-                <td :title="item.wayline_name || '--'">{{ item.wayline_name || '--' }}</td>
-                <td :title="item.thumbnail_image_url ? '点击查看大图' : '暂无图片'">
-                  <template v-if="item.thumbnail_image_url">
-                    <img 
-                      v-if="thumbCache[item.thumbnail_image_url] && !thumbError[item.thumbnail_image_url]"
-                      :src="thumbCache[item.thumbnail_image_url]"
-                      alt="目标图片"
-                      class="target-image-small"
-                      @click="handleInspectionImageClick(item.marked_image_url)"
-                      style="cursor:pointer;"
-                    />
-                    <div v-else-if="thumbLoading[item.thumbnail_image_url]" class="loading-image-small">
-                      <span>加载中...</span>
-                    </div>
-                    <div v-else-if="thumbError[item.thumbnail_image_url]" class="loading-image-small">
-                      <span style='color:#f66;'>加载失败</span>
-                    </div>
-                  </template>
-                  <div v-else-if="item.marked_image_url" class="loading-image-small">
-                    <span>加载中...</span>
-                  </div>
-                  <span v-else class="no-image">--</span>
-                </td>
-                <td :title="`目标数量: ${item.target_count || 0}`" style="text-align: center;">{{ item.target_count || 0 }}</td>
-                <td :title="getAlgorithmName(item.target_type)">{{ getAlgorithmName(item.target_type) }}</td>
-                <td :title="formatTimestamp(item.detection_time)">{{ formatTimestamp(item.detection_time) }}</td>
+                <td :title="item.content || '--'">{{ item.content || '--' }}</td>
+                <td :title="item.time || '--'">{{ item.time || '--' }}</td>
               </tr>
             </tbody>
           </table>
@@ -275,7 +243,7 @@
                   <div>{{ droneStatus?.isOnline ? '在线' : '离线' }}</div>
                 </div>
                 <div class="img">
-                  <img src="@/assets/source_data/plane_2.png" alt="" />
+                  <img src="@/assets/source_data/dog.png" alt="" />
                 </div>
               </div>
               <div class="b-top-right">
@@ -305,7 +273,8 @@
               </div>
             </div>
             <div class="b-bottom">
-              <div class="status-row">
+              <div class="status-grid">
+                <!-- 第一行 -->
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/longitude.svg" alt="经度" />
@@ -344,26 +313,87 @@
                   </div>
                   <span class="value">{{ gpsStatus?.rtkNumber || 0 }}</span>
                 </div>
+                
+                <!-- 第二行 -->
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/longitude.svg" alt="速度" />
+                    <span class="label">速度</span>
+                  </div>
+                  <span class="value">{{ formatSpeed(droneStatus?.horizontalSpeed) }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/latitude.svg" alt="坐标" />
+                    <span class="label">坐标</span>
+                  </div>
+                  <span class="value">WGS84</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/altitude.svg" alt="电压" />
+                    <span class="label">电压</span>
+                  </div>
+                  <span class="value">{{ droneStatus?.batteryVoltage ? (droneStatus.batteryVoltage / 1000).toFixed(1) + 'V' : '--' }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/stars.svg" alt="电流" />
+                    <span class="label">电流</span>
+                  </div>
+                  <span class="value">{{ droneStatus?.batteryCurrent ? (droneStatus.batteryCurrent / 1000).toFixed(2) + 'A' : '--' }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/longitude.svg" alt="地面" />
+                    <span class="label">地面</span>
+                  </div>
+                  <span class="value">{{ droneDisplayPosition?.height ? formatHeight(droneDisplayPosition.height) : '--' }}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 传感器状态 -->
-      <div class="right-on2 flight-report-card">
+      <!-- 机器人控制 -->
+      <div class="right-on2 robot-control-card">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          传感器状态
+          机器人控制
         </div>
-        <div class="chart-container">
-          <div v-if="loadingFlightStats" class="loading-container">
-            <div class="loading-text">加载中...</div>
+        <div class="robot-control-container">
+          <div class="robot-control-grid">
+            <!-- 第一行 -->
+            <button class="control-button active" @click="handleControlClick('stand')">起立</button>
+            <button class="control-button disabled" disabled>力控模式</button>
+            <button class="control-button active emergency" @click="handleControlClick('emergencyStop')">急停</button>
+            
+            <!-- 第二行 -->
+            <button class="control-button active" @click="handleControlClick('startMove')">开始运动</button>
+            <button class="control-button active" @click="handleControlClick('crawl')">匍匐姿态</button>
+            <button class="control-button active" @click="handleControlClick('autoMode')">非手动模式</button>
+            
+            <!-- 第三行 -->
+            <button class="control-button active" @click="handleControlClick('walkGait')">行走步态</button>
+            <button class="control-button active" @click="handleControlClick('obstacleGait')">超障步态</button>
+            <button class="control-button active" @click="handleControlClick('slopeGait')">斜坡步态</button>
+            
+            <!-- 第四行 -->
+            <button class="control-button active" @click="handleControlClick('stairGait')">楼梯步态</button>
+            <button class="control-button active" @click="handleControlClick('stairFollowGait')">顺楼梯步态</button>
+            <button class="control-button active" @click="handleControlClick('stair45Gait')">45°楼梯步态</button>
+            
+            <!-- 第五行 -->
+            <button class="control-button disabled" disabled>L步态</button>
+            <button class="control-button active" @click="handleControlClick('mountainGait')">山地步态</button>
+            <button class="control-button active" @click="handleControlClick('quietGait')">静音步态</button>
+            
+            <!-- 第六行 -->
+            <button class="control-button active" @click="handleControlClick('startCharge')">开始充电</button>
+            <button class="control-button active" @click="handleControlClick('endCharge')">结束充电</button>
+            <button class="control-button active" @click="handleControlClick('resetCharge')">重置充电</button>
           </div>
-          <div v-else-if="!flightStatistics || !flightStatistics.daily_stats || flightStatistics.daily_stats.length === 0" class="empty-container">
-            <div class="empty-text">暂无数据</div>
-          </div>
-          <div v-else :ref="el => lineChartRef = el as HTMLElement" class="trend-chart"></div>
         </div>
       </div>
 
@@ -778,6 +808,13 @@ const closeBigImage = () => {
   bigImageUrl.value = ''
 }
 
+// 处理警情图片点击
+const handleAlertImageClick = (imageUrl: string) => {
+  if (!imageUrl) return
+  bigImageUrl.value = imageUrl
+  showBigImage.value = true
+}
+
 // 使用全局任务进度数据
 const waylineProgress = computed(() => taskProgressStore.waylineProgress)
 const waylineJobDetail = computed(() => taskProgressStore.waylineJobDetail)
@@ -1070,8 +1107,8 @@ const parsePcdBuffer = (buffer: ArrayBuffer): PointCloudPoint[] => {
 }
 
 const clampPointCloudScale = (value: number) => {
-  const MIN_SCALE = 0.5
-  const MAX_SCALE = 3
+  const MIN_SCALE = 0.01
+  const MAX_SCALE = 50
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value))
 }
 
@@ -4133,10 +4170,11 @@ const centerToDroneMarker = () => {
   }
 }
 
-
-
-
-
+// 机器人控制按钮点击处理
+const handleControlClick = (controlName: string) => {
+  console.log(`机器人控制指令: ${controlName}`)
+  // TODO: 实现具体的控制逻辑
+}
 
 </script>
 
@@ -4651,10 +4689,11 @@ const centerToDroneMarker = () => {
 
 /* 顶部区域 */
 .b-top {
-  width: 440px;
-  height: 65%;
+  width: 100%;
+  flex: 1.5;
   display: flex;
-  margin-top: -5px;
+  margin: 0;
+  min-height: 0;
 }
 
 .b-top-left {
@@ -4703,6 +4742,7 @@ const centerToDroneMarker = () => {
   aspect-ratio: 100/100;
   max-width: 100px;
   max-height: 100px;
+  margin-left: 10px;
 }
 
 .img img {
@@ -4716,43 +4756,43 @@ const centerToDroneMarker = () => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: space-evenly;
+  justify-content: center;
   align-items: flex-end;
   padding-right: 5px;
-  padding-top: 15px;
-  gap: 1px;
+  padding-top: 0;
+  gap: 4px;
 }
 
 .b-top-rightDiv {
   width: 85%;
-  min-height: 38px;
+  min-height: 30px;
   height: auto;
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(270deg, #0187bf4d, #0187bf00);
   display: flex;
   justify-content: center;
   align-items: center;
   color: #d4edfd;
-  padding: 0.5rem 0;
+  padding: 4px 0;
 }
 
 .b-top-rightDiv img {
-  width: clamp(35px, 4vw, 48px);
-  height: clamp(25px, 3vw, 35px);
-  margin-right: 10px;
+  width: clamp(28px, 3.5vw, 36px);
+  height: clamp(22px, 2.5vw, 28px);
+  margin-right: 8px;
 }
 
 .b-top-rightDiv p:first-child {
   color: #d4edfd;
-  font-size: clamp(14px, 1vw, 16px);
+  font-size: clamp(12px, 1vw, 14px);
   font-weight: 600;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   line-height: 1;
 }
 
 .b-top-rightDiv p:last-child {
   color: rgba(212, 237, 253, 0.7);
-  font-size: clamp(10px, 0.8vw, 11px);
+  font-size: clamp(9px, 0.75vw, 10px);
   line-height: 1;
 }
 
@@ -4764,76 +4804,68 @@ const centerToDroneMarker = () => {
 
 /* 底部区域 */
 .b-bottom {
-  width: 440px;
-  height: 30%;
+  width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
-  position: absolute;
-  bottom: 0;
-  padding-bottom: 2%;
+  padding-bottom: 8px;
+  margin-top: 8px;
 }
 
-.status-row {
-  width: 440px;
-  display: flex;
-  justify-content: space-evenly;
-  align-items: center;
-  border-radius: 20px;
-  gap: 10px;
-  height: 55px;
+.status-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 8px 10px;
   padding: 0 10px;
+  align-items: center;
 }
 
 .status-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   justify-content: center;
-  min-width: 70px;
-  flex: 1;
+  min-width: 0;
 }
 
 .status-item .top-row {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .status-item img {
-  width: clamp(20px, 2.5vw, 24px);
-  height: clamp(20px, 2.5vw, 24px);
+  width: clamp(16px, 2vw, 18px);
+  height: clamp(16px, 2vw, 18px);
   filter: brightness(0) saturate(100%) invert(69%) sepia(28%) saturate(469%) hue-rotate(169deg) brightness(91%) contrast(87%);
 }
 
 .status-item .label {
   color: rgba(212, 237, 253, 0.8);
-  font-size: clamp(10px, 0.8vw, 11px);
+  font-size: clamp(9px, 0.7vw, 10px);
   font-weight: 500;
 }
 
 .status-item .value {
   color: #d4edfd;
-  font-size: clamp(12px, 0.9vw, 13px);
-  font-weight: 600;
-  text-align: center;
+  font-size: clamp(8px, 0.7vw, 10px);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .icon-back {
   width: 16px;
   height: 16px;
-  fill: currentColor;
-  color: #00a8ff;
 }
 
-/* 状态网格样式 */
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 20px;
-  padding: 0 20px;
-}
+
 
 .grid-item {
   display: flex;
@@ -5841,6 +5873,29 @@ const centerToDroneMarker = () => {
   width: 18px;
   height: 18px;
   margin-right: 8px;
+}
+
+/* 无人机状态卡片主体样式 */
+.drone-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+/* 无人机状态卡片内的 on1-bottom 应该填满整个 drone-card-body */
+.drone-card-body .on1-bottom {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 15px 0;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .chart-container {
@@ -6890,4 +6945,85 @@ const centerToDroneMarker = () => {
   position: relative;
 }
 
+/* ========== 机器人控制面板样式 ========== */
+.robot-control-container {
+  flex: 1;
+  width: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.robot-control-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px 8px;
+  padding: 8px 12px 10px;
+}
+
+.control-button {
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+  outline: none;
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* 活跃状态按钮 - 项目主题色 */
+.control-button.active {
+  background: #0c3c56;
+  color: #67d5fd;
+}
+
+.control-button.active:hover {
+  background: #0c4666;
+  border-color: rgba(103, 213, 253, 0.8);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(103, 213, 253, 0.2);
+}
+
+.control-button.active:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* 禁用状态按钮 - 灰色 */
+.control-button.disabled {
+  background: #555;
+  color: #888;
+  cursor: not-allowed;
+  border-color: #444;
+}
+
+.control-button.disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* 急停按钮 - 红色特殊样式 */
+.control-button.emergency {
+  background: #8b2022;
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
+.control-button.emergency:hover {
+  background: #a52527;
+  border-color: rgba(255, 107, 107, 0.8);
+  box-shadow: 0 2px 6px rgba(255, 107, 107, 0.2);
+}
+
+.control-button.emergency:active {
+  box-shadow: none;
+}
+
 </style>
+
