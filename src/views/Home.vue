@@ -625,13 +625,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { useHmsAlerts, useDevices, useWaylineJobs } from '../composables/useApi'
+import { useDevices, useWaylineJobs } from '../composables/useApi'
 import { controlApi, waylineApi, livestreamApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config } from '../config/environment'
 import { getVideoStreams, getVideoStream, getDefaultVideoType } from '../utils/videoCache'
-import * as echarts from 'echarts'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import flvjs from 'flv.js'
 import mapDockIcon from '@/assets/source_data/svg_data/map_dock3.svg'
@@ -642,168 +640,41 @@ import droneBatteryChargeIcon from '@/assets/source_data/svg_data/drone_battery_
 const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 
 
-const router = useRouter()
 
-// 使用HMS报警API和设备管理API
-const { hmsAlerts, loading, error, fetchDeviceHms, setAllAlerts } = useHmsAlerts()
+// 使用设备管理API
 const { getCachedDeviceSns, getCachedWorkspaceId } = useDevices()
-
-
-
-// 使用航线任务API
-const { waylineFiles, fetchWaylineFiles, createJob, fetchWaylineDetail, cancelReturnHome, stopJob, pauseJob, resumeJob, executeJob } = useWaylineJobs()
 
 // 使用设备状态API
 const { 
   fetchDeviceStatus, 
   fetchMainDeviceStatus,
   fetchDroneStatus,
-  position, 
-  environment, 
   dockStatus, 
   droneStatus, 
   gpsStatus,
   formatCoordinate,
   formatHeight,
   formatSpeed,
-  formatTemperature,
-  formatHumidity,
-  formatWindSpeed,
-  formatRainfall,
   formatBattery,
-  formatNetworkRate,
   formatAccTime,
   formatFlightDistance
 } = useDeviceStatus()
 
+// 使用航线任务API
+const { waylineFiles, fetchWaylineFiles, createJob, fetchWaylineDetail, cancelReturnHome, stopJob, pauseJob, resumeJob, executeJob } = useWaylineJobs()
+
 // 使用全局任务进度store
 import { useTaskProgressStore } from '../stores/taskProgress'
-import { parseErrorMessage } from '../utils/errorCodes'
 const taskProgressStore = useTaskProgressStore()
-
-// 当前标签页
-const currentTab = ref('device')
 
 // 设备告警数据
 const deviceAlarmData = ref<any[]>([])
-
-// 巡检告警数据
-const inspectionAlarmData = ref<any[]>([])
-
-// 获取最新的三条巡检告警数据
-const loadLatestInspectionAlerts = async () => {
-  try {
-    const workspaceId = getCachedWorkspaceId()
-    if (!workspaceId) {
-      return
-    }
-    
-    // 调用vision API获取巡检告警数据
-    const { visionApi } = await import('../api/services')
-    const response = await visionApi.getAlerts(workspaceId, {
-      limit: 3,
-      offset: 0
-    })
-    
-    if (response && response.alerts) {
-      inspectionAlarmData.value = response.alerts.slice(0, 3)
-      // 批量下载缩略图
-      downloadThumbnails(response.alerts.slice(0, 3))
-    }
-  } catch (err) {
-    console.error('获取巡检告警数据失败:', err)
-    // 静默处理错误
-  }
-}
-
-// 获取算法名称
-const getAlgorithmName = (targetType: string | number) => {
-  // 如果target_type是unknown，显示"无"
-  if (targetType === 'unknown' || targetType === 'Unknown') {
-    return '无'
-  }
-  
-  const algorithmMap: { [key: string]: string } = {
-    '49': '常熟1号线路灯',
-    '50': '常熟2号线路灯',
-    '51': '常熟3号线路灯',
-    '52': '常熟楼宇亮化',
-    '9': '人车检测'
-  }
-  return algorithmMap[targetType?.toString()] || `算法${targetType}`
-}
-
-// 图片缓存相关
-const thumbCache = ref<Record<string, string>>({})
-const thumbLoading = ref<Record<string, string>>({})
-const thumbError = ref<Record<string, boolean>>({})
-
-// 获取缩略图URL
-const getThumbnailUrl = async (thumbPath: string) => {
-  if (!thumbPath) return ''
-  if (thumbCache.value[thumbPath]) return thumbCache.value[thumbPath]
-  if (thumbLoading.value[thumbPath]) return ''
-  
-  thumbLoading.value[thumbPath] = 'loading'
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`${thumbPath}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'image/*'
-      }
-    })
-    if (!response.ok) throw new Error('缩略图下载失败')
-    const blob = await response.blob()
-    const url = URL.createObjectURL(blob)
-    thumbCache.value[thumbPath] = url
-    thumbError.value[thumbPath] = false
-    return url
-  } catch {
-    thumbError.value[thumbPath] = true
-    return ''
-  } finally {
-    thumbLoading.value[thumbPath] = ''
-  }
-}
-
-// 批量下载缩略图
-const downloadThumbnails = async (alerts: any[]) => {
-  alerts.forEach((alert: any) => {
-    if (alert.thumbnail_image_url) {
-      getThumbnailUrl(alert.thumbnail_image_url)
-    }
-  })
-}
 
 // 大图显示相关状态
 const bigImageUrl = ref('')
 const showBigImage = ref(false)
 
-// 处理巡检告警图片点击
-const handleInspectionImageClick = async (markedUrl: string) => {
-  if (!markedUrl) return
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`${markedUrl}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'image/*'
-      }
-    })
-    if (!response.ok) throw new Error('图片下载失败')
-    const blob = await response.blob()
-    const url = URL.createObjectURL(blob)
-    bigImageUrl.value = url
-    showBigImage.value = true
-  } catch (e) {
-    bigImageUrl.value = ''
-    showBigImage.value = false
-  }
-}
-
 const closeBigImage = () => {
-  if (bigImageUrl.value) URL.revokeObjectURL(bigImageUrl.value)
   showBigImage.value = false
   bigImageUrl.value = ''
 }
@@ -1553,10 +1424,7 @@ const toggleTaskStatus = () => {
   taskStatus.value = taskStatus.value === 'normal' ? 'error' : 'normal'
 }
 
-// 计算当前显示的数据
-const currentAlarmData = computed(() => {
-  return currentTab.value === 'device' ? deviceAlarmData.value : inspectionAlarmData.value
-})
+
 
 // 航线任务相关计算属性
 const waylineTaskName = computed(() => {
@@ -1630,10 +1498,7 @@ const canReturnHome = computed(() => {
   return isDroneOnline && !isInDock
 })
 
-// 切换标签
-const switchTab = (tab: string) => {
-  currentTab.value = tab
-}
+
 
 // 分屏控制
 const showScreenMenu = ref(false)
@@ -3619,33 +3484,13 @@ watch([pointCloudScale, pointCloudRotationX, pointCloudRotationY, pointCloudPanX
   schedulePointCloudRender()
 })
 
-// 组件挂载时初始化
 onMounted(async () => {
-  console.log('开始初始化首页')
-  
   // 初始化警报声（使用Web Audio API生成）
   
   // 获取最新报警数据
   await loadLatestAlarmData()
   
-  // 获取最新巡检告警数据
-  await loadLatestInspectionAlerts()
-  
-  // 加载机场状态数据
-  await loadDockStatus()
-  console.log('机场状态加载完成:', dockStatus.value)
-  
-  // 加载无人机状态数据
-  await loadDroneStatus()
-  console.log('无人机状态加载完成:', droneStatus.value)
-  
-  // 加载航线文件列表
-  await loadWaylineFiles()
-  
   // 航线任务进度数据现在由全局store管理，无需本地加载
-  
-  // 加载飞行统计数据
-  await loadFlightStatistics(7)
   
   // 初始化视频播放器
   initVideoPlayer()
@@ -3673,9 +3518,6 @@ onMounted(async () => {
     drawPointCloud()
   })
 
-  console.log('数据加载完成，开始初始化地图')
-  console.log('当前定位数据:', position.value)
-  
   // 初始化地图
   if (mapContainer.value) {
     // 读取凭据：优先使用通过 vite.define 注入的常量，其次使用 VITE_ 环境变量
@@ -3737,19 +3579,7 @@ onMounted(async () => {
     })
   }
   
-  // 设置机场状态自动刷新（每5秒）- 仅刷新状态，不重复刷新地图
-  statusRefreshTimer = setInterval(async () => {
-    await loadDockStatus()
-  }, 5000)
-  
-  // 设置无人机状态自动刷新（每2秒）
-  droneStatusRefreshTimer = setInterval(async () => {
-    await loadDroneStatus()
-    // 更新地图标记
-    if (amapInstance) {
-      updateMapMarkers()
-    }
-  }, 2000)
+
   
   // 航线任务进度现在由全局store管理，无需本地轮询
 })
@@ -5563,9 +5393,17 @@ const handleControlClick = (controlName: string) => {
   text-align: center;
   border: none;
   font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.tableOne th {
+  line-height: 38px;
+  height: 38px;
+}
+
+.tableOne td {
   line-height: 52px;
   height: 52px;
-  color: rgba(255, 255, 255, 0.9);
 }
 
 /* 删除列分隔线的样式，改为行分隔线 */
