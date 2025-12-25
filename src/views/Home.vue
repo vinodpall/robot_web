@@ -252,21 +252,21 @@
                     <img src="@/assets/source_data/speed.png" alt="" />
                   <div>
                     <p>{{ formatSpeed(droneStatus?.horizontalSpeed) }}</p>
-                      <p>当前飞行速度</p>
+                      <p>当前速度</p>
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
                   <img src="@/assets/source_data/today_time.png" alt="" />
                   <div>
                     <p>{{ formatAccTime(droneStatus?.totalFlightTime) }}</p>
-                      <p>累计运行时间</p>
+                      <p>本次行走里程</p>
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
                   <img src="@/assets/source_data/total_miles.png" alt="" />
                   <div>
                     <p>{{ formatFlightDistance(droneStatus?.totalFlightDistance) }}</p>
-                      <p>累计飞行里程</p>
+                      <p>累计行走里程</p>
                   </div>
                 </div>
                 </div>
@@ -308,47 +308,47 @@
                 </div>
                 <div class="status-item">
                   <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/stars.svg" alt="搜星" />
-                    <span class="label">搜星</span>
+                    <img src="@/assets/source_data/svg_data/status.svg" alt="状态" />
+                    <span class="label">状态</span>
                   </div>
-                  <span class="value">{{ gpsStatus?.rtkNumber || 0 }}</span>
+                  <span class="value">{{ formatRobotStatus(droneStatus?.robotStatus) }}</span>
                 </div>
                 
                 <!-- 第二行 -->
                 <div class="status-item">
                   <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/longitude.svg" alt="速度" />
-                    <span class="label">速度</span>
-                  </div>
-                  <span class="value">{{ formatSpeed(droneStatus?.horizontalSpeed) }}</span>
-                </div>
-                <div class="status-item">
-                  <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/latitude.svg" alt="坐标" />
-                    <span class="label">坐标</span>
-                  </div>
-                  <span class="value">WGS84</span>
-                </div>
-                <div class="status-item">
-                  <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/altitude.svg" alt="电压" />
+                    <img src="@/assets/source_data/svg_data/voltage.svg" alt="电压" />
                     <span class="label">电压</span>
                   </div>
-                  <span class="value">{{ droneStatus?.batteryVoltage ? (droneStatus.batteryVoltage / 1000).toFixed(1) + 'V' : '--' }}</span>
+                  <span class="value">{{ formatRobotVoltage(droneStatus?.voltage) }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/stars.svg" alt="电流" />
+                    <img src="@/assets/source_data/svg_data/current.svg" alt="电流" />
                     <span class="label">电流</span>
                   </div>
-                  <span class="value">{{ droneStatus?.batteryCurrent ? (droneStatus.batteryCurrent / 1000).toFixed(2) + 'A' : '--' }}</span>
+                  <span class="value">{{ formatRobotCurrent(droneStatus?.current) }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/longitude.svg" alt="地面" />
+                    <img src="@/assets/source_data/svg_data/ground.svg" alt="地面" />
                     <span class="label">地面</span>
                   </div>
-                  <span class="value">{{ droneDisplayPosition?.height ? formatHeight(droneDisplayPosition.height) : '--' }}</span>
+                  <span class="value">{{ formatGroundType(droneStatus?.groundType) }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/foot.svg" alt="步态" />
+                    <span class="label">步态</span>
+                  </div>
+                  <span class="value">{{ formatGaitType(droneStatus?.gaitType) }}</span>
+                </div>
+                <div class="status-item">
+                  <div class="top-row">
+                    <img src="@/assets/source_data/svg_data/height.svg" alt="姿态" />
+                    <span class="label">姿态</span>
+                  </div>
+                  <span class="value">{{ formatPosture(droneStatus?.postureType) }}</span>
                 </div>
               </div>
             </div>
@@ -366,7 +366,7 @@
           <div class="robot-control-grid">
             <!-- 第一行 -->
             <button class="control-button active" @click="handleControlClick('stand')">起立</button>
-            <button class="control-button disabled" disabled>力控模式</button>
+            <button class="control-button active" @click="handleControlClick('forceControlMode')">力控模式</button>
             <button class="control-button active emergency" @click="handleControlClick('emergencyStop')">急停</button>
             
             <!-- 第二行 -->
@@ -385,7 +385,7 @@
             <button class="control-button active" @click="handleControlClick('stair45Gait')">45°楼梯步态</button>
             
             <!-- 第五行 -->
-            <button class="control-button disabled" disabled>L步态</button>
+            <button class="control-button active" @click="handleControlClick('lGait')">L步态</button>
             <button class="control-button active" @click="handleControlClick('mountainGait')">山地步态</button>
             <button class="control-button active" @click="handleControlClick('quietGait')">静音步态</button>
             
@@ -694,6 +694,75 @@ const waylineJobDetail = computed(() => taskProgressStore.waylineJobDetail)
 const flightStatistics = ref<any>(null)
 const loadingFlightStats = ref(false)
 const flightStatsError = ref('')
+
+// 机器人状态映射
+const robotStatusMap: Record<number, string> = {
+  0: '趴下状态',
+  1: '正在起立状态',
+  2: '初始站立状态',
+  3: '力控站立状态',
+  4: '踏步状态',
+  5: '正在趴下状态',
+  6: '软急停/摔倒状态',
+  16: 'RL状态'
+}
+
+// 地面类型映射
+const groundTypeMap: Record<number, string> = {
+  1: '实心地面',
+  2: '镂空地面',
+  3: '无踢面地面',
+  4: '累积帧模式'
+}
+
+// 步态映射
+const gaitTypeMap: Record<number, string> = {
+  1: '行走步态',
+  2: '斜坡步态',
+  3: '越障步态',
+  4: '楼梯步态',
+  5: '帧楼梯步态',
+  6: '帧45°楼梯步态',
+  7: 'L行走步态',
+  8: '山地步态',
+  9: '静音步态'
+}
+
+// 格式化机器人状态
+const formatRobotStatus = (value: number | undefined) => {
+  if (value === undefined || value === null) return '--'
+  return robotStatusMap[value] || '--'
+}
+
+// 格式化机器人电压
+const formatRobotVoltage = (value: number | undefined) => {
+  if (value === undefined || value === null) return '0.0V'
+  return `${value.toFixed(1)}V`
+}
+
+// 格式化机器人电流
+const formatRobotCurrent = (value: number | undefined) => {
+  if (value === undefined || value === null) return '0.0A'
+  return `${value.toFixed(1)}A`
+}
+
+// 格式化地面类型
+const formatGroundType = (value: number | undefined) => {
+  if (value === undefined || value === null) return '--'
+  return groundTypeMap[value] || '--'
+}
+
+// 格式化步态
+const formatGaitType = (value: number | undefined) => {
+  if (value === undefined || value === null) return '--'
+  return gaitTypeMap[value] || '--'
+}
+
+// 格式化姿态
+const formatPosture = (value: number | undefined) => {
+  if (value === undefined || value === null) return '--'
+  return value === 1 ? '匍匐姿态' : '正常姿态'
+}
 
 type PointCloudPoint = { x: number; y: number; z: number; intensity: number }
 type RawPointCloudPoint = { x: number; y: number; z?: number; intensityValue?: number }

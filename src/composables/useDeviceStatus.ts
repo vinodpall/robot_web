@@ -399,9 +399,9 @@ export function useDeviceStatus() {
 
   // 格式化累计运行时间显示（秒转换为小时）
   const formatAccTime = (value: number | undefined) => {
-    if (value === undefined || value === null) return '--小时'
+    if (value === undefined || value === null) return '--km'
     const hours = Math.floor(value / 3600)
-    return `${hours}小时`
+    return `${hours}km`
   }
 
   // 格式化电压显示（毫伏转换为伏特）
