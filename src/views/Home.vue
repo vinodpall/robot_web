@@ -359,8 +359,17 @@
       <!-- 机器人控制 -->
       <div class="right-on2 robot-control-card">
         <div class="cardTitle">
-          <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          机器人控制
+          <div class="cardTitle-left">
+            <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
+            机器人控制
+          </div>
+          <img 
+            :src="isMicOn ? mkfOnIcon : mkfOffIcon" 
+            alt="麦克风" 
+            class="mic-icon"
+            title="语音对讲开关"
+            @click="toggleMic"
+          />
         </div>
         <div class="robot-control-container">
           <div class="robot-control-grid">
@@ -637,6 +646,8 @@ import mapDroneIcon from '@/assets/source_data/svg_data/map_drone.svg'
 import droneArrowIcon from '@/assets/source_data/svg_data/drone_control_svg/drone_arrow.svg'
 import droneBatteryIcon from '@/assets/source_data/svg_data/drone_battery.svg'
 import droneBatteryChargeIcon from '@/assets/source_data/svg_data/drone_battery_charge.svg'
+import mkfOnIcon from '@/assets/source_data/svg_data/mkf_on.svg'
+import mkfOffIcon from '@/assets/source_data/svg_data/mkf_off.svg'
 const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 
 
@@ -669,6 +680,14 @@ const taskProgressStore = useTaskProgressStore()
 
 // 设备告警数据
 const deviceAlarmData = ref<any[]>([])
+
+// 麦克风开关状态
+const isMicOn = ref(false)
+
+// 切换麦克风状态
+const toggleMic = () => {
+  isMicOn.value = !isMicOn.value
+}
 
 // 大图显示相关状态
 const bigImageUrl = ref('')
@@ -5761,13 +5780,14 @@ const handleControlClick = (controlName: string) => {
   position: relative;
 }
 
-.cardTitle {
+.robot-control-card .cardTitle {
   width: calc(100% - 10px);
   height: 41px;
   display: flex;
-  justify-content: start;
+  justify-content: space-between;
   align-items: center;
   padding-left: 10px;
+  padding-right: 10px;
   background-image: url('@/assets/source_data/bg_data/card_title.png');
   background-size: 100% 100%;
   color: #fff;
@@ -6931,6 +6951,29 @@ const handleControlClick = (controlName: string) => {
 .control-button.emergency:active {
   box-shadow: none;
 }
+
+/* 卡片标题左侧容器 */
+.cardTitle-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 麦克风图标样式 */
+.mic-icon {
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  transition: all 0.3s;
+  filter: brightness(1.2);
+  margin-top: 6px;
+}
+
+.mic-icon:hover {
+  transform: scale(1.1);
+  filter: brightness(1.5);
+}
+
 
 </style>
 
