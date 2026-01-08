@@ -22,7 +22,7 @@ function loadEnvConfig() {
     }
     const envContent = readFileSync(existing, 'utf-8')
     const envVars: Record<string, string> = {}
-    
+
     envContent.split('\n').forEach(line => {
       const trimmed = line.trim()
       if (trimmed && !trimmed.startsWith('#')) {
@@ -32,7 +32,7 @@ function loadEnvConfig() {
         }
       }
     })
-    
+
     return envVars
   } catch (error) {
     console.log('未找到env.local文件，使用默认环境变量')
@@ -45,10 +45,10 @@ export default defineConfig(({ mode }) => {
   // 加载环境变量
   const env = loadEnv(mode, process.cwd(), '')
   const localEnv = loadEnvConfig()
-  
+
   // 合并环境变量，本地配置优先
   const mergedEnv = { ...env, ...localEnv }
-  
+
   // 根据环境变量动态配置代理
   const getProxyTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
@@ -73,7 +73,7 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '127.0.0.1', // 绑定到127.0.0.1而不是localhost
       proxy: {
-        '/api': {
+        '/v1': {
           target: getProxyTarget(),
           changeOrigin: true,
           secure: false,

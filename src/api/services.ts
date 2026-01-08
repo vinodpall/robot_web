@@ -6,8 +6,8 @@ export const authApi = {
   // 用户登录 - 适配后端API
   login: (username: string, password: string) => {
     console.log('??????:', { username, password })
-    
-    return fetch(`${API_BASE_URL}/login`, {
+
+    return fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -35,7 +35,7 @@ export const authApi = {
 
   // 获取当前用户信息
   getCurrentUser: () => {
-    return apiClient.get<ApiResponse<User>>('/users/me')
+    return apiClient.get<ApiResponse<User>>('/auth/me')
   },
 
   // 刷新token
@@ -332,7 +332,7 @@ export const systemApi = {
       lastCheck: string
     }>>('/system/health')
   }
-} 
+}
 
 // 设备管理接口
 export const deviceApi = {
@@ -357,7 +357,7 @@ export const deviceApi = {
   deleteDevice: (deviceSn: string) => {
     return apiClient.delete(`/devices/${deviceSn}`)
   }
-} 
+}
 
 // HMS报警日志接口
 export const hmsApi = {
@@ -707,9 +707,9 @@ export const drcApi = {
 // 任务记录相关接口
 export const waylineApi = {
   // 获取任务记录列表
-  getJobs: (workspaceId: string, params?: { 
-    page?: number; 
-    page_size?: number; 
+  getJobs: (workspaceId: string, params?: {
+    page?: number;
+    page_size?: number;
     status?: number;
     task_type?: number;
     wayline_type?: number;
@@ -1095,7 +1095,7 @@ export const waylineApi = {
       }
     }>(`/wayline/workspaces/${workspaceId}/reports/flight-statistics`, days ? { days } : {})
   }
-} 
+}
 
 // 媒体文件接口
 export const mediaApi = {

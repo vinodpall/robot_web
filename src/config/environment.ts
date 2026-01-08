@@ -16,20 +16,20 @@ export interface EnvironmentConfig {
     baseUrl: string
     domain: string
   }
-  
+
   // WebSocket配置
   websocket: {
     host: string
     port: number
     fullUrl: string
   }
-  
+
   // 视频流配置
   video: {
     webrtcDomain: string
     rtmpDomain: string
   }
-  
+
   // 其他服务配置
   services: {
     vision: string
@@ -40,8 +40,8 @@ export interface EnvironmentConfig {
 // 内网环境配置
 const intranetConfig: EnvironmentConfig = {
   api: {
-    baseUrl: '/api/v1',
-    domain: '/api/v1' // 同域部署，使用相对路径
+    baseUrl: '/v1',
+    domain: '/v1' // 同域部署，使用相对路径
   },
   websocket: {
     host: '172.16.88.152',
@@ -61,8 +61,8 @@ const intranetConfig: EnvironmentConfig = {
 // 外网环境配置
 const internetConfig: EnvironmentConfig = {
   api: {
-    baseUrl: '/api/v1',
-    domain: '/api/v1' // 同域部署，使用相对路径
+    baseUrl: '/v1',
+    domain: '/v1' // 同域部署，使用相对路径
   },
   websocket: {
     host: '10.10.1.3',
@@ -125,15 +125,15 @@ export const currentEnvironment = getCurrentEnvironment()
 export function refreshEnvironmentConfig(): EnvironmentConfig {
   console.log('🔄 强制刷新环境配置...')
   console.log('- 环境变量 VITE_APP_ENVIRONMENT:', import.meta.env.VITE_APP_ENVIRONMENT)
-  
+
   // 重新获取配置
   const newConfig = getCurrentConfig()
-  
+
   console.log('🔄 刷新后的配置:')
   console.log('- 环境类型:', getCurrentEnvironment())
   console.log('- API域名:', newConfig.api.domain)
   console.log('- WebRTC域名:', newConfig.video.webrtcDomain)
-  
+
   return newConfig
 }
 
@@ -149,7 +149,7 @@ export function logEnvironmentConfig(): void {
   try {
     // @ts-ignore
     console.log('- 构建常量 __APP_ENVIRONMENT__:', typeof __APP_ENVIRONMENT__ !== 'undefined' ? __APP_ENVIRONMENT__ : 'undefined')
-  } catch (_) {}
+  } catch (_) { }
   console.log('- 环境变量 VITE_APP_ENVIRONMENT:', import.meta.env.VITE_APP_ENVIRONMENT)
 }
 
