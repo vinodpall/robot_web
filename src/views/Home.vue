@@ -53,26 +53,41 @@
         </div>
         <div class="on3-bottom">
           <div class="on3-bottom-center">
-            <div class="task-toggle-row">
-              <span class="task-toggle-button" @click="handleEnableNavigation">开启导航</span>
-              <span class="task-toggle-button" @click="handleEnableIns">开启INS</span>
-              <span class="task-toggle-button" @click="handleEnableMsf">开启MSF</span>
+            <div class="task-row">
+              <div class="map-dropdown-wrapper">
+                <select class="map-dropdown" v-model="selectedMap">
+                  <option v-if="mapList.length === 0" value="">选择地图</option>
+                  <option v-for="map in mapList" :key="map" :value="map">
+                    {{ map }}
+                  </option>
+                </select>
+                <span class="dropdown-arrow">
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <polygon points="2,4 6,8 10,4" fill="#67d5fd"/>
+                  </svg>
+                </span>
+              </div>
+              <div class="task-buttons">
+                <span class="task-btn" @click="handleEnableNavigation">导航</span>
+                <span class="task-btn" @click="handleEnableIns">INS</span>
+                <span class="task-btn" @click="handleEnableMsf">MSF</span>
+              </div>
             </div>
             <div class="wayline-control-list">
               <div class="control-row">
                 <div class="div">循迹任务：</div>
                 <div class="wayline-select-wrapper">
                   <select 
-                    v-model="selectedWayline" 
+                    v-model="selectedTrack" 
                     class="wayline-select"
                   >
                     <option value="">请选择</option>
                     <option 
-                      v-for="wayline in waylineFiles"
-                      :key="wayline.wayline_id"
-                      :value="wayline.wayline_id"
+                      v-for="track in filteredTrackList"
+                      :key="track"
+                      :value="track"
                     >
-                      {{ wayline.name }}
+                      {{ track }}
                     </option>
                   </select>
                   <span class="wayline-custom-arrow">
@@ -82,9 +97,15 @@
                   </span>
                 </div>
                 <div class="button-group">
-                  <span class="span" v-permission-click-dialog="'home.task.issue'" @click="handleDispatchTask">下发任务</span>
+                  <span 
+                    class="span" 
+                    :class="{ disabled: !canDispatchTask }"
+                    v-permission-click-dialog="'home.task.issue'" 
+                    @click="handleDispatchTask"
+                  >下发任务</span>
                   <span 
                     class="span1" 
+                    :class="{ disabled: activeTaskType !== 'wayline' }"
                     v-permission-click-dialog="'home.task.cancel'"
                     @click="handleCancelTask"
                   >
@@ -101,11 +122,11 @@
                   >
                     <option value="">请选择</option>
                     <option 
-                      v-for="wayline in waylineFiles"
-                      :key="wayline.wayline_id"
-                      :value="wayline.wayline_id"
+                      v-for="task in pointTaskList"
+                      :key="task.task_id"
+                      :value="task.task_id"
                     >
-                      {{ wayline.name }}
+                      {{ task.task_name }}
                     </option>
                   </select>
                   <span class="wayline-custom-arrow">
@@ -115,9 +136,15 @@
                   </span>
                 </div>
                 <div class="button-group">
-                  <span class="span" v-permission-click-dialog="'home.task.issue'" @click="handleDispatchPointTask">下发任务</span>
+                  <span 
+                    class="span" 
+                    :class="{ disabled: !canDispatchTask }"
+                    v-permission-click-dialog="'home.task.issue'" 
+                    @click="handleDispatchPointTask"
+                  >下发任务</span>
                   <span 
                     class="span1" 
+                    :class="{ disabled: activeTaskType !== 'point' }"
                     v-permission-click-dialog="'home.task.cancel'"
                     @click="handleCancelTask"
                   >
@@ -134,11 +161,11 @@
                   >
                     <option value="">请选择</option>
                     <option 
-                      v-for="wayline in waylineFiles"
-                      :key="wayline.wayline_id"
-                      :value="wayline.wayline_id"
+                      v-for="task in multiTaskList"
+                      :key="task.multitask_id"
+                      :value="task.multitask_id"
                     >
-                      {{ wayline.name }}
+                      {{ task.multitask_name }}
                     </option>
                   </select>
                   <span class="wayline-custom-arrow">
@@ -148,9 +175,15 @@
                   </span>
                 </div>
                 <div class="button-group">
-                  <span class="span" v-permission-click-dialog="'home.task.issue'" @click="handleDispatchMultiTask">下发任务</span>
+                  <span 
+                    class="span" 
+                    :class="{ disabled: !canDispatchTask }"
+                    v-permission-click-dialog="'home.task.issue'" 
+                    @click="handleDispatchMultiTask"
+                  >下发任务</span>
                   <span 
                     class="span1" 
+                    :class="{ disabled: activeTaskType !== 'multi' }"
                     v-permission-click-dialog="'home.task.cancel'"
                     @click="handleCancelTask"
                   >
@@ -625,6 +658,20 @@
     </div>
   </div>
     
+    <!-- 确认对话框 -->
+    <div v-if="confirmDialog.visible" class="confirm-dialog-mask" @click.self="confirmDialog.visible = false">
+      <div class="confirm-dialog">
+        <div class="confirm-dialog-header">提示</div>
+        <div class="confirm-dialog-body">
+          {{ confirmDialog.message }}
+        </div>
+        <div class="confirm-dialog-actions">
+          <button class="confirm-btn confirm-btn-cancel" @click="onConfirmCancel">取消</button>
+          <button class="confirm-btn confirm-btn-ok" @click="onConfirmOk">确定</button>
+        </div>
+      </div>
+    </div>
+    
     <!-- 大图显示模态框 -->
     <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
       <img :src="bigImageUrl" class="big-image" @click.stop />
@@ -635,9 +682,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useDevices, useWaylineJobs } from '../composables/useApi'
-import { controlApi, waylineApi, livestreamApi } from '../api/services'
+import { controlApi, waylineApi, livestreamApi, navigationApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config } from '../config/environment'
+import { useDeviceStore } from '../stores/device'
 import { getVideoStreams, getVideoStream, getDefaultVideoType } from '../utils/videoCache'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import flvjs from 'flv.js'
@@ -654,6 +702,7 @@ const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 
 // 使用设备管理API
 const { getCachedDeviceSns, getCachedWorkspaceId } = useDevices()
+const deviceStore = useDeviceStore()
 
 // 使用设备状态API
 const { 
@@ -2630,9 +2679,47 @@ const reloadInfraredStream = () => {
 
 // 航线选择相关
 const selectedWayline = ref('')
-const selectedPointTask = ref('')
 const selectedMultiTask = ref('')
+const mapList = ref<string[]>([])
+const selectedMap = ref('')
 const showWaylineDropdown = ref(false)
+
+// 导航、INS、MSF 状态
+const navigationEnabled = ref(false)
+const insEnabled = ref(false)
+const msfEnabled = ref(false)
+
+// 当前活动任务类型：'wayline' | 'point' | 'multi' | null
+const activeTaskType = ref<'wayline' | 'point' | 'multi' | null>(null)
+
+// 确认对话框状态
+const confirmDialog = ref({
+  visible: false,
+  message: '',
+  onConfirm: null as (() => void) | null
+})
+
+// 显示确认对话框
+const showConfirmDialog = (message: string, onConfirm: () => void) => {
+  confirmDialog.value = {
+    visible: true,
+    message,
+    onConfirm
+  }
+}
+
+// 确认对话框 - 确定
+const onConfirmOk = () => {
+  if (confirmDialog.value.onConfirm) {
+    confirmDialog.value.onConfirm()
+  }
+  confirmDialog.value.visible = false
+}
+
+// 确认对话框 - 取消
+const onConfirmCancel = () => {
+  confirmDialog.value.visible = false
+}
 
 // 算法选项
 const algorithmOptions = {
@@ -2696,6 +2783,166 @@ const loadWaylineFiles = async () => {
   }
 }
 
+// 获取地图列表
+const fetchMapList = async () => {
+  const robotId = deviceStore.selectedRobotId
+  if (!robotId) {
+    console.warn('未选择机器人，无法获取地图列表')
+    return
+  }
+  
+  try {
+    const response = await navigationApi.getMapList(robotId)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      // 处理地图名称，去掉时间戳（只保留 @ 前面的部分）
+      mapList.value = response.msg.result.map(item => {
+        const atIndex = item.indexOf('@')
+        return atIndex !== -1 ? item.substring(0, atIndex) : item
+      })
+      // 缓存地图列表
+      localStorage.setItem('cached_map_list', JSON.stringify(mapList.value))
+      // 默认选择第一个地图
+      if (mapList.value.length > 0) {
+        selectedMap.value = mapList.value[0]
+      }
+    } else {
+      console.error('获取地图列表失败:', response?.msg?.error_msg || '未知错误')
+    }
+  } catch (err) {
+    console.error('获取地图列表失败:', err)
+    // 尝试从缓存加载
+    const cached = localStorage.getItem('cached_map_list')
+    if (cached) {
+      mapList.value = JSON.parse(cached)
+      if (mapList.value.length > 0 && !selectedMap.value) {
+        selectedMap.value = mapList.value[0]
+      }
+    }
+  }
+}
+
+// 循迹任务列表
+const trackList = ref<string[]>([])
+const selectedTrack = ref('')
+
+const fetchTrackList = async () => {
+  const robotId = deviceStore.selectedRobotId
+  if (!robotId) return
+  
+  try {
+    const response = await navigationApi.getTrackList(robotId)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      trackList.value = response.msg.result
+    }
+  } catch (error) {
+    console.error('获取循迹任务列表失败:', error)
+  }
+}
+
+// 过滤后的循迹任务列表
+const filteredTrackList = computed(() => {
+  if (!selectedMap.value) return []
+  return trackList.value
+    .filter(track => track.startsWith(selectedMap.value + '_'))
+    .map(track => {
+      const atIndex = track.indexOf('@')
+      return atIndex > -1 ? track.substring(0, atIndex) : track
+    })
+})
+
+// 监听地图变化，重置选中的循迹任务
+watch(selectedMap, () => {
+  selectedTrack.value = ''
+  // 自动选择第一个
+  if (filteredTrackList.value.length > 0) {
+    selectedTrack.value = filteredTrackList.value[0]
+  }
+})
+
+// 监听 filteredTrackList 变化，确保有数据时自动选择第一个
+watch(filteredTrackList, (newList) => {
+  if (newList.length > 0 && !selectedTrack.value) {
+    selectedTrack.value = newList[0]
+  }
+})
+
+// 发布点任务列表
+interface PointTask {
+  isStart: boolean
+  task_id: string
+  task_name: string
+  taskcontent: any[]
+}
+
+const pointTaskList = ref<PointTask[]>([])
+const selectedPointTask = ref('')
+
+const fetchPointTaskList = async () => {
+  const robotId = deviceStore.selectedRobotId
+  if (!robotId) return
+  
+  try {
+    const response = await navigationApi.getPointTaskList(robotId)
+    if (response && response.data) {
+      pointTaskList.value = response.data
+      // 缓存发布点任务列表
+      localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
+    }
+  } catch (error) {
+    console.error('获取发布点任务列表失败:', error)
+    // 尝试从缓存加载
+    const cached = localStorage.getItem('cached_point_task_list')
+    if (cached) {
+      pointTaskList.value = JSON.parse(cached)
+    }
+  }
+}
+
+// 监听 pointTaskList 变化，确保有数据时自动选择第一个
+watch(pointTaskList, (newList) => {
+  if (newList.length > 0 && !selectedPointTask.value) {
+    selectedPointTask.value = newList[0].task_id
+  }
+})
+
+// 多任务组列表
+interface MultiTask {
+  multitask_id: string
+  multitask_name: string
+  multitask_list: any[]
+}
+
+const multiTaskList = ref<MultiTask[]>([])
+
+const fetchMultiTaskList = async () => {
+  const robotId = deviceStore.selectedRobotId
+  if (!robotId) return
+  
+  try {
+    const response = await navigationApi.getMultiTaskList(robotId)
+    if (response && response.msg) {
+      multiTaskList.value = response.msg
+      // 缓存多任务组列表
+      localStorage.setItem('cached_multi_task_list', JSON.stringify(multiTaskList.value))
+    }
+  } catch (error) {
+    console.error('获取多任务组列表失败:', error)
+    // 尝试从缓存加载
+    const cached = localStorage.getItem('cached_multi_task_list')
+    if (cached) {
+      multiTaskList.value = JSON.parse(cached)
+    }
+  }
+}
+
+// 监听 multiTaskList 变化，确保有数据时自动选择第一个
+watch(multiTaskList, (newList) => {
+  if (newList.length > 0 && !selectedMultiTask.value) {
+    selectedMultiTask.value = newList[0].multitask_id
+  }
+})
+
+
 // 获取当前选中的航线名称
 const getCurrentWaylineName = computed(() => {
   const currentWayline = waylineFiles.value.find(f => f.wayline_id === selectedWayline.value)
@@ -2748,29 +2995,164 @@ const dispatchWaylineTask = (waylineId: string, taskLabel: string) => {
   dispatchTaskDialog.value.visible = true
 }
 
+// 检查是否可以下发任务
+const canDispatchTask = computed(() => {
+  // 必须开启导航、INS或MSF中的至少一个
+  const hasNavEnabled = navigationEnabled.value || insEnabled.value || msfEnabled.value
+  // 没有活动任务
+  const noActiveTask = activeTaskType.value === null
+  return hasNavEnabled && noActiveTask
+})
+
 // 下发任务处理
 const handleDispatchTask = () => {
-  dispatchWaylineTask(selectedWayline.value, '航线任务')
+  if (!canDispatchTask.value) {
+    if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
+      alert('请先开启导航、INS或MSF')
+    } else if (activeTaskType.value) {
+      alert('已有任务在执行中，请先取消当前任务')
+    }
+    return
+  }
+  activeTaskType.value = 'wayline'
+  // 这里的 selectedTrack.value 是处理过的名称，我们需要找到原始的完整名称（包含时间戳）来作为ID
+  // 或者如果后端只接受名称，就直接传名称。根据之前的代码逻辑，这里似乎是传ID。
+  // 但对于循迹任务，列表返回的是字符串，没有ID字段。
+  // 假设直接使用选中的名称作为ID/Name进行下发。
+  // 之前的 dispatchWaylineTask 逻辑是查找 waylineFiles 中的对象。
+  // 现在我们需要修改 dispatchWaylineTask 或者创建一个新的 dispatchTrackTask。
+  // 鉴于 dispatchWaylineTask 依赖 waylineFiles，我们需要调整它。
+  
+  // 暂时直接调用 dispatchWaylineTask，但我们需要先确认 dispatchWaylineTask 的实现。
+  // 看起来 dispatchWaylineTask 是为 waylineFiles 设计的。
+  // 我们需要一个新的处理函数或者修改 dispatchWaylineTask。
+  
+  // 让我们先修改 handleDispatchTask 调用一个新的函数 dispatchTrackTask
+  dispatchTrackTask(selectedTrack.value, '循迹任务')
+}
+
+const dispatchTrackTask = (trackName: string, taskLabel: string) => {
+  if (!trackName) {
+    alert(`请先选择一个${taskLabel}`)
+    activeTaskType.value = null
+    return
+  }
+  
+  // 构造一个临时的任务表单数据，因为循迹任务可能不需要 wayline_id
+  // 或者它需要特定的格式。
+  // 根据之前的 API 结构，下发任务通常需要 file_id。
+  // 对于循迹任务，file_id 可能就是 trackName。
+  
+  dispatchTaskDialog.value.form = {
+    name: `${taskLabel}_${Date.now()}`,
+    dock_sn: deviceSns.dockSns[0] || '',
+    file_id: trackName, // 使用 trackName 作为 file_id
+    task_type: 0,
+    out_of_control_action: 0,
+    rth_altitude: 100,
+    rth_mode: 1,
+    exit_wayline_when_rc_lost: 0,
+    wayline_precision_type: 1,
+    begin_time: null,
+    end_time: null,
+    enable_vision: false,
+    vision_algorithms: [],
+    vision_threshold: 0.5,
+    enable_recurrence: false,
+    recurrence_start_date: '',
+    recurrence_end_date: ''
+  }
+  
+  dispatchTaskDialog.value.visible = true
 }
 
 const handleDispatchPointTask = () => {
-  dispatchWaylineTask(selectedPointTask.value, '发布点任务')
+  if (!canDispatchTask.value) {
+    if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
+      alert('请先开启导航、INS或MSF')
+    } else if (activeTaskType.value) {
+      alert('已有任务在执行中，请先取消当前任务')
+    }
+    return
+  }
+  activeTaskType.value = 'point'
+  // 发布点任务也使用 dispatchTrackTask 逻辑，因为它们也是基于ID/Name下发
+  // selectedPointTask.value 已经是 task_id
+  dispatchTrackTask(selectedPointTask.value, '发布点任务')
 }
 
 const handleDispatchMultiTask = () => {
-  dispatchWaylineTask(selectedMultiTask.value, '多任务')
+  if (!canDispatchTask.value) {
+    if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
+      alert('请先开启导航、INS或MSF')
+    } else if (activeTaskType.value) {
+      alert('已有任务在执行中，请先取消当前任务')
+    }
+    return
+  }
+  activeTaskType.value = 'multi'
+  // 多任务组也使用 dispatchTrackTask 逻辑
+  // selectedMultiTask.value 已经是 multitask_id
+  dispatchTrackTask(selectedMultiTask.value, '多任务')
+}
+
+// 取消任务
+const handleCancelTask = () => {
+  if (activeTaskType.value === null) {
+    alert('当前没有正在执行的任务')
+    return
+  }
+  
+  showConfirmDialog('确定要取消当前任务吗？', () => {
+    activeTaskType.value = null
+    console.log('取消任务')
+    // TODO: 调用取消任务API
+  })
 }
 
 const handleEnableNavigation = () => {
-  console.log('开启导航功能触发')
+  if (!selectedMap.value) {
+    alert('请先选择地图')
+    return
+  }
+  
+  const action = navigationEnabled.value ? '关闭' : '开启'
+  showConfirmDialog(`确定要${action}导航吗？`, async () => {
+    try {
+      const robotId = deviceStore.selectedRobotId
+      if (!robotId) return
+
+      // action: 1 开启, 0 关闭
+      await navigationApi.controlNavigation(robotId, {
+        action: navigationEnabled.value ? 0 : 1,
+        map_name: selectedMap.value
+      })
+      
+      navigationEnabled.value = !navigationEnabled.value
+      console.log(`${action}导航成功`)
+    } catch (err) {
+      console.error(`${action}导航失败:`, err)
+      alert(`${action}导航失败`)
+    }
+  })
 }
 
 const handleEnableIns = () => {
-  console.log('开启INS功能触发')
+  const action = insEnabled.value ? '关闭' : '开启'
+  showConfirmDialog(`确定要${action}INS吗？`, () => {
+    insEnabled.value = !insEnabled.value
+    console.log(`${action}INS`)
+    // TODO: 调用INS开启/关闭API
+  })
 }
 
 const handleEnableMsf = () => {
-  console.log('开启MSF功能触发')
+  const action = msfEnabled.value ? '关闭' : '开启'
+  showConfirmDialog(`确定要${action}MSF吗？`, () => {
+    msfEnabled.value = !msfEnabled.value
+    console.log(`${action}MSF`)
+    // TODO: 调用MSF开启/关闭API
+  })
 }
 
 // 返回当前本地时间+4分钟（到分钟）的最小值，供 datetime-local 作为最小值
@@ -2924,33 +3306,7 @@ const onDispatchTaskCancel = () => {
   dispatchTaskDialog.value.visible = false
 }
 
-// 取消任务处理
-const handleCancelTask = async () => {
-  try {
-    const workspaceId = getCachedWorkspaceId()
-    if (!workspaceId) {
-      alert('未找到workspace_id')
-      return
-    }
-    
-    if (!waylineProgress.value?.job_id) {
-      alert('没有正在执行的任务')
-      return
-    }
-    
-    if (!confirm('确定要取消当前任务吗？')) {
-      return
-    }
-    
-    await stopJob(workspaceId, waylineProgress.value.job_id)
-    alert('任务取消指令已发送')
-    
-    // 任务进度由全局store自动更新
-  } catch (err) {
-    console.error('取消任务失败:', err)
-    alert('取消任务失败')
-  }
-}
+
 
 // 航线暂停处理
 const handlePauseRoute = async () => {
@@ -4094,6 +4450,30 @@ const handleControlClick = (controlName: string) => {
   // TODO: 实现具体的控制逻辑
 }
 
+
+// 监听选中的机器人ID变化
+watch(() => deviceStore.selectedRobotId, async (newId) => {
+  if (newId) {
+    await fetchDeviceStatus(newId)
+  }
+})
+
+onMounted(async () => {
+  // 如果有选中的机器人，获取其状态
+  if (deviceStore.selectedRobotId) {
+    await fetchDeviceStatus(deviceStore.selectedRobotId)
+  }
+  
+  // 获取地图列表
+  await fetchMapList()
+  // 获取循迹任务列表
+  await fetchTrackList()
+  // 获取发布点任务列表
+  await fetchPointTaskList()
+  // 获取多任务组列表
+  await fetchMultiTaskList()
+})
+
 </script>
 
 <style scoped>
@@ -4923,11 +5303,73 @@ const handleControlClick = (controlName: string) => {
 
 .task-toggle-row {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
 }
 
+.map-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.map-label {
+  color: #67d5fd;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.map-select-wrapper {
+  position: relative;
+  min-width: 120px;
+}
+
+.map-select {
+  width: 100%;
+  height: 32px;
+  padding: 0 25px 0 10px;
+  background: rgba(12, 60, 86, 0.5);
+  border: 1px solid rgba(103, 213, 253, 0.3);
+  border-radius: 4px;
+  color: #67d5fd;
+  font-size: 12px;
+  cursor: pointer;
+  appearance: none;
+  outline: none;
+  transition: all 0.3s;
+}
+
+.map-select:hover {
+  border-color: rgba(103, 213, 253, 0.6);
+  background: rgba(12, 60, 86, 0.7);
+}
+
+.map-select option {
+  background: #0c3c56;
+  color: #67d5fd;
+}
+
+.map-custom-arrow {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.map-custom-arrow svg polygon {
+  fill: #67d5fd;
+}
+
+.task-button-group {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .task-toggle-button {
-  flex: 1;
   height: 32px;
   line-height: 32px;
   text-align: center;
@@ -4945,24 +5387,111 @@ const handleControlClick = (controlName: string) => {
   border-color: rgba(103, 213, 253, 0.8);
 }
 
+.task-button-group .task-toggle-button {
+  flex: none;
+  min-width: 70px;
+  padding: 0 12px;
+}
+
+/* 任务行样式 */
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+  justify-content: space-between;
+}
+
+.map-dropdown-wrapper {
+  position: relative;
+  flex: 0 0 auto;
+  width: 220px;
+}
+
+.map-dropdown {
+  width: 100%;
+  height: 32px;
+  padding: 0 30px 0 12px;
+  background: rgba(12, 60, 86, 0.6);
+  border: 1px solid rgba(103, 213, 253, 0.3);
+  border-radius: 4px;
+  color: #67d5fd;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  outline: none;
+  transition: all 0.3s;
+}
+
+.map-dropdown:hover {
+  border-color: rgba(103, 213, 253, 0.6);
+  background: rgba(12, 60, 86, 0.8);
+}
+
+.map-dropdown option {
+  background: #0c3c56;
+  color: #67d5fd;
+}
+
+.dropdown-arrow {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.task-buttons {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.task-btn {
+  min-width: 65px;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  padding: 0 14px;
+  background: #0c3c56;
+  border-radius: 4px;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+  color: #67d5fd;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.task-btn:hover {
+  background: #0c4666;
+  border-color: rgba(103, 213, 253, 0.8);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(103, 213, 253, 0.2);
+}
+
+.task-btn:active {
+  transform: translateY(0);
+}
+
 .wayline-control-list {
   display: flex;
   flex-direction: column;
   gap: clamp(10px, 2vh, 15px);
-  margin-top: auto;
+  margin-top: 0;
 }
 
 .control-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
   width: 100%;
   justify-content: flex-start;
 }
 
 .control-row .wayline-select-wrapper {
-  flex: 3;
-  margin: 0 10px;
+  flex: 1;
+  margin: 0 4px;
   min-width: 150px;
 }
 
@@ -4981,9 +5510,9 @@ const handleControlClick = (controlName: string) => {
   color: rgba(255, 255, 255, 0.8);
   font-size: 12px;
   white-space: nowrap;
-  width: 72px;
+  width: 65px;
   text-align: right;
-  padding-right: 4px;
+  padding-right: 2px;
   flex-shrink: 0;
 }
 
@@ -6975,5 +7504,89 @@ const handleControlClick = (controlName: string) => {
 }
 
 
+/* 确认对话框样式 - 参考ResultDialog */
+.confirm-dialog-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.confirm-dialog {
+  position: relative;
+  width: 380px;
+  max-width: 86vw;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(23,30,49,0.98), rgba(16,22,38,0.98));
+  border: 1px solid rgba(99, 216, 255, 0.18);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+}
+
+.confirm-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px 24px 10px 24px;
+  font-size: 18px;
+  color: #e9f3ff;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.confirm-dialog-body {
+  padding: 8px 24px 14px 24px;
+  color: #d1d7e0;
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 24px 18px 24px;
+}
+
+.confirm-btn {
+  min-width: 90px;
+  height: 34px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid;
+}
+
+.confirm-btn-cancel {
+  background: rgba(255,255,255,0.08);
+  color: #e6e6e6;
+  border-color: rgba(255,255,255,0.18);
+}
+
+.confirm-btn-cancel:hover {
+  background: rgba(255,255,255,0.16);
+}
+
+.confirm-btn-ok {
+  background: rgba(255,255,255,0.12);
+  color: #e9f3ff;
+  border-color: rgba(99, 216, 255, 0.3);
+}
+
+.confirm-btn-ok:hover {
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(99, 216, 255, 0.5);
+}
+
 </style>
+
+
 

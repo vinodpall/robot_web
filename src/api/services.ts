@@ -1,28 +1,32 @@
 import { apiClient, API_BASE_URL, type ApiResponse, type PaginatedResponse } from './config'
-import type { User, Dock, Drone, Mission, MissionRecord, Alert, Role, Device, HmsAlert, VisionAlert, VisionAlertsResponse, Permission } from '../types'
+import type { User, Dock, Drone, Mission, MissionRecord, Alert, Role, Device, HmsAlert, VisionAlert, VisionAlertsResponse, Permission, Robot, RobotsResponse } from '../types'
 
 // 认证相关接口
 export const authApi = {
   // 用户登录 - 适配后端API
   login: (username: string, password: string) => {
-    console.log('??????:', { username, password })
+    console.log('Login attempt:', { username, password })
+
+    const formData = new URLSearchParams()
+    formData.append('username', username)
+    formData.append('password', password)
 
     return fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: JSON.stringify({ username, password })
+      body: formData
     }).then(response => {
-      console.log('??????:', response.status)
+      console.log('Login response status:', response.status)
       if (!response.ok) {
         return response.json().then(errorData => {
-          console.error('????:', response.status, errorData)
+          console.error('Login error:', response.status, errorData)
           throw new Error(`HTTP error! status: ${response.status}`)
         })
       }
       return response.json().then(data => {
-        console.log('??????:', data)
+        console.log('Login success:', data)
         return data
       })
     })
@@ -1165,4 +1169,37 @@ export const visionApi = {
   }) => {
     return apiClient.put<VisionAlert>(`/workspaces/${workspaceId}/vision/alerts/${alertId}/status`, data)
   }
-} 
+}
+
+// 机器人管理接口
+export const robotApi = {
+  // 获取机器人列表
+  getRobots: (params?: { skip?: number; limit?: number }) => {
+    return apiClient.get<RobotsResponse>('/robots', params)
+  }
+}
+
+// 导航管理接口
+export const navigationApi = {
+  // 获取地图列表
+  getMapList: (robotId: string) => {
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/map_list`)
+  },
+  // 导航控制
+  controlNavigation: (robotId: string, data: { action: number; map_name: string }) => {
+    return apiClient.post(`/navigation/${robotId}/ctrl_nav`, data)
+  },
+  // 获取循迹任务列表
+  getTrackList: (robotId: string) => {
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/track_list`)
+  },
+  // 获取发布点任务列表
+  getPointTaskList: (robotId: string) => {
+    return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/alltask_list`)
+  },
+  // 获取多任务组列表
+  getMultiTaskList: (robotId: string) => {
+    return apiClient.get<{ msg: { multitask_id: string; multitask_name: string; multitask_list: any[] }[]; request_id: string }>(`/multitasks/${robotId}/multitask_list`)
+  }
+}
+
