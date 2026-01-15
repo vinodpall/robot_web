@@ -26,7 +26,7 @@
                 <span class="nav-top-title">录包建图</span>
               </div>
             </div>
-            <div class="nav-content-wrapper">
+            <div class="nav-content-wrapper track-record-content">
               <!-- 采集地图数据 -->
               <div class="map-section">
                 <div class="map-section-title">采集地图数据</div>
@@ -245,61 +245,43 @@
                   <div v-show="isEditMode" class="edit-panel-right">
                     <div class="panel-tools">
                       <!-- 拖动模式 -->
-                      <div class="navigation-tools">
-                        <div class="nav-item" :class="{ active: navMode === 'pan' }" @click="setNavMode('pan')" title="拖动模式">
-                          <span class="nav-icon">✋</span>
-                        </div>
-                      </div>
+                      <button class="tool-button" :class="{ active: navMode === 'pan' }" @click="setNavMode('pan')" title="拖动模式">
+                        <img :src="mapMoveIcon" class="tool-icon-img" alt="拖动模式" />
+                      </button>
                       <!-- 放大 -->
-                      <div class="navigation-tools">
-                        <div class="nav-item" @click="zoomIn" title="放大">
-                          <span class="nav-icon">+</span>
-                        </div>
-                      </div>
+                      <button class="tool-button" @click="zoomIn" title="放大">
+                        <img :src="mapMagnifyIcon" class="tool-icon-img" alt="放大" />
+                      </button>
                       <!-- 缩小 -->
-                      <div class="navigation-tools">
-                        <div class="nav-item" @click="zoomOut" title="缩小">
-                          <span class="nav-icon">-</span>
-                        </div>
-                      </div>
+                      <button class="tool-button" @click="zoomOut" title="缩小">
+                        <img :src="mapReduceIcon" class="tool-icon-img" alt="缩小" />
+                      </button>
                       <!-- 画笔 -->
-                      <div class="tool-group">
-                        <div class="tool-item" :class="{ active: activeTool === 'pen' && navMode === 'edit' }" @click="setTool('pen')" title="画笔">
-                          <span class="tool-icon">✏️</span>
-                        </div>
-                      </div>
+                      <button class="tool-button" :class="{ active: activeTool === 'pen' && navMode === 'edit' }" @click="setTool('pen')" title="画笔">
+                        <img :src="mapPenIcon" class="tool-icon-img" alt="画笔" />
+                      </button>
                       <!-- 橡皮擦 -->
-                      <div class="tool-group">
-                        <div class="tool-item" :class="{ active: activeTool === 'eraser' && navMode === 'edit' }" @click="setTool('eraser')" title="橡皮擦">
-                          <span class="tool-icon">🧹</span>
-                        </div>
-                      </div>
+                      <button class="tool-button" :class="{ active: activeTool === 'eraser' && navMode === 'edit' }" @click="setTool('eraser')" title="橡皮擦">
+                        <img :src="mapEraserIcon" class="tool-icon-img" alt="橡皮擦" />
+                      </button>
                       <!-- 撤销 -->
-                      <div class="tool-actions">
-                        <button class="action-btn" @click="undoEdit" :disabled="!canUndo" title="撤回">
-                          <span class="action-icon">↶</span>
-                        </button>
-                      </div>
+                      <button class="tool-button" :class="{ disabled: !canUndo }" @click="canUndo && undoEdit()" title="撤回">
+                        <img :src="mapRollbackIcon" class="tool-icon-img" alt="撤回" />
+                      </button>
                       <!-- 初始化 -->
-                      <div class="tool-actions">
-                        <button class="action-btn" @click="clearGridEdit" title="初始化">
-                          <span class="action-icon">⟲</span>
-                        </button>
+                      <button class="tool-button" @click="clearGridEdit" title="初始化">
+                        <img :src="mapInitIcon" class="tool-icon-img" alt="初始化" />
+                      </button>
+                      <!-- 大小滚动条 -->
+                      <div class="tool-slider">
+                        <div class="slider-label">大小</div>
+                        <input type="range" min="1" max="20" v-model.number="brushSize" class="size-slider-vertical" orient="vertical" />
+                        <div class="slider-value">{{ brushSize }}</div>
                       </div>
                       <!-- 保存 -->
-                      <div class="tool-actions">
-                        <button class="action-btn action-btn-save" @click="handleSaveGridMap" :disabled="!gridImageData" title="保存地图">
-                          <span class="action-icon">💾</span>
-                        </button>
-                      </div>
-                      <!-- 大小滚动条 -->
-                      <div class="tool-settings">
-                        <div class="setting-item">
-                          <label>大小</label>
-                          <input type="range" min="1" max="20" v-model.number="brushSize" class="size-slider" />
-                          <span class="size-value">{{ brushSize }}</span>
-                        </div>
-                      </div>
+                      <button class="tool-button" :class="{ disabled: !gridImageData }" @click="gridImageData && handleSaveGridMap()" title="保存地图">
+                        <img :src="mapUploadIcon" class="tool-icon-img" alt="保存地图" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -316,8 +298,76 @@
               </div>
             </div>
             <div class="nav-content-wrapper">
-              <div class="settings-content">
-                <p style="color: #b8c7d9; font-size: 14px;">路线录制功能开发中...</p>
+              <div class="track-record-toolbar">
+                <div class="track-toolbar-group">
+                  <span class="track-label">地图:</span>
+                  <div class="track-select-wrapper">
+                    <select v-model="trackRecordMap" class="track-select">
+                      <option value="FA0625">FA0625</option>
+                      <option value="电厂巡检地图">电厂巡检地图</option>
+                      <option value="仓库地图">仓库地图</option>
+                    </select>
+                    <span class="track-select-arrow">
+                      <svg width="10" height="10" viewBox="0 0 12 12">
+                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+                <button class="map-btn map-btn-secondary track-btn" @click="handleTrackRecord">录制路线</button>
+                <div class="track-toolbar-group">
+                  <span class="track-label">路线:</span>
+                  <div class="track-select-wrapper">
+                    <select v-model="trackRecordLine" class="track-select">
+                      <option value="">请选择</option>
+                      <option value="FA0625_new_line_mode1">FA0625_new_line_mode1</option>
+                      <option value="FA0625_line_demo">FA0625_line_demo</option>
+                    </select>
+                    <span class="track-select-arrow">
+                      <svg width="10" height="10" viewBox="0 0 12 12">
+                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+                <div class="track-toolbar-group">
+                  <span class="track-label">任务组:</span>
+                  <div class="track-select-wrapper">
+                    <select v-model="trackRecordTask" class="track-select">
+                      <option value="">导出+ 关键点:0</option>
+                      <option value="task_group_a">任务组A</option>
+                    </select>
+                    <span class="track-select-arrow">
+                      <svg width="10" height="10" viewBox="0 0 12 12">
+                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+                <div class="track-toolbar-actions">
+                  <button class="map-btn track-btn track-btn-danger" @click="handleTrackDelete">删除路线</button>
+                  <button class="map-btn map-btn-primary track-btn" @click="handleTrackPreview">预览路线</button>
+                  <button class="map-btn map-btn-primary track-btn" @click="handleTrackSmooth">轨迹平滑</button>
+                </div>
+              </div>
+              <div class="track-record-map">
+                <div class="nav-map-canvas">
+                  <div class="pointcloud-wrapper">
+                    <div class="pointcloud-view">
+                      <canvas
+                        ref="navPointCloudCanvas"
+                        class="pointcloud-canvas"
+                        tabindex="0"
+                        @wheel.prevent="handleNavPointCloudWheel"
+                        @pointerdown="handleNavPointCloudPointerDown"
+                        @keydown="handleNavPointCloudKeydown"
+                        @contextmenu.prevent
+                      ></canvas>
+                      <div v-if="navPointCloudLoading" class="pcd-overlay loading">点云加载中...</div>
+                      <div v-else-if="navPointCloudError" class="pcd-overlay error">{{ navPointCloudError }}</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </template>
@@ -329,53 +379,54 @@
                 <img src="@/assets/source_data/bg_data/card_logo.png" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;" alt="logo" />
                 <span class="nav-top-title">文件管理</span>
               </div>
-              <div class="nav-top-row">
-                <input v-model="filter.keyword" class="nav-input" placeholder="请输入关键字搜索" />
-                <button class="nav-btn" @click="handleSearch">查询</button>
-                <button class="nav-btn nav-btn-add" @click="handleAdd">上传文件</button>
-              </div>
             </div>
-            <div class="nav-content-wrapper">
-              <div class="nav-card-list">
-                <div class="nav-card" v-for="(item, idx) in fileList" :key="idx">
-                  <div class="nav-card-header">
-                    <span class="nav-card-title">{{ item.name || '-' }}</span>
-                    <span class="nav-card-delete" @click="handleDelete(item.id)">
-                      <img :src="rubbishIcon" alt="删除" />
-                    </span>
+            <div class="nav-content-wrapper file-manage-content">
+              <div class="file-manage-toolbar">
+                <span class="file-manage-label">地图:</span>
+                <div class="track-select-wrapper">
+                  <select v-model="fileManageMap" class="map-edit-select">
+                    <option value="FA0625">FA0625</option>
+                    <option value="电厂巡检地图">电厂巡检地图</option>
+                    <option value="仓库地图">仓库地图</option>
+                  </select>
+                </div>
+                <button class="map-btn map-btn-danger" @click="handleDeleteMap">删除地图</button>
+                <div class="file-manage-package-group">
+                  <span class="file-manage-label">数据包:</span>
+                  <div class="track-select-wrapper">
+                    <select v-model="fileManagePackage" class="map-edit-select">
+                      <option value="包A">包A</option>
+                      <option value="包B">包B</option>
+                      <option value="包C">包C</option>
+                    </select>
                   </div>
-                  <div class="nav-card-body">
-                    <div class="nav-card-info">
-                      <div class="info-row"><span class="info-label">文件类型：</span><span class="info-value">{{ item.type || '-' }}</span></div>
-                      <div class="info-row"><span class="info-label">文件大小：</span><span class="info-value">{{ item.size || '-' }}</span></div>
-                      <div class="info-row"><span class="info-label">创建时间：</span><span class="info-value">{{ item.createTime || '-' }}</span></div>
-                      <div class="info-row"><span class="info-label">状态：</span><span class="info-value">{{ item.status || '正常' }}</span></div>
-                    </div>
+                  <button class="map-btn map-btn-danger" @click="handleDeletePackage">删除数据包</button>
+                </div>
+              </div>
+              <div class="file-table">
+                <div class="file-table-header">
+                  <div class="file-table-cell file-table-check">序号</div>
+                  <div class="file-table-cell">类型</div>
+                  <div class="file-table-cell file-table-name">名称</div>
+                  <div class="file-table-cell">创建时间</div>
+                  <div class="file-table-cell file-table-action">操作</div>
+                </div>
+                <div class="file-table-row" v-for="(item, index) in fileManageList" :key="item.id">
+                  <div class="file-table-cell file-table-check">{{ index + 1 }}</div>
+                  <div class="file-table-cell">{{ item.type }}</div>
+                  <div class="file-table-cell file-table-name">{{ item.name }}</div>
+                  <div class="file-table-cell">{{ item.createTime }}</div>
+                  <div class="file-table-cell file-table-action">
+                    <button class="file-delete-btn" @click="handleDelete(item.id)">
+                      <img :src="rubbishIcon" alt="删除" />
+                      删除
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
           </template>
 
-          <!-- 数据包管理 -->
-          <template v-else-if="currentTab === 'package_manage'">
-            <div class="nav-top-card card">
-              <div class="nav-top-header">
-                <img src="@/assets/source_data/bg_data/card_logo.png" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;" alt="logo" />
-                <span class="nav-top-title">数据包管理</span>
-              </div>
-              <div class="nav-top-row">
-                <input v-model="filter.keyword" class="nav-input" placeholder="请输入关键字搜索" />
-                <button class="nav-btn" @click="handleSearch">查询</button>
-                <button class="nav-btn nav-btn-add" @click="handleAdd">新建数据包</button>
-              </div>
-            </div>
-            <div class="nav-content-wrapper">
-              <div class="settings-content">
-                <p style="color: #b8c7d9; font-size: 14px;">数据包管理功能开发中...</p>
-              </div>
-            </div>
-          </template>
         </section>
       </div>
     </main>
@@ -419,8 +470,15 @@ import mapRecordIcon from '@/assets/source_data/svg_data/map_record.svg'
 import navIcon from '@/assets/source_data/svg_data/nav.svg'
 import mapEditIcon from '@/assets/source_data/svg_data/map_edit.svg'
 import trackRecordIcon from '@/assets/source_data/svg_data/track_record.svg'
-import fileManageIcon from '@/assets/source_data/svg_data/file_manage.svg'
 import packageManageIcon from '@/assets/source_data/svg_data/package_manage.svg'
+import mapMoveIcon from '@/assets/source_data/svg_data/robot_source/map_move.svg'
+import mapMagnifyIcon from '@/assets/source_data/svg_data/robot_source/map_magnify.svg'
+import mapReduceIcon from '@/assets/source_data/svg_data/robot_source/map_reduce.svg'
+import mapPenIcon from '@/assets/source_data/svg_data/robot_source/map_pen.svg'
+import mapEraserIcon from '@/assets/source_data/svg_data/robot_source/map_eraser.svg'
+import mapRollbackIcon from '@/assets/source_data/svg_data/robot_source/map_rollback.svg'
+import mapInitIcon from '@/assets/source_data/svg_data/robot_source/map_init.svg'
+import mapUploadIcon from '@/assets/source_data/svg_data/robot_source/map_upload.svg'
 
 // 导航点云图相关变量（需要在前面声明，因为在cleanupNavPointCloud中使用）
 let navPointCloudInitialized = false
@@ -514,8 +572,7 @@ const sidebarTabs = [
   { key: 'nav', label: '导航', icon: navIcon },
   { key: 'map_edit', label: '地图编辑', icon: mapEditIcon },
   { key: 'track_record', label: '路线录制', icon: trackRecordIcon },
-  { key: 'file_manage', label: '文件管理', icon: fileManageIcon },
-  { key: 'package_manage', label: '数据包管理', icon: packageManageIcon }
+  { key: 'file_manage', label: '文件管理', icon: packageManageIcon }
 ]
 
 const currentTab = ref('map_record')
@@ -524,13 +581,13 @@ const handleTabClick = (key: string) => {
   const previousTab = currentTab.value
   currentTab.value = key
   
-  // 如果离开导航标签，清理点云图状态
-  if (previousTab === 'nav' && key !== 'nav') {
+  // 如果离开导航/路线录制标签，清理点云图状态
+  if ((previousTab === 'nav' || previousTab === 'track_record') && key !== 'nav' && key !== 'track_record') {
     cleanupNavPointCloud()
   }
   
-  // 当切换到导航标签时，初始化点云图
-  if (key === 'nav') {
+  // 当切换到导航/路线录制标签时，初始化点云图
+  if (key === 'nav' || key === 'track_record') {
     nextTick(() => {
       initNavPointCloud()
     })
@@ -542,17 +599,34 @@ const cleanupNavPointCloud = () => {
   console.log('清理点云图状态')
   navPointCloudInitialized = false
   if (navResizeObserver) {
-    navResizeObserver.disconnect()
+    (navResizeObserver as ResizeObserver | null)?.disconnect()
     navResizeObserver = null
   }
 }
 
-// 筛选
-const filter = ref<{ keyword: string }>({ keyword: '' })
+// 路线录制相关状态
+const trackRecordMap = ref('FA0625')
+const trackRecordLine = ref('')
+const trackRecordTask = ref('')
 
-const handleSearch = () => {
-  console.log('搜索:', filter.value.keyword)
-  // TODO: 实现搜索逻辑
+const handleTrackRecord = () => {
+  console.log('录制路线')
+}
+
+const handleTrackDelete = () => {
+  console.log('删除路线')
+}
+
+const handleTrackDownload = () => {
+  console.log('下载路线')
+}
+
+const handleTrackPreview = () => {
+  console.log('预览路线')
+}
+
+const handleTrackSmooth = () => {
+  console.log('轨迹平滑')
 }
 
 // 导航相关状态
@@ -1061,7 +1135,7 @@ const initNavPointCloud = async () => {
   
   // 清理旧的 ResizeObserver
   if (navResizeObserver) {
-    navResizeObserver.disconnect()
+    (navResizeObserver as ResizeObserver | null)?.disconnect()
     navResizeObserver = null
   }
   
@@ -1075,7 +1149,7 @@ const initNavPointCloud = async () => {
   // 使用 ResizeObserver 监听容器尺寸变化，确保在容器尺寸稳定后渲染
   // 这样可以解决初始加载时容器尺寸为0或很小的问题
   if (navResizeObserver) {
-    navResizeObserver.disconnect()
+    (navResizeObserver as ResizeObserver | null)?.disconnect()
   }
   
   navResizeObserver = new ResizeObserver((entries) => {
@@ -1753,6 +1827,23 @@ const fileList = ref([
   }
 ])
 
+// 文件管理（路线/任务组）列表
+const fileManageMap = ref('FA0625')
+const fileManagePackage = ref('包A')
+const fileManageList = ref([
+  { id: 'A001', type: '地图', name: 'FA0625_展区A', createTime: '2024-12-20 10:30:00' },
+  { id: 'A002', type: '路线', name: 'FA0625_路线B', createTime: '2024-12-21 14:20:00' },
+  { id: 'A003', type: '任务组', name: 'FA0625_任务组C', createTime: '2024-12-22 09:15:00' }
+])
+
+const handleDeleteMap = () => {
+  console.log('删除地图:', fileManageMap.value)
+}
+
+const handleDeletePackage = () => {
+  console.log('删除数据包:', fileManagePackage.value)
+}
+
 const handleAdd = () => {
   console.log('添加操作')
   // TODO: 根据currentTab实现对应的添加逻辑
@@ -1863,6 +1954,110 @@ const handleDelete = (id: string) => {
   flex: 1;
   min-height: 0;
   height: 100%;
+}
+
+.file-manage-content {
+  padding: 12px 16px 20px 16px;
+}
+
+.file-manage-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 8px 0 12px;
+}
+
+.file-manage-package-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: 18px;
+}
+
+.file-manage-label {
+  color: #b8dcf5;
+  font-size: 14px;
+  line-height: 40px;
+}
+
+.file-manage-toolbar .map-edit-select {
+  height: 40px;
+  min-width: 220px;
+}
+
+.file-table {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(62, 121, 150, 0.6);
+  background: transparent;
+}
+
+.file-table-header,
+.file-table-row {
+  display: grid;
+  grid-template-columns: 60px 120px 1fr 200px 140px;
+  align-items: center;
+}
+
+.file-table-header {
+  background: #1c4b64;
+  color: #e9f7ff;
+  font-size: 13px;
+  font-weight: 600;
+  height: 44px;
+  text-align: center;
+}
+
+.file-table-row {
+  background: transparent;
+  color: #cfe9ff;
+  font-size: 13px;
+  height: 44px;
+  border-top: 1px solid rgba(45, 111, 145, 0.5);
+}
+
+.file-table-cell {
+  padding: 0 12px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-table-name {
+  text-align: left;
+}
+
+.file-table-action {
+  display: flex;
+  justify-content: center;
+}
+
+.file-check-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  display: inline-block;
+}
+
+.file-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #fd6767;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.file-delete-btn img {
+  width: 14px;
+  height: 14px;
+  filter: drop-shadow(0 0 4px rgba(253, 103, 103, 0.4));
 }
 
 .nav-page-content {
@@ -2003,6 +2198,11 @@ const handleDelete = (id: string) => {
   margin-bottom: 16px;
 }
 
+.track-record-content .map-section {
+  padding: 20px 22px 22px;
+  margin-bottom: 52px;
+}
+
 /* 导航页的按钮区不需要背景和内边距 */
 .nav-content-wrapper > .map-section {
   background: transparent;
@@ -2017,10 +2217,23 @@ const handleDelete = (id: string) => {
   margin-bottom: 20px;
 }
 
+.track-record-content .map-section-title {
+  margin-bottom: 26px;
+}
+
 .map-section-buttons {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.track-record-content .map-section-buttons {
+  gap: 24px;
+  margin-bottom: 6px;
+}
+
+.track-record-content .map-progress-wrapper {
+  margin-top: 12px;
 }
 
 .map-btn {
@@ -2104,10 +2317,36 @@ const handleDelete = (id: string) => {
   cursor: not-allowed;
 }
 
+.map-btn-danger {
+  background: #561c1c;
+  border: 1px solid rgba(182, 38, 38, 0.4);
+  color: #fd6767;
+}
+
+.map-btn-danger:hover:not(:disabled) {
+  background: #662626;
+  border-color: rgba(182, 38, 38, 0.8);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(253, 103, 103, 0.2);
+}
+
+.map-btn-danger:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.map-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .map-progress-header {
   display: flex;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.track-record-content .map-progress-header {
+  margin-top: 12px;
 }
 
 .map-progress-header .map-section-title {
@@ -2118,7 +2357,7 @@ const handleDelete = (id: string) => {
 }
 
 .map-progress-percent {
-  font-size: 24px;
+  font-size: 18px;
   color: #67d5fd;
   font-weight: 600;
   font-family: 'Arial', sans-serif;
@@ -2310,6 +2549,114 @@ const handleDelete = (id: string) => {
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+/* 路线录制工具栏 */
+.track-record-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0 8px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin-bottom: 8px;
+}
+
+.track-record-content {
+  padding: 24px 20px 28px 20px;
+}
+
+.track-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.track-label {
+  color: #b8dcf5;
+  font-size: 14px;
+  min-width: 40px;
+  line-height: 40px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.track-select-wrapper {
+  position: relative;
+}
+
+.track-select {
+  height: 40px;
+  background: #0c3c56;
+  color: #67d5fd;
+  border: 1px solid rgba(38, 131, 182, 0.8);
+  border-radius: 4px;
+  padding: 0 30px 0 12px;
+  font-size: 13px;
+  min-width: 200px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.track-select:focus {
+  border-color: #67d5fd;
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
+}
+
+.track-select:hover {
+  background: #0c4666;
+  border-color: rgba(38, 131, 182, 1);
+}
+
+.track-select-arrow {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.track-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.track-btn {
+  max-width: 140px;
+  flex-shrink: 0;
+}
+
+.track-btn-danger {
+  background: #561c1c;
+  border: 1px solid rgba(182, 38, 38, 0.4);
+  color: #fd6767;
+}
+
+.track-btn-danger:hover {
+  border-color: rgba(182, 38, 38, 0.8);
+  background: #662626;
+}
+
+.track-record-map {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(10, 42, 58, 0.6);
+  border: 1px solid rgba(103, 213, 253, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  height: calc(100vh - 300px);
+  min-height: 420px;
 }
 
 /* 点云图样式 */
@@ -2519,12 +2866,14 @@ const handleDelete = (id: string) => {
   right: 0;
   top: 0;
   bottom: 0;
-  width: 60px;
-  background: rgba(22, 65, 89, 0.95);
-  border-left: 1px solid rgba(38, 131, 182, 0.4);
+  width: 66px;
+  background: linear-gradient(180deg, #244e63 0%, #1c4156 100%);
+  border-left: 1px solid rgba(73, 146, 176, 0.5);
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   backdrop-filter: blur(4px);
+  overflow: hidden;
   z-index: 100;
 }
 
@@ -2532,158 +2881,108 @@ const handleDelete = (id: string) => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 12px 8px;
+  padding: 16px 8px 20px;
   gap: 10px;
+  align-items: center;
 }
 
-.navigation-tools,
-.tool-group,
-.tool-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.nav-item,
-.tool-item {
-  width: 44px;
-  height: 44px;
-  background: rgba(103, 213, 253, 0.1);
-  border: 1px solid rgba(103, 213, 253, 0.3);
-  border-radius: 6px;
+.tool-button {
+  width: 48px;
+  height: 48px;
+  background: rgba(26, 80, 104, 0.8);
+  border: 1px solid rgba(93, 160, 188, 0.28);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  padding: 0;
 }
 
-.nav-item:hover,
-.tool-item:hover {
-  background: rgba(103, 213, 253, 0.2);
-  border-color: rgba(103, 213, 253, 0.5);
+.tool-button:hover:not(.disabled) {
+  background: rgba(66, 149, 186, 0.7);
+  border-color: rgba(126, 200, 230, 0.5);
   transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(10, 30, 45, 0.3);
 }
 
-.nav-item.active,
-.tool-item.active {
-  background: #67d5fd;
-  border-color: #67d5fd;
-  box-shadow: 0 0 10px rgba(103, 213, 253, 0.4);
+.tool-button.active {
+  background: #7fd3fb;
+  border-color: #7fd3fb;
+  box-shadow: 0 8px 16px rgba(73, 171, 212, 0.35);
 }
 
-.nav-icon,
-.tool-icon {
-  font-size: 20px;
-  color: #67d5fd;
-}
-
-.nav-item.active .nav-icon,
-.tool-item.active .tool-icon {
-  color: #0a1929;
-}
-
-.action-btn {
-  width: 44px;
-  height: 44px;
-  background: rgba(103, 213, 253, 0.1);
-  border: 1px solid rgba(103, 213, 253, 0.3);
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.action-btn:hover:not(:disabled) {
-  background: rgba(103, 213, 253, 0.2);
-  border-color: rgba(103, 213, 253, 0.5);
-  transform: translateY(-1px);
-}
-
-.action-btn:disabled {
-  opacity: 0.3;
+.tool-button.disabled {
+  opacity: 0.35;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
-.action-btn-save {
-  background: rgba(76, 175, 80, 0.15);
-  border-color: rgba(76, 175, 80, 0.4);
+.tool-icon-img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) saturate(100%) invert(88%) sepia(9%) saturate(748%) hue-rotate(164deg);
 }
 
-.action-btn-save:hover:not(:disabled) {
-  background: rgba(76, 175, 80, 0.25);
-  border-color: rgba(76, 175, 80, 0.6);
-  box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+.tool-button.active .tool-icon-img {
+  filter: brightness(0) saturate(100%) invert(15%) sepia(16%) saturate(1035%) hue-rotate(166deg);
 }
 
-.action-btn-save:disabled {
-  opacity: 0.25;
-  cursor: not-allowed;
-  background: rgba(76, 175, 80, 0.05);
-  border-color: rgba(76, 175, 80, 0.2);
-}
-
-.action-btn-save .action-icon {
-  font-size: 22px;
-}
-
-.action-icon {
-  font-size: 20px;
-  color: #67d5fd;
-}
-
-.tool-settings {
+.tool-slider {
   margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid rgba(38, 131, 182, 0.3);
-}
-
-.setting-item {
+  width: 100%;
+  padding-top: 14px;
+  padding-bottom: 6px;
+  border-top: 1px solid rgba(73, 146, 176, 0.45);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
 }
 
-.setting-item label {
-  color: #67d5fd;
-  font-size: 11px;
-  text-align: center;
+.slider-label {
+  color: #73d2f6;
+  font-size: 12px;
+  letter-spacing: 1px;
 }
 
-.size-slider {
-  width: 100%;
-  height: 4px;
-  background: rgba(103, 213, 253, 0.2);
-  border-radius: 2px;
+.size-slider-vertical {
+  writing-mode: bt-lr;
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  width: 6px;
+  height: 140px;
+  background: rgba(40, 120, 150, 0.6);
+  border-radius: 999px;
   outline: none;
-  -webkit-appearance: none;
+  cursor: pointer;
 }
 
-.size-slider::-webkit-slider-thumb {
+.size-slider-vertical::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 12px;
   height: 12px;
-  background: #67d5fd;
+  background: #8bdcff;
   border-radius: 50%;
+  box-shadow: 0 0 6px rgba(130, 220, 255, 0.55);
   cursor: pointer;
 }
 
-.size-slider::-moz-range-thumb {
+.size-slider-vertical::-moz-range-thumb {
   width: 12px;
   height: 12px;
-  background: #67d5fd;
+  background: #8bdcff;
   border-radius: 50%;
-  cursor: pointer;
   border: none;
+  box-shadow: 0 0 6px rgba(130, 220, 255, 0.55);
+  cursor: pointer;
 }
 
-.size-value {
-  color: #67d5fd;
-  font-size: 12px;
-  text-align: center;
+.slider-value {
+  color: #73d2f6;
+  font-size: 13px;
   font-weight: 600;
 }
 </style>

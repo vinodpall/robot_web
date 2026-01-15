@@ -7,6 +7,7 @@
           v-for="tab in sidebarTabs"
           :key="tab.key"
           :class="['sidebar-tab', { active: route.path === tab.path }]"
+          :title="tab.label"
           @click="handleTabClick(tab)"
         >
           <img :src="tab.icon" :alt="tab.label" />
@@ -20,66 +21,69 @@
           <div class="mission-top-card card">
             <div class="mission-top-header">
               <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
-              <span class="mission-top-title">航线管理</span>
-            </div>
-            <div class="mission-top-row">
-              <span class="mission-lib-label">航线库</span>
-              <div class="mission-top-selects">
-                <div style="position: relative; display: inline-block;">
-                  <select
-                    v-model="selectedTrack"
-                    ref="trackSelectRef"
-                    class="mission-select treeselect-track track-select-wide"
-                    style="width: 200px;"
-                    @mousedown="onTrackSelectMousedown"
-                    @keydown="onTrackSelectKeydown"
-                    @blur="onTrackSelectBlur"
-                    @focus="onTrackSelectFocus"
-                    @change="onTrackSelectChange"
-                    :disabled="trackFileLoading"
-                  >
-                    <option v-for="file in waylineFiles" :key="file.wayline_id" :value="file.wayline_id">
-                      {{ file.name }}
-                    </option>
-                  </select>
-                  <span
-                    class="custom-select-arrow"
-                    @click="openTrackSelect"
-                    style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2;"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 12 12">
-                      <polygon v-if="!isTrackSelectOpen" points="2,4 6,8 10,4" fill="#fff"/>
-                      <polygon v-else points="2,8 6,4 10,8" fill="#fff"/>
-                    </svg>
-                  </span>
-                </div>
-                <div class="mission-top-btns">
-                                  <button class="mission-btn mission-btn-pause" v-permission-click-dialog="'wayline_management.wayline.delete'" @click="handleDeleteTrack">删除航线</button>
-                <button class="mission-btn mission-btn-pause" v-permission-click-dialog="'wayline_management.wayline.create'" @click="handleAddTrack">新增航线</button>
-                <button class="mission-btn mission-btn-pause" v-permission-click-dialog="'wayline_management.task.issue'" @click="handleDispatchTask">下发任务</button>
-                </div>
+              <span class="mission-top-title">循迹任务</span>
+              <div class="mission-top-data">
+                <span class="mission-data-item">X坐标: <span class="mission-data-value">{{ currentPosition.x || '-' }}</span></span>
+                <span class="mission-data-item">Y坐标: <span class="mission-data-value">{{ currentPosition.y || '-' }}</span></span>
+                <span class="mission-data-item">Z坐标: <span class="mission-data-value">{{ currentPosition.z || '-' }}</span></span>
+                <span class="mission-data-item">角度: <span class="mission-data-value">{{ currentPosition.angle || '-' }}</span></span>
+                <span class="mission-data-item">任务ID: <span class="mission-data-value">{{ currentTaskId || '-' }}</span></span>
               </div>
             </div>
           </div>
-          <div class="mission-table-card card">
-            <div class="mission-table-header">
-              <div class="mission-th">航点编号</div>
-              <div class="mission-th">坐标</div>
-              <div class="mission-th">航点类型</div>
-              <div class="mission-th">操作</div>
+          <div class="mission-content-wrapper">
+            <div class="mission-toolbar">
+              <!-- 任务组选择 -->
+              <span class="mission-toolbar-label" style="margin-right: -8px;">任务组名称：</span>
+              <select class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">FA0625_new_line_mode1</option>
+              </select>
+              
+              <!-- 关键点选择 -->
+              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">关键点名称：</span>
+              <select class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">寻迹中-关键点0</option>
+              </select>
+              
+              <!-- 操作按钮组 -->
+              <div style="display: flex; gap: 12px; margin-left: 8px;">
+                <button class="mission-btn mission-btn-primary">开始</button>
+                <button class="mission-btn mission-btn-secondary">暂停</button>
+                <button class="mission-btn mission-btn-primary">添加任务组</button>
+                <button class="mission-btn mission-btn-stop">删除任务组</button>
+                <button class="mission-btn mission-btn-primary">添加任务</button>
+                <button class="mission-btn mission-btn-secondary">预览</button>
+              </div>
             </div>
-            <div class="mission-table-body">
-              <div class="mission-tr" v-for="waypoint in waypointsData" :key="waypoint.index">
-                <div class="mission-td">{{ waypoint.index + 1 }}</div>
-                <div class="mission-td">{{ formatCoordinates(waypoint.coordinates) }}</div>
-                <div class="mission-td mission-icons">
-                  <span v-for="action in waypoint.actions" :key="action.actionId" class="mission-icon">
-                    <img :src="getActionIcon(action.type)" :title="action.typeName" />
-                  </span>
+            <div class="file-table">
+              <div class="file-table-header">
+                <div class="file-table-cell" style="width: 80px;">序号</div>
+                <div class="file-table-cell" style="width: 120px;">任务类型</div>
+                <div class="file-table-cell" style="width: 100px;">X坐标</div>
+                <div class="file-table-cell" style="width: 100px;">Y坐标</div>
+                <div class="file-table-cell" style="width: 100px;">Z坐标</div>
+                <div class="file-table-cell" style="width: 100px;">角度</div>
+                <div class="file-table-cell" style="width: 120px;">预置点</div>
+                <div class="file-table-cell" style="flex: 1;">描述</div>
+                <div class="file-table-cell file-table-action" style="width: 120px;">操作</div>
+              </div>
+              <template v-if="waypointsData.length > 0">
+                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
+                  <div class="file-table-cell" style="width: 80px;">{{ waypoint.index + 1 }}</div>
+                  <div class="file-table-cell" style="width: 120px;">{{ waypoint.type || '-' }}</div>
+                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.x || '-' }}</div>
+                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.y || '-' }}</div>
+                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.z || '-' }}</div>
+                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.angle || '-' }}</div>
+                  <div class="file-table-cell" style="width: 120px;">{{ waypoint.preset || '-' }}</div>
+                  <div class="file-table-cell file-table-name" style="flex: 1;">{{ waypoint.description || '-' }}</div>
+                  <div class="file-table-cell file-table-action" style="width: 120px;">
+                    <button class="mission-btn mission-btn-secondary" disabled style="min-width: 80px; padding: 0 12px;">删除</button>
+                  </div>
                 </div>
-                <div class="mission-td">
-                  <button class="mission-btn mission-btn-pause" disabled>删除航点</button>
-                </div>
+              </template>
+              <div v-else class="mission-empty">
+                暂无航点数据
               </div>
             </div>
           </div>
@@ -296,8 +300,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
-import trackRecordsIcon from '@/assets/source_data/svg_data/track_records.svg'
-import trackLogsIcon from '@/assets/source_data/svg_data/track_logs.svg'
+import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
+import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
+import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
 import { waylineApi } from '@/api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
@@ -325,6 +330,15 @@ const { droneStatus, fetchMainDeviceStatus, fetchDroneStatus } = useDeviceStatus
 // 航线文件相关
 const selectedTrack = ref('')
 const trackFileLoading = ref(false)
+
+// 当前位置和任务信息
+const currentPosition = ref({
+  x: 0,
+  y: 0,
+  z: 0,
+  angle: 0
+})
+const currentTaskId = ref('')
 
 // 加载航线文件列表
 const loadWaylineFiles = async () => {
@@ -416,9 +430,10 @@ const getActionIcon = (actionType: string) => {
 }
 
 const sidebarTabs = [
-  { key: 'list', label: '航线管理', icon: trackListIcon, path: '/dashboard/mission' },
-  { key: 'records', label: '任务记录', icon: trackRecordsIcon, path: '/dashboard/mission-records' },
-  { key: 'logs', label: '任务日志', icon: trackLogsIcon, path: '/dashboard/mission-logs' }
+  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission' },
+  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records' },
+  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs' },
+  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group' }
 ]
 
 const handleTabClick = (tab: any) => {
@@ -1255,10 +1270,6 @@ onMounted(async () => {
   cursor: pointer;
   padding: 2px 0;
   transition: all 0.2s;
-}
-
-.dispatch-algorithm-option:hover {
-  /* 移除动态效果 */
 }
 
 .dispatch-algorithm-checkbox {

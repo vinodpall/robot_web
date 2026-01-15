@@ -122,6 +122,7 @@
 .mission-top-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   font-size: 16px;
   color: #67d5fd;
   font-weight: 600;
@@ -138,6 +139,25 @@
   font-size: 16px;
   color: #67d5fd;
   font-weight: 600;
+}
+.mission-top-data {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin-left: auto;
+}
+.mission-data-item {
+  font-size: 14px;
+  color: #b8dcf5;
+  font-weight: normal;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+.mission-data-value {
+  color: #67d5fd;
+  font-weight: 600;
+  margin-left: 6px;
 }
 .mission-top-row {
   display: flex;
@@ -201,47 +221,92 @@
 .mission-btn {
   border-radius: 4px;
   font-size: 14px;
-  font-weight: 400;
-  padding: 4px 18px;
+  font-weight: 500;
+  padding: 0 31px;
+  height: 40px;
+  line-height: 40px;
   cursor: pointer;
   border: none;
-  transition: background 0.2s, color 0.2s, border 0.2s;
+  transition: all 0.3s;
+  white-space: nowrap;
+  min-width: 135px;
+  text-align: center;
 }
+
+.mission-btn-primary {
+  background: #0c3c56;
+  color: #67d5fd;
+  border: 1px solid rgba(38, 131, 182, 0.8);
+}
+
+.mission-btn-primary:hover {
+  background: #0c4666;
+  border-color: rgba(103, 213, 253, 0.8);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(103, 213, 253, 0.2);
+}
+
+.mission-btn-primary:active {
+  transform: translateY(0);
+}
+
 .mission-btn-pause {
   background: #0c3c56;
   color: #67d5fd;
   border: 1px solid rgba(38, 131, 182, 0.8);
 }
+
 .mission-btn-pause:hover {
   background: #0c4666;
-  color: #67d5fd;
+  border-color: rgba(103, 213, 253, 0.8);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(103, 213, 253, 0.2);
 }
+
+.mission-btn-pause:active {
+  transform: translateY(0);
+}
+
+.mission-btn-cancel {
+  background: #0c3c56;
+  color: #67d5fd;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+}
+
+.mission-btn-cancel:hover {
+  background: #0c4666;
+  border-color: rgba(103, 213, 253, 0.8);
+}
+
 .mission-btn-stop {
   background: #561c1c;
+  border: 1px solid rgba(182, 38, 38, 0.4);
   color: #fd6767;
-  border: 1px solid rgba(182, 38, 38, 0);
 }
+
 .mission-btn-stop:hover {
-  background: #a94442;
-  color: #fff;
+  background: #662626;
+  border-color: rgba(182, 38, 38, 0.8);
 }
+
 .mission-btn-normal {
   background: #1a3a4a;
   color: #fff;
   border: 1px solid #164159;
 }
+
 .mission-btn-normal:hover {
   background: #16bbf2;
   color: #fff;
   border: 1.5px solid #16bbf2;
 }
+
 .mission-btn:disabled,
 .mission-btn[disabled] {
-  opacity: 1 !important;
-  background: #0c3c56 !important;
-  color: #67d5fd !important;
-  border: 1px solid rgba(38, 131, 182, 0.8) !important;
+  opacity: 0.5 !important;
   cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 .mission-table-card {
   background: linear-gradient(135deg, #0a2a3a 80%, #0a0f1c 100%);
@@ -861,3 +926,174 @@
     gap: 20px; /* 在高分辨率下稍微减少间距 */
   }
 } 
+/* ��״̬������״̬������״̬ */
+.mission-loading,
+.mission-empty,
+.mission-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 40px 20px;
+}
+
+.mission-loading {
+  color: #67d5fd;
+}
+
+.mission-error {
+  color: #fd6767;
+}
+
+.mission-empty {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* 任务内容包装器 */
+.mission-content-wrapper {
+  background: linear-gradient(135deg, #0a2a3a 80%, #0a0f1c 100%);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  padding: 16px 20px 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 工具栏样式 */
+.mission-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 6px 0;
+}
+
+.mission-toolbar-label {
+  color: #b8dcf5;
+  font-size: 14px;
+  line-height: 40px;
+  min-width: 60px;
+}
+
+.mission-toolbar-selects {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+}
+
+.mission-toolbar-select {
+  height: 40px;
+  background: #0c3c56;
+  color: #67d5fd;
+  border: 1px solid rgba(38, 131, 182, 0.8);
+  border-radius: 4px;
+  padding: 0 12px;
+  font-size: 13px;
+  min-width: 160px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mission-toolbar-select:hover {
+  background: #0c4666;
+  border-color: rgba(38, 131, 182, 1);
+}
+
+.mission-toolbar-select:focus {
+  border-color: #67d5fd;
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
+}
+
+.mission-toolbar-actions {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+}
+
+/* 文件表格样式 - 参考 NavigationManage */
+.file-table {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(62, 121, 150, 0.6);
+  background: transparent;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-table-header,
+.file-table-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr 100px 100px 100px 150px 150px 100px 140px;
+  align-items: center;
+}
+
+.file-table-header {
+  background: #1c4b64;
+  color: #e9f7ff;
+  font-size: 13px;
+  font-weight: 600;
+  height: 44px;
+  text-align: center;
+}
+
+.file-table-row {
+  background: transparent;
+  color: #cfe9ff;
+  font-size: 13px;
+  height: 44px;
+  border-top: 1px solid rgba(45, 111, 145, 0.5);
+}
+
+.file-table-cell {
+  padding: 0 12px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-table-name {
+  text-align: left;
+}
+
+.file-table-action {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.file-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #fd6767;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+  transition: all 0.2s;
+}
+
+.file-delete-btn:hover {
+  color: #ff8888;
+}
+
+.mission-btn-secondary {
+  background: #0c3c56;
+  color: #67d5fd;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+}
+
+.mission-btn-secondary:hover {
+  background: #0c4666;
+  border-color: rgba(103, 213, 253, 0.8);
+}
+

@@ -21,99 +21,93 @@
             <div class="mission-top-header">
               <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
               <span class="mission-top-title">
-                {{ filters.job_id ? `任务日志 - 任务ID: ${filters.job_id}` : '任务日志' }}
+                {{ filters.job_id ? `定时循迹任务 - 任务ID: ${filters.job_id}` : '定时循迹任务' }}
               </span>
             </div>
-            <div class="mission-top-row">
-              <span class="mission-lib-label">状态筛选</span>
-              <div class="mission-top-selects">
-                <div style="position: relative; display: inline-block;">
-                  <select
-                    v-model="filters.status"
-                    class="mission-select treeselect-track"
-                    style="width: 120px;"
-                    @change="onFilterChange"
-                  >
-                    <option value="">全部状态</option>
-                    <option value="PENDING">待处理</option>
-                    <option value="HANDLED">已处理</option>
-                    <option value="IGNORED">已忽略</option>
-                  </select>
-                  <span
-                    class="custom-select-arrow"
-                    style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2;"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 12 12">
-                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                    </svg>
-                  </span>
-                </div>
+          </div>
+          <div class="mission-content-wrapper">
+            <div class="mission-toolbar">
+              <span class="mission-toolbar-label">状态筛选：</span>
+              <div class="mission-toolbar-selects">
+                <select
+                  v-model="filters.status"
+                  class="mission-toolbar-select"
+                  @change="onFilterChange"
+                >
+                  <option value="">全部状态</option>
+                  <option value="PENDING">待处理</option>
+                  <option value="HANDLED">已处理</option>
+                  <option value="IGNORED">已忽略</option>
+                </select>
               </div>
             </div>
-          </div>
-          <div class="mission-table-card card">
-            <div class="mission-table-header">
-              <div class="mission-th">序号</div>
-              <div class="mission-th">航线名称</div>
-              <div class="mission-th">任务名称</div>
-              <div class="mission-th">目标图片</div>
-              <div class="mission-th">位置预览</div>
-              <div class="mission-th">目标数量</div>
-              <div class="mission-th">算法名称</div>
-              <div class="mission-th">检测时间</div>
-              <div class="mission-th">操作</div>
-            </div>
-            <div class="mission-table-body">
-              <div class="mission-tr" v-for="(alert, idx) in alerts" :key="alert.id">
-                <div class="mission-td">{{ (currentPage - 1) * pageSize + idx + 1 }}</div>
-                <div class="mission-td">{{ alert.wayline_name }}</div>
-                <div class="mission-td">{{ alert.mission_name }}</div>
-                <div class="mission-td">
-                  <template v-if="alert.thumbnail_image_url">
-                    <img 
-                      v-if="thumbCache[alert.thumbnail_image_url] && !thumbError[alert.thumbnail_image_url]"
-                      :src="thumbCache[alert.thumbnail_image_url]"
-                      alt="目标图片"
-                      class="target-image"
-                      @click="handleImageClick(alert.marked_image_url)"
-                      style="cursor:pointer;"
-                    />
-                    <div v-else-if="thumbLoading[alert.thumbnail_image_url]" class="loading-image">
+            <div class="file-table">
+              <div class="file-table-header">
+                <div class="file-table-cell">序号</div>
+                <div class="file-table-cell">航线名称</div>
+                <div class="file-table-cell">任务名称</div>
+                <div class="file-table-cell">目标图片</div>
+                <div class="file-table-cell">位置预览</div>
+                <div class="file-table-cell">目标数量</div>
+                <div class="file-table-cell">算法名称</div>
+                <div class="file-table-cell">检测时间</div>
+                <div class="file-table-cell file-table-action">操作</div>
+              </div>
+              <template v-if="alerts.length > 0">
+                <div class="file-table-row" v-for="(alert, idx) in alerts" :key="alert.id">
+                  <div class="file-table-cell">{{ (currentPage - 1) * pageSize + idx + 1 }}</div>
+                  <div class="file-table-cell file-table-name">{{ alert.wayline_name }}</div>
+                  <div class="file-table-cell">{{ alert.mission_name }}</div>
+                  <div class="file-table-cell">
+                    <template v-if="alert.thumbnail_image_url">
+                      <img 
+                        v-if="thumbCache[alert.thumbnail_image_url] && !thumbError[alert.thumbnail_image_url]"
+                        :src="thumbCache[alert.thumbnail_image_url]"
+                        alt="目标图片"
+                        class="target-image"
+                        @click="handleImageClick(alert.marked_image_url)"
+                        style="cursor:pointer;"
+                      />
+                      <div v-else-if="thumbLoading[alert.thumbnail_image_url]" class="loading-image">
+                        <span>加载中...</span>
+                      </div>
+                      <div v-else-if="thumbError[alert.thumbnail_image_url]" class="loading-image">
+                        <span style='color:#f66;'>加载失败</span>
+                      </div>
+                    </template>
+                    <div v-else-if="alert.marked_image_url" class="loading-image">
                       <span>加载中...</span>
                     </div>
-                    <div v-else-if="thumbError[alert.thumbnail_image_url]" class="loading-image">
-                      <span style='color:#f66;'>加载失败</span>
-                    </div>
-                  </template>
-                  <div v-else-if="alert.marked_image_url" class="loading-image">
-                    <span>加载中...</span>
+                    <span v-else class="no-image">--</span>
                   </div>
-                  <span v-else class="no-image">--</span>
+                  <div class="file-table-cell">
+                    <button 
+                      v-if="alert.latitude && alert.longitude"
+                      class="location-preview-btn"
+                      @click="showLocationPreview(alert)"
+                      title="查看位置"
+                    >
+                      预览
+                    </button>
+                    <span v-else class="no-location">--</span>
+                  </div>
+                  <div class="file-table-cell">{{ alert.target_count }}</div>
+                  <div class="file-table-cell">{{ getAlgorithmName(alert.target_type) }}</div>
+                  <div class="file-table-cell">{{ formatTime(alert.detection_time) }}</div>
+                  <div class="file-table-cell file-table-action">
+                    <button 
+                      class="status-btn"
+                      :class="getStatusBtnClass(alert.status)"
+                      @click="handleStatusClick(alert)"
+                      :title="getStatusBtnTitle(alert.status)"
+                    >
+                      {{ getStatusBtnText(alert.status) }}
+                    </button>
+                  </div>
                 </div>
-                <div class="mission-td">
-                  <button 
-                    v-if="alert.latitude && alert.longitude"
-                    class="location-preview-btn"
-                    @click="showLocationPreview(alert)"
-                    title="查看位置"
-                  >
-                    预览
-                  </button>
-                  <span v-else class="no-location">--</span>
-                </div>
-                <div class="mission-td">{{ alert.target_count }}</div>
-                <div class="mission-td">{{ getAlgorithmName(alert.target_type) }}</div>
-                <div class="mission-td">{{ formatTime(alert.detection_time) }}</div>
-                <div class="mission-td">
-                  <button 
-                    class="status-btn"
-                    :class="getStatusBtnClass(alert.status)"
-                    @click="handleStatusClick(alert)"
-                    :title="getStatusBtnTitle(alert.status)"
-                  >
-                    {{ getStatusBtnText(alert.status) }}
-                  </button>
-                </div>
+              </template>
+              <div v-else class="mission-empty">
+                暂无告警记录
               </div>
             </div>
             <!-- 分页组件 -->
@@ -169,9 +163,10 @@
         </section>
       </div>
     </main>
-  </div>
-  <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
-    <div class="big-image-content" @click.stop>
+    
+    <!-- 大图预览弹窗 -->
+    <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
+      <div class="big-image-content" @click.stop>
       <img v-if="bigImageUrl" :src="bigImageUrl" class="big-image" @load="handleBigImageLoaded" @error="handleBigImageErrored" />
       <div v-if="bigImageLoading" class="big-image-loading">
         <div class="spinner"></div>
@@ -287,6 +282,7 @@
       </div>
     </div>
   </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -314,17 +310,19 @@ const buildImageFetchUrl = (path: string) => {
 import { useUserStore } from '@/stores/user'
 import type { VisionAlert } from '@/types'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
-import trackRecordsIcon from '@/assets/source_data/svg_data/track_records.svg'
-import trackLogsIcon from '@/assets/source_data/svg_data/track_logs.svg'
+import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
+import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
+import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 
 const sidebarTabs = [
-  { key: 'list', label: '航线管理', icon: trackListIcon, path: '/dashboard/mission' },
-  { key: 'records', label: '任务记录', icon: trackRecordsIcon, path: '/dashboard/mission-records' },
-  { key: 'logs', label: '任务日志', icon: trackLogsIcon, path: '/dashboard/mission-logs' }
+  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission' },
+  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records' },
+  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs' },
+  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group' }
 ]
 
 const handleTabClick = (tab: any) => {

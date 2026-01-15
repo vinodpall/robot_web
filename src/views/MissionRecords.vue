@@ -7,6 +7,7 @@
           v-for="tab in sidebarTabs"
           :key="tab.key"
           :class="['sidebar-tab', { active: route.path === tab.path }]"
+          :title="tab.label"
           @click="handleTabClick(tab)"
         >
           <img :src="tab.icon" :alt="tab.label" />
@@ -20,132 +21,69 @@
           <div class="mission-top-card card">
             <div class="mission-top-header">
               <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
-              <span class="mission-top-title">任务记录</span>
-            </div>
-            <div class="mission-top-row">
-              <div class="mission-top-selects">
-                <!-- 任务状态筛选 -->
-                <div style="position: relative; display: inline-block;">
-                  <select
-                    v-model="selectedStatus"
-                    class="mission-select treeselect-track"
-                    style="width: 120px;"
-                    @change="onFilterChange"
-                  >
-                    <option value="">全部状态</option>
-                    <option value="0">待执行</option>
-                    <option value="1">已发送</option>
-                    <option value="2">执行中</option>
-                    <option value="3">已暂停</option>
-                    <option value="4">已取消</option>
-                    <option value="5">执行成功</option>
-                    <option value="6">执行失败</option>
-                    <option value="7">准备执行</option>
-                  </select>
-                  <span class="custom-select-arrow" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2;">
-                    <svg width="12" height="12" viewBox="0 0 12 12">
-                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                    </svg>
-                  </span>
-                </div>
-                <!-- 任务类型筛选 -->
-                <div style="position: relative; display: inline-block;">
-                  <select
-                    v-model="selectedTaskType"
-                    class="mission-select treeselect-track"
-                    style="width: 120px;"
-                    @change="onFilterChange"
-                  >
-                    <option value="">全部类型</option>
-                    <option value="0">立即任务</option>
-                    <option value="1">定时任务</option>
-                  </select>
-                  <span class="custom-select-arrow" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2;">
-                    <svg width="12" height="12" viewBox="0 0 12 12">
-                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                    </svg>
-                  </span>
-                </div>
+              <span class="mission-top-title">发布点任务</span>
+              <div class="mission-top-data">
+                <span class="mission-data-item">X坐标: <span class="mission-data-value">{{ currentPosition.x || '-' }}</span></span>
+                <span class="mission-data-item">Y坐标: <span class="mission-data-value">{{ currentPosition.y || '-' }}</span></span>
+                <span class="mission-data-item">Z坐标: <span class="mission-data-value">{{ currentPosition.z || '-' }}</span></span>
+                <span class="mission-data-item">角度: <span class="mission-data-value">{{ currentPosition.angle || '-' }}</span></span>
+                <span class="mission-data-item">任务ID: <span class="mission-data-value">{{ currentTaskId || '-' }}</span></span>
               </div>
             </div>
           </div>
-          <div class="mission-table-card card">
-            <div class="mission-table-header">
-              <div class="mission-th">序号</div>
-              <div class="mission-th">任务名称</div>
-              <div class="mission-th">航线名称</div>
-              <div class="mission-th">任务类型</div>
-              <div class="mission-th">状态</div>
-              <div class="mission-th">上传进度</div>
-              <div class="mission-th">开始时间</div>
-              <div class="mission-th">结束时间</div>
-              <div class="mission-th">创建人</div>
-              <div class="mission-th">操作</div>
+          <div class="mission-content-wrapper">
+            <div class="mission-toolbar">
+              <!-- 任务组选择 -->
+              <span class="mission-toolbar-label" style="margin-right: -8px;">任务组名称：</span>
+              <select class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">FA0625_new_line_mode1</option>
+              </select>
+              
+              <!-- 关键点选择 -->
+              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">关键点名称：</span>
+              <select class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">寻迹中-关键点0</option>
+              </select>
+              
+              <!-- 操作按钮组 -->
+              <div style="display: flex; gap: 12px; margin-left: 8px;">
+                <button class="mission-btn mission-btn-primary">开始</button>
+                <button class="mission-btn mission-btn-secondary">暂停</button>
+                <button class="mission-btn mission-btn-primary">添加任务组</button>
+                <button class="mission-btn mission-btn-stop">删除任务组</button>
+                <button class="mission-btn mission-btn-primary">添加任务</button>
+                <button class="mission-btn mission-btn-secondary">预览</button>
+              </div>
             </div>
-            <div class="mission-table-body">
-              <div v-if="loading" class="mission-loading">
-                加载中...
+            <div class="file-table">
+              <div class="file-table-header">
+                <div class="file-table-cell" style="width: 80px;">序号</div>
+                <div class="file-table-cell" style="width: 120px;">任务类型</div>
+                <div class="file-table-cell" style="width: 100px;">X坐标</div>
+                <div class="file-table-cell" style="width: 100px;">Y坐标</div>
+                <div class="file-table-cell" style="width: 100px;">Z坐标</div>
+                <div class="file-table-cell" style="width: 100px;">角度</div>
+                <div class="file-table-cell" style="width: 120px;">预置点</div>
+                <div class="file-table-cell" style="flex: 1;">描述</div>
+                <div class="file-table-cell file-table-action" style="width: 120px;">操作</div>
               </div>
-              <div v-else-if="error" class="mission-error">
-                {{ error }}
-              </div>
-              <div v-else-if="jobs.length === 0" class="mission-empty">
-                暂无任务记录
-              </div>
-              <div v-else class="mission-tr" v-for="(job, idx) in jobs" :key="job.job_id">
-                <div class="mission-td">{{ (currentPage - 1) * pageSize + idx + 1 }}</div>
-                <div class="mission-td">{{ job.name }}</div>
-                <div class="mission-td">{{ job.file_name || job.name }}</div>
-                <div class="mission-td">{{ getTaskTypeText(job.task_type) }}</div>
-                <div class="mission-td">
-                  <div v-if="job.status === 6" class="error-tooltip-wrapper">
-                    <span
-                      class="status-badge status-failed"
-                      @click.stop="toggleErrorTooltip(job)"
-                      title="点击查看错误信息"
-                      style="cursor: pointer;"
-                    >
-                      {{ getStatusText(job.status) }}
-                    </span>
-                    <div v-if="openErrorTooltipJobId === job.job_id" class="error-tooltip-content">
-                      <div class="error-title">异常信息</div>
-                      <div class="error-text">{{ getJobErrorMessage(job) }}</div>
-                      <div v-if="job.error_code" class="error-code">错误码：{{ job.error_code }}</div>
-                    </div>
-                  </div>
-                  <span v-else :class="['status-badge', getStatusClass(job.status)]">
-                    {{ getStatusText(job.status) }}
-                  </span>
-                </div>
-                <div class="mission-td">
-                  <div 
-                    class="upload-progress-container clickable"
-                    @click="showMediaFiles(job)"
-                    :title="job.media_count > 0 ? '点击查看媒体文件' : '暂无媒体文件'"
-                  >
-                    <div class="upload-progress-bar">
-                      <div 
-                        class="upload-progress-fill" 
-                        :style="{ width: getUploadProgress(job) + '%' }"
-                      ></div>
-                    </div>
-                    <div class="upload-progress-text">
-                      {{ job.uploaded_count || 0 }}/{{ job.media_count || 0 }}
-                    </div>
+              <template v-if="waypointsData.length > 0">
+                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
+                  <div class="file-table-cell" style="width: 80px;">{{ waypoint.index + 1 }}</div>
+                  <div class="file-table-cell" style="width: 120px;">{{ waypoint.type || '-' }}</div>
+                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.x || '-' }}</div>
+                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.y || '-' }}</div>
+                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.z || '-' }}</div>
+                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.angle || '-' }}</div>
+                  <div class="file-table-cell" style="width: 120px;">{{ waypoint.preset || '-' }}</div>
+                  <div class="file-table-cell file-table-name" style="flex: 1;">{{ waypoint.description || '-' }}</div>
+                  <div class="file-table-cell file-table-action" style="width: 120px;">
+                    <button class="mission-btn mission-btn-secondary" disabled style="min-width: 80px; padding: 0 12px;">删除</button>
                   </div>
                 </div>
-                <div class="mission-td">{{ formatTimestamp(job.execute_time) }}</div>
-                <div class="mission-td">{{ formatTimestamp(job.completed_time) }}</div>
-                <div class="mission-td">{{ job.username }}</div>
-                <div class="mission-td">
-                  <button 
-                    class="mission-btn mission-btn-stop"
-                    @click.stop="handleDeleteJob(job)"
-                    :title="'删除任务记录'"
-                  >
-                    删除
-                  </button>
-                </div>
+              </template>
+              <div v-else class="mission-empty">
+                暂无任务数据
               </div>
             </div>
             <!-- 分页组件 -->
@@ -201,8 +139,6 @@
         </section>
       </div>
     </main>
-    
-    <!-- 媒体文件弹窗 -->
     <div v-if="showMediaModal" class="media-modal-mask" @click="closeMediaModal">
       <div class="media-modal" @click.stop>
         <div class="media-modal-header">
@@ -351,8 +287,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
-import trackRecordsIcon from '@/assets/source_data/svg_data/track_records.svg'
-import trackLogsIcon from '@/assets/source_data/svg_data/track_logs.svg'
+import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
+import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
+import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
 import { waylineApi } from '../api/services'
 import { getErrorMessage } from '@/utils/errorCodes'
@@ -364,6 +301,18 @@ const route = useRoute()
 // 使用任务记录API
 const { jobs, loading, error, pagination, fetchJobs, clearJobs } = useWaylineJobs()
 const { getCachedWorkspaceId } = useDevices()
+
+// 航点数据
+const waypointsData = ref<any[]>([])
+
+// 当前位置和任务信息
+const currentPosition = ref({
+  x: 0,
+  y: 0,
+  z: 0,
+  angle: 0
+})
+const currentTaskId = ref('')
 
 // 航线文件筛选已移除
 // 筛选：任务状态与任务类型
@@ -619,9 +568,10 @@ const downloadMediaFile = async (fileId: string, fileName: string) => {
 // 航线文件加载逻辑已移除
 
 const sidebarTabs = [
-  { key: 'list', label: '航线管理', icon: trackListIcon, path: '/dashboard/mission' },
-  { key: 'records', label: '任务记录', icon: trackRecordsIcon, path: '/dashboard/mission-records' },
-  { key: 'logs', label: '任务日志', icon: trackLogsIcon, path: '/dashboard/mission-logs' }
+  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission' },
+  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records' },
+  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs' },
+  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group' }
 ]
 
 const handleTabClick = (tab: any) => {

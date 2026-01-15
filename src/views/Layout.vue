@@ -13,9 +13,6 @@
         <router-link to="/dashboard/navigation" class="nav-item" :class="{ active: $route.path === '/dashboard/navigation' }">
           导航管理
         </router-link>
-        <router-link to="/dashboard/drone-control" class="nav-item" :class="{ active: $route.path === '/dashboard/drone-control' || $route.path === '/dashboard/dock-control' }">
-          机器人管理
-        </router-link>
         <router-link to="/dashboard/mission" class="nav-item" :class="{ active: $route.path.includes('mission') }">
           任务管理
         </router-link>
