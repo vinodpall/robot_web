@@ -18,26 +18,41 @@
       <div class="main-flex">
         <section class="right-panel">
           <div class="mission-top-card card">
-            <div class="mission-top-header">
+            <div class="mission-top-header mission-top-header-left">
               <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
               <span class="mission-top-title">多任务组任务</span>
             </div>
           </div>
           <div class="mission-content-wrapper">
             <div class="mission-toolbar">
-              <div class="mission-toolbar-actions">
-                <button class="mission-btn mission-btn-primary" @click="handleCreateTaskGroup">创建任务组</button>
-                <button class="mission-btn mission-btn-stop" @click="handleDeleteTaskGroup">删除任务组</button>
-                <button class="mission-btn mission-btn-primary" @click="handleExecuteTaskGroup">执行任务组</button>
+              <span class="mission-toolbar-label" style="margin-right: -8px;">多任务组名称：</span>
+              <select class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">多任务组-001</option>
+              </select>
+
+              <div style="display: flex; gap: 12px; margin-left: 8px;">
+                <button class="mission-btn mission-btn-primary" @click="handleExecuteTaskGroup">开始</button>
+                <button class="mission-btn mission-btn-secondary">暂停</button>
+                <button class="mission-btn mission-btn-primary" @click="handleCreateTaskGroup">添加多任务组</button>
+                <button class="mission-btn mission-btn-stop" @click="handleDeleteTaskGroup">删除多任务组</button>
+                <button class="mission-btn mission-btn-primary">添加任务组</button>
               </div>
+
+              <label class="mission-toolbar-label" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" v-model="exceptionStart" />
+                异常时原地启动
+              </label>
             </div>
             <div class="file-table">
               <div class="file-table-header">
-                <div class="file-table-cell">任务组ID</div>
-                <div class="file-table-cell file-table-name">任务组名称</div>
-                <div class="file-table-cell">任务数量</div>
-                <div class="file-table-cell">状态</div>
-                <div class="file-table-cell file-table-action">操作</div>
+                <div class="file-table-cell" style="width: 80px;">序号</div>
+                <div class="file-table-cell">地图</div>
+                <div class="file-table-cell">轨迹</div>
+                <div class="file-table-cell">任务组</div>
+                <div class="file-table-cell">圈数</div>
+                <div class="file-table-cell">避障模式</div>
+                <div class="file-table-cell">原点发布</div>
+                <div class="file-table-cell file-table-action" style="width: 240px;">操作</div>
               </div>
               <div v-if="loading" class="mission-loading">
                 加载中...
@@ -47,16 +62,18 @@
               </div>
               <template v-else>
                 <div class="file-table-row" v-for="taskGroup in taskGroups" :key="taskGroup.id">
-                  <div class="file-table-cell">{{ taskGroup.id }}</div>
-                  <div class="file-table-cell file-table-name">{{ taskGroup.name }}</div>
-                  <div class="file-table-cell">{{ taskGroup.taskCount }}</div>
-                  <div class="file-table-cell">
-                    <span class="status-badge" :class="getStatusClass(taskGroup.status)">
-                      {{ taskGroup.status }}
-                    </span>
-                  </div>
-                  <div class="file-table-cell file-table-action">
+                  <div class="file-table-cell" style="width: 80px;">{{ taskGroup.index ?? taskGroup.id ?? '-' }}</div>
+                  <div class="file-table-cell">{{ taskGroup.mapName || '-' }}</div>
+                  <div class="file-table-cell">{{ taskGroup.trackName || '-' }}</div>
+                  <div class="file-table-cell">{{ taskGroup.groupName || taskGroup.name || '-' }}</div>
+                  <div class="file-table-cell">{{ taskGroup.laps || '-' }}</div>
+                  <div class="file-table-cell">{{ taskGroup.obstacleMode || '-' }}</div>
+                  <div class="file-table-cell">{{ taskGroup.originPublish || '-' }}</div>
+                  <div class="file-table-cell file-table-action" style="width: 240px;">
                     <button class="mission-btn mission-btn-secondary" @click="handleEditTaskGroup(taskGroup)">编辑</button>
+                    <button class="mission-btn mission-btn-secondary" @click="handleDeleteTaskGroup">删除</button>
+                    <button class="mission-btn mission-btn-secondary">上移</button>
+                    <button class="mission-btn mission-btn-secondary">下移</button>
                   </div>
                 </div>
               </template>
@@ -94,6 +111,7 @@ const handleTabClick = (tab: any) => {
 
 const loading = ref(false)
 const taskGroups = ref<any[]>([])
+const exceptionStart = ref(false)
 
 const getStatusClass = (status: string) => {
   const statusMap: Record<string, string> = {
@@ -139,6 +157,11 @@ onMounted(() => {
 
 <style>
 @import './mission-common.css';
+
+/* 多任务组标题左对齐 */
+.mission-top-header.mission-top-header-left {
+  justify-content: flex-start !important;
+}
 
 /* 多任务组特定样式 */
 .status-badge {

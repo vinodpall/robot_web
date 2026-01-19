@@ -1,14 +1,14 @@
 <template>
-  <PermissionGuard permission="device_management.log.view" fallback-text="无权限查看报警日志">
-    <div class="drone-control-main">
+  <div class="drone-control-main">
       <!-- 侧边栏菜单 -->
       <aside class="sidebar-menu">
         <div class="sidebar-tabs">
           <div
             v-for="tab in sidebarTabs"
             :key="tab.key"
-            :class="['sidebar-tab', { active: currentTab === tab.key }]"
-            @click="handleTabClick(tab.key)"
+            :class="['sidebar-tab', { active: route.path === tab.path }]"
+            :title="tab.label"
+            @click="handleTabClick(tab.path)"
           >
             <img :src="tab.icon" :alt="tab.label" />
           </div>
@@ -20,93 +20,133 @@
           <section class="right-panel">
             <!-- 筛选区 -->
             <div class="mission-top-card card">
-              <div class="mission-top-header">
-                <img src="@/assets/source_data/bg_data/card_logo.png" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;" alt="logo" />
-                <span class="mission-top-title">报警日志</span>
-              </div>
-              <div class="mission-top-row">
-                <div class="filter-item">
-                  <span class="filter-label">设备选择：</span>
-                  <div class="custom-select-wrapper">
-                    <select v-model="selectedDeviceType" class="mission-select" @change="handleDeviceTypeChange">
-                      <option v-for="option in getDeviceTypeOptions()" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                      </option>
-                    </select>
-                    <span class="custom-select-arrow">
-                      <svg width="12" height="12" viewBox="0 0 12 12">
-                        <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                      </svg>
-                    </span>
-                  </div>
-                </div>
-                <div class="filter-item">
-                  <span class="filter-label">报警等级：</span>
-                  <div class="custom-select-wrapper">
-                    <select v-model="filter.level" class="mission-select">
-                      <option value="">全部等级</option>
-                      <option value="0">通知</option>
-                      <option value="1">提醒</option>
-                      <option value="2">警告</option>
-                    </select>
-                    <span class="custom-select-arrow">
-                      <svg width="12" height="12" viewBox="0 0 12 12">
-                        <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                      </svg>
-                    </span>
-                  </div>
-                </div>
+              <div class="mission-top-header mission-top-header-left">
+                <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
+                <span class="mission-top-title">循迹记录</span>
               </div>
             </div>
             <!-- 列表区 -->
-            <div class="mission-table-card card">
-              <div class="mission-table-header">
-                <div class="mission-th" v-for="col in columns" :key="col.key">{{ col.title }}</div>
+            <div class="mission-content-wrapper">
+              <div class="mission-toolbar track-toolbar-row">
+                <div class="track-toolbar-group">
+                  <span class="mission-toolbar-label">地图名称：</span>
+                  <select v-model="mapName" class="mission-toolbar-select" style="min-width: 160px;">
+                    <option value="">请选择</option>
+                    <option value="map-001">地图-001</option>
+                    <option value="map-002">地图-002</option>
+                  </select>
+                </div>
+
+                <div class="track-toolbar-group">
+                  <span class="mission-toolbar-label">识别项目：</span>
+                  <select v-model="identifyItem" class="mission-toolbar-select" style="min-width: 160px;">
+                    <option value="">请选择</option>
+                    <option value="person">人员</option>
+                    <option value="vehicle">车辆</option>
+                  </select>
+                </div>
+
+                <div class="track-toolbar-group">
+                  <span class="mission-toolbar-label">开始时间：</span>
+                  <input
+                    v-model="startTime"
+                    type="datetime-local"
+                    class="mission-toolbar-select track-time-input"
+                    style="min-width: 80px;"
+                    ref="startTimeInput"
+                    @click="openStartTimePicker"
+                  />
+                </div>
+
+                <div class="track-toolbar-group">
+                  <span class="mission-toolbar-label">结束时间：</span>
+                  <input
+                    v-model="endTime"
+                    type="datetime-local"
+                    class="mission-toolbar-select track-time-input"
+                    style="min-width: 80px;"
+                    ref="endTimeInput"
+                    @click="openEndTimePicker"
+                  />
+                </div>
+                <div class="track-toolbar-actions track-toolbar-actions-right">
+                  <button class="mission-btn mission-btn-primary" @click="handleSearch">查询</button>
+                  <button class="mission-btn mission-btn-primary">确定</button>
+                  <button class="mission-btn mission-btn-stop" @click="handleDelete">删除</button>
+                  <button class="mission-btn mission-btn-export" @click="handleExport">导出</button>
+                </div>
               </div>
-              <div class="mission-table-body">
-                <div v-if="loading" class="loading-row">
-                  <div class="mission-td" style="text-align:center;grid-column:1/-1;padding:20px;">
-                    加载中...
-                  </div>
+
+              <div class="mission-toolbar track-toolbar-row track-toolbar-row-bottom" style="padding-top: 0;">
+                <div class="track-toolbar-group">
+                  <span class="mission-toolbar-label">循迹路线：</span>
+                  <select v-model="trackLine" class="mission-toolbar-select" style="min-width: 160px;">
+                    <option value="">请选择</option>
+                    <option value="track-001">路线-001</option>
+                    <option value="track-002">路线-002</option>
+                  </select>
                 </div>
-                <div v-else-if="error" class="error-row">
-                  <div class="mission-td" style="text-align:center;grid-column:1/-1;padding:20px;color:#ff6b6b;">
-                    {{ error }}
-                  </div>
+
+                <div class="track-toolbar-group">
+                  <span class="mission-toolbar-label">任务组：</span>
+                  <select v-model="taskGroup" class="mission-toolbar-select" style="min-width: 160px;">
+                    <option value="">请选择</option>
+                    <option value="group-001">任务组-001</option>
+                    <option value="group-002">任务组-002</option>
+                  </select>
                 </div>
-                <div v-else-if="alarmList.length === 0" class="empty-row">
-                  <div class="mission-td" style="text-align:center;grid-column:1/-1;padding:20px;color:#b8c7d9;">
-                    暂无报警数据
-                  </div>
+
+              </div>
+
+              <div class="file-table">
+                <div class="file-table-header">
+                  <div class="file-table-cell" style="width: 80px;">序号</div>
+                  <div class="file-table-cell">地图</div>
+                  <div class="file-table-cell">轨迹</div>
+                  <div class="file-table-cell">任务组</div>
+                  <div class="file-table-cell">圈数</div>
+                  <div class="file-table-cell">避障模式</div>
+                  <div class="file-table-cell">原点发布</div>
+                  <div class="file-table-cell file-table-action" style="width: 240px;">操作</div>
                 </div>
-                <div v-else class="mission-tr" v-for="(row, idx) in alarmList" :key="row.id">
-                  <div class="mission-td">{{ idx + 1 }}</div>
-                  <div class="mission-td">{{ row.deviceName }}</div>
-                  <div class="mission-td">{{ row.type }}</div>
-                  <div class="mission-td">{{ row.content }}</div>
-                  <div class="mission-td">
-                    <span :class="['level-badge', `level-${row.level}`]">{{ row.levelText }}</span>
-                  </div>
-                  <div class="mission-td">{{ row.time }}</div>
-                </div>
+                <div v-if="loading" class="mission-loading">加载中...</div>
+                <div v-else-if="error" class="mission-error">{{ error }}</div>
+                <template v-else>
+                  <template v-if="alarmList.length > 0">
+                    <div class="file-table-row" v-for="(row, idx) in alarmList" :key="row.id">
+                      <div class="file-table-cell" style="width: 80px;">{{ idx + 1 }}</div>
+                      <div class="file-table-cell">{{ row.mapName || row.deviceName || '-' }}</div>
+                      <div class="file-table-cell">{{ row.trackName || row.type || '-' }}</div>
+                      <div class="file-table-cell">{{ row.taskGroup || '-' }}</div>
+                      <div class="file-table-cell">{{ row.laps || '-' }}</div>
+                      <div class="file-table-cell">{{ row.obstacleMode || '-' }}</div>
+                      <div class="file-table-cell">{{ row.originPublish || '-' }}</div>
+                      <div class="file-table-cell file-table-action" style="width: 240px;">
+                        <button class="mission-btn mission-btn-secondary">编辑</button>
+                        <button class="mission-btn mission-btn-secondary">删除</button>
+                        <button class="mission-btn mission-btn-secondary">上移</button>
+                        <button class="mission-btn mission-btn-secondary">下移</button>
+                      </div>
+                    </div>
+                  </template>
+                  <div v-else class="mission-empty">暂无记录</div>
+                </template>
               </div>
             </div>
           </section>
         </div>
       </main>
-    </div>
-  </PermissionGuard>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useHmsAlerts, useDevices } from '../composables/useApi'
-import PermissionGuard from '../components/PermissionGuard.vue'
-import equipmengStoreIcon from '@/assets/source_data/svg_data/equipmeng_store.svg'
-import equipmentWarningsIcon from '@/assets/source_data/svg_data/equipment_warnings.svg'
+import trackRecordIcon from '@/assets/source_data/svg_data/robot_source/track_record.svg'
 
 const router = useRouter()
+const route = useRoute()
 
 
 
@@ -115,22 +155,36 @@ const { hmsAlerts, loading, error, fetchDeviceHms, setAllAlerts } = useHmsAlerts
 const { getCachedDeviceSns, fetchDevices } = useDevices()
 
 const sidebarTabs = [
-  { key: 'manage', label: '设备管理', icon: equipmengStoreIcon },
-  { key: 'warning', label: '设备告警', icon: equipmentWarningsIcon }
+  { key: 'track-record', label: '循迹记录', icon: trackRecordIcon, path: '/dashboard/alarm-log' }
 ]
-const currentTab = ref('warning')
-const handleTabClick = (key: string) => {
-  currentTab.value = key
-  if (key === 'manage') {
-    router.push('/dashboard/device-manage')
-  } else if (key === 'warning') {
-    router.push('/dashboard/alarm-log')
+const handleTabClick = (path: string) => {
+  if (route.path !== path) {
+    router.push(path)
   }
+}
+
+const startTimeInput = ref<HTMLInputElement | null>(null)
+const endTimeInput = ref<HTMLInputElement | null>(null)
+
+const openStartTimePicker = () => {
+  startTimeInput.value?.showPicker?.()
+  startTimeInput.value?.focus()
+}
+
+const openEndTimePicker = () => {
+  endTimeInput.value?.showPicker?.()
+  endTimeInput.value?.focus()
 }
 
 // 筛选相关
 const selectedDeviceType = ref('')
 const filter = ref({ level: '' })
+const mapName = ref('')
+const identifyItem = ref('')
+const startTime = ref('')
+const endTime = ref('')
+const trackLine = ref('')
+const taskGroup = ref('')
 const alarmList = ref<any[]>([])
 
 // 从本地缓存获取设备列表
@@ -231,6 +285,25 @@ const handleReset = () => {
   filter.value = { level: '' }
   selectedDeviceType.value = ''
   loadAllAlarmData()
+}
+
+const handleConfirm = () => {
+  console.log('确定筛选', {
+    mapName: mapName.value,
+    identifyItem: identifyItem.value,
+    startTime: startTime.value,
+    endTime: endTime.value,
+    trackLine: trackLine.value,
+    taskGroup: taskGroup.value
+  })
+}
+
+const handleDelete = () => {
+  console.log('删除记录')
+}
+
+const handleExport = () => {
+  console.log('导出记录')
 }
 
 // 加载所有设备的报警数据
@@ -415,15 +488,6 @@ const formatTime = (timestamp: number) => {
   })
 }
 
-const columns = [
-  { key: 'index', title: '序号' },
-  { key: 'deviceName', title: '设备名称' },
-  { key: 'type', title: '报警类型' },
-  { key: 'content', title: '报警内容' },
-  { key: 'level', title: '报警等级' },
-  { key: 'time', title: '报警时间' }
-]
-
 // 页面加载时初始化
 onMounted(() => {
   initDevice()
@@ -432,6 +496,102 @@ onMounted(() => {
 
 <style scoped>
 @import './mission-common.css';
+
+/* 循迹记录标题左对齐 */
+.mission-top-header.mission-top-header-left {
+  justify-content: flex-start !important;
+}
+
+/* 工具栏布局优化 */
+.track-toolbar-row {
+  flex-wrap: wrap;
+  column-gap: 16px;
+  row-gap: 8px;
+  padding: 4px 0;
+  margin-bottom: 4px;
+}
+
+.track-toolbar-row-bottom {
+  margin-top: 0;
+}
+
+.track-toolbar-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.track-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.track-toolbar-group .mission-toolbar-label {
+  min-width: 76px;
+  text-align: right;
+  margin: 0;
+}
+
+.track-toolbar-actions-left {
+  margin-left: 0;
+}
+
+.track-toolbar-actions-right {
+  margin-left: auto;
+}
+
+.track-toolbar-end-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.track-toolbar-row .mission-toolbar-select {
+  height: 32px;
+  line-height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.track-toolbar-row .mission-btn {
+  height: 32px;
+  line-height: 32px;
+  min-width: 96px;
+  padding: 0 20px;
+  font-size: 13px;
+}
+
+.mission-btn-export {
+  background: #2a7bd1;
+  border: 1px solid #2a7bd1;
+  color: #ffffff;
+}
+
+.mission-btn-export:hover {
+  filter: brightness(1.05);
+}
+
+.track-time-input {
+  width: 150px !important;
+  min-width: 150px !important;
+  max-width: 150px !important;
+  padding-right: 18px;
+  box-sizing: border-box;
+}
+
+.track-time-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  cursor: pointer;
+  position: absolute;
+  right: 8px;
+}
+
+.track-time-input {
+  -webkit-appearance: none;
+  appearance: none;
+}
 
 .alarm-input {
   height: 32px;

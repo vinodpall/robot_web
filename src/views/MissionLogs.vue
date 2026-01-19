@@ -18,96 +18,55 @@
       <div class="main-flex">
         <section class="right-panel">
           <div class="mission-top-card card">
-            <div class="mission-top-header">
+            <div class="mission-top-header mission-top-header-left">
               <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
-              <span class="mission-top-title">
-                {{ filters.job_id ? `定时循迹任务 - 任务ID: ${filters.job_id}` : '定时循迹任务' }}
-              </span>
+              <span class="mission-top-title">定时循迹任务</span>
             </div>
           </div>
           <div class="mission-content-wrapper">
             <div class="mission-toolbar">
-              <span class="mission-toolbar-label">状态筛选：</span>
-              <div class="mission-toolbar-selects">
-                <select
-                  v-model="filters.status"
-                  class="mission-toolbar-select"
-                  @change="onFilterChange"
-                >
-                  <option value="">全部状态</option>
-                  <option value="PENDING">待处理</option>
-                  <option value="HANDLED">已处理</option>
-                  <option value="IGNORED">已忽略</option>
-                </select>
+              <span class="mission-toolbar-label" style="margin-right: -8px;">循迹任务名称：</span>
+              <select class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">FA0625_new_line_mode1</option>
+              </select>
+
+              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">任务组名称：</span>
+              <select class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">任务组-001</option>
+              </select>
+
+              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">定时任务开始时间：</span>
+              <input
+                type="time"
+                class="mission-toolbar-select"
+                style="min-width: 140px;"
+              />
+
+              <div style="display: flex; gap: 12px; margin-left: 8px;">
+                <button class="mission-btn mission-btn-primary">提交</button>
               </div>
             </div>
             <div class="file-table">
               <div class="file-table-header">
-                <div class="file-table-cell">序号</div>
-                <div class="file-table-cell">航线名称</div>
-                <div class="file-table-cell">任务名称</div>
-                <div class="file-table-cell">目标图片</div>
-                <div class="file-table-cell">位置预览</div>
-                <div class="file-table-cell">目标数量</div>
-                <div class="file-table-cell">算法名称</div>
-                <div class="file-table-cell">检测时间</div>
-                <div class="file-table-cell file-table-action">操作</div>
+                <div class="file-table-cell" style="width: 80px;">序号</div>
+                <div class="file-table-cell" style="flex: 1;">开始时间</div>
+                <div class="file-table-cell file-table-action" style="width: 120px;">操作</div>
               </div>
               <template v-if="alerts.length > 0">
                 <div class="file-table-row" v-for="(alert, idx) in alerts" :key="alert.id">
-                  <div class="file-table-cell">{{ (currentPage - 1) * pageSize + idx + 1 }}</div>
-                  <div class="file-table-cell file-table-name">{{ alert.wayline_name }}</div>
-                  <div class="file-table-cell">{{ alert.mission_name }}</div>
-                  <div class="file-table-cell">
-                    <template v-if="alert.thumbnail_image_url">
-                      <img 
-                        v-if="thumbCache[alert.thumbnail_image_url] && !thumbError[alert.thumbnail_image_url]"
-                        :src="thumbCache[alert.thumbnail_image_url]"
-                        alt="目标图片"
-                        class="target-image"
-                        @click="handleImageClick(alert.marked_image_url)"
-                        style="cursor:pointer;"
-                      />
-                      <div v-else-if="thumbLoading[alert.thumbnail_image_url]" class="loading-image">
-                        <span>加载中...</span>
-                      </div>
-                      <div v-else-if="thumbError[alert.thumbnail_image_url]" class="loading-image">
-                        <span style='color:#f66;'>加载失败</span>
-                      </div>
-                    </template>
-                    <div v-else-if="alert.marked_image_url" class="loading-image">
-                      <span>加载中...</span>
-                    </div>
-                    <span v-else class="no-image">--</span>
+                  <div class="file-table-cell" style="width: 80px;">
+                    {{ (currentPage - 1) * pageSize + idx + 1 }}
                   </div>
-                  <div class="file-table-cell">
-                    <button 
-                      v-if="alert.latitude && alert.longitude"
-                      class="location-preview-btn"
-                      @click="showLocationPreview(alert)"
-                      title="查看位置"
-                    >
-                      预览
-                    </button>
-                    <span v-else class="no-location">--</span>
+                  <div class="file-table-cell" style="flex: 1;">
+                    {{ alert.detection_time ? formatTimeHM(alert.detection_time) : '-' }}
                   </div>
-                  <div class="file-table-cell">{{ alert.target_count }}</div>
-                  <div class="file-table-cell">{{ getAlgorithmName(alert.target_type) }}</div>
-                  <div class="file-table-cell">{{ formatTime(alert.detection_time) }}</div>
-                  <div class="file-table-cell file-table-action">
-                    <button 
-                      class="status-btn"
-                      :class="getStatusBtnClass(alert.status)"
-                      @click="handleStatusClick(alert)"
-                      :title="getStatusBtnTitle(alert.status)"
-                    >
-                      {{ getStatusBtnText(alert.status) }}
-                    </button>
+                  <div class="file-table-cell file-table-action" style="width: 120px;">
+                    <button class="mission-btn mission-btn-secondary" disabled style="min-width: 80px; padding: 0 12px;">删除</button>
                   </div>
                 </div>
               </template>
               <div v-else class="mission-empty">
-                暂无告警记录
+                暂无任务记录
               </div>
             </div>
             <!-- 分页组件 -->
@@ -116,21 +75,21 @@
                 共 {{ total }} 条记录，当前第 {{ currentPage }} 页
               </div>
               <div class="pagination-controls">
-                <button 
-                  class="pagination-btn pagination-btn-icon" 
+                <button
+                  class="pagination-btn pagination-btn-icon"
                   :disabled="currentPage <= 1"
                   @click="changePage(currentPage - 1)"
                   title="上一页"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#67d5fd" stroke-width="2">
-                    <path d="M15 18l-6-6 6-6"/>
+                    <path d="M15 18l-6-6 6-6" />
                   </svg>
                 </button>
-                
+
                 <div class="pagination-page-input">
-                  <input 
-                    v-model="pageInput" 
-                    type="text" 
+                  <input
+                    v-model="pageInput"
+                    type="text"
                     class="page-input"
                     @keyup.enter="jumpToPage"
                     @blur="jumpToPage"
@@ -138,20 +97,20 @@
                   <span class="page-separator">/</span>
                   <span class="total-pages">{{ totalPages }}</span>
                 </div>
-                
-                <button 
-                  class="pagination-btn pagination-btn-icon" 
+
+                <button
+                  class="pagination-btn pagination-btn-icon"
                   :disabled="currentPage >= totalPages"
                   @click="changePage(currentPage + 1)"
                   title="下一页"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#67d5fd" stroke-width="2">
-                    <path d="M9 18l6-6-6-6"/>
+                    <path d="M9 18l6-6-6-6" />
                   </svg>
                 </button>
-                
-                <button 
-                  class="pagination-btn pagination-btn-jump" 
+
+                <button
+                  class="pagination-btn pagination-btn-jump"
                   @click="jumpToPage"
                   title="跳转到指定页码"
                 >
@@ -163,7 +122,7 @@
         </section>
       </div>
     </main>
-    
+
     <!-- 大图预览弹窗 -->
     <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
       <div class="big-image-content" @click.stop>
@@ -495,6 +454,13 @@ const formatTime = (timestamp: number) => {
     minute: '2-digit',
     second: '2-digit'
   })
+}
+
+const formatTimeHM = (timestamp: number) => {
+  const date = new Date(timestamp)
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
 }
 
 // 获取算法名称
@@ -978,6 +944,11 @@ const transformLng = (lng: number, lat: number) => {
 
 <style>
 @import './mission-common.css';
+
+/* 定时循迹任务标题左对齐 */
+.mission-top-header.mission-top-header-left {
+  justify-content: flex-start !important;
+}
 
 /* 分页样式 */
 .pagination-wrapper {

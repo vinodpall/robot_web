@@ -27,7 +27,6 @@
                 <span class="mission-data-item">Y坐标: <span class="mission-data-value">{{ currentPosition.y || '-' }}</span></span>
                 <span class="mission-data-item">Z坐标: <span class="mission-data-value">{{ currentPosition.z || '-' }}</span></span>
                 <span class="mission-data-item">角度: <span class="mission-data-value">{{ currentPosition.angle || '-' }}</span></span>
-                <span class="mission-data-item">任务ID: <span class="mission-data-value">{{ currentTaskId || '-' }}</span></span>
               </div>
             </div>
           </div>
@@ -39,12 +38,6 @@
                 <option value="">FA0625_new_line_mode1</option>
               </select>
               
-              <!-- 关键点选择 -->
-              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">关键点名称：</span>
-              <select class="mission-toolbar-select" style="min-width: 180px;">
-                <option value="">寻迹中-关键点0</option>
-              </select>
-              
               <!-- 操作按钮组 -->
               <div style="display: flex; gap: 12px; margin-left: 8px;">
                 <button class="mission-btn mission-btn-primary">开始</button>
@@ -52,7 +45,6 @@
                 <button class="mission-btn mission-btn-primary">添加任务组</button>
                 <button class="mission-btn mission-btn-stop">删除任务组</button>
                 <button class="mission-btn mission-btn-primary">添加任务</button>
-                <button class="mission-btn mission-btn-secondary">预览</button>
               </div>
             </div>
             <div class="file-table">
@@ -312,7 +304,6 @@ const currentPosition = ref({
   z: 0,
   angle: 0
 })
-const currentTaskId = ref('')
 
 // 航线文件筛选已移除
 // 筛选：任务状态与任务类型

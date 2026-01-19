@@ -13,10 +13,14 @@
         <router-link to="/dashboard/navigation" class="nav-item" :class="{ active: $route.path === '/dashboard/navigation' }">
           导航管理
         </router-link>
-        <router-link to="/dashboard/mission" class="nav-item" :class="{ active: $route.path.includes('mission') }">
+        <router-link
+          to="/dashboard/mission"
+          class="nav-item"
+          :class="{ active: $route.path.includes('mission') || $route.path.includes('multi-task-group') }"
+        >
           任务管理
         </router-link>
-        <router-link to="/dashboard/device-manage" class="nav-item" :class="{ active: $route.path === '/dashboard/device-manage' || $route.path === '/dashboard/alarm-log' }">
+        <router-link to="/dashboard/alarm-log" class="nav-item" :class="{ active: $route.path === '/dashboard/device-manage' || $route.path === '/dashboard/alarm-log' }">
           日志管理
         </router-link>
         <router-link to="/dashboard/users" class="nav-item" :class="{ active: $route.path.includes('users') || $route.path.includes('roles') }">

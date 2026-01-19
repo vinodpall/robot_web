@@ -22,7 +22,7 @@
           <template v-if="currentTab === 'map_record'">
             <div class="nav-top-card card">
               <div class="nav-top-header">
-                <img src="@/assets/source_data/bg_data/card_logo.png" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;" alt="logo" />
+                <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
                 <span class="nav-top-title">录包建图</span>
               </div>
             </div>
@@ -86,7 +86,7 @@
           <template v-else-if="currentTab === 'nav'">
             <div class="nav-top-card card">
               <div class="nav-top-header">
-                <img src="@/assets/source_data/bg_data/card_logo.png" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;" alt="logo" />
+                <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
                 <span class="nav-top-title">导航</span>
               </div>
             </div>
@@ -214,7 +214,7 @@
           <template v-else-if="currentTab === 'map_edit'">
             <div class="nav-top-card card">
               <div class="nav-top-header">
-                <img src="@/assets/source_data/bg_data/card_logo.png" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;" alt="logo" />
+                <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
                 <span class="nav-top-title">地图编辑</span>
               </div>
             </div>
@@ -293,7 +293,7 @@
           <template v-else-if="currentTab === 'track_record'">
             <div class="nav-top-card card">
               <div class="nav-top-header">
-                <img src="@/assets/source_data/bg_data/card_logo.png" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;" alt="logo" />
+                <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
                 <span class="nav-top-title">路线录制</span>
               </div>
             </div>
@@ -376,7 +376,7 @@
           <template v-else-if="currentTab === 'file_manage'">
             <div class="nav-top-card card">
               <div class="nav-top-header">
-                <img src="@/assets/source_data/bg_data/card_logo.png" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;" alt="logo" />
+                <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
                 <span class="nav-top-title">文件管理</span>
               </div>
             </div>
@@ -1873,6 +1873,7 @@ const handleDelete = (id: string) => {
   display: flex;
   align-items: center;
   margin-bottom: 8px;
+  gap: 10px;
 }
 
 .nav-top-title {

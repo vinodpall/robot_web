@@ -100,10 +100,7 @@ const router = createRouter({
         {
           path: 'roles',
           name: 'RoleManage',
-          component: () => import('../views/RoleManage.vue'),
-          meta: { 
-            requiresAuth: true
-          }
+          redirect: '/dashboard/users'
         },
         {
           path: 'navigation',
