@@ -1193,13 +1193,38 @@ export const navigationApi = {
   getTrackList: (robotId: string) => {
     return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/track_list`)
   },
+  // 获取关键点文件列表
+  getTaskpointList: (robotId: string, trackName: string) => {
+    return apiClient.post<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/taskpoint_list`, { track_name: trackName })
+  },
   // 获取发布点任务列表
   getPointTaskList: (robotId: string) => {
-    return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/alltask_list`)
+    return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/task_list`)
   },
   // 获取多任务组列表
   getMultiTaskList: (robotId: string) => {
     return apiClient.get<{ msg: { multitask_id: string; multitask_name: string; multitask_list: any[] }[]; request_id: string }>(`/multitasks/${robotId}/multitask_list`)
+  },
+  // 启动循迹任务
+  startTrack: (robotId: string, data: {
+    action: number;
+    wait: number;
+    obs_mode: number;
+    track_name: string;
+    taskpoint_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/start_track`, data)
+  },
+  // 取消循迹任务
+  cancelTrack: (robotId: string) => {
+    return apiClient.post(`/navigation/${robotId}/cancel_track`, {})
+  },
+  // 启动多任务组
+  startMultiTaskGroup: (robotId: string, data: {
+    group_name: string;
+    loop: boolean;
+  }) => {
+    return apiClient.post(`/multitasks/${robotId}/start_multitask_group`, data)
   }
 }
 

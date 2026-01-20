@@ -68,9 +68,30 @@
                 </span>
               </div>
               <div class="task-buttons">
-                <span class="task-btn" @click="handleEnableNavigation">导航</span>
-                <span class="task-btn" @click="handleEnableIns">INS</span>
-                <span class="task-btn" @click="handleEnableMsf">MSF</span>
+                <span 
+                  class="task-btn" 
+                  :class="{ 
+                    'active': navigationEnabled, 
+                    'disabled': insEnabled || msfEnabled 
+                  }"
+                  @click="handleEnableNavigation"
+                >导航</span>
+                <span 
+                  class="task-btn" 
+                  :class="{ 
+                    'active': insEnabled, 
+                    'disabled': navigationEnabled || msfEnabled 
+                  }"
+                  @click="handleEnableIns"
+                >INS</span>
+                <span 
+                  class="task-btn" 
+                  :class="{ 
+                    'active': msfEnabled, 
+                    'disabled': navigationEnabled || insEnabled 
+                  }"
+                  @click="handleEnableMsf"
+                >MSF</span>
               </div>
             </div>
             <div class="wayline-control-list">
@@ -81,7 +102,7 @@
                     v-model="selectedTrack" 
                     class="wayline-select"
                   >
-                    <option value="">请选择</option>
+                    <option v-if="filteredTrackList.length === 0" value="">暂无循迹任务</option>
                     <option 
                       v-for="track in filteredTrackList"
                       :key="track"
@@ -100,13 +121,11 @@
                   <span 
                     class="span" 
                     :class="{ disabled: !canDispatchTask }"
-                    v-permission-click-dialog="'home.task.issue'" 
                     @click="handleDispatchTask"
                   >下发任务</span>
                   <span 
                     class="span1" 
                     :class="{ disabled: activeTaskType !== 'wayline' }"
-                    v-permission-click-dialog="'home.task.cancel'"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -120,9 +139,9 @@
                     v-model="selectedPointTask" 
                     class="wayline-select"
                   >
-                    <option value="">请选择</option>
+                    <option v-if="filteredPointTaskList.length === 0" value="">暂无发布点任务</option>
                     <option 
-                      v-for="task in pointTaskList"
+                      v-for="task in filteredPointTaskList"
                       :key="task.task_id"
                       :value="task.task_id"
                     >
@@ -139,13 +158,11 @@
                   <span 
                     class="span" 
                     :class="{ disabled: !canDispatchTask }"
-                    v-permission-click-dialog="'home.task.issue'" 
                     @click="handleDispatchPointTask"
                   >下发任务</span>
                   <span 
                     class="span1" 
                     :class="{ disabled: activeTaskType !== 'point' }"
-                    v-permission-click-dialog="'home.task.cancel'"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -159,7 +176,7 @@
                     v-model="selectedMultiTask" 
                     class="wayline-select"
                   >
-                    <option value="">请选择</option>
+                    <option v-if="multiTaskList.length === 0" value="">暂无多任务组</option>
                     <option 
                       v-for="task in multiTaskList"
                       :key="task.multitask_id"
@@ -178,13 +195,11 @@
                   <span 
                     class="span" 
                     :class="{ disabled: !canDispatchTask }"
-                    v-permission-click-dialog="'home.task.issue'" 
                     @click="handleDispatchMultiTask"
                   >下发任务</span>
                   <span 
                     class="span1" 
                     :class="{ disabled: activeTaskType !== 'multi' }"
-                    v-permission-click-dialog="'home.task.cancel'"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -655,6 +670,149 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- 循迹任务启动弹窗 -->
+  <div v-if="trackStartDialog.visible" class="custom-dialog-mask">
+    <div class="dispatch-task-modal">
+      <div class="dispatch-task-modal-content">
+        <div class="dispatch-task-title">启动循迹任务</div>
+        <div class="dispatch-task-form">
+          <div class="dispatch-task-row">
+            <label>循迹任务：</label>
+            <input 
+              v-model="trackStartDialog.form.track_name" 
+              class="dispatch-task-input" 
+              disabled
+            />
+          </div>
+          <div class="dispatch-task-row">
+            <label>关键点文件：</label>
+            <div class="custom-select-wrapper">
+              <select 
+                v-model="trackStartDialog.form.taskpoint_name" 
+                class="mission-select"
+                :disabled="taskpointList.length === 0"
+              >
+                <option v-if="taskpointList.length === 0" value="">暂无关键点文件</option>
+                <option 
+                  v-for="taskpoint in taskpointList" 
+                  :key="taskpoint" 
+                  :value="taskpoint"
+                >
+                  {{ taskpoint }}
+                </option>
+              </select>
+              <span class="custom-select-arrow">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                  <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                </svg>
+              </span>
+            </div>
+          </div>
+          <div v-if="taskpointList.length === 0" class="dispatch-task-row">
+            <label></label>
+            <div class="time-tip" style="color: #ff6b6b;">提示：当前循迹任务没有关键点文件，请先创建</div>
+          </div>
+          <div class="dispatch-task-row">
+            <label>避障模式：</label>
+            <div class="custom-select-wrapper">
+              <select v-model="trackStartDialog.form.obs_mode" class="mission-select">
+                <option :value="1">近障模式</option>
+                <option :value="2">停障模式</option>
+                <option :value="3">绕障模式</option>
+              </select>
+              <span class="custom-select-arrow">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                  <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                </svg>
+              </span>
+            </div>
+          </div>
+          <div class="dispatch-task-row">
+            <label>步态选择：</label>
+            <div class="custom-select-wrapper">
+              <select v-model="trackStartDialog.form.gait_type" class="mission-select">
+                <option :value="0">行走步态</option>
+                <option :value="1">斜坡步态</option>
+                <option :value="2">越障步态</option>
+                <option :value="3">楼梯步态</option>
+                <option :value="4">帧楼梯步态</option>
+                <option :value="5">帧45°楼梯步态</option>
+                <option :value="6">L行走步态</option>
+                <option :value="7">山地步态</option>
+                <option :value="8">静音步态</option>
+              </select>
+              <span class="custom-select-arrow">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                  <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                </svg>
+              </span>
+            </div>
+          </div>
+          <div class="dispatch-task-row">
+            <label>立即启动：</label>
+            <div class="dispatch-switch-wrapper">
+              <div
+                class="switch-container"
+                :class="{ active: !trackStartDialog.form.wait }"
+                @click="trackStartDialog.form.wait = trackStartDialog.form.wait ? 0 : 1"
+              >
+                <div class="switch-toggle"></div>
+              </div>
+              <span class="dispatch-switch-label">{{ trackStartDialog.form.wait ? '否' : '是' }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="dispatch-task-actions">
+          <button class="mission-btn mission-btn-cancel" @click="onTrackStartCancel">取消</button>
+          <button 
+            class="mission-btn mission-btn-pause" 
+            :class="{ disabled: taskpointList.length === 0 || !trackStartDialog.form.taskpoint_name }"
+            @click="onTrackStartConfirm"
+          >确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 多任务组启动弹窗 -->
+  <div v-if="multiTaskStartDialog.visible" class="custom-dialog-mask">
+    <div class="dispatch-task-modal">
+      <div class="dispatch-task-modal-content">
+        <div class="dispatch-task-title">启动多任务组</div>
+        <div class="dispatch-task-form">
+          <div class="dispatch-task-row">
+            <label>任务组名称：</label>
+            <input 
+              v-model="multiTaskStartDialog.form.group_name" 
+              class="dispatch-task-input" 
+              disabled
+            />
+          </div>
+          <div class="dispatch-task-row">
+            <label>循环执行：</label>
+            <div class="dispatch-switch-wrapper">
+              <div
+                class="switch-container"
+                :class="{ active: multiTaskStartDialog.form.loop }"
+                @click="multiTaskStartDialog.form.loop = !multiTaskStartDialog.form.loop"
+              >
+                <div class="switch-toggle"></div>
+              </div>
+              <span class="dispatch-switch-label">{{ multiTaskStartDialog.form.loop ? '是' : '否' }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="dispatch-task-actions">
+          <button class="mission-btn mission-btn-cancel" @click="onMultiTaskStartCancel">取消</button>
+          <button 
+            class="mission-btn mission-btn-pause" 
+            @click="onMultiTaskStartConfirm"
+          >确定</button>
+        </div>
+      </div>
     </div>
   </div>
     
@@ -2690,7 +2848,7 @@ const insEnabled = ref(false)
 const msfEnabled = ref(false)
 
 // 当前活动任务类型：'wayline' | 'point' | 'multi' | null
-const activeTaskType = ref<'wayline' | 'point' | 'multi' | null>(null)
+const activeTaskType = ref<'wayline' | 'point' | 'multi' | 'track' | null>(null)
 
 // 确认对话框状态
 const confirmDialog = ref({
@@ -2754,6 +2912,52 @@ const dispatchTaskDialog = ref({
     recurrence_end_date: '' as string
   }
 })
+
+// 循迹任务启动弹窗
+const trackStartDialog = ref({
+  visible: false,
+  form: {
+    action: 1, // 固定为1，表示启动
+    wait: 0, // 0=立即启动, 1=不立即启动
+    obs_mode: 1, // 1=近障模式, 2=停障模式, 3=绕障模式
+    track_name: '',
+    taskpoint_name: '',
+    gait_type: 0 // 0=行走步态, 1=斜坡步态, 2=越障步态, 3=楼梯步态, 4=帧楼梯步态, 5=帧45°楼梯步态, 6=L行走步态, 7=山地步态, 8=静音步态
+  }
+})
+
+// 多任务组启动弹窗
+const multiTaskStartDialog = ref({
+  visible: false,
+  form: {
+    group_name: '',
+    loop: false
+  }
+})
+
+// 关键点文件列表（用于循迹任务启动弹窗）
+const taskpointList = ref<string[]>([])
+
+// 获取关键点文件列表
+const fetchTaskpointList = async (trackName: string) => {
+  const robotId = deviceStore.selectedRobotId
+  if (!robotId || !trackName) {
+    taskpointList.value = []
+    return
+  }
+  
+  try {
+    const response = await navigationApi.getTaskpointList(robotId, trackName)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      taskpointList.value = response.msg.result
+    } else {
+      taskpointList.value = []
+    }
+  } catch (error) {
+    console.error('获取关键点文件列表失败:', error)
+    taskpointList.value = []
+  }
+}
 
 // 获取航线文件列表
 const loadWaylineFiles = async () => {
@@ -2905,6 +3109,25 @@ watch(pointTaskList, (newList) => {
   }
 })
 
+// 过滤后的发布点任务列表（根据当前地图筛选）
+const filteredPointTaskList = computed(() => {
+  if (!selectedMap.value) return []
+  
+  // 根据地图名称筛选：task_name 以 "地图名称_" 开头
+  return pointTaskList.value.filter(task => {
+    return task.task_name.startsWith(selectedMap.value + '_')
+  })
+})
+
+// 监听筛选后的发布点任务列表变化，自动选择第一个
+watch(filteredPointTaskList, (newList) => {
+  if (newList.length > 0) {
+    selectedPointTask.value = newList[0].task_id
+  } else {
+    selectedPointTask.value = ''
+  }
+})
+
 // 多任务组列表
 interface MultiTask {
   multitask_id: string
@@ -2941,7 +3164,6 @@ watch(multiTaskList, (newList) => {
     selectedMultiTask.value = newList[0].multitask_id
   }
 })
-
 
 // 获取当前选中的航线名称
 const getCurrentWaylineName = computed(() => {
@@ -3014,21 +3236,23 @@ const handleDispatchTask = () => {
     }
     return
   }
-  activeTaskType.value = 'wayline'
-  // 这里的 selectedTrack.value 是处理过的名称，我们需要找到原始的完整名称（包含时间戳）来作为ID
-  // 或者如果后端只接受名称，就直接传名称。根据之前的代码逻辑，这里似乎是传ID。
-  // 但对于循迹任务，列表返回的是字符串，没有ID字段。
-  // 假设直接使用选中的名称作为ID/Name进行下发。
-  // 之前的 dispatchWaylineTask 逻辑是查找 waylineFiles 中的对象。
-  // 现在我们需要修改 dispatchWaylineTask 或者创建一个新的 dispatchTrackTask。
-  // 鉴于 dispatchWaylineTask 依赖 waylineFiles，我们需要调整它。
   
-  // 暂时直接调用 dispatchWaylineTask，但我们需要先确认 dispatchWaylineTask 的实现。
-  // 看起来 dispatchWaylineTask 是为 waylineFiles 设计的。
-  // 我们需要一个新的处理函数或者修改 dispatchWaylineTask。
+  // 检查是否选择了循迹任务
+  if (!selectedTrack.value) {
+    alert('请先选择循迹任务')
+    return
+  }
   
-  // 让我们先修改 handleDispatchTask 调用一个新的函数 dispatchTrackTask
-  dispatchTrackTask(selectedTrack.value, '循迹任务')
+  // 打开循迹任务启动弹窗
+  trackStartDialog.value.form.track_name = selectedTrack.value
+  trackStartDialog.value.form.taskpoint_name = ''
+  trackStartDialog.value.form.obs_mode = 1
+  trackStartDialog.value.form.gait_type = 0
+  trackStartDialog.value.form.wait = 0
+  trackStartDialog.value.visible = true
+  
+  // 获取关键点文件列表
+  fetchTaskpointList(selectedTrack.value)
 }
 
 const dispatchTrackTask = (trackName: string, taskLabel: string) => {
@@ -3090,27 +3314,87 @@ const handleDispatchMultiTask = () => {
     }
     return
   }
-  activeTaskType.value = 'multi'
-  // 多任务组也使用 dispatchTrackTask 逻辑
-  // selectedMultiTask.value 已经是 multitask_id
-  dispatchTrackTask(selectedMultiTask.value, '多任务')
+  
+  if (!selectedMultiTask.value) {
+    alert('请先选择一个多任务组')
+    return
+  }
+  
+  // 查找选中的任务组名称
+  const selectedTask = multiTaskList.value.find(task => task.multitask_id === selectedMultiTask.value)
+  if (!selectedTask) {
+    alert('未找到选中的多任务组')
+    return
+  }
+  
+  // 打开弹窗并设置表单数据
+  multiTaskStartDialog.value.form.group_name = selectedTask.multitask_name
+  multiTaskStartDialog.value.form.loop = false
+  multiTaskStartDialog.value.visible = true
 }
 
 // 取消任务
-const handleCancelTask = () => {
+const handleCancelTask = async () => {
   if (activeTaskType.value === null) {
     alert('当前没有正在执行的任务')
     return
   }
   
-  showConfirmDialog('确定要取消当前任务吗？', () => {
-    activeTaskType.value = null
-    console.log('取消任务')
-    // TODO: 调用取消任务API
+  const taskTypeMap = {
+    wayline: '循迹任务',
+    point: '发布点任务',
+    multi: '多任务组',
+    track: '循迹任务'
+  }
+  
+  const taskName = taskTypeMap[activeTaskType.value] || '任务'
+  
+  showConfirmDialog(`确定要取消当前${taskName}吗？`, async () => {
+    try {
+      const robotId = deviceStore.selectedRobotId
+      if (!robotId) {
+        alert('未找到机器人ID')
+        return
+      }
+      
+      // 根据任务类型调用不同的取消接口
+      if (activeTaskType.value === 'track') {
+        // 取消循迹任务
+        const response = await navigationApi.cancelTrack(robotId)
+        console.log('取消循迹任务响应:', response)
+        
+        if (response && (response as any).response && (response as any).response.msg) {
+          const { error_code, error_msg } = (response as any).response.msg
+          if (error_code === 0) {
+            alert((response as any).message || '循迹任务已取消')
+            activeTaskType.value = null
+          } else {
+            alert(`取消失败: ${error_msg || '未知错误'}`)
+          }
+        } else {
+          alert('循迹任务已取消')
+          activeTaskType.value = null
+        }
+      } else {
+        // 其他任务类型的取消逻辑（暂时只清除状态）
+        activeTaskType.value = null
+        console.log(`取消${taskName}`)
+        alert(`${taskName}已取消`)
+        // TODO: 其他任务类型的取消API
+      }
+    } catch (error) {
+      console.error('取消任务失败:', error)
+      alert('取消任务失败，请稍后重试')
+    }
   })
 }
 
 const handleEnableNavigation = () => {
+  // 检查是否被禁用
+  if (insEnabled.value || msfEnabled.value) {
+    return
+  }
+  
   if (!selectedMap.value) {
     alert('请先选择地图')
     return
@@ -3138,6 +3422,11 @@ const handleEnableNavigation = () => {
 }
 
 const handleEnableIns = () => {
+  // 检查是否被禁用
+  if (navigationEnabled.value || msfEnabled.value) {
+    return
+  }
+  
   const action = insEnabled.value ? '关闭' : '开启'
   showConfirmDialog(`确定要${action}INS吗？`, () => {
     insEnabled.value = !insEnabled.value
@@ -3147,6 +3436,11 @@ const handleEnableIns = () => {
 }
 
 const handleEnableMsf = () => {
+  // 检查是否被禁用
+  if (navigationEnabled.value || insEnabled.value) {
+    return
+  }
+  
   const action = msfEnabled.value ? '关闭' : '开启'
   showConfirmDialog(`确定要${action}MSF吗？`, () => {
     msfEnabled.value = !msfEnabled.value
@@ -3306,7 +3600,130 @@ const onDispatchTaskCancel = () => {
   dispatchTaskDialog.value.visible = false
 }
 
+// 循迹任务启动弹窗 - 取消
+const onTrackStartCancel = () => {
+  trackStartDialog.value.visible = false
+}
 
+// 循迹任务启动弹窗 - 确认
+const onTrackStartConfirm = async () => {
+  const form = trackStartDialog.value.form
+  
+  // 验证循迹任务名称
+  if (!form.track_name || form.track_name.trim() === '') {
+    alert('循迹任务名称不能为空')
+    return
+  }
+  
+  // 验证关键点文件是否选择
+  if (!form.taskpoint_name || form.taskpoint_name.trim() === '') {
+    alert('请选择关键点文件')
+    return
+  }
+  
+  // 验证关键点文件列表是否为空
+  if (taskpointList.value.length === 0) {
+    alert('当前循迹任务没有可用的关键点文件，请先创建关键点文件')
+    return
+  }
+  
+  // 验证避障模式
+  if (form.obs_mode === null || form.obs_mode === undefined) {
+    alert('请选择避障模式')
+    return
+  }
+  
+  try {
+    const robotId = deviceStore.selectedRobotId
+    if (!robotId) {
+      alert('未找到机器人ID')
+      return
+    }
+    
+    // 调用启动循迹任务API
+    const response = await navigationApi.startTrack(robotId, {
+      action: form.action,
+      wait: form.wait,
+      obs_mode: form.obs_mode,
+      track_name: form.track_name,
+      taskpoint_name: form.taskpoint_name
+    })
+    
+    console.log('启动循迹任务响应:', response)
+    
+    // 根据返回结果判断是否成功
+    if (response && (response as any).response && (response as any).response.msg) {
+      const { error_code, error_msg } = (response as any).response.msg
+      if (error_code === 0) {
+        alert((response as any).message || '循迹任务启动成功')
+        trackStartDialog.value.visible = false
+        activeTaskType.value = 'track'
+      } else {
+        alert(`启动失败: ${error_msg || '未知错误'}`)
+      }
+    } else {
+      alert('启动循迹任务成功')
+      trackStartDialog.value.visible = false
+      activeTaskType.value = 'track'
+    }
+  } catch (error) {
+    console.error('启动循迹任务失败:', error)
+    alert('启动循迹任务失败，请稍后重试')
+  }
+}
+
+
+
+// 多任务组启动弹窗 - 取消
+const onMultiTaskStartCancel = () => {
+  multiTaskStartDialog.value.visible = false
+}
+
+// 多任务组启动弹窗 - 确认
+const onMultiTaskStartConfirm = async () => {
+  const form = multiTaskStartDialog.value.form
+  
+  // 验证任务组名称
+  if (!form.group_name || form.group_name.trim() === '') {
+    alert('任务组名称不能为空')
+    return
+  }
+  
+  try {
+    const robotId = deviceStore.selectedRobotId
+    if (!robotId) {
+      alert('未找到机器人ID')
+      return
+    }
+    
+    // 调用启动多任务组API
+    const response = await navigationApi.startMultiTaskGroup(robotId, {
+      group_name: form.group_name,
+      loop: form.loop
+    })
+    
+    console.log('启动多任务组响应:', response)
+    
+    // 根据返回结果判断是否成功
+    if (response && (response as any).response && (response as any).response.msg) {
+      const { error_code, error_msg } = (response as any).response.msg
+      if (error_code === 0) {
+        alert((response as any).message || '多任务组启动成功')
+        multiTaskStartDialog.value.visible = false
+        activeTaskType.value = 'multi'
+      } else {
+        alert(`启动失败: ${error_msg || '未知错误'}`)
+      }
+    } else {
+      alert('启动多任务组成功')
+      multiTaskStartDialog.value.visible = false
+      activeTaskType.value = 'multi'
+    }
+  } catch (error) {
+    console.error('启动多任务组失败:', error)
+    alert('启动多任务组失败，请稍后重试')
+  }
+}
 
 // 航线暂停处理
 const handlePauseRoute = async () => {
@@ -4541,7 +4958,7 @@ onMounted(async () => {
   box-shadow: 0 4px 24px #0008;
   overflow: hidden;
   width: 90%;
-  max-width: 500px;
+  max-width: 420px;
   margin: 2vh auto;
   position: relative;
   border: 1px solid #18344a;
@@ -4558,7 +4975,7 @@ onMounted(async () => {
 }
 
 .dispatch-task-title {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 600;
   color: #67d5fd;
   margin-bottom: 20px;
@@ -4573,13 +4990,13 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   margin-bottom: 12px;
-  gap: 12px;
+  gap: 10px;
 }
 
 .dispatch-task-row label {
   font-size: 14px;
   color: #b8c7d9;
-  min-width: 100px;
+  min-width: 90px;
   text-align: right;
 }
 
@@ -4858,6 +5275,18 @@ onMounted(async () => {
 .dispatch-task-actions .mission-btn-pause:hover {
   background: #50c7f7;
   box-shadow: 0 2px 8px rgba(103, 213, 253, 0.3);
+}
+
+.dispatch-task-actions .mission-btn-pause.disabled {
+  background: #2a3f51;
+  color: #666;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dispatch-task-actions .mission-btn-pause.disabled:hover {
+  background: #2a3f51;
+  box-shadow: none;
 }
 
 .custom-dialog-mask {
@@ -5472,6 +5901,36 @@ onMounted(async () => {
 
 .task-btn:active {
   transform: translateY(0);
+}
+
+/* 激活状态 - 红色 */
+.task-btn.active {
+  background: #c62828;
+  border-color: #ff5252;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(198, 40, 40, 0.5);
+}
+
+.task-btn.active:hover {
+  background: #d32f2f;
+  border-color: #ff6666;
+  box-shadow: 0 0 15px rgba(198, 40, 40, 0.7);
+}
+
+/* 禁用状态 - 置灰 */
+.task-btn.disabled {
+  background: #1a1a1a;
+  border-color: rgba(100, 100, 100, 0.3);
+  color: #666;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.task-btn.disabled:hover {
+  background: #1a1a1a;
+  border-color: rgba(100, 100, 100, 0.3);
+  transform: none;
+  box-shadow: none;
 }
 
 .wayline-control-list {
@@ -6718,14 +7177,7 @@ onMounted(async () => {
   text-shadow: 0 0 3px rgba(255, 77, 79, 0.5);
 }
 
-
-
-
-
-
-
 /* 地图容器样式 */
-*** End Patch
 
 /* 航线任务卡片响应式样式 */
 @media (max-width: 1400px) {
