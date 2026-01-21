@@ -1,3 +1,4 @@
+
 <template>
   <div class="home-container">
     <!-- 左侧状态栏 -->
@@ -815,6 +816,58 @@
       </div>
     </div>
   </div>
+
+  <!-- 发布点任务启动弹窗 -->
+  <div v-if="pointTaskStartDialog.visible" class="custom-dialog-mask">
+    <div class="dispatch-task-modal">
+      <div class="dispatch-task-modal-content">
+        <div class="dispatch-task-title">启动发布点任务</div>
+        <div class="dispatch-task-form">
+          <div class="dispatch-task-row">
+            <label>任务名称：</label>
+            <input 
+              v-model="pointTaskStartDialog.form.task_name" 
+              class="dispatch-task-input" 
+              disabled
+            />
+          </div>
+          <div class="dispatch-task-row">
+            <label>循环执行：</label>
+            <div class="dispatch-switch-wrapper">
+              <div
+                class="switch-container"
+                :class="{ active: pointTaskStartDialog.form.circle }"
+                @click="pointTaskStartDialog.form.circle = !pointTaskStartDialog.form.circle"
+              >
+                <div class="switch-toggle"></div>
+              </div>
+              <span class="dispatch-switch-label">{{ pointTaskStartDialog.form.circle ? '是' : '否' }}</span>
+            </div>
+          </div>
+          <div class="dispatch-task-row">
+            <label>断点续传：</label>
+            <div class="dispatch-switch-wrapper">
+              <div
+                class="switch-container"
+                :class="{ active: pointTaskStartDialog.form.recover }"
+                @click="pointTaskStartDialog.form.recover = !pointTaskStartDialog.form.recover"
+              >
+                <div class="switch-toggle"></div>
+              </div>
+              <span class="dispatch-switch-label">{{ pointTaskStartDialog.form.recover ? '是' : '否' }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="dispatch-task-actions">
+          <button class="mission-btn mission-btn-cancel" @click="onPointTaskStartCancel">取消</button>
+          <button 
+            class="mission-btn mission-btn-pause" 
+            @click="onPointTaskStartConfirm"
+          >确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
     
     <!-- 确认对话框 -->
     <div v-if="confirmDialog.visible" class="confirm-dialog-mask" @click.self="confirmDialog.visible = false">
@@ -838,9 +891,103 @@
 </template>
 
 <script setup lang="ts">
+// ================= 轨迹路线文件本地缓存与配置 ================
+const TRAJECTORY_CONFIG_KEY = 'trajectory_config'
+const TRAJECTORY_STORE_NAME = 'trajectory_files'
+
+// 打开轨迹文件的 IndexedDB
+const openTrajectoryDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('trajectory_db', 1)
+    request.onupgradeneeded = (event) => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(TRAJECTORY_STORE_NAME)) {
+        db.createObjectStore(TRAJECTORY_STORE_NAME, { keyPath: 'id' })
+      }
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+// 保存轨迹文件
+const saveTrajectoryFile = async (trackName: string, blob: Blob): Promise<void> => {
+  const db = await openTrajectoryDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([TRAJECTORY_STORE_NAME], 'readwrite')
+    const store = tx.objectStore(TRAJECTORY_STORE_NAME)
+    store.put({ id: trackName, blob })
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+// 获取轨迹文件
+const getTrajectoryFile = async (trackName: string): Promise<Blob | null> => {
+  try {
+    const db = await openTrajectoryDB()
+    return new Promise((resolve) => {
+      const tx = db.transaction([TRAJECTORY_STORE_NAME], 'readonly')
+      const request = tx.objectStore(TRAJECTORY_STORE_NAME).get(trackName)
+      request.onsuccess = () => resolve(request.result?.blob || null)
+      request.onerror = () => resolve(null)
+    })
+  } catch {
+    return null
+  }
+}
+
+// 轨迹配置管理
+const getTrajectoryConfig = (): Record<string, string> => {
+  return JSON.parse(localStorage.getItem(TRAJECTORY_CONFIG_KEY) || '{}')
+}
+const saveTrajectoryConfig = (config: Record<string, string>): void => {
+  localStorage.setItem(TRAJECTORY_CONFIG_KEY, JSON.stringify(config))
+}
+const updateTrajectoryConfig = (trackName: string, updateTime: string): void => {
+  const config = getTrajectoryConfig()
+  config[trackName] = updateTime
+  saveTrajectoryConfig(config)
+}
+const shouldDownloadTrajectory = (trackName: string, serverUpdateTime: string): boolean => {
+  const config = getTrajectoryConfig()
+  const localUpdateTime = config[trackName]
+  if (!localUpdateTime) return true
+  return localUpdateTime !== serverUpdateTime
+}
+
+// 下载单个轨迹文件
+const downloadTrajectoryFile = async (trackName: string): Promise<Blob | null> => {
+  // 轨迹文件名和文件夹同名
+  const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trackName}/${trackName}.txt`
+  try {
+    const response = await fetch(url, { method: 'GET' })
+    if (!response.ok) return null
+    return await response.blob()
+  } catch {
+    return null
+  }
+}
+
+// 下载所有轨迹文件（切换地图时调用）
+const downloadAllTrajectoryFiles = async (trackList: string[]) => {
+  // trackList 形如 [map1_track1@20260121, map1_track2@20260120]
+  for (const trackRaw of trackList) {
+    const atIndex = trackRaw.indexOf('@')
+    const trackName = atIndex > -1 ? trackRaw.substring(0, atIndex) : trackRaw
+    const updateTime = atIndex > -1 ? trackRaw.substring(atIndex + 1) : ''
+    if (!trackName) continue
+    if (!shouldDownloadTrajectory(trackName, updateTime)) continue
+    const blob = await downloadTrajectoryFile(trackName)
+    if (blob) {
+      await saveTrajectoryFile(trackName, blob)
+      updateTrajectoryConfig(trackName, updateTime)
+    }
+  }
+}
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useDevices, useWaylineJobs } from '../composables/useApi'
-import { controlApi, waylineApi, livestreamApi, navigationApi } from '../api/services'
+import { controlApi, waylineApi, livestreamApi, navigationApi, mapFileApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config } from '../config/environment'
 import { useDeviceStore } from '../stores/device'
@@ -1426,18 +1573,31 @@ const refreshPointCloud = async () => {
   pointCloudLoading.value = true
   pointCloudError.value = ''
   try {
-    const response = await fetch(tinymapPcdUrl)
-    if (!response.ok) {
-      throw new Error('PCD 文件加载失败')
+    let buffer: ArrayBuffer | null = null
+    
+    // 优先从 IndexedDB 获取当前选中地图的点云文件
+    if (selectedMap.value) {
+      const blob = await getMapFile(selectedMap.value, 'tinyMap.pcd')
+      if (blob) {
+        buffer = await blob.arrayBuffer()
+      }
     }
-    const buffer = await response.arrayBuffer()
+    
+    // 如果没有下载的地图文件，使用默认测试文件
+    if (!buffer) {
+      const response = await fetch(tinymapPcdUrl)
+      if (!response.ok) {
+        throw new Error('PCD 文件加载失败')
+      }
+      buffer = await response.arrayBuffer()
+    }
+    
     const parsedPoints = parsePcdBuffer(buffer)
     pointCloudData.value = parsedPoints.length ? parsedPoints : generateMockPointCloud()
     await nextTick()
     schedulePointCloudRender()
   } catch (error) {
-    console.error('点云数据解析失败', error)
-    pointCloudError.value = '点云数据加载失败，请检查 tinyMap.pcd 文件'
+    pointCloudError.value = '点云数据加载失败'
     pointCloudData.value = generateMockPointCloud()
     await nextTick()
     schedulePointCloudRender()
@@ -1651,7 +1811,7 @@ const switchGimbal = async (videoType: 'dock' | 'drone_visible' | 'drone_infrare
     videoStreamUrl.value = targetStream.url
     currentVideoType.value = videoType
     
-    console.log(`已切换到${getVideoTypeName(videoType)}视频流`)
+  // ...
     
     // 选择视频后关闭菜单
     gimbalMenuVisible.value = false
@@ -1963,92 +2123,88 @@ const startDronePositionAnimation = (newPosition: any) => {
 const isInitialLoad = ref(true)
 
 // 视频播放器相关
-const videoStreamUrl = ref<string>('')
+const videoStreamUrl = ref<string>('webrtc://10.10.1.3:1985/live/robot_001_cam_rtsp_left')
 const videoPlayer = ref<any>(null)
 const videoElement = ref<HTMLVideoElement | null>(null)
 
 // 云台切换相关
 const currentVideoType = ref<'dock' | 'drone_visible' | 'drone_infrared'>('dock')
 const videoLoading = ref(false)
-const gimbalMenuVisible = ref(false)
-
-// 清晰度设置相关状态
-const showQualityMenu = ref(false)
-const currentQuality = ref<number>(0)
-const qualityChanging = ref(false)
-
-// 清晰度菜单样式计算属性
-const qualityMenuStyle = computed(() => {
-  if (!showQualityMenu.value) return {}
-  const button = document.querySelector('.quality-btn') as HTMLElement
-  if (!button) return {}
-  const rect = button.getBoundingClientRect()
-  return {
-    top: `${rect.bottom + 4}px`,
-    right: `${window.innerWidth - rect.right}px`
+const startVideoPlayback = () => {
+  if (!videoElement.value || !videoStreamUrl.value) {
+    console.warn('startVideoPlayback: videoElement 或 videoStreamUrl 不存在')
+    return
   }
-})
-
-// 切换清晰度菜单
-const toggleQualityMenu = () => {
-  showQualityMenu.value = !showQualityMenu.value
-}
-
-// 处理清晰度切换
-const handleQualityChange = async (quality: number) => {
-  if (qualityChanging.value) return
   try {
-    const { dockSns } = getCachedDeviceSns()
-    if (!dockSns || dockSns.length === 0) {
-      alert('未找到可用的机场设备')
-      return
+    if (videoPlayer.value) {
+      videoPlayer.value.destroy()
+      videoPlayer.value = null
     }
-
-    // 从缓存的视频流中推断当前流的 device_sn/camera_index/video_index
-    const streams = getVideoStreams()
-    const active = streams.find(s => s.type === currentVideoType.value)
-    if (!active) {
-      alert('未找到当前视频流信息，无法设置清晰度')
-      return
+    if (videoElement.value) {
+      videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+      videoElement.value.addEventListener('play', () => {
+        isVideoPlaying.value = true
+        console.log('videoElement 播放事件触发')
+      })
+      videoElement.value.addEventListener('pause', () => {
+        isVideoPlaying.value = false
+        console.log('videoElement 暂停事件触发')
+      })
+      videoElement.value.addEventListener('timeupdate', updateVideoTime)
+      videoElement.value.addEventListener('loadedmetadata', () => {
+        updateVideoTime()
+        console.log('videoElement loadedmetadata 事件')
+      })
+      videoElement.value.addEventListener('loadeddata', () => {
+        const el = videoElement.value
+        if (!el) return
+        el.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+        console.log('videoElement loadeddata 事件')
+      })
     }
-
-    const videoId = `${active.device_sn}/${active.camera_index}/${active.video_index}`
-
-    qualityChanging.value = true
-    showQualityMenu.value = false
-    const dockSn = dockSns[0]
-    const result = await livestreamApi.setQuality(dockSn, { video_id: videoId, video_quality: quality })
-    if ((result as any)?.message && (result as any).message.includes('Set livestream quality command sent')) {
-      currentQuality.value = quality
+    if (videoStreamUrl.value.startsWith('webrtc://')) {
+      console.log('startVideoPlayback: 检测到 webrtc 流，调用 startWebRTCPlayback', videoStreamUrl.value)
+      startWebRTCPlayback()
+    } else if (videoStreamUrl.value.startsWith('rtmp://')) {
+      if (flvjs.isSupported()) {
+        const flvUrl = videoStreamUrl.value.replace(/^rtmp:\/\/[^\/]+/, config.api.domain)
+        videoPlayer.value = flvjs.createPlayer({
+          type: 'flv',
+          url: flvUrl,
+          isLive: true,
+          hasAudio: false,
+          hasVideo: true
+        }, {
+          enableStashBuffer: false,
+          stashInitialSize: 128,
+          enableWorker: true,
+          lazyLoad: false,
+          autoCleanupSourceBuffer: true
+        })
+        videoPlayer.value.attachMediaElement(videoElement.value)
+        videoPlayer.value.load()
+        videoPlayer.value.play()
+        if (videoElement.value) {
+          videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+        }
+        console.log('startVideoPlayback: flv.js 播放器已初始化')
+      } else {
+        console.warn('startVideoPlayback: flv.js 不支持')
+      }
     } else {
-      const msg = (result as any)?.detail || (result as any)?.message || '清晰度设置失败'
-      alert(msg)
+      videoElement.value.src = videoStreamUrl.value
+      videoElement.value.load()
+      videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+      videoElement.value.play().then(() => {
+        console.log('startVideoPlayback: 原生流 play 成功')
+      }).catch(error => {
+        console.error('startVideoPlayback: 原生流 play 失败', error)
+      })
     }
-  } catch (err: any) {
-    alert(err?.message || '清晰度设置失败')
-  } finally {
-    qualityChanging.value = false
+  } catch (error) {
+    console.error('startVideoPlayback: 初始化失败', error)
   }
 }
-
-// WGS84坐标转GCJ-02坐标的转换函数
-const transformWGS84ToGCJ02 = (wgsLng: number, wgsLat: number) => {
-  const PI = Math.PI
-  const ee = 0.00669342162296594323
-  const a = 6378245.0
-
-  if (isOutOfChina(wgsLng, wgsLat)) {
-    return { longitude: wgsLng, latitude: wgsLat }
-  }
-
-  let dlat = transformLat(wgsLng - 105.0, wgsLat - 35.0)
-  let dlng = transformLng(wgsLng - 105.0, wgsLat - 35.0)
-  const radlat = wgsLat / 180.0 * PI
-  let magic = Math.sin(radlat)
-  magic = 1 - ee * magic * magic
-  const sqrtmagic = Math.sqrt(magic)
-  dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * PI)
-  dlng = (dlng * 180.0) / (a / sqrtmagic * Math.cos(radlat) * PI)
   const mglat = wgsLat + dlat
   const mglng = wgsLng + dlng
 
@@ -2166,81 +2322,81 @@ const createHeadingSector = (center: [number, number], headingDeg: number) => {
 }
 
 // 获取当前云台偏航角（优先设备状态，其次回退机体航向）
-const getCurrentGimbalYaw = (): number => {
-  const a = (droneStatus.value?.gimbalYaw ?? null) as number | null
-  if (typeof a === 'number' && Number.isFinite(a)) return a
-  return (droneStatus.value?.attitude?.head ?? 0) as number
-}
-
-// 更新现有扇形（若不存在返回null）
-const updateHeadingSector = (center: [number, number], headingDeg: number) => {
-  const sector = droneHeadingSectors.value?.[0]
-  if (!sector || !amapApiRef) return null
-  const path = computeSectorPath(center, headingDeg)
-  sector.setPath(path)
-  return sector
-}
-
-// 添加无人机标记到地图
-const addDroneMarker = (longitude: number, latitude: number, droneInfo: any) => {
-  if (!amapInstance || !amapApiRef) {
+const startWebRTCPlayback = async () => {
+  if (isPlaying) {
+    stopWebRTCPlayback()
+  }
+  const serverUrl = videoStreamUrl.value
+  if (!serverUrl) {
+    console.warn('startWebRTCPlayback: serverUrl 为空')
     return
   }
-
-  const AMap = amapApiRef
-  
-  // 创建无人机标记点（箭头图标，后续通过 rotateAngle 实时旋转）
-  const marker = new AMap.Marker({
-    position: [longitude, latitude],
-    title: `无人机: ${droneInfo?.deviceSn || '未知设备'}`,
-    icon: new AMap.Icon({
-      image: droneArrowIcon,
-      imageSize: new AMap.Size(32, 32),
-      size: new AMap.Size(32, 32)
-    }),
-    // 使用 autoRotation/angle 需要配合 setAngle
-    autoRotation: false,
-    angle: (droneStatus.value?.attitude?.head ?? 0) as number,
-    anchor: 'center',
-    offset: new AMap.Pixel(0, 0)
-  })
-
-  // 添加点击事件
-  marker.on('click', () => {
-    // 可以在这里添加更多交互功能，比如显示详细信息
-  })
-
-  // 添加到地图
-  amapInstance.add(marker)
-  droneMarkers.value.push(marker)
-
-  // 添加朝向扇形（仅无人机在线时显示）
-  if (droneStatus.value?.isOnline) {
-    const heading = getCurrentGimbalYaw()
-    const sector = createHeadingSector([longitude, latitude], heading)
-    if (sector) {
-      amapInstance.add(sector)
-      droneHeadingSectors.value = [sector]
+  try {
+    if (pc) {
+      pc.close()
+      pc = null
     }
+    pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' }
+      ]
+    })
+    pc.ontrack = (e) => {
+      if (videoElement.value) {
+        videoElement.value.srcObject = e.streams[0]
+        videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+        videoElement.value.play().then(() => {
+          console.log('startWebRTCPlayback: WebRTC流 play 成功')
+        }).catch(err => {
+          console.error('startWebRTCPlayback: WebRTC流 play 失败', err)
+        })
+        console.log('startWebRTCPlayback: ontrack 触发，已设置 srcObject')
+      }
+    }
+    pc.oniceconnectionstatechange = () => {
+      console.log('startWebRTCPlayback: ICE 状态', pc?.iceConnectionState)
+      if (pc?.iceConnectionState === 'connected') {
+        isPlaying = true
+      } else if (pc?.iceConnectionState === 'failed') {
+        stopWebRTCPlayback()
+      }
+    }
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true
+    })
+    await pc.setLocalDescription(offer)
+    const apiUrl = buildApiUrl(serverUrl)
+    console.log('startWebRTCPlayback: 请求 SRS /rtc/v1/play/', apiUrl, serverUrl)
+    const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sdp: offer.sdp,
+        streamurl: serverUrl
+      })
+    })
+    if (!response.ok) {
+      console.error('startWebRTCPlayback: SRS 服务器响应错误', response.status)
+      throw new Error(`服务器响应错误: ${response.status}`)
+    }
+    const data = await response.json()
+    if (data.code !== 0) {
+      console.error('startWebRTCPlayback: SRS 错误', data.msg)
+      throw new Error(`SRS错误: ${data.msg}`)
+    }
+    await pc.setRemoteDescription({
+      type: 'answer',
+      sdp: data.sdp
+    })
+    console.log('startWebRTCPlayback: setRemoteDescription 完成')
+  } catch (error) {
+    console.error('startWebRTCPlayback: 失败', error)
+    stopWebRTCPlayback()
   }
 }
-
-// 清除所有无人机标记
-const clearDroneMarkers = () => {
-  if (droneMarkers.value.length > 0) {
-    droneMarkers.value.forEach(marker => {
-      if (amapInstance) {
-        amapInstance.remove(marker)
-      }
-    })
-    droneMarkers.value = []
-  }
-  // 清除无人机朝向扇形
-  if (droneHeadingSectors.value?.length > 0) {
-    droneHeadingSectors.value.forEach((poly: any) => {
-      if (amapInstance) {
-        amapInstance.remove(poly)
-      }
     })
     droneHeadingSectors.value = []
   }
@@ -2253,7 +2409,7 @@ const updateMapMarkers = (shouldCenter = false) => {
   
   // 检查是否有位置数据
   if (position.value && position.value.longitude && position.value.latitude) {
-    // console.log('定位数据可用:', position.value)
+  // ...
     const wgsLongitude = position.value.longitude
     const wgsLatitude = position.value.latitude
     
@@ -2408,7 +2564,7 @@ const initVideoPlayer = () => {
     if (defaultStream) {
       videoStreamUrl.value = defaultStream.url
       currentVideoType.value = defaultVideoType
-      console.log(`首页初始化：使用默认视频流 ${defaultVideoType}`)
+  // ...
     }
   }
   
@@ -2935,6 +3091,17 @@ const multiTaskStartDialog = ref({
   }
 })
 
+// 发布点任务启动弹窗
+const pointTaskStartDialog = ref({
+  visible: false,
+  form: {
+    task_id: 0,
+    task_name: '',
+    circle: false,
+    recover: false
+  }
+})
+
 // 关键点文件列表（用于循迹任务启动弹窗）
 const taskpointList = ref<string[]>([])
 
@@ -2954,7 +3121,7 @@ const fetchTaskpointList = async (trackName: string) => {
       taskpointList.value = []
     }
   } catch (error) {
-    console.error('获取关键点文件列表失败:', error)
+  // ...
     taskpointList.value = []
   }
 }
@@ -2987,6 +3154,132 @@ const loadWaylineFiles = async () => {
   }
 }
 
+// 地图文件缓存 - 使用 IndexedDB 存储大文件
+const MAP_DB_NAME = 'MapFilesDB'
+const MAP_STORE_NAME = 'mapFiles'
+
+// 打开地图文件数据库
+const openMapDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(MAP_DB_NAME, 1)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains(MAP_STORE_NAME)) {
+        db.createObjectStore(MAP_STORE_NAME, { keyPath: 'id' })
+      }
+    }
+  })
+}
+
+// 保存地图文件
+const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promise<void> => {
+  const db = await openMapDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([MAP_STORE_NAME], 'readwrite')
+    const store = tx.objectStore(MAP_STORE_NAME)
+    store.put({ id: `${mapName}/${fileName}`, blob })
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+// 获取地图文件
+const getMapFile = async (mapName: string, fileName: string): Promise<Blob | null> => {
+  try {
+    const db = await openMapDB()
+    return new Promise((resolve) => {
+      const tx = db.transaction([MAP_STORE_NAME], 'readonly')
+      const request = tx.objectStore(MAP_STORE_NAME).get(`${mapName}/${fileName}`)
+      request.onsuccess = () => resolve(request.result?.blob || null)
+      request.onerror = () => resolve(null)
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 地图配置文件管理
+ * 配置存储在 localStorage 中，格式为：
+ * {
+ *   "地图名称": "更新时间",
+ *   "abc": "20260121103000",
+ *   "def": "20260120150000"
+ * }
+ */
+const MAP_CONFIG_KEY = 'map_config'
+
+// 读取地图配置
+const getMapConfig = (): Record<string, string> => {
+  return JSON.parse(localStorage.getItem(MAP_CONFIG_KEY) || '{}')
+}
+
+// 保存地图配置
+const saveMapConfig = (config: Record<string, string>): void => {
+  localStorage.setItem(MAP_CONFIG_KEY, JSON.stringify(config))
+}
+
+// 更新单个地图的配置
+const updateMapConfig = (mapName: string, updateTime: string): void => {
+  const config = getMapConfig()
+  config[mapName] = updateTime
+  saveMapConfig(config)
+}
+
+// 检查地图是否需要下载（比对配置文件中的更新时间）
+const shouldDownloadMap = (mapName: string, serverUpdateTime: string): boolean => {
+  const config = getMapConfig()
+  const localUpdateTime = config[mapName]
+  
+  // 配置中没有该地图，需要下载
+  if (!localUpdateTime) {
+    return true
+  }
+  
+  // 更新时间不一致，需要重新下载
+  return localUpdateTime !== serverUpdateTime
+}
+
+// 下载地图文件
+const downloadMapFiles = async (mapName: string, updateTime: string) => {
+  // 验证配置文件，检查是否需要下载
+  if (!shouldDownloadMap(mapName, updateTime)) {
+    return
+  }
+  
+  // 获取机器人 IP
+  const robotInfo = deviceStore.selectedRobot
+  if (!robotInfo?.ip_address) {
+    return
+  }
+  
+  const robotIp = robotInfo.ip_address
+  
+  // 下载文件
+  const files = await mapFileApi.downloadAllMapFiles(robotIp, mapName)
+  
+  // 保存文件到 IndexedDB
+  for (const [fileName, blob] of files) {
+    await saveMapFile(mapName, fileName, blob)
+  }
+  
+  // 下载成功后更新配置文件
+  if (files.size === mapFileApi.MAP_FILES.length) {
+    updateMapConfig(mapName, updateTime)
+  }
+}
+
+// 获取地图文件 URL（用于渲染）
+const getMapFileUrl = async (mapName: string, fileName: string): Promise<string | null> => {
+  const blob = await getMapFile(mapName, fileName)
+  return blob ? URL.createObjectURL(blob) : null
+}
+
+// 地图更新时间映射（运行时使用，key: 地图名, value: 更新时间）
+const mapUpdateTimeMap = ref<Record<string, string>>({})
+
 // 获取地图列表
 const fetchMapList = async () => {
   const robotId = deviceStore.selectedRobotId
@@ -2998,26 +3291,47 @@ const fetchMapList = async () => {
   try {
     const response = await navigationApi.getMapList(robotId)
     if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-      // 处理地图名称，去掉时间戳（只保留 @ 前面的部分）
-      mapList.value = response.msg.result.map(item => {
+      // 处理地图名称和更新时间
+      const tempMapList: string[] = []
+      const tempUpdateTimeMap: Record<string, string> = {}
+      
+      response.msg.result.forEach(item => {
         const atIndex = item.indexOf('@')
-        return atIndex !== -1 ? item.substring(0, atIndex) : item
+        if (atIndex !== -1) {
+          const mapName = item.substring(0, atIndex)
+          const updateTime = item.substring(atIndex + 1) // @ 后面的部分是更新时间
+          tempMapList.push(mapName)
+          tempUpdateTimeMap[mapName] = updateTime
+        } else {
+          tempMapList.push(item)
+          tempUpdateTimeMap[item] = '' // 没有更新时间
+        }
       })
-      // 缓存地图列表
+      
+      mapList.value = tempMapList
+      mapUpdateTimeMap.value = tempUpdateTimeMap
+      
+      // 缓存地图列表和更新时间映射
       localStorage.setItem('cached_map_list', JSON.stringify(mapList.value))
+      localStorage.setItem('cached_map_update_time_map', JSON.stringify(mapUpdateTimeMap.value))
+      
       // 默认选择第一个地图
       if (mapList.value.length > 0) {
         selectedMap.value = mapList.value[0]
       }
     } else {
-      console.error('获取地图列表失败:', response?.msg?.error_msg || '未知错误')
+  // ...
     }
   } catch (err) {
-    console.error('获取地图列表失败:', err)
+  // ...
     // 尝试从缓存加载
     const cached = localStorage.getItem('cached_map_list')
+    const cachedTimeMap = localStorage.getItem('cached_map_update_time_map')
     if (cached) {
       mapList.value = JSON.parse(cached)
+      if (cachedTimeMap) {
+        mapUpdateTimeMap.value = JSON.parse(cachedTimeMap)
+      }
       if (mapList.value.length > 0 && !selectedMap.value) {
         selectedMap.value = mapList.value[0]
       }
@@ -3039,7 +3353,7 @@ const fetchTrackList = async () => {
       trackList.value = response.msg.result
     }
   } catch (error) {
-    console.error('获取循迹任务列表失败:', error)
+  // ...
   }
 }
 
@@ -3054,12 +3368,34 @@ const filteredTrackList = computed(() => {
     })
 })
 
-// 监听地图变化，重置选中的循迹任务
-watch(selectedMap, () => {
+// 监听地图变化，重置选中的循迹任务并下载地图文件
+watch(selectedMap, async (newMapName) => {
   selectedTrack.value = ''
   // 自动选择第一个
   if (filteredTrackList.value.length > 0) {
     selectedTrack.value = filteredTrackList.value[0]
+  }
+
+  // 切换地图时检查并下载地图文件和所有轨迹文件
+  if (newMapName) {
+    try {
+      // 获取该地图的更新时间
+      const updateTime = mapUpdateTimeMap.value[newMapName] || ''
+      await downloadMapFiles(newMapName, updateTime)
+
+      // 下载所有轨迹文件（带更新时间校验）
+      if (trackList.value.length > 0) {
+        // 只处理属于当前地图的轨迹
+        const relatedTracks = trackList.value.filter(track => track.startsWith(newMapName + '_'))
+        await downloadAllTrajectoryFiles(relatedTracks)
+      }
+
+      // 地图文件和轨迹文件下载/验证完成后，刷新点云图
+      await refreshPointCloud()
+    } catch (err) {
+      // 下载失败也尝试刷新点云图（可能使用缓存）
+      await refreshPointCloud()
+    }
   }
 })
 
@@ -3093,7 +3429,7 @@ const fetchPointTaskList = async () => {
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
     }
   } catch (error) {
-    console.error('获取发布点任务列表失败:', error)
+  // ...
     // 尝试从缓存加载
     const cached = localStorage.getItem('cached_point_task_list')
     if (cached) {
@@ -3149,7 +3485,7 @@ const fetchMultiTaskList = async () => {
       localStorage.setItem('cached_multi_task_list', JSON.stringify(multiTaskList.value))
     }
   } catch (error) {
-    console.error('获取多任务组列表失败:', error)
+  // ...
     // 尝试从缓存加载
     const cached = localStorage.getItem('cached_multi_task_list')
     if (cached) {
@@ -3299,10 +3635,25 @@ const handleDispatchPointTask = () => {
     }
     return
   }
-  activeTaskType.value = 'point'
-  // 发布点任务也使用 dispatchTrackTask 逻辑，因为它们也是基于ID/Name下发
-  // selectedPointTask.value 已经是 task_id
-  dispatchTrackTask(selectedPointTask.value, '发布点任务')
+  
+  if (!selectedPointTask.value) {
+    alert('请先选择一个发布点任务')
+    return
+  }
+  
+  // 查找选中的任务信息
+  const selectedTask = filteredPointTaskList.value.find(task => task.task_id === selectedPointTask.value)
+  if (!selectedTask) {
+    alert('未找到选中的发布点任务')
+    return
+  }
+  
+  // 打开弹窗并设置表单数据
+  pointTaskStartDialog.value.form.task_id = parseInt(selectedTask.task_id)
+  pointTaskStartDialog.value.form.task_name = selectedTask.task_name
+  pointTaskStartDialog.value.form.circle = false
+  pointTaskStartDialog.value.form.recover = false
+  pointTaskStartDialog.value.visible = true
 }
 
 const handleDispatchMultiTask = () => {
@@ -3361,7 +3712,7 @@ const handleCancelTask = async () => {
       if (activeTaskType.value === 'track') {
         // 取消循迹任务
         const response = await navigationApi.cancelTrack(robotId)
-        console.log('取消循迹任务响应:', response)
+  // ...
         
         if (response && (response as any).response && (response as any).response.msg) {
           const { error_code, error_msg } = (response as any).response.msg
@@ -3375,15 +3726,58 @@ const handleCancelTask = async () => {
           alert('循迹任务已取消')
           activeTaskType.value = null
         }
+      } else if (activeTaskType.value === 'point') {
+        // 停止发布点任务
+        const taskId = parseInt(selectedPointTask.value)
+        if (!taskId) {
+          alert('未找到任务ID')
+          return
+        }
+        
+        const response = await navigationApi.stopPointTask({
+          task_id: taskId,
+          circle: false,
+          recover: false
+        })
+  // ...
+        
+        if (response && (response as any).response && (response as any).response.msg) {
+          const { error_code, error_msg } = (response as any).response.msg
+          if (error_code === 0) {
+            alert((response as any).message || '发布点任务已停止')
+            activeTaskType.value = null
+          } else {
+            alert(`停止失败: ${error_msg || '未知错误'}`)
+          }
+        } else {
+          alert('发布点任务已停止')
+          activeTaskType.value = null
+        }
+      } else if (activeTaskType.value === 'multi') {
+        // 取消多任务组
+        const response = await navigationApi.cancelMultiTaskGroup(robotId)
+  // ...
+        
+        if (response && (response as any).response && (response as any).response.msg) {
+          const { error_code, error_msg } = (response as any).response.msg
+          if (error_code === 0) {
+            alert((response as any).message || '多任务组已取消')
+            activeTaskType.value = null
+          } else {
+            alert(`取消失败: ${error_msg || '未知错误'}`)
+          }
+        } else {
+          alert('多任务组已取消')
+          activeTaskType.value = null
+        }
       } else {
         // 其他任务类型的取消逻辑（暂时只清除状态）
         activeTaskType.value = null
-        console.log(`取消${taskName}`)
+  // ...
         alert(`${taskName}已取消`)
-        // TODO: 其他任务类型的取消API
       }
     } catch (error) {
-      console.error('取消任务失败:', error)
+  // ...
       alert('取消任务失败，请稍后重试')
     }
   })
@@ -3413,9 +3807,9 @@ const handleEnableNavigation = () => {
       })
       
       navigationEnabled.value = !navigationEnabled.value
-      console.log(`${action}导航成功`)
+  // ...
     } catch (err) {
-      console.error(`${action}导航失败:`, err)
+  // ...
       alert(`${action}导航失败`)
     }
   })
@@ -3430,7 +3824,7 @@ const handleEnableIns = () => {
   const action = insEnabled.value ? '关闭' : '开启'
   showConfirmDialog(`确定要${action}INS吗？`, () => {
     insEnabled.value = !insEnabled.value
-    console.log(`${action}INS`)
+  // ...
     // TODO: 调用INS开启/关闭API
   })
 }
@@ -3444,7 +3838,7 @@ const handleEnableMsf = () => {
   const action = msfEnabled.value ? '关闭' : '开启'
   showConfirmDialog(`确定要${action}MSF吗？`, () => {
     msfEnabled.value = !msfEnabled.value
-    console.log(`${action}MSF`)
+  // ...
     // TODO: 调用MSF开启/关闭API
   })
 }
@@ -3564,7 +3958,7 @@ const onDispatchTaskConfirm = async () => {
     }
 
     const response = await createJob(workspaceId, taskData)
-    console.log('任务创建成功:', response)
+  // ...
     
     if (response && response.job_id) {
       // 立即任务需要调用execute接口
@@ -3577,7 +3971,7 @@ const onDispatchTaskConfirm = async () => {
           })
           alert('立即任务创建并执行成功')
         } catch (executeErr) {
-          console.error('任务执行失败:', executeErr)
+          // ...
           alert('立即任务创建成功，但执行失败')
         }
       } else {
@@ -3590,7 +3984,7 @@ const onDispatchTaskConfirm = async () => {
     
     dispatchTaskDialog.value.visible = false
   } catch (err) {
-    console.error('任务下发失败:', err)
+  // ...
     alert('任务下发失败')
   }
 }
@@ -3722,6 +4116,52 @@ const onMultiTaskStartConfirm = async () => {
   } catch (error) {
     console.error('启动多任务组失败:', error)
     alert('启动多任务组失败，请稍后重试')
+  }
+}
+
+// 发布点任务启动弹窗 - 取消
+const onPointTaskStartCancel = () => {
+  pointTaskStartDialog.value.visible = false
+}
+
+// 发布点任务启动弹窗 - 确认
+const onPointTaskStartConfirm = async () => {
+  const form = pointTaskStartDialog.value.form
+  
+  // 验证任务ID
+  if (!form.task_id) {
+    alert('任务ID不能为空')
+    return
+  }
+  
+  try {
+    // 调用启动发布点任务API
+    const response = await navigationApi.startPointTask({
+      task_id: form.task_id,
+      circle: form.circle,
+      recover: form.recover
+    })
+    
+    console.log('启动发布点任务响应:', response)
+    
+    // 根据返回结果判断是否成功
+    if (response && (response as any).response && (response as any).response.msg) {
+      const { error_code, error_msg } = (response as any).response.msg
+      if (error_code === 0) {
+        alert((response as any).message || '发布点任务启动成功')
+        pointTaskStartDialog.value.visible = false
+        activeTaskType.value = 'point'
+      } else {
+        alert(`启动失败: ${error_msg || '未知错误'}`)
+      }
+    } else {
+      alert('发布点任务启动成功')
+      pointTaskStartDialog.value.visible = false
+      activeTaskType.value = 'point'
+    }
+  } catch (error) {
+    console.error('启动发布点任务失败:', error)
+    alert('启动发布点任务失败，请稍后重试')
   }
 }
 

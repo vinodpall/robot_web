@@ -90,7 +90,12 @@ export default defineConfig(({ mode }) => {
               console.log('📥 代理响应:', proxyRes.statusCode, req.url)
             })
           }
-        }
+        },
+        '/download_file': {
+          target: 'http://10.10.1.3:5000',
+          changeOrigin: true,
+          secure: false,
+        },
       }
     },
     // 定义环境变量

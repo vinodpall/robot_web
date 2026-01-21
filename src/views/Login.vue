@@ -85,6 +85,7 @@ import { useUserStore } from '../stores/user'
 import { useAuth } from '../composables/useApi'
 import { initUserPermissions, initAllPermissions } from '../utils/initPermissions'
 import { debugPermissions } from '../utils/permissionDebug'
+import { robotApi, cameraApi } from '../api/services'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -154,11 +155,42 @@ const handleLogin = async () => {
       console.log('开始初始化权限...')
       await initAllPermissions()
       await initUserPermissions()
-      console.log('权限初始化完成，准备跳转到dashboard')
+      console.log('权限初始化完成')
       
       // 权限初始化完成后，输出调试信息
       debugPermissions()
       
+      // 获取机器人列表并缓存摄像头信息
+      try {
+        const robotsResponse = await robotApi.getRobots()
+        if (robotsResponse && robotsResponse.items && robotsResponse.items.length > 0) {
+          // 取第一个机器人的ID，或者使用缓存的
+          const cachedRobotId = localStorage.getItem('selected_robot_id')
+          const robotId = cachedRobotId || robotsResponse.items[0].robot_id
+          
+          // 获取摄像头列表
+          const cameraResponse = await cameraApi.getCameraList(robotId)
+          if (cameraResponse && cameraResponse.data) {
+            // 存储到本地
+            localStorage.setItem('camera_list', JSON.stringify(cameraResponse.data))
+            console.log('摄像头列表已缓存:', cameraResponse.data)
+            // 登录后立即启动前两个摄像头流
+            const cameraList = cameraResponse.data || []
+            for (let i = 0; i < 2; i++) {
+              if (cameraList[i]) {
+                try {
+                  await cameraApi.startCameraStream(robotId, cameraList[i].CamKey, false)
+                } catch (e) {}
+              }
+            }
+          }
+        }
+      } catch (cameraErr) {
+        console.error('获取摄像头列表失败:', cameraErr)
+        // 摄像头获取失败不影响登录流程
+      }
+      
+      console.log('准备跳转到dashboard')
       // 权限初始化完成后再跳转
       router.push('/dashboard/home')
     } catch (err) {

@@ -1201,6 +1201,22 @@ export const navigationApi = {
   getPointTaskList: (robotId: string) => {
     return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/task_list`)
   },
+  // 启动发布点任务
+  startPointTask: (data: {
+    task_id: number;
+    circle: boolean;
+    recover: boolean;
+  }) => {
+    return apiClient.post(`/taskpoints/start`, data)
+  },
+  // 停止发布点任务
+  stopPointTask: (data: {
+    task_id: number;
+    circle: boolean;
+    recover: boolean;
+  }) => {
+    return apiClient.post(`/taskpoints/stop`, data)
+  },
   // 获取多任务组列表
   getMultiTaskList: (robotId: string) => {
     return apiClient.get<{ msg: { multitask_id: string; multitask_name: string; multitask_list: any[] }[]; request_id: string }>(`/multitasks/${robotId}/multitask_list`)
@@ -1225,6 +1241,85 @@ export const navigationApi = {
     loop: boolean;
   }) => {
     return apiClient.post(`/multitasks/${robotId}/start_multitask_group`, data)
+  },
+  // 取消多任务组
+  cancelMultiTaskGroup: (robotId: string) => {
+    return apiClient.post(`/multitasks/${robotId}/cancel_multitask_group`, {})
+  }
+}
+
+// 摄像头相关接口
+export interface CameraInfo {
+  CamName: string
+  CamKey: string
+  CamType: string
+  PtzName: string
+  PtzType: string
+  Ip: string
+  UserName: string
+  PassWord: string
+  MainUrl: string
+  SubUrl: string
+}
+
+export const cameraApi = {
+  // 获取摄像头列表
+  getCameraList: (robotId: string) => {
+    return apiClient.get<{ data: CameraInfo[]; request_id: string }>(`/cameras/${robotId}/list`)
+  },
+  // 启动摄像头流（webrtc）
+  startCameraStream: (robotId: string, camKey: string, useSubStream = false) => {
+    return apiClient.post<{ message: string; cam_key: string; stream_url: string; rtmp_push_url: string }>(
+      `/cameras/${robotId}/stream/start`,
+      { cam_key: camKey, use_sub_stream: useSubStream }
+    )
+  },
+  // 停止摄像头流
+  stopCameraStream: (robotId: string, camKey: string) => {
+    return apiClient.post<{ message: string }>(
+      `/cameras/${robotId}/stream/stop`,
+      { cam_key: camKey }
+    )
+  }
+}
+
+// 地图文件下载相关
+export const mapFileApi = {
+  // 需要下载的地图文件列表
+  MAP_FILES: ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt'],
+  
+  // 下载单个地图文件
+  downloadMapFile: async (robotIp: string, mapName: string, fileName: string): Promise<Blob | null> => {
+  // 通过 Vite 代理，避免 CORS 问题
+  const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}`
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors'
+      })
+      if (!response.ok) {
+        console.error(`下载文件失败: ${fileName}, 状态: ${response.status}`)
+        return null
+      }
+      return await response.blob()
+    } catch (error) {
+      console.error(`下载文件失败: ${fileName}`, error)
+      return null
+    }
+  },
+  
+  // 下载所有地图文件
+  downloadAllMapFiles: async (robotIp: string, mapName: string): Promise<Map<string, Blob>> => {
+    const results = new Map<string, Blob>()
+    
+    for (const fileName of mapFileApi.MAP_FILES) {
+      const blob = await mapFileApi.downloadMapFile(robotIp, mapName, fileName)
+      if (blob) {
+        results.set(fileName, blob)
+      }
+    }
+    
+    return results
   }
 }
 
