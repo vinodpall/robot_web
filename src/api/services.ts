@@ -1195,27 +1195,26 @@ export const navigationApi = {
   },
   // 获取关键点文件列表
   getTaskpointList: (robotId: string, trackName: string) => {
-    return apiClient.post<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/taskpoint_list`, { track_name: trackName })
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/taskpoint_list`, { track_name: trackName })
   },
   // 获取发布点任务列表
   getPointTaskList: (robotId: string) => {
     return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/task_list`)
   },
   // 启动发布点任务
-  startPointTask: (data: {
-    task_id: number;
-    circle: boolean;
-    recover: boolean;
+  startPointTask: (robotId: string, data: {
+    id: string;
+    sn: string;
   }) => {
-    return apiClient.post(`/taskpoints/start`, data)
+    return apiClient.post(`/taskpoints/${robotId}/start_task`, data)
   },
   // 停止发布点任务
-  stopPointTask: (data: {
-    task_id: number;
-    circle: boolean;
-    recover: boolean;
+  // 停止发布点任务
+  stopPointTask: (robotId: string, data: {
+    id: string;
+    sn: string;
   }) => {
-    return apiClient.post(`/taskpoints/stop`, data)
+    return apiClient.post(`/taskpoints/${robotId}/stop_task`, data)
   },
   // 获取多任务组列表
   getMultiTaskList: (robotId: string) => {
@@ -1232,8 +1231,35 @@ export const navigationApi = {
     return apiClient.post(`/navigation/${robotId}/start_track`, data)
   },
   // 取消循迹任务
-  cancelTrack: (robotId: string) => {
-    return apiClient.post(`/navigation/${robotId}/cancel_track`, {})
+  // 取消循迹任务
+  cancelTrack: (robotId: string, data: {
+    action: number;
+    wait: number;
+    obs_mode: number;
+    track_name: string;
+    taskpoint_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/start_track`, data)
+  },
+  // MSF控制
+  msfControl: (robotId: string, data: {
+    action: number;
+    mode: number;
+    session: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/msf_control`, data)
+  },
+  // INS控制
+  insControl: (robotId: string, data: {
+    action: number;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/ins_control`, data)
+  },
+  // INS初始化
+  initINS: (robotId: string, data: {
+    action: number;
+  }) => {
+    return apiClient.post(`/speed/${robotId}/nav_stop`, data)
   },
   // 启动多任务组
   startMultiTaskGroup: (robotId: string, data: {
@@ -1287,11 +1313,11 @@ export const cameraApi = {
 export const mapFileApi = {
   // 需要下载的地图文件列表
   MAP_FILES: ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt'],
-  
+
   // 下载单个地图文件
   downloadMapFile: async (robotIp: string, mapName: string, fileName: string): Promise<Blob | null> => {
-  // 通过 Vite 代理，避免 CORS 问题
-  const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}`
+    // 通过 Vite 代理，避免 CORS 问题
+    const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}`
     try {
       const response = await fetch(url, {
         method: 'GET',
@@ -1307,18 +1333,18 @@ export const mapFileApi = {
       return null
     }
   },
-  
+
   // 下载所有地图文件
   downloadAllMapFiles: async (robotIp: string, mapName: string): Promise<Map<string, Blob>> => {
     const results = new Map<string, Blob>()
-    
+
     for (const fileName of mapFileApi.MAP_FILES) {
       const blob = await mapFileApi.downloadMapFile(robotIp, mapName, fileName)
       if (blob) {
         results.set(fileName, blob)
       }
     }
-    
+
     return results
   }
 }

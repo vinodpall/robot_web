@@ -94,13 +94,31 @@
               <!-- 顶部按钮区 -->
               <div class="map-section">
                 <div class="nav-button-group">
-                  <button class="map-btn map-btn-primary" @click="handleStartNav">开始导航</button>
+                  <button 
+                    class="map-btn" 
+                    :class="navigationEnabled ? 'map-btn-danger' : 'map-btn-primary'"
+                    @click="handleStartNav"
+                  >
+                    {{ navigationEnabled ? '关闭导航' : '开始导航' }}
+                  </button>
                   <button class="map-btn map-btn-secondary" @click="handlePauseNav">暂停导航</button>
-                  <button class="map-btn map-btn-secondary" @click="handleResumeNav">暂停恢复</button>
-                  <button class="map-btn map-btn-primary" @click="handleStartINS">开始INS</button>
+                  <button class="map-btn map-btn-secondary" @click="handleResumeNav">暂停停障</button>
+                  <button 
+                    class="map-btn" 
+                    :class="insEnabled ? 'map-btn-danger' : 'map-btn-primary'"
+                    @click="handleStartINS"
+                  >
+                    {{ insEnabled ? '关闭INS' : '开始INS' }}
+                  </button>
                   <button class="map-btn map-btn-primary" @click="handleInitINS">INS初始化</button>
-                  <button class="map-btn map-btn-primary" @click="handleStartMSF">开始MSF</button>
-                  <button class="map-btn map-btn-secondary" @click="handleCircleMode">循迹随停循</button>
+                  <button 
+                    class="map-btn" 
+                    :class="msfEnabled ? 'map-btn-danger' : 'map-btn-primary'"
+                    @click="handleStartMSF"
+                  >
+                    {{ msfEnabled ? '关闭MSF' : '开始MSF' }}
+                  </button>
+                  <button class="map-btn map-btn-secondary" @click="handleCircleMode">循迹避障模式</button>
                   <button class="map-btn map-btn-secondary" @click="handleCloseGPS">关闭GPS</button>
                   <button class="map-btn map-btn-secondary" @click="handleSetOrigin">原点设置</button>
                 </div>
@@ -642,13 +660,51 @@ const navData = ref({
   lidar: '未收到',
   imu: '未收到',
   satellite: '未收到',
+  satellite: '未收到',
   msfStatus: '未开启'
 })
 
+const navigationEnabled = ref(false)
+const insEnabled = ref(false)
+const msfEnabled = ref(false)
+
 // 导航相关方法
 const handleStartNav = () => {
-  console.log('开始导航')
-  // TODO: 调用开始导航API
+  if (insEnabled.value || msfEnabled.value) {
+    showErrorMessage('请先关闭INS或MSF')
+    return
+  }
+
+  if (!selectedNavMap.value) {
+    showErrorMessage('请先选择地图')
+    return
+  }
+
+  const action = navigationEnabled.value ? '关闭' : '开启'
+  showConfirmDialog({
+    title: `${action}导航`,
+    message: `确定要${action}导航吗？`,
+    onConfirm: async () => {
+      try {
+        const robotId = deviceStore.selectedRobotId
+        if (!robotId) {
+          showErrorMessage('未选择机器人')
+          return
+        }
+
+        await navigationApi.controlNavigation(robotId, {
+          action: navigationEnabled.value ? 0 : 1,
+          map_name: selectedNavMap.value
+        })
+        
+        navigationEnabled.value = !navigationEnabled.value
+        showSuccessMessage(`${action}导航成功`)
+      } catch (err) {
+        console.error(`${action}导航失败:`, err)
+        showErrorMessage(`${action}导航失败`)
+      }
+    }
+  })
 }
 
 const handlePauseNav = () => {
@@ -662,18 +718,99 @@ const handleResumeNav = () => {
 }
 
 const handleStartINS = () => {
-  console.log('开始INS')
-  // TODO: 调用开始INS API
+  if (navigationEnabled.value || msfEnabled.value) {
+    showErrorMessage('请先关闭导航或MSF')
+    return
+  }
+
+  const action = insEnabled.value ? '关闭' : '开启'
+  showConfirmDialog({
+    title: `${action}INS`,
+    message: `确定要${action}INS吗？`,
+    onConfirm: async () => {
+      try {
+        const robotId = deviceStore.selectedRobotId
+        if (!robotId) {
+          showErrorMessage('未选择机器人')
+          return
+        }
+
+        await navigationApi.insControl(robotId, {
+          action: insEnabled.value ? 0 : 1
+        })
+        
+        insEnabled.value = !insEnabled.value
+        showSuccessMessage(`${action}INS成功`)
+      } catch (err) {
+        console.error(`${action}INS失败:`, err)
+        showErrorMessage(`${action}INS失败`)
+      }
+    }
+  })
 }
 
 const handleInitINS = () => {
-  console.log('INS初始化')
-  // TODO: 调用INS初始化API
+  showConfirmDialog({
+    title: 'INS初始化',
+    message: '确定要进行INS初始化吗？',
+    onConfirm: async () => {
+      try {
+        const robotId = deviceStore.selectedRobotId
+        if (!robotId) {
+          showErrorMessage('未选择机器人')
+          return
+        }
+
+        await navigationApi.initINS(robotId, {
+          action: 1
+        })
+        
+        showSuccessMessage('INS初始化指令已发送')
+      } catch (err) {
+        console.error('INS初始化失败:', err)
+        showErrorMessage('INS初始化失败')
+      }
+    }
+  })
 }
 
 const handleStartMSF = () => {
-  console.log('开始MSF')
-  // TODO: 调用开始MSF API
+  if (navigationEnabled.value || insEnabled.value) {
+    showErrorMessage('请先关闭导航或INS')
+    return
+  }
+
+  if (!selectedNavMap.value) {
+    showErrorMessage('请先选择地图')
+    return
+  }
+
+  const action = msfEnabled.value ? '关闭' : '开启'
+  showConfirmDialog({
+    title: `${action}MSF`,
+    message: `确定要${action}MSF吗？`,
+    onConfirm: async () => {
+      try {
+        const robotId = deviceStore.selectedRobotId
+        if (!robotId) {
+          showErrorMessage('未选择机器人')
+          return
+        }
+
+        await navigationApi.msfControl(robotId, {
+          action: msfEnabled.value ? 0 : 1,
+          mode: 3,
+          session: selectedNavMap.value
+        })
+        
+        msfEnabled.value = !msfEnabled.value
+        showSuccessMessage(`${action}MSF成功`)
+      } catch (err) {
+        console.error(`${action}MSF失败:`, err)
+        showErrorMessage(`${action}MSF失败`)
+      }
+    }
+  })
 }
 
 const handleCircleMode = () => {
@@ -881,7 +1018,10 @@ const handleNavPointCloudKeydown = (e: KeyboardEvent) => {
   }
 }
 
-// 生成模拟点云数据
+import { navigationApi } from '../api/services'
+import { useDeviceStore } from '../stores/device'
+
+const deviceStore = useDeviceStore()
 const generateMockNavPointCloud = (count = 800): PointCloudPoint[] => {
   return Array.from({ length: count }, () => ({
     x: Math.random(),
@@ -2199,9 +2339,10 @@ const handleDelete = (id: string) => {
   margin-bottom: 16px;
 }
 
-.track-record-content .map-section {
-  padding: 20px 22px 22px;
+.nav-content-wrapper.track-record-content .map-section {
+  padding: 20px 22px 22px 19px !important;
   margin-bottom: 52px;
+  background: rgba(10, 42, 58, 0.6) !important;
 }
 
 /* 导航页的按钮区不需要背景和内边距 */

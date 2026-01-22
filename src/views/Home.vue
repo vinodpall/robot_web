@@ -4,19 +4,21 @@
     <!-- 左侧状态栏 -->
     <div class="left-box">
       <!-- 可见光视频 -->
-      <div class="left-video-card visible-video-card" @click="closeMenus">
+      <div class="left-video-card visible-video-card" @click="closeMenus" style="border-radius: 0; overflow: hidden;">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
           可见光视频
         </div>
-        <div class="video-card-body video-only-body">
-          <div class="video-only-wrapper">
+        <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
+          <div class="video-only-wrapper" style="border-radius: 0; overflow: hidden;">
             <video 
               ref="videoElement"
               class="video-only-element"
+              controls
               muted
               playsinline
               webkit-playsinline
+              style="width: 100%; height: 100%; background: #000; border-radius: 0;"
             >
               您的浏览器不支持视频播放
             </video>
@@ -25,20 +27,22 @@
       </div>
 
       <!-- 红外视频 -->
-      <div class="left-video-card infrared-card">
+      <div class="left-video-card infrared-card" style="border-radius: 0; overflow: hidden;">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
           红外视频
         </div>
-        <div class="video-card-body video-only-body">
-          <div class="video-only-wrapper">
+        <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
+          <div class="video-only-wrapper" style="border-radius: 0; overflow: hidden;">
             <video 
               ref="infraredVideoElement"
               class="video-only-element"
+              controls
               muted
               autoplay
               playsinline
               webkit-playsinline
+              style="width: 100%; height: 100%; background: #000; border-radius: 0;"
             >
               您的浏览器不支持视频播放
             </video>
@@ -289,7 +293,7 @@
             <div class="b-top">
               <div class="b-top-left">
                 <div class="zhuangtai4">
-                  <div>{{ droneStatus?.isOnline ? '在线' : '离线' }}</div>
+                  <div>{{ isRobotOnline ? '在线' : '离线' }}</div>
                 </div>
                 <div class="img">
                   <img src="@/assets/source_data/dog.png" alt="" />
@@ -353,7 +357,7 @@
                     />
                     <span class="label">电量</span>
                   </div>
-                  <span class="value">{{ formatBattery(droneStatus?.batteryPercent) }}</span>
+                  <span class="value">{{ formatBattery(robotBatteryLevel) }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
@@ -831,32 +835,7 @@
               disabled
             />
           </div>
-          <div class="dispatch-task-row">
-            <label>循环执行：</label>
-            <div class="dispatch-switch-wrapper">
-              <div
-                class="switch-container"
-                :class="{ active: pointTaskStartDialog.form.circle }"
-                @click="pointTaskStartDialog.form.circle = !pointTaskStartDialog.form.circle"
-              >
-                <div class="switch-toggle"></div>
-              </div>
-              <span class="dispatch-switch-label">{{ pointTaskStartDialog.form.circle ? '是' : '否' }}</span>
-            </div>
-          </div>
-          <div class="dispatch-task-row">
-            <label>断点续传：</label>
-            <div class="dispatch-switch-wrapper">
-              <div
-                class="switch-container"
-                :class="{ active: pointTaskStartDialog.form.recover }"
-                @click="pointTaskStartDialog.form.recover = !pointTaskStartDialog.form.recover"
-              >
-                <div class="switch-toggle"></div>
-              </div>
-              <span class="dispatch-switch-label">{{ pointTaskStartDialog.form.recover ? '是' : '否' }}</span>
-            </div>
-          </div>
+
         </div>
         <div class="dispatch-task-actions">
           <button class="mission-btn mission-btn-cancel" @click="onPointTaskStartCancel">取消</button>
@@ -987,11 +966,11 @@ const downloadAllTrajectoryFiles = async (trackList: string[]) => {
 }
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useDevices, useWaylineJobs } from '../composables/useApi'
-import { controlApi, waylineApi, livestreamApi, navigationApi, mapFileApi } from '../api/services'
+import { controlApi, waylineApi, livestreamApi, navigationApi, mapFileApi, cameraApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config } from '../config/environment'
 import { useDeviceStore } from '../stores/device'
-import { getVideoStreams, getVideoStream, getDefaultVideoType } from '../utils/videoCache'
+import { getVideoStreams, getVideoStream, getDefaultVideoType, setVideoStreams } from '../utils/videoCache'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import flvjs from 'flv.js'
 import mapDockIcon from '@/assets/source_data/svg_data/map_dock3.svg'
@@ -1034,6 +1013,49 @@ const taskProgressStore = useTaskProgressStore()
 
 // 设备告警数据
 const deviceAlarmData = ref<any[]>([])
+
+// ================= 机器人实时状态缓存读取 ================
+const selectedRobotInfo = ref<any>(null)
+let robotInfoTimer: number | null = null
+
+// 更新机器人信息
+const updateSelectedRobotInfo = () => {
+  try {
+    const infoStr = localStorage.getItem('selected_robot_info')
+    if (infoStr) {
+      selectedRobotInfo.value = JSON.parse(infoStr)
+    } else {
+      selectedRobotInfo.value = null
+    }
+  } catch (e) {
+    console.error('读取机器人缓存信息失败', e)
+    selectedRobotInfo.value = null
+  }
+}
+
+// 计算属性：机器人是否在线
+const isRobotOnline = computed(() => {
+  // 优先使用缓存中的状态
+  if (selectedRobotInfo.value) {
+    return selectedRobotInfo.value.status === 'online'
+  }
+  // 回退到原有逻辑
+  return droneStatus.value?.isOnline || false
+})
+
+// 计算属性：机器人电量
+const robotBatteryLevel = computed(() => {
+  // 优先使用缓存中的电量
+  if (selectedRobotInfo.value && selectedRobotInfo.value.battery_level !== null) {
+    return selectedRobotInfo.value.battery_level
+  }
+  // 回退到原有逻辑
+  return droneStatus.value?.batteryPercent
+})
+
+
+
+
 
 // 麦克风开关状态
 const isMicOn = ref(false)
@@ -2123,88 +2145,92 @@ const startDronePositionAnimation = (newPosition: any) => {
 const isInitialLoad = ref(true)
 
 // 视频播放器相关
-const videoStreamUrl = ref<string>('webrtc://10.10.1.3:1985/live/robot_001_cam_rtsp_left')
+const videoStreamUrl = ref<string>('')
 const videoPlayer = ref<any>(null)
 const videoElement = ref<HTMLVideoElement | null>(null)
 
 // 云台切换相关
 const currentVideoType = ref<'dock' | 'drone_visible' | 'drone_infrared'>('dock')
 const videoLoading = ref(false)
-const startVideoPlayback = () => {
-  if (!videoElement.value || !videoStreamUrl.value) {
-    console.warn('startVideoPlayback: videoElement 或 videoStreamUrl 不存在')
-    return
+const gimbalMenuVisible = ref(false)
+
+// 清晰度设置相关状态
+const showQualityMenu = ref(false)
+const currentQuality = ref<number>(0)
+const qualityChanging = ref(false)
+
+// 清晰度菜单样式计算属性
+const qualityMenuStyle = computed(() => {
+  if (!showQualityMenu.value) return {}
+  const button = document.querySelector('.quality-btn') as HTMLElement
+  if (!button) return {}
+  const rect = button.getBoundingClientRect()
+  return {
+    top: `${rect.bottom + 4}px`,
+    right: `${window.innerWidth - rect.right}px`
   }
+})
+
+// 切换清晰度菜单
+const toggleQualityMenu = () => {
+  showQualityMenu.value = !showQualityMenu.value
+}
+
+// 处理清晰度切换
+const handleQualityChange = async (quality: number) => {
+  if (qualityChanging.value) return
   try {
-    if (videoPlayer.value) {
-      videoPlayer.value.destroy()
-      videoPlayer.value = null
+    const { dockSns } = getCachedDeviceSns()
+    if (!dockSns || dockSns.length === 0) {
+      alert('未找到可用的机场设备')
+      return
     }
-    if (videoElement.value) {
-      videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-      videoElement.value.addEventListener('play', () => {
-        isVideoPlaying.value = true
-        console.log('videoElement 播放事件触发')
-      })
-      videoElement.value.addEventListener('pause', () => {
-        isVideoPlaying.value = false
-        console.log('videoElement 暂停事件触发')
-      })
-      videoElement.value.addEventListener('timeupdate', updateVideoTime)
-      videoElement.value.addEventListener('loadedmetadata', () => {
-        updateVideoTime()
-        console.log('videoElement loadedmetadata 事件')
-      })
-      videoElement.value.addEventListener('loadeddata', () => {
-        const el = videoElement.value
-        if (!el) return
-        el.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-        console.log('videoElement loadeddata 事件')
-      })
+
+    // 从缓存的视频流中推断当前流的 device_sn/camera_index/video_index
+    const streams = getVideoStreams()
+    const active = streams.find(s => s.type === currentVideoType.value)
+    if (!active) {
+      alert('未找到当前视频流信息，无法设置清晰度')
+      return
     }
-    if (videoStreamUrl.value.startsWith('webrtc://')) {
-      console.log('startVideoPlayback: 检测到 webrtc 流，调用 startWebRTCPlayback', videoStreamUrl.value)
-      startWebRTCPlayback()
-    } else if (videoStreamUrl.value.startsWith('rtmp://')) {
-      if (flvjs.isSupported()) {
-        const flvUrl = videoStreamUrl.value.replace(/^rtmp:\/\/[^\/]+/, config.api.domain)
-        videoPlayer.value = flvjs.createPlayer({
-          type: 'flv',
-          url: flvUrl,
-          isLive: true,
-          hasAudio: false,
-          hasVideo: true
-        }, {
-          enableStashBuffer: false,
-          stashInitialSize: 128,
-          enableWorker: true,
-          lazyLoad: false,
-          autoCleanupSourceBuffer: true
-        })
-        videoPlayer.value.attachMediaElement(videoElement.value)
-        videoPlayer.value.load()
-        videoPlayer.value.play()
-        if (videoElement.value) {
-          videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-        }
-        console.log('startVideoPlayback: flv.js 播放器已初始化')
-      } else {
-        console.warn('startVideoPlayback: flv.js 不支持')
-      }
+
+    const videoId = `${active.device_sn}/${active.camera_index}/${active.video_index}`
+
+    qualityChanging.value = true
+    showQualityMenu.value = false
+    const dockSn = dockSns[0]
+    const result = await livestreamApi.setQuality(dockSn, { video_id: videoId, video_quality: quality })
+    if ((result as any)?.message && (result as any).message.includes('Set livestream quality command sent')) {
+      currentQuality.value = quality
     } else {
-      videoElement.value.src = videoStreamUrl.value
-      videoElement.value.load()
-      videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-      videoElement.value.play().then(() => {
-        console.log('startVideoPlayback: 原生流 play 成功')
-      }).catch(error => {
-        console.error('startVideoPlayback: 原生流 play 失败', error)
-      })
+      const msg = (result as any)?.detail || (result as any)?.message || '清晰度设置失败'
+      alert(msg)
     }
-  } catch (error) {
-    console.error('startVideoPlayback: 初始化失败', error)
+  } catch (err: any) {
+    alert(err?.message || '清晰度设置失败')
+  } finally {
+    qualityChanging.value = false
   }
 }
+
+// WGS84坐标转GCJ-02坐标的转换函数
+const transformWGS84ToGCJ02 = (wgsLng: number, wgsLat: number) => {
+  const PI = Math.PI
+  const ee = 0.00669342162296594323
+  const a = 6378245.0
+
+  if (isOutOfChina(wgsLng, wgsLat)) {
+    return { longitude: wgsLng, latitude: wgsLat }
+  }
+
+  let dlat = transformLat(wgsLng - 105.0, wgsLat - 35.0)
+  let dlng = transformLng(wgsLng - 105.0, wgsLat - 35.0)
+  const radlat = wgsLat / 180.0 * PI
+  let magic = Math.sin(radlat)
+  magic = 1 - ee * magic * magic
+  const sqrtmagic = Math.sqrt(magic)
+  dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * PI)
+  dlng = (dlng * 180.0) / (a / sqrtmagic * Math.cos(radlat) * PI)
   const mglat = wgsLat + dlat
   const mglng = wgsLng + dlng
 
@@ -2322,81 +2348,81 @@ const createHeadingSector = (center: [number, number], headingDeg: number) => {
 }
 
 // 获取当前云台偏航角（优先设备状态，其次回退机体航向）
-const startWebRTCPlayback = async () => {
-  if (isPlaying) {
-    stopWebRTCPlayback()
-  }
-  const serverUrl = videoStreamUrl.value
-  if (!serverUrl) {
-    console.warn('startWebRTCPlayback: serverUrl 为空')
+const getCurrentGimbalYaw = (): number => {
+  const a = (droneStatus.value?.gimbalYaw ?? null) as number | null
+  if (typeof a === 'number' && Number.isFinite(a)) return a
+  return (droneStatus.value?.attitude?.head ?? 0) as number
+}
+
+// 更新现有扇形（若不存在返回null）
+const updateHeadingSector = (center: [number, number], headingDeg: number) => {
+  const sector = droneHeadingSectors.value?.[0]
+  if (!sector || !amapApiRef) return null
+  const path = computeSectorPath(center, headingDeg)
+  sector.setPath(path)
+  return sector
+}
+
+// 添加无人机标记到地图
+const addDroneMarker = (longitude: number, latitude: number, droneInfo: any) => {
+  if (!amapInstance || !amapApiRef) {
     return
   }
-  try {
-    if (pc) {
-      pc.close()
-      pc = null
+
+  const AMap = amapApiRef
+  
+  // 创建无人机标记点（箭头图标，后续通过 rotateAngle 实时旋转）
+  const marker = new AMap.Marker({
+    position: [longitude, latitude],
+    title: `无人机: ${droneInfo?.deviceSn || '未知设备'}`,
+    icon: new AMap.Icon({
+      image: droneArrowIcon,
+      imageSize: new AMap.Size(32, 32),
+      size: new AMap.Size(32, 32)
+    }),
+    // 使用 autoRotation/angle 需要配合 setAngle
+    autoRotation: false,
+    angle: (droneStatus.value?.attitude?.head ?? 0) as number,
+    anchor: 'center',
+    offset: new AMap.Pixel(0, 0)
+  })
+
+  // 添加点击事件
+  marker.on('click', () => {
+    // 可以在这里添加更多交互功能，比如显示详细信息
+  })
+
+  // 添加到地图
+  amapInstance.add(marker)
+  droneMarkers.value.push(marker)
+
+  // 添加朝向扇形（仅无人机在线时显示）
+  if (droneStatus.value?.isOnline) {
+    const heading = getCurrentGimbalYaw()
+    const sector = createHeadingSector([longitude, latitude], heading)
+    if (sector) {
+      amapInstance.add(sector)
+      droneHeadingSectors.value = [sector]
     }
-    pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' }
-      ]
-    })
-    pc.ontrack = (e) => {
-      if (videoElement.value) {
-        videoElement.value.srcObject = e.streams[0]
-        videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-        videoElement.value.play().then(() => {
-          console.log('startWebRTCPlayback: WebRTC流 play 成功')
-        }).catch(err => {
-          console.error('startWebRTCPlayback: WebRTC流 play 失败', err)
-        })
-        console.log('startWebRTCPlayback: ontrack 触发，已设置 srcObject')
-      }
-    }
-    pc.oniceconnectionstatechange = () => {
-      console.log('startWebRTCPlayback: ICE 状态', pc?.iceConnectionState)
-      if (pc?.iceConnectionState === 'connected') {
-        isPlaying = true
-      } else if (pc?.iceConnectionState === 'failed') {
-        stopWebRTCPlayback()
-      }
-    }
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true
-    })
-    await pc.setLocalDescription(offer)
-    const apiUrl = buildApiUrl(serverUrl)
-    console.log('startWebRTCPlayback: 请求 SRS /rtc/v1/play/', apiUrl, serverUrl)
-    const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        sdp: offer.sdp,
-        streamurl: serverUrl
-      })
-    })
-    if (!response.ok) {
-      console.error('startWebRTCPlayback: SRS 服务器响应错误', response.status)
-      throw new Error(`服务器响应错误: ${response.status}`)
-    }
-    const data = await response.json()
-    if (data.code !== 0) {
-      console.error('startWebRTCPlayback: SRS 错误', data.msg)
-      throw new Error(`SRS错误: ${data.msg}`)
-    }
-    await pc.setRemoteDescription({
-      type: 'answer',
-      sdp: data.sdp
-    })
-    console.log('startWebRTCPlayback: setRemoteDescription 完成')
-  } catch (error) {
-    console.error('startWebRTCPlayback: 失败', error)
-    stopWebRTCPlayback()
   }
 }
+
+// 清除所有无人机标记
+const clearDroneMarkers = () => {
+  if (droneMarkers.value.length > 0) {
+    droneMarkers.value.forEach(marker => {
+      if (amapInstance) {
+        amapInstance.remove(marker)
+      }
+    })
+    droneMarkers.value = []
+  }
+  // 清除无人机朝向扇形
+  if (droneHeadingSectors.value?.length > 0) {
+    droneHeadingSectors.value.forEach((poly: any) => {
+      if (amapInstance) {
+        amapInstance.remove(poly)
+      }
     })
     droneHeadingSectors.value = []
   }
@@ -2555,7 +2581,6 @@ let infraredPc: RTCPeerConnection | null = null
 
 // 初始化视频播放器
 const initVideoPlayer = () => {
-  // 从video_streams缓存中获取默认视频流
   const defaultVideoType = getDefaultVideoType()
   
   if (defaultVideoType) {
@@ -2564,11 +2589,88 @@ const initVideoPlayer = () => {
     if (defaultStream) {
       videoStreamUrl.value = defaultStream.url
       currentVideoType.value = defaultVideoType
-  // ...
+    } else {
+      const dockStream = getVideoStream('dock')
+      if (dockStream) {
+        videoStreamUrl.value = dockStream.url
+        currentVideoType.value = 'dock'
+      }
+    }
+  } else {
+    const allStreams = getVideoStreams()
+    
+    if (allStreams.length > 0) {
+      videoStreamUrl.value = allStreams[0].url
+      currentVideoType.value = allStreams[0].type
     }
   }
   
   // 由watch(videoStreamUrl)统一触发播放，避免重复拉流
+}
+
+// 初始化摄像头流
+const initCameraStreams = async () => {
+  // 获取机器人ID - 优先从 deviceStore，其次从 localStorage
+  let robotId = deviceStore.selectedRobotId
+  
+  if (!robotId) {
+    robotId = localStorage.getItem('selected_robot_id') || ''
+  }
+  
+  if (!robotId) {
+    return
+  }
+  
+  try {
+    const cameraListResponse = await cameraApi.getCameraList(robotId)
+    
+    // 检查响应是否有效
+    if (!cameraListResponse) {
+      return
+    }
+    
+    if (!cameraListResponse.data || !Array.isArray(cameraListResponse.data)) {
+      return
+    }
+    
+    if (cameraListResponse.data.length === 0) {
+      return
+    }
+    
+    const videoStreams: any[] = []
+    
+    // 只使用前两个摄像头：第一个作为可见光，第二个作为红外
+    const camerasToUse = cameraListResponse.data.slice(0, 2)
+    
+    for (let i = 0; i < camerasToUse.length; i++) {
+      const camera = camerasToUse[i]
+      try {
+        const streamResponse = await cameraApi.startCameraStream(robotId, camera.CamKey, false)
+        
+        // 第一个摄像头作为可见光，第二个摄像头作为红外
+        const type: 'drone_visible' | 'drone_infrared' = i === 0 ? 'drone_visible' : 'drone_infrared'
+        
+        videoStreams.push({
+          type: type,
+          url: streamResponse.stream_url,
+          switchable_video_types: [],
+          device_sn: robotId,
+          camera_index: camera.CamKey,
+          video_index: i.toString()
+        })
+      } catch (error) {
+        // 静默处理错误
+      }
+    }
+    
+    // 保存视频流到localStorage
+    if (videoStreams.length > 0) {
+      setVideoStreams(videoStreams)
+      localStorage.setItem('default_video_type', 'drone_visible')
+    }
+  } catch (error) {
+    // 静默处理错误
+  }
 }
 
 // 开始视频播放
@@ -2603,7 +2705,7 @@ const startVideoPlayback = () => {
         updateVideoTime()
       })
       
-      // 确保视频加载后也应用样式（元素可能在回调触发时已不存在，需判空）
+      // 确保视频加载后也应用样式
       videoElement.value.addEventListener('loadeddata', () => {
         const el = videoElement.value
         if (!el) return
@@ -2645,8 +2747,6 @@ const startVideoPlayback = () => {
         if (videoElement.value) {
           videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
         }
-      } else {
-        // 浏览器不支持flv.js
       }
     } else {
       videoElement.value.src = videoStreamUrl.value
@@ -2682,14 +2782,22 @@ const buildApiUrl = (webrtcUrl: string) => {
 
 // 开始WebRTC播放
 const startWebRTCPlayback = async () => {
+  console.log('[WebRTC播放] startWebRTCPlayback 被调用')
+  console.log('[WebRTC播放] isPlaying:', isPlaying)
+  console.log('[WebRTC播放] videoStreamUrl.value:', videoStreamUrl.value)
+  
   if (isPlaying) {
+    console.log('[WebRTC播放] 停止之前的播放')
     stopWebRTCPlayback()
   }
 
   const serverUrl = videoStreamUrl.value
   if (!serverUrl) {
+    console.warn('[WebRTC播放] serverUrl 为空，跳过播放')
     return
   }
+  
+  console.log('[WebRTC播放] 开始建立 WebRTC 连接...')
 
   try {
     
@@ -2706,40 +2814,114 @@ const startWebRTCPlayback = async () => {
       ]
     })
 
+    // 添加ICE candidate监听
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('[WebRTC播放] ICE candidate:', event.candidate)
+      } else {
+        console.log('[WebRTC播放] ICE candidate gathering 完成')
+      }
+    }
+
+    // 监听连接状态
+    pc.onconnectionstatechange = () => {
+      console.log('[WebRTC播放] 连接状态变化:', pc?.connectionState)
+    }
+
     // 处理远程流
     pc.ontrack = (e) => {
+      console.log('[WebRTC播放] ontrack 事件触发，接收到远程流:', e.streams)
       if (videoElement.value) {
-        videoElement.value.srcObject = e.streams[0]
-        
-        // 强制设置WebRTC视频播放器样式
-        videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-        
-        videoElement.value.play().catch(err => {
-          // 静默处理播放失败
-        })
+        // 只在第一次设置srcObject
+        if (!videoElement.value.srcObject) {
+          videoElement.value.srcObject = e.streams[0]
+          console.log('[WebRTC播放] 已设置 srcObject 到 video 元素')
+          
+          const tracks = e.streams[0].getTracks()
+          console.log('[WebRTC播放] 流信息:', tracks)
+          tracks.forEach(track => {
+            console.log(`[WebRTC播放] Track - kind: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}, readyState: ${track.readyState}`)
+          })
+          
+          // 强制设置WebRTC视频播放器样式
+          videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+          
+          // 添加所有video事件监听以诊断问题
+          const videoEl = videoElement.value
+          
+          videoEl.addEventListener('loadstart', () => console.log('[WebRTC播放] 事件: loadstart'))
+          videoEl.addEventListener('loadeddata', () => console.log('[WebRTC播放] 事件: loadeddata'))
+          videoEl.addEventListener('canplay', () => console.log('[WebRTC播放] 事件: canplay'))
+          videoEl.addEventListener('canplaythrough', () => console.log('[WebRTC播放] 事件: canplaythrough'))
+          videoEl.addEventListener('playing', () => console.log('[WebRTC播放] 事件: playing'))
+          videoEl.addEventListener('waiting', () => console.log('[WebRTC播放] 事件: waiting'))
+          videoEl.addEventListener('stalled', () => console.log('[WebRTC播放] 事件: stalled'))
+          videoEl.addEventListener('suspend', () => console.log('[WebRTC播放] 事件: suspend'))
+          videoEl.addEventListener('error', (e) => console.error('[WebRTC播放] 事件: error', e))
+          
+          // 等待视频流准备好后再播放
+          videoEl.onloadedmetadata = () => {
+            console.log('[WebRTC播放] 事件: loadedmetadata')
+            console.log('[WebRTC播放] 视频尺寸:', videoEl.videoWidth, 'x', videoEl.videoHeight)
+            console.log('[WebRTC播放] 准备播放...')
+            videoEl.play().then(() => {
+              console.log('[WebRTC播放] ✅ 可见光视频开始播放')
+            }).catch(err => {
+              console.error('[WebRTC播放] ❌ 视频播放失败:', err)
+            })
+          }
+          
+          // 添加超时机制：如果2秒后metadata还没加载，尝试强制播放
+          setTimeout(() => {
+            if (videoEl.readyState === 0) {
+              console.warn('[WebRTC播放] ⚠️ metadata未加载，readyState:', videoEl.readyState)
+              console.warn('[WebRTC播放] ⚠️ 尝试强制播放...')
+              videoEl.play().then(() => {
+                console.log('[WebRTC播放] ✅ 强制播放成功')
+              }).catch(err => {
+                console.error('[WebRTC播放] ❌ 强制播放失败:', err)
+              })
+            } else {
+              console.log('[WebRTC播放] readyState正常:', videoEl.readyState)
+            }
+          }, 2000)
+        } else {
+          console.log('[WebRTC播放] srcObject 已存在，跳过设置')
+        }
+      } else {
+        console.error('[WebRTC播放] ❌ videoElement.value 为空')
       }
     }
 
     // ICE连接状态监听
     pc.oniceconnectionstatechange = () => {
+      console.log('[WebRTC播放] ICE 连接状态变化:', pc?.iceConnectionState)
       if (pc?.iceConnectionState === 'connected') {
+        console.log('[WebRTC播放] ✅ ICE 连接已建立')
         isPlaying = true
       } else if (pc?.iceConnectionState === 'failed') {
+        console.error('[WebRTC播放] ❌ ICE 连接失败')
         stopWebRTCPlayback()
       }
     }
 
     // 创建offer
+    console.log('[WebRTC播放] 创建 offer...')
     const offer = await pc.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true
     })
+    console.log('[WebRTC播放] offer 创建成功')
+    console.log('[WebRTC播放] offer SDP:', offer.sdp.substring(0, 200) + '...')  // 只显示前200个字符
     
     await pc.setLocalDescription(offer)
+    console.log('[WebRTC播放] 已设置本地描述')
 
     // 构建SRS API地址
     const apiUrl = buildApiUrl(serverUrl)
+    console.log('[WebRTC播放] SRS API 地址:', apiUrl)
 
+    console.log('[WebRTC播放] 发送 SDP 到 SRS 服务器...')
     const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
       method: 'POST',
       headers: {
@@ -2752,20 +2934,26 @@ const startWebRTCPlayback = async () => {
     })
 
     if (!response.ok) {
+      console.error('[WebRTC播放] ❌ SRS 服务器响应错误:', response.status)
       throw new Error(`服务器响应错误: ${response.status}`)
     }
+    console.log('[WebRTC播放] SRS 服务器响应成功')
 
     const data = await response.json()
+    console.log('[WebRTC播放] SRS 服务器响应数据:', data)
     
     if (data.code !== 0) {
       throw new Error(`SRS错误: ${data.msg}`)
     }
 
     // 设置远程描述
+    console.log('[WebRTC播放] 设置远程描述 (answer SDP)...')
+    console.log('[WebRTC播放] answer SDP:', data.sdp?.substring(0, 200) + '...')
     await pc.setRemoteDescription({
       type: 'answer',
       sdp: data.sdp
     })
+    console.log('[WebRTC播放] ✅ 远程描述设置成功')
 
   } catch (error) {
     stopWebRTCPlayback()
@@ -2817,6 +3005,7 @@ const reloadVideo = () => {
 
 const initInfraredVideo = () => {
   const stream = getVideoStream('drone_infrared')
+  
   if (stream) {
     infraredStreamUrl.value = stream.url
     infraredError.value = ''
@@ -2826,7 +3015,14 @@ const initInfraredVideo = () => {
 }
 
 const startInfraredPlayback = () => {
-  if (!infraredVideoElement.value || !infraredStreamUrl.value) return
+  console.log('[红外视频播放] startInfraredPlayback 被调用')
+  console.log('[红外视频播放] infraredVideoElement.value:', infraredVideoElement.value)
+  console.log('[红外视频播放] infraredStreamUrl.value:', infraredStreamUrl.value)
+  
+  if (!infraredVideoElement.value || !infraredStreamUrl.value) {
+    console.warn('[红外视频播放] infraredVideoElement 或 infraredStreamUrl 为空，跳过播放')
+    return
+  }
 
   infraredLoading.value = true
   infraredError.value = ''
@@ -2842,7 +3038,9 @@ const startInfraredPlayback = () => {
   const videoEl = infraredVideoElement.value
   videoEl.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
 
+  console.log('[红外视频播放] 检查视频URL类型:', infraredStreamUrl.value)
   if (infraredStreamUrl.value.startsWith('webrtc://')) {
+    console.log('[红外视频播放] 检测到 WebRTC 流，调用 startInfraredWebRTCPlayback')
     startInfraredWebRTCPlayback()
     return
   }
@@ -2901,13 +3099,33 @@ const startInfraredWebRTCPlayback = async () => {
     })
 
     infraredPc.ontrack = (e) => {
-      if (!infraredVideoElement.value) return
-      infraredVideoElement.value.srcObject = e.streams[0]
-      infraredVideoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-      infraredVideoElement.value.play().catch(() => {
-        infraredError.value = '红外视频播放失败'
-      })
-      infraredLoading.value = false
+      console.log('[红外视频播放] ontrack 事件触发，接收到远程流:', e.streams)
+      if (!infraredVideoElement.value) {
+        console.error('[红外视频播放] ❌ infraredVideoElement.value 为空')
+        return
+      }
+      
+      // 只在第一次设置srcObject
+      if (!infraredVideoElement.value.srcObject) {
+        infraredVideoElement.value.srcObject = e.streams[0]
+        console.log('[红外视频播放] 已设置 srcObject 到 video 元素')
+        infraredVideoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+        
+        // 等待视频流准备好后再播放
+        infraredVideoElement.value.onloadedmetadata = () => {
+          infraredVideoElement.value?.play().then(() => {
+            console.log('[红外视频播放] ✅ 红外视频开始播放')
+            infraredLoading.value = false
+          }).catch((err) => {
+            console.error('[红外视频播放] ❌ 视频播放失败:', err)
+            infraredError.value = '红外视频播放失败'
+            infraredLoading.value = false
+          })
+        }
+      } else {
+        console.log('[红外视频播放] srcObject 已存在，跳过设置')
+        infraredLoading.value = false
+      }
     }
 
     infraredPc.oniceconnectionstatechange = () => {
@@ -3095,7 +3313,7 @@ const multiTaskStartDialog = ref({
 const pointTaskStartDialog = ref({
   visible: false,
   form: {
-    task_id: 0,
+    task_id: '',
     task_name: '',
     circle: false,
     recover: false
@@ -3117,12 +3335,19 @@ const fetchTaskpointList = async (trackName: string) => {
     const response = await navigationApi.getTaskpointList(robotId, trackName)
     if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
       taskpointList.value = response.msg.result
+      // 默认选中第一个
+      if (taskpointList.value.length > 0) {
+        trackStartDialog.value.form.taskpoint_name = taskpointList.value[0]
+      } else {
+        trackStartDialog.value.form.taskpoint_name = ''
+      }
     } else {
       taskpointList.value = []
+      trackStartDialog.value.form.taskpoint_name = ''
     }
   } catch (error) {
-  // ...
     taskpointList.value = []
+    trackStartDialog.value.form.taskpoint_name = ''
   }
 }
 
@@ -3424,7 +3649,10 @@ const fetchPointTaskList = async () => {
   try {
     const response = await navigationApi.getPointTaskList(robotId)
     if (response && response.data) {
-      pointTaskList.value = response.data
+      pointTaskList.value = response.data.map(task => ({
+        ...task,
+        task_id: String(task.task_id) // 统一转为字符串存储，方便比较
+      }))
       // 缓存发布点任务列表
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
     }
@@ -3649,7 +3877,7 @@ const handleDispatchPointTask = () => {
   }
   
   // 打开弹窗并设置表单数据
-  pointTaskStartDialog.value.form.task_id = parseInt(selectedTask.task_id)
+  pointTaskStartDialog.value.form.task_id = selectedTask.task_id // 直接使用字符串ID
   pointTaskStartDialog.value.form.task_name = selectedTask.task_name
   pointTaskStartDialog.value.form.circle = false
   pointTaskStartDialog.value.form.recover = false
@@ -3711,13 +3939,19 @@ const handleCancelTask = async () => {
       // 根据任务类型调用不同的取消接口
       if (activeTaskType.value === 'track') {
         // 取消循迹任务
-        const response = await navigationApi.cancelTrack(robotId)
+        const response = await navigationApi.cancelTrack(robotId, {
+          action: 0,
+          wait: 0,
+          obs_mode: 1,
+          track_name: '', // 取消时可能不需要具体名称，或者需要从某处获取当前运行的任务名，这里暂时传空或默认值
+          taskpoint_name: ''
+        })
   // ...
         
-        if (response && (response as any).response && (response as any).response.msg) {
-          const { error_code, error_msg } = (response as any).response.msg
+        if (response && (response as any).msg) {
+          const { error_code, error_msg } = (response as any).msg
           if (error_code === 0) {
-            alert((response as any).message || '循迹任务已取消')
+            alert('循迹任务已取消')
             activeTaskType.value = null
           } else {
             alert(`取消失败: ${error_msg || '未知错误'}`)
@@ -3728,23 +3962,22 @@ const handleCancelTask = async () => {
         }
       } else if (activeTaskType.value === 'point') {
         // 停止发布点任务
-        const taskId = parseInt(selectedPointTask.value)
+        const taskId = selectedPointTask.value
         if (!taskId) {
           alert('未找到任务ID')
           return
         }
         
-        const response = await navigationApi.stopPointTask({
-          task_id: taskId,
-          circle: false,
-          recover: false
+        const response = await navigationApi.stopPointTask(robotId, {
+          id: taskId,
+          sn: robotId
         })
   // ...
         
-        if (response && (response as any).response && (response as any).response.msg) {
-          const { error_code, error_msg } = (response as any).response.msg
+        if (response && (response as any).msg) {
+          const { error_code, error_msg } = (response as any).msg
           if (error_code === 0) {
-            alert((response as any).message || '发布点任务已停止')
+            alert('发布点任务已停止')
             activeTaskType.value = null
           } else {
             alert(`停止失败: ${error_msg || '未知错误'}`)
@@ -3822,10 +4055,22 @@ const handleEnableIns = () => {
   }
   
   const action = insEnabled.value ? '关闭' : '开启'
-  showConfirmDialog(`确定要${action}INS吗？`, () => {
-    insEnabled.value = !insEnabled.value
-  // ...
-    // TODO: 调用INS开启/关闭API
+  showConfirmDialog(`确定要${action}INS吗？`, async () => {
+    try {
+      const robotId = deviceStore.selectedRobotId
+      if (!robotId) return
+
+      // action: 1 开启, 0 关闭
+      await navigationApi.insControl(robotId, {
+        action: insEnabled.value ? 0 : 1
+      })
+      
+      insEnabled.value = !insEnabled.value
+      alert(`${action}INS成功`)
+    } catch (err) {
+      console.error(`${action}INS失败:`, err)
+      alert(`${action}INS失败`)
+    }
   })
 }
 
@@ -3835,11 +4080,30 @@ const handleEnableMsf = () => {
     return
   }
   
+  if (!selectedMap.value) {
+    alert('请先选择地图')
+    return
+  }
+  
   const action = msfEnabled.value ? '关闭' : '开启'
-  showConfirmDialog(`确定要${action}MSF吗？`, () => {
-    msfEnabled.value = !msfEnabled.value
-  // ...
-    // TODO: 调用MSF开启/关闭API
+  showConfirmDialog(`确定要${action}MSF吗？`, async () => {
+    try {
+      const robotId = deviceStore.selectedRobotId
+      if (!robotId) return
+
+      // action: 1 开启, 0 关闭
+      await navigationApi.msfControl(robotId, {
+        action: msfEnabled.value ? 0 : 1,
+        mode: 3,
+        session: selectedMap.value
+      })
+      
+      msfEnabled.value = !msfEnabled.value
+      alert(`${action}MSF成功`)
+    } catch (err) {
+      console.error(`${action}MSF失败:`, err)
+      alert(`${action}MSF失败`)
+    }
   })
 }
 
@@ -4135,20 +4399,25 @@ const onPointTaskStartConfirm = async () => {
   }
   
   try {
+    const robotId = deviceStore.selectedRobotId
+    if (!robotId) {
+      alert('未找到机器人ID')
+      return
+    }
+
     // 调用启动发布点任务API
-    const response = await navigationApi.startPointTask({
-      task_id: form.task_id,
-      circle: form.circle,
-      recover: form.recover
+    const response = await navigationApi.startPointTask(robotId, {
+      id: form.task_id, // 传递字符串ID
+      sn: robotId
     })
     
     console.log('启动发布点任务响应:', response)
     
     // 根据返回结果判断是否成功
-    if (response && (response as any).response && (response as any).response.msg) {
-      const { error_code, error_msg } = (response as any).response.msg
+    if (response && (response as any).msg) {
+      const { error_code, error_msg } = (response as any).msg
       if (error_code === 0) {
-        alert((response as any).message || '发布点任务启动成功')
+        alert('发布点任务启动成功')
         pointTaskStartDialog.value.visible = false
         activeTaskType.value = 'point'
       } else {
@@ -4788,12 +5057,19 @@ watch([pointCloudScale, pointCloudRotationX, pointCloudRotationY, pointCloudPanX
 onMounted(async () => {
   // 初始化警报声（使用Web Audio API生成）
   
+  // 启动机器人状态轮询
+  updateSelectedRobotInfo()
+  robotInfoTimer = window.setInterval(updateSelectedRobotInfo, 1000)
+
   // 获取最新报警数据
   await loadLatestAlarmData()
   
   // 航线任务进度数据现在由全局store管理，无需本地加载
   
-  // 初始化视频播放器
+  // 初始化摄像头流（需要先调用API获取视频流URL并缓存）
+  await initCameraStreams()
+  
+  // 初始化视频播放器（会从localStorage读取视频流URL
   initVideoPlayer()
   initInfraredVideo()
   await refreshPointCloud()
@@ -4893,6 +5169,13 @@ onUnmounted(() => {
   stopPointCloudDragging()
 
   // 清理机场状态刷新定时器
+  if (robotInfoTimer) {
+    clearInterval(robotInfoTimer)
+    robotInfoTimer = null
+  }
+
+
+  
   if (statusRefreshTimer) {
     clearInterval(statusRefreshTimer)
     statusRefreshTimer = null
@@ -5441,7 +5724,7 @@ onMounted(async () => {
 }
 
 .dispatch-task-input {
-  flex: 1;
+  flex: 0 1 70%;
   height: 36px;
   border-radius: 6px;
   border: 1px solid #164159;
