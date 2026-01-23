@@ -449,6 +449,22 @@
       </div>
     </main>
 
+    <!-- 录包名称输入对话框 -->
+    <div v-if="recordingDialogVisible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card">
+        <div class="recording-dialog-header">开始录包 - 输入数据包名称</div>
+        <div class="recording-dialog-body">
+          <input v-model="recordingName" placeholder="请输入数据包名称" class="recording-input" />
+        </div>
+        <div class="recording-dialog-actions">
+          <button class="map-btn" @click="cancelStartRecording">取消</button>
+          <button class="map-btn map-btn-primary" @click="confirmStartRecording" :disabled="recordingLoading">
+            {{ recordingLoading ? '提交中...' : '开始录包' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 确认对话框 -->
     <ConfirmDialog
       :show="confirmDialog.show"
@@ -659,7 +675,6 @@ const navData = ref({
   brake: 0,
   lidar: '未收到',
   imu: '未收到',
-  satellite: '未收到',
   satellite: '未收到',
   msfStatus: '未开启'
 })
@@ -1350,18 +1365,87 @@ onMounted(async () => {
 // 录包建图相关状态
 const isRecording = ref(false)
 const mapProgress = ref(0)
+const recordingDialogVisible = ref(false)
+const recordingName = ref('')
+const recordingLoading = ref(false)
 
 // 录包建图相关方法
 const handleStartRecording = () => {
-  isRecording.value = true
-  console.log('开始录包')
-  // TODO: 调用开始录包API
+  // 弹出输入对话框，输入数据包名称
+  recordingName.value = ''
+  recordingDialogVisible.value = true
 }
 
-const handleStopRecording = () => {
-  isRecording.value = false
-  console.log('完成录制')
-  // TODO: 调用完成录制API
+const confirmStartRecording = async () => {
+  const name = recordingName.value.trim()
+  if (!name) {
+    showErrorMessage('请输入数据包名称')
+    return
+  }
+
+  if (recordingLoading.value) return
+  recordingLoading.value = true
+
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+
+    // 调用开始录包接口：action=1
+    await navigationApi.dataRecord(robotId, {
+      action: 1,
+      data_name: name
+    })
+
+    isRecording.value = true
+    // 保存当前录制名称，以便停止时使用
+    recordingName.value = name
+    recordingDialogVisible.value = false
+    showSuccessMessage('开始录包指令已发送')
+  } catch (err) {
+    console.error('开始录包失败:', err)
+    showErrorMessage('开始录包失败')
+  } finally {
+    recordingLoading.value = false
+  }
+}
+
+const cancelStartRecording = () => {
+  recordingDialogVisible.value = false
+}
+
+const handleStopRecording = async () => {
+  if (!isRecording.value) return
+  if (recordingLoading.value) return
+
+  recordingLoading.value = true
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+
+    const nameToSend = recordingName.value.trim()
+
+    // 调用停止录包接口：action=0
+    await navigationApi.dataRecord(robotId, {
+      action: 0,
+      data_name: nameToSend
+    })
+
+    isRecording.value = false
+    showSuccessMessage('停止录包指令已发送')
+    // 可选：清空录制名称
+    // recordingName.value = ''
+  } catch (err) {
+    console.error('停止录包失败:', err)
+    showErrorMessage('停止录包失败')
+  } finally {
+    recordingLoading.value = false
+  }
 }
 
 const handleGenerateMap = () => {

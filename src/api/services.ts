@@ -1249,6 +1249,14 @@ export const navigationApi = {
   }) => {
     return apiClient.post(`/navigation/${robotId}/msf_control`, data)
   },
+  // 录包控制（开始/停止）
+  dataRecord: (robotId: string, data: {
+    action: number;
+    data_name: string;
+  }) => {
+    // 后端接口路径按照 /v1/navigation/{robot_id}/data_record
+    return apiClient.post(`/v1/navigation/${robotId}/data_record`, data)
+  },
   // INS控制
   insControl: (robotId: string, data: {
     action: number;
