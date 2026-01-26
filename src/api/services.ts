@@ -1189,6 +1189,14 @@ export const navigationApi = {
   controlNavigation: (robotId: string, data: { action: number; map_name: string }) => {
     return apiClient.post(`/navigation/${robotId}/ctrl_nav`, data)
   },
+  // 导航暂停/取消暂停
+  navPause: (robotId: string, data: { action: number }) => {
+    return apiClient.post(`/navigation/${robotId}/nav_pause`, data)
+  },
+  // 设置原点
+  setOriginPoint: (robotId: string, data: { map_name: string }) => {
+    return apiClient.post(`/navigation/${robotId}/set_origin_point`, data)
+  },
   // 获取循迹任务列表
   getTrackList: (robotId: string) => {
     return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/track_list`)
@@ -1256,6 +1264,33 @@ export const navigationApi = {
   }) => {
     // 后端接口路径按照 /v1/navigation/{robot_id}/data_record
     return apiClient.post(`/v1/navigation/${robotId}/data_record`, data)
+  },
+  // 获取数据包列表
+  getDataList: (robotId: string) => {
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(
+      `/navigation/${robotId}/data_list`
+    )
+  },
+  // SLAM建图控制（开始/取消）
+  slamControl: (robotId: string, data: {
+    action: number;
+    data_name: string;
+    map_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/slam`, data)
+  },
+  // 点云转栅格地图
+  changePcd: (robotId: string, data: {
+    action: number;
+    map_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/change_pcd`, data)
+  },
+  // 创建融合地图数据
+  createMsfData: (robotId: string, data: {
+    session: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/create_msf_data`, data)
   },
   // INS控制
   insControl: (robotId: string, data: {
@@ -1356,4 +1391,3 @@ export const mapFileApi = {
     return results
   }
 }
-
