@@ -53,9 +53,10 @@ export class ApiClient {
     // 通用请求方法
     private async request<T>(
         endpoint: string,
-        options: RequestInit & { responseType?: 'blob' } = {}
+        options: RequestInit & { responseType?: 'blob', baseURL?: string } = {}
     ): Promise<T> {
-        const url = `${this.baseURL}${endpoint}`
+        const baseURL = options.baseURL !== undefined ? options.baseURL : this.baseURL
+        const url = `${baseURL}${endpoint}`
 
         // 合并请求头，确保自定义的Content-Type不被覆盖
         const headers: Record<string, string> = { ...this.defaultHeaders }
@@ -105,7 +106,7 @@ export class ApiClient {
     }
 
     // GET请求
-    async get<T>(endpoint: string, params?: Record<string, any>, options?: RequestInit & { responseType?: 'blob' }): Promise<T> {
+    async get<T>(endpoint: string, params?: Record<string, any>, options?: RequestInit & { responseType?: 'blob', baseURL?: string }): Promise<T> {
         let url = endpoint
         if (params) {
             const queryParams = new URLSearchParams()

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -34,21 +34,23 @@
           <div class="mission-content-wrapper">
             <div class="mission-toolbar">
               <!-- 任务组选择 -->
-              <span class="mission-toolbar-label" style="margin-right: -8px;">任务组名称：</span>
-              <select class="mission-toolbar-select" style="min-width: 180px;">
-                <option value="">FA0625_new_line_mode1</option>
+              <span class="mission-toolbar-label" style="margin-right: -8px;">路线名称：</span>
+              <select v-model="selectedRouteName" class="mission-toolbar-select" style="min-width: 180px;">
+                <option v-if="routeList.length === 0" value="">暂无路线</option>
+                <option v-for="route in routeList" :key="route" :value="route">{{ route }}</option>
               </select>
               
               <!-- 关键点选择 -->
-              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">关键点名称：</span>
-              <select class="mission-toolbar-select" style="min-width: 180px;">
-                <option value="">寻迹中-关键点0</option>
+              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">任务组名称：</span>
+              <select v-model="selectedTaskGroupName" class="mission-toolbar-select" style="min-width: 180px;">
+                <option v-if="taskGroupList.length === 0" value="">暂无任务组</option>
+                <option v-for="group in taskGroupList" :key="group" :value="group">{{ group }}</option>
               </select>
               
               <!-- 操作按钮组 -->
               <div style="display: flex; gap: 12px; margin-left: 8px;">
-                <button class="mission-btn mission-btn-primary">开始</button>
-                <button class="mission-btn mission-btn-secondary">暂停</button>
+                <button class="mission-btn mission-btn-primary" @click="handleStartTrack">开始</button>
+                <button class="mission-btn mission-btn-secondary" @click="handlePauseTrack">暂停</button>
                 <button class="mission-btn mission-btn-primary">添加任务组</button>
                 <button class="mission-btn mission-btn-stop">删除任务组</button>
                 <button class="mission-btn mission-btn-primary">添加任务</button>
@@ -293,6 +295,72 @@
         </div>
       </div>
     </div>
+    <!-- 循迹任务启动弹窗 -->
+    <div v-if="trackStartDialog.visible" class="custom-dialog-mask">
+      <div class="dispatch-task-modal">
+        <div class="dispatch-task-modal-content">
+          <div class="dispatch-task-title">启动循迹任务</div>
+          <div class="dispatch-task-form">
+            <div class="dispatch-task-row">
+              <label>路线名称：</label>
+              <input 
+                v-model="trackStartDialog.form.track_name" 
+                class="dispatch-task-input" 
+                disabled
+              />
+            </div>
+            <div class="dispatch-task-row">
+              <label>任务组：</label>
+              <input 
+                v-model="trackStartDialog.form.taskpoint_name" 
+                class="dispatch-task-input" 
+                disabled
+              />
+            </div>
+            <div class="dispatch-task-row">
+              <label>避障模式：</label>
+              <div class="custom-select-wrapper">
+                <select v-model="trackStartDialog.form.obs_mode" class="mission-select">
+                  <option :value="1">近障模式</option>
+                  <option :value="2">停障模式</option>
+                  <option :value="3">绕障模式</option>
+                </select>
+                <span class="custom-select-arrow">
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                  </svg>
+                </span>
+              </div>
+            </div>
+            <div class="dispatch-task-row">
+              <label>步态类型：</label>
+              <div class="custom-select-wrapper">
+                <select v-model="trackStartDialog.form.gait_type" class="mission-select">
+                  <option :value="0">行走步态</option>
+                  <option :value="1">斜坡步态</option>
+                  <option :value="2">越障步态</option>
+                  <option :value="3">楼梯步态</option>
+                  <option :value="4">帧楼梯步态</option>
+                  <option :value="5">帧45°楼梯步态</option>
+                  <option :value="6">L行走步态</option>
+                  <option :value="7">山地步态</option>
+                  <option :value="8">静音步态</option>
+                </select>
+                <span class="custom-select-arrow">
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                  </svg>
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="dispatch-task-actions">
+            <button class="mission-btn mission-btn-cancel" @click="onTrackStartCancel">取消</button>
+            <button class="mission-btn mission-btn-pause" @click="onTrackStartConfirm">确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -304,7 +372,7 @@ import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.s
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
 import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
-import { waylineApi } from '@/api/services'
+import { waylineApi, navigationApi } from '@/api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import icon360Photo from '@/assets/source_data/svg_data/task_line_svg/360_photo.svg'
 import iconAbsPhoto from '@/assets/source_data/svg_data/task_line_svg/abs_photo.svg'
@@ -339,6 +407,148 @@ const currentPosition = ref({
   angle: 0
 })
 const currentTaskId = ref('')
+
+// 循迹任务 - 路线与任务组
+const routeList = ref<string[]>([])
+const selectedRouteName = ref('')
+const taskGroupList = ref<string[]>([])
+const selectedTaskGroupName = ref('')
+
+// 获取路线列表
+const loadRouteList = async () => {
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) return
+  
+  try {
+    const response = await navigationApi.getTrackList(robotId)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      const rawList: string[] = response.msg.result
+      // 处理：移除 @ 及后缀，并去重
+      const processedSet = new Set<string>()
+      rawList.forEach(item => {
+        const atIndex = item.indexOf('@')
+        const name = atIndex > -1 ? item.substring(0, atIndex) : item
+        processedSet.add(name)
+      })
+      routeList.value = Array.from(processedSet)
+      
+      if (routeList.value.length > 0) {
+        selectedRouteName.value = routeList.value[0]
+      }
+    }
+  } catch (err) {
+    console.error('获取路线列表失败:', err)
+  }
+}
+
+// 监听路线选择变化
+watch(selectedRouteName, async (newVal) => {
+  taskGroupList.value = []
+  selectedTaskGroupName.value = ''
+  if (!newVal) return
+  
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) return
+  
+  try {
+    const response = await navigationApi.getTaskpointList(robotId, newVal)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      taskGroupList.value = response.msg.result
+      if (taskGroupList.value.length > 0) {
+        selectedTaskGroupName.value = taskGroupList.value[0]
+      }
+    }
+  } catch (err) {
+    console.error('获取任务组列表失败:', err)
+  }
+})
+
+// 循迹任务启动弹窗
+const trackStartDialog = ref({
+  visible: false,
+  form: {
+    action: 1, // 固定为1，表示启动
+    wait: 0, // 0=立即启动, 1=不立即启动
+    obs_mode: 1, // 1=近障模式, 2=停障模式, 3=绕障模式
+    track_name: '',
+    taskpoint_name: '',
+    gait_type: 0 // 0=行走步态, 1=斜坡步态, 2=越障步态, 3=楼梯步态, 4=帧楼梯步态, 5=帧45°楼梯步态, 6=L行走步态, 7=山地步态, 8=静音步态
+  }
+})
+
+// 启动循迹任务
+const handleStartTrack = () => {
+  if (!selectedRouteName.value) {
+    alert('请先选择路线')
+    return
+  }
+  if (!selectedTaskGroupName.value) {
+    alert('请先选择任务组')
+    return
+  }
+
+  trackStartDialog.value.form.track_name = selectedRouteName.value
+  trackStartDialog.value.form.taskpoint_name = selectedTaskGroupName.value
+  trackStartDialog.value.form.obs_mode = 1
+  trackStartDialog.value.form.gait_type = 0
+  trackStartDialog.value.form.wait = 0
+  trackStartDialog.value.visible = true
+}
+
+// 暂停循迹任务
+const handlePauseTrack = () => {
+  console.log('暂停循迹')
+  // TODO: 调用暂停循迹API，参考 NavigationManage.vue 中的 handlePauseNav
+}
+
+const onTrackStartConfirm = async () => {
+  const form = trackStartDialog.value.form
+  
+  try {
+    const robotId = localStorage.getItem('selected_robot_id')
+    if (!robotId) {
+      alert('未找到机器人ID')
+      return
+    }
+    
+    // 调用启动循迹任务API
+    const response = await navigationApi.startTrack(robotId, {
+      action: form.action,
+      wait: form.wait,
+      obs_mode: form.obs_mode,
+      track_name: form.track_name,
+      taskpoint_name: form.taskpoint_name
+    })
+    
+    console.log('启动循迹任务响应:', response)
+    
+    // 根据返回结果判断是否成功
+    if (response && (response as any).response && (response as any).response.msg) {
+      const { error_code, error_msg } = (response as any).response.msg
+      if (error_code === 0) {
+        alert((response as any).message || '循迹任务启动成功')
+        trackStartDialog.value.visible = false
+      } else {
+        alert(`启动失败: ${error_msg || '未知错误'}`)
+      }
+    } else {
+      alert('启动循迹任务成功')
+      trackStartDialog.value.visible = false
+    }
+  } catch (error) {
+    console.error('启动循迹任务失败:', error)
+    alert('启动循迹任务失败，请稍后重试')
+  }
+}
+
+const onTrackStartCancel = () => {
+  trackStartDialog.value.visible = false
+}
+
+onMounted(() => {
+  loadWaylineFiles()
+  loadRouteList()
+})
 
 // 加载航线文件列表
 const loadWaylineFiles = async () => {

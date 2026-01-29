@@ -91,7 +91,22 @@ export default defineConfig(({ mode }) => {
             })
           }
         },
+        '/navigation_list': {
+          target: 'http://10.10.1.3:5000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/navigation_delete': {
+          target: 'http://10.10.1.3:5000',
+          changeOrigin: true,
+          secure: false,
+        },
         '/download_file': {
+          target: 'http://10.10.1.3:5000',
+          changeOrigin: true,
+          secure: false,
+        },
+        '/upload_single_file': {
           target: 'http://10.10.1.3:5000',
           changeOrigin: true,
           secure: false,

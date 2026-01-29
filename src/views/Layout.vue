@@ -36,7 +36,7 @@
                @click.stop="toggleSelect">
             <div class="el-select__selection">
               <div class="el-select__selected-item el-select__placeholder">
-                <span class="status-light" :class="selectedRobot?.status === 'Online' ? 'is-online' : 'is-offline'"></span>
+                <span class="status-light" :class="isSelectedRobotOnline ? 'is-online' : 'is-offline'"></span>
                 <span>{{ selectedRobot?.robot_id || '请选择' }}</span>
               </div>
             </div>
@@ -59,7 +59,7 @@
                 :class="{ 'is-selected': robot.robot_id === selectedRobotId }"
                 @click="selectRobot(robot.robot_id)"
               >
-                <span class="status-light" :class="robot.status === 'Online' ? 'is-online' : 'is-offline'"></span>
+                <span class="status-light" :class="isRobotItemOnline(robot) ? 'is-online' : 'is-offline'"></span>
                 {{ robot.robot_id }}
               </div>
             </div>
@@ -126,6 +126,29 @@ const selectedRobotId = computed({
 const selectedRobot = computed(() => {
   return robots.value.find(robot => robot.robot_id === selectedRobotId.value)
 })
+
+// 判断当前选中的机器人是否在线
+const isSelectedRobotOnline = computed(() => {
+  // 1. 优先检查选中机器人的静态状态 (兼容大小写)
+  if (selectedRobot.value) {
+    const status = selectedRobot.value.status?.toLowerCase()
+    if (status === 'online') return true
+  }
+  
+  // 2. 如果静态状态不在线，检查实时设备状态 (仅针对当前选中的机器人)
+  // 注意：deviceStatus 是当前选中机器人的实时状态
+  return deviceStatus.value?.isOnline || false
+})
+
+// 判断列表中的机器人是否在线
+const isRobotItemOnline = (robot: any) => {
+  // 列表中的机器人主要依赖其静态状态字段
+  // 如果是当前选中的机器人，也可以参考实时状态(可选，为了保持列表和头部一致，这里简单处理)
+  if (robot.robot_id === selectedRobotId.value) {
+    return isSelectedRobotOnline.value
+  }
+  return robot.status?.toLowerCase() === 'online'
+}
 
 const isSelectActive = ref(false)
 

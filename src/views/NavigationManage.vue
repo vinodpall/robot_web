@@ -119,7 +119,7 @@
                     {{ msfEnabled ? '关闭MSF' : '开始MSF' }}
                   </button>
                   <button class="map-btn map-btn-secondary" @click="handleCircleMode">循迹避障模式</button>
-                  <button class="map-btn map-btn-secondary" @click="handleCloseGPS">关闭GPS</button>
+                  <button class="map-btn map-btn-secondary" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
                   <button class="map-btn map-btn-secondary" @click="handleSetOrigin">原点设置</button>
                 </div>
               </div>
@@ -132,9 +132,7 @@
                   <div class="nav-info-item">
                     <label class="nav-label">地图：</label>
                     <select v-model="selectedNavMap" class="nav-select">
-                      <option value="电厂巡检地图">电厂巡检地图</option>
-                      <option value="仓库地图">仓库地图</option>
-                      <option value="园区地图">园区地图</option>
+                      <option v-for="map in navMapList" :key="map" :value="map">{{ map }}</option>
                     </select>
                   </div>
 
@@ -242,10 +240,7 @@
                   <div class="toolbar-left">
                     <span class="toolbar-label">地图：</span>
                     <select v-model="selectedEditMap" class="map-edit-select">
-                      <option value="FA0625">FA0625</option>
-                      <option value="电厂巡检地图">电厂巡检地图</option>
-                      <option value="仓库地图">仓库地图</option>
-                      <option value="园区地图">园区地图</option>
+                      <option v-for="map in editMapList" :key="map" :value="map">{{ map }}</option>
                     </select>
                   </div>
                   <div class="toolbar-right">
@@ -321,9 +316,7 @@
                   <span class="track-label">地图:</span>
                   <div class="track-select-wrapper">
                     <select v-model="trackRecordMap" class="track-select">
-                      <option value="FA0625">FA0625</option>
-                      <option value="电厂巡检地图">电厂巡检地图</option>
-                      <option value="仓库地图">仓库地图</option>
+                      <option v-for="map in trackMapList" :key="map" :value="map">{{ map }}</option>
                     </select>
                     <span class="track-select-arrow">
                       <svg width="10" height="10" viewBox="0 0 12 12">
@@ -337,9 +330,8 @@
                   <span class="track-label">路线:</span>
                   <div class="track-select-wrapper">
                     <select v-model="trackRecordLine" class="track-select">
-                      <option value="">请选择</option>
-                      <option value="FA0625_new_line_mode1">FA0625_new_line_mode1</option>
-                      <option value="FA0625_line_demo">FA0625_line_demo</option>
+                      <option v-if="trackLineList.length === 0" value="">暂无路线</option>
+                      <option v-for="line in trackLineList" :key="line" :value="line">{{ line }}</option>
                     </select>
                     <span class="track-select-arrow">
                       <svg width="10" height="10" viewBox="0 0 12 12">
@@ -352,8 +344,8 @@
                   <span class="track-label">任务组:</span>
                   <div class="track-select-wrapper">
                     <select v-model="trackRecordTask" class="track-select">
-                      <option value="">导出+ 关键点:0</option>
-                      <option value="task_group_a">任务组A</option>
+                      <option v-if="trackTaskList.length === 0" value="">暂无任务组</option>
+                      <option v-for="task in trackTaskList" :key="task" :value="task">{{ task }}</option>
                     </select>
                     <span class="track-select-arrow">
                       <svg width="10" height="10" viewBox="0 0 12 12">
@@ -403,9 +395,7 @@
                 <span class="file-manage-label">地图:</span>
                 <div class="track-select-wrapper">
                   <select v-model="fileManageMap" class="map-edit-select">
-                    <option value="FA0625">FA0625</option>
-                    <option value="电厂巡检地图">电厂巡检地图</option>
-                    <option value="仓库地图">仓库地图</option>
+                    <option v-for="map in fileMapList" :key="map" :value="map">{{ map }}</option>
                   </select>
                 </div>
                 <button class="map-btn map-btn-danger" @click="handleDeleteMap">删除地图</button>
@@ -413,9 +403,8 @@
                   <span class="file-manage-label">数据包:</span>
                   <div class="track-select-wrapper">
                     <select v-model="fileManagePackage" class="map-edit-select">
-                      <option value="包A">包A</option>
-                      <option value="包B">包B</option>
-                      <option value="包C">包C</option>
+                      <option v-if="dataPackageList.length === 0" value="">暂无数据包</option>
+                      <option v-for="pkg in dataPackageList" :key="pkg" :value="pkg">{{ pkg }}</option>
                     </select>
                   </div>
                   <button class="map-btn map-btn-danger" @click="handleDeletePackage">删除数据包</button>
@@ -429,16 +418,18 @@
                   <div class="file-table-cell">创建时间</div>
                   <div class="file-table-cell file-table-action">操作</div>
                 </div>
-                <div class="file-table-row" v-for="(item, index) in fileManageList" :key="item.id">
-                  <div class="file-table-cell file-table-check">{{ index + 1 }}</div>
-                  <div class="file-table-cell">{{ item.type }}</div>
-                  <div class="file-table-cell file-table-name">{{ item.name }}</div>
-                  <div class="file-table-cell">{{ item.createTime }}</div>
-                  <div class="file-table-cell file-table-action">
-                    <button class="file-delete-btn" @click="handleDelete(item.id)">
-                      <img :src="rubbishIcon" alt="删除" />
-                      删除
-                    </button>
+                <div class="file-table-body">
+                  <div class="file-table-row" v-for="(item, index) in fileManageList" :key="item.id">
+                    <div class="file-table-cell file-table-check">{{ index + 1 }}</div>
+                    <div class="file-table-cell">{{ item.type }}</div>
+                    <div class="file-table-cell file-table-name">{{ item.name }}</div>
+                    <div class="file-table-cell">{{ item.createTime }}</div>
+                    <div class="file-table-cell file-table-action">
+                      <button class="file-delete-btn" @click="handleDelete(item)">
+                        <img :src="rubbishIcon" alt="删除" />
+                        删除
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -460,6 +451,47 @@
           <button class="map-btn" @click="cancelStartRecording">取消</button>
           <button class="map-btn map-btn-primary" @click="confirmStartRecording" :disabled="recordingLoading">
             {{ recordingLoading ? '提交中...' : '开始录包' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 循迹避障模式选择对话框 -->
+    <div v-if="obsHandleDialogVisible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card">
+        <div class="recording-dialog-header">循迹避障模式设置</div>
+        <div class="recording-dialog-body">
+          <div class="obs-mode-options">
+            <label 
+              class="obs-mode-option" 
+              :class="{ 'active': selectedObsMode === 0 }"
+              @click="selectedObsMode = 0"
+            >
+              <input type="radio" name="obs_mode" :value="0" v-model="selectedObsMode" />
+              <span>近障模式</span>
+            </label>
+            <label 
+              class="obs-mode-option" 
+              :class="{ 'active': selectedObsMode === 1 }"
+              @click="selectedObsMode = 1"
+            >
+              <input type="radio" name="obs_mode" :value="1" v-model="selectedObsMode" />
+              <span>停障模式</span>
+            </label>
+            <label 
+              class="obs-mode-option" 
+              :class="{ 'active': selectedObsMode === 2 }"
+              @click="selectedObsMode = 2"
+            >
+              <input type="radio" name="obs_mode" :value="2" v-model="selectedObsMode" />
+              <span>绕障模式</span>
+            </label>
+          </div>
+        </div>
+        <div class="recording-dialog-actions">
+          <button class="map-btn" @click="cancelObsHandleDialog">取消</button>
+          <button class="map-btn map-btn-primary" @click="confirmObsHandleDialog" :disabled="obsHandleLoading">
+            {{ obsHandleLoading ? '提交中...' : '确认' }}
           </button>
         </div>
       </div>
@@ -495,7 +527,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed } from 'vue'
+import { ref, onMounted, nextTick, watch, computed, shallowRef } from 'vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
@@ -513,6 +545,7 @@ import mapEraserIcon from '@/assets/source_data/svg_data/robot_source/map_eraser
 import mapRollbackIcon from '@/assets/source_data/svg_data/robot_source/map_rollback.svg'
 import mapInitIcon from '@/assets/source_data/svg_data/robot_source/map_init.svg'
 import mapUploadIcon from '@/assets/source_data/svg_data/robot_source/map_upload.svg'
+import { saveTrajectoryFile, getTrajectoryFile } from '@/utils/trajectoryDB'
 
 // 导航点云图相关变量（需要在前面声明，因为在cleanupNavPointCloud中使用）
 let navPointCloudInitialized = false
@@ -620,11 +653,36 @@ const handleTabClick = (key: string) => {
     cleanupNavPointCloud()
   }
   
-  // 当切换到导航/路线录制标签时，初始化点云图
-  if (key === 'nav' || key === 'track_record') {
+  // 当切换到导航标签时，初始化点云图并获取GPS状态和地图列表
+  if (key === 'nav') {
+    nextTick(() => {
+      fetchMapList() // 获取地图列表
+      initNavPointCloud()
+      fetchGpsStatus() // 获取GPS状态
+    })
+  } else if (key === 'track_record') {
     nextTick(() => {
       initNavPointCloud()
+      fetchTrackMapList() // 获取路线录制页面的地图列表
+      fetchAllTrackList() // 获取所有循迹任务列表
     })
+  } else if (key === 'map_edit') {
+    // 切换到地图编辑标签时获取地图列表
+    fetchEditMapList()
+    // 如果已有选中的地图，手动加载一次（因为如果值没变，watcher不会触发）
+    if (selectedEditMap.value) {
+      nextTick(() => {
+        loadGridMap(selectedEditMap.value)
+      })
+    }
+  } else if (key === 'file_manage') {
+    // 切换到文件管理标签时获取地图列表和数据包列表
+    fetchFileMapList()
+    fetchDataPackageList()
+    // 如果已有选中的地图，获取文件列表
+    if (fileManageMap.value) {
+      fetchNavigationList()
+    }
   }
 }
 
@@ -639,9 +697,173 @@ const cleanupNavPointCloud = () => {
 }
 
 // 路线录制相关状态
-const trackRecordMap = ref('FA0625')
+const trackRecordMap = ref('')
+const trackMapList = ref<string[]>([]) // 路线录制页面的地图列表
 const trackRecordLine = ref('')
 const trackRecordTask = ref('')
+
+// 所有循迹任务列表（从API获取）
+const allTrackList = ref<string[]>([])
+
+// 获取所有循迹任务列表
+const fetchAllTrackList = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    console.warn('未选择机器人，无法获取循迹任务列表')
+    // 尝试从缓存加载
+    const cached = localStorage.getItem('cached_track_list')
+    if (cached) {
+      allTrackList.value = JSON.parse(cached)
+      console.log('从缓存加载循迹任务列表:', allTrackList.value)
+    }
+    return
+  }
+  
+  try {
+    const response = await navigationApi.getTrackList(robotId)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      allTrackList.value = response.msg.result
+      // 缓存到localStorage
+      localStorage.setItem('cached_track_list', JSON.stringify(allTrackList.value))
+      console.log('获取到所有循迹任务列表:', allTrackList.value)
+    } else {
+      console.warn('循迹任务列表返回格式异常')
+      // 尝试从缓存加载
+      const cached = localStorage.getItem('cached_track_list')
+      if (cached) {
+        allTrackList.value = JSON.parse(cached)
+      }
+    }
+  } catch (error) {
+    console.error('获取循迹任务列表失败:', error)
+    // 尝试从缓存加载
+    const cached = localStorage.getItem('cached_track_list')
+    if (cached) {
+      allTrackList.value = JSON.parse(cached)
+      console.log('从缓存加载循迹任务列表:', allTrackList.value)
+    }
+  }
+}
+
+// 过滤后的路线列表（根据选中的地图）
+const trackLineList = computed(() => {
+  if (!trackRecordMap.value) return []
+  
+  // 过滤出属于当前地图的循迹任务
+  // 循迹任务格式：{地图名}_{路线名}@{更新时间}
+  return allTrackList.value
+    .filter(track => track.startsWith(trackRecordMap.value + '_'))
+    .map(track => {
+      // 移除 @ 后面的更新时间
+      const atIndex = track.indexOf('@')
+      return atIndex > -1 ? track.substring(0, atIndex) : track
+    })
+})
+
+// 任务组列表
+const trackTaskList = ref<string[]>([])
+
+// 监听路线录制地图选择变化 - 同步更新路线和任务组列表
+watch(trackRecordMap, async (newMap) => {
+  if (newMap) {
+    // 加载该地图的点云图
+    refreshNavPointCloud(newMap)
+    
+    // 重新加载循迹任务列表（从缓存或API）
+    await fetchAllTrackList()
+    
+    // 清空选中的路线
+    trackRecordLine.value = ''
+    
+    // 自动选择第一个路线
+    if (trackLineList.value.length > 0) {
+      trackRecordLine.value = trackLineList.value[0]
+    }
+  } else {
+    // 如果没有选中地图，清空选择
+    trackRecordLine.value = ''
+    trackRecordTask.value = ''
+    trackTaskList.value = []
+  }
+})
+
+// 监听路线选择变化 - 获取该路线的任务组列表（关键点文件列表）
+watch(trackRecordLine, async (newLine) => {
+  // 清空任务组选择
+  trackRecordTask.value = ''
+  trackTaskList.value = []
+  
+  if (!newLine) {
+    return
+  }
+  
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    console.warn('未选择机器人，无法获取任务组')
+    return
+  }
+  
+  try {
+    console.log('获取路线的任务组列表:', newLine)
+    const response = await navigationApi.getTaskpointList(robotId, newLine)
+    
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      trackTaskList.value = response.msg.result
+      console.log(`路线 ${newLine} 的任务组列表:`, trackTaskList.value)
+      
+      // 自动选择第一个任务组
+      if (trackTaskList.value.length > 0) {
+        trackRecordTask.value = trackTaskList.value[0]
+        console.log('自动选择第一个任务组:', trackRecordTask.value)
+      }
+    } else {
+      console.warn('任务组列表返回格式异常:', response)
+      trackTaskList.value = []
+    }
+  } catch (error) {
+    console.error('获取任务组列表失败:', error)
+    trackTaskList.value = []
+  }
+  
+  // 下载轨迹文件到本地
+  try {
+    console.log('准备下载轨迹文件:', newLine)
+    
+    // 检查缓存中是否已有轨迹文件
+    const cachedBlob = await getTrajectoryFile(newLine)
+    if (cachedBlob) {
+      console.log('✓ 轨迹文件已在缓存中:', newLine)
+      return
+    }
+    
+    // 从服务器下载轨迹文件
+    // 注意：这里假设 mapFileApi.downloadTrajectoryFile 接受的是 trackName
+    const blob = await mapFileApi.downloadTrajectoryFile(newLine)
+    
+    if (blob) {
+      // DEBUG: 检查下载的内容
+      const text = await blob.text()
+      console.log('DEBUG: 下载的轨迹文件内容预览:', text.substring(0, 200))
+      console.log('DEBUG: 下载的轨迹文件大小:', blob.size)
+      
+      if (text.trim().startsWith('<') || text.includes('error_code')) {
+        console.error('DEBUG: 下载的内容看起来像是HTML错误页面或JSON错误信息')
+      }
+
+      // 保存到IndexedDB
+      await saveTrajectoryFile(newLine, blob)
+      console.log('✓ 轨迹文件下载并保存成功:', newLine)
+      
+      // DEBUG: 立即验证保存是否成功
+      const savedBlob = await getTrajectoryFile(newLine)
+      console.log('DEBUG: 验证保存结果:', savedBlob ? `成功, 大小: ${savedBlob.size}` : '失败, 未找到文件')
+    } else {
+      console.warn('⚠ 轨迹文件下载失败:', newLine)
+    }
+  } catch (error) {
+    console.error('下载轨迹文件失败:', error)
+  }
+})
 
 const handleTrackRecord = () => {
   console.log('录制路线')
@@ -655,8 +877,126 @@ const handleTrackDownload = () => {
   console.log('下载路线')
 }
 
-const handleTrackPreview = () => {
+const handleTrackPreview = async () => {
   console.log('预览路线')
+  
+  // 检查是否选中了路线
+  if (!trackRecordLine.value) {
+    showErrorMessage('请先选择路线')
+    return
+  }
+  
+  try {
+    // 从IndexedDB获取轨迹文件
+    const blob = await getTrajectoryFile(trackRecordLine.value)
+    
+    if (!blob) {
+      showErrorMessage('未找到轨迹文件，请确认路线是否存在')
+      return
+    }
+    
+    console.log('✓ 找到轨迹文件，开始解析:', trackRecordLine.value)
+    
+    // 读取轨迹文件内容
+    const text = await blob.text()
+    console.log('DEBUG: 预览读取的文件内容预览:', text.substring(0, 200))
+    
+    const lines = text.trim().split('\n')
+    
+    // 解析轨迹点
+    const trajectoryPoints: Array<{x: number, y: number, z: number}> = []
+    
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue // 跳过空行和注释
+      
+      // 尝试用逗号分隔（CSV格式）或空格分隔
+      let parts: string[]
+      if (trimmed.includes(',')) {
+        parts = trimmed.split(',')
+      } else {
+        parts = trimmed.split(/\s+/)
+      }
+      
+      // 检查数据格式
+      // 格式可能是: index, x, y, z, ...
+      // 或者: x, y, z ...
+      
+      let x: number, y: number, z: number
+      
+      // 尝试解析为 index, x, y, z 格式 (5列或更多)
+      if (parts.length >= 4) {
+        // 假设第2,3,4列是x,y,z (忽略第1列索引)
+        const val1 = parseFloat(parts[1])
+        const val2 = parseFloat(parts[2])
+        const val3 = parseFloat(parts[3])
+        
+        if (!isNaN(val1) && !isNaN(val2) && !isNaN(val3)) {
+          x = val1
+          y = val2
+          z = val3
+          trajectoryPoints.push({ x, y, z })
+          continue
+        }
+      }
+      
+      // 如果上面的解析失败，尝试解析为 x, y, z 格式 (3列)
+      if (parts.length >= 3) {
+        const val0 = parseFloat(parts[0])
+        const val1 = parseFloat(parts[1])
+        const val2 = parseFloat(parts[2])
+        
+        if (!isNaN(val0) && !isNaN(val1) && !isNaN(val2)) {
+          x = val0
+          y = val1
+          z = val2
+          trajectoryPoints.push({ x, y, z })
+        }
+      }
+    }
+    
+    if (trajectoryPoints.length === 0) {
+      console.warn('DEBUG: 解析失败，未找到有效的轨迹点。首行内容:', lines[0])
+      showErrorMessage('轨迹文件格式无法识别')
+      return
+    }
+    
+    console.log(`✓ 解析到 ${trajectoryPoints.length} 个轨迹点`)
+    
+    // 获取归一化参数
+    const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
+    
+    // 如果没有地图数据，使用轨迹自身的范围（虽然这不太可能发生，因为已经加载了地图）
+    if (maxRange <= 1e-6) {
+      console.warn('地图归一化参数无效，使用轨迹自身范围')
+      // ... 原有逻辑 ...
+    }
+    
+    // 使用地图参数归一化轨迹点
+    const normalizedTrajectoryPoints = trajectoryPoints.map(p => ({
+      x: (p.x - centerX) / maxRange,
+      y: (p.y - centerY) / maxRange,
+      z: (p.z - centerZ) / maxRange,
+      intensity: 2.0 // 使用特殊强度值区分轨迹 (2.0)
+    }))
+    
+    // 合并地图数据和轨迹数据
+    if (baseNavPointCloudData.value.length > 0) {
+      navPointCloudData.value = [...baseNavPointCloudData.value, ...normalizedTrajectoryPoints]
+    } else {
+      navPointCloudData.value = normalizedTrajectoryPoints
+    }
+    
+    // 渲染点云图
+    await nextTick()
+    scheduleNavPointCloudRender()
+    
+    showSuccessMessage(`轨迹预览加载成功 (${trajectoryPoints.length} 个点)`)
+    console.log('✓ 轨迹预览渲染完成')
+  } catch (error) {
+    console.error('预览路线失败:', error)
+    showErrorMessage('预览路线失败: ' + (error as Error).message)
+  }
 }
 
 const handleTrackSmooth = () => {
@@ -664,7 +1004,16 @@ const handleTrackSmooth = () => {
 }
 
 // 导航相关状态
-const selectedNavMap = ref('电厂巡检地图')
+const selectedNavMap = ref('')
+const navMapList = ref<string[]>([]) // 地图列表
+
+// 监听导航地图选择变化
+watch(selectedNavMap, (newMap) => {
+  if (newMap) {
+    refreshNavPointCloud(newMap)
+  }
+})
+
 const taskSpeed = ref(1.0)
 const navData = ref({
   w: 0,
@@ -682,6 +1031,15 @@ const navData = ref({
 const navigationEnabled = ref(false)
 const insEnabled = ref(false)
 const msfEnabled = ref(false)
+
+// GPS状态
+const gpsEnabled = ref(false)
+
+// 循迹避障模式对话框状态
+const obsHandleDialogVisible = ref(false)
+const selectedObsMode = ref(0) // 0: 近障, 1: 停障, 2: 绕障
+const obsHandleLoading = ref(false)
+
 
 // 导航相关方法
 const handleStartNav = () => {
@@ -829,14 +1187,228 @@ const handleStartMSF = () => {
 }
 
 const handleCircleMode = () => {
-  console.log('循迹随停循')
-  // TODO: 调用循迹模式API
+  // 显示循迹避障模式选择对话框
+  obsHandleDialogVisible.value = true
+}
+
+// 取消循迹避障模式对话框
+const cancelObsHandleDialog = () => {
+  obsHandleDialogVisible.value = false
+  selectedObsMode.value = 0
+}
+
+// 确认循迹避障模式设置
+const confirmObsHandleDialog = async () => {
+  try {
+    obsHandleLoading.value = true
+    
+    const robotId = deviceStore.selectedRobotId
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      obsHandleLoading.value = false
+      return
+    }
+
+    await navigationApi.setObsHandle(robotId, {
+      action: selectedObsMode.value
+    })
+
+    const modeNames = ['近障模式', '停障模式', '绕障模式']
+    showSuccessMessage(`已设置为${modeNames[selectedObsMode.value]}`)
+    obsHandleDialogVisible.value = false
+  } catch (err) {
+    console.error('设置避障模式失败:', err)
+    showErrorMessage('设置避障模式失败')
+  } finally {
+    obsHandleLoading.value = false
+  }
+}
+
+// 获取GPS状态
+const fetchGpsStatus = async () => {
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      console.warn('未选择机器人，无法获取GPS状态')
+      return
+    }
+
+    const response = await navigationApi.getGpsStatus(robotId)
+    if (response.msg && response.msg.error_code === 0) {
+      // result为1表示GPS开启，0表示GPS关闭
+      gpsEnabled.value = response.msg.result === 1
+    }
+  } catch (err) {
+    console.error('获取GPS状态失败:', err)
+  }
+}
+
+// 获取地图列表（从缓存读取，不需要robotId，但为了保持一致性保留检查逻辑如果后续需要API）
+const fetchMapList = () => {
+  try {
+    // 从缓存读取地图列表
+    const cached = localStorage.getItem('cached_map_list')
+    if (cached) {
+      navMapList.value = JSON.parse(cached)
+      // 如果有地图列表且当前未选择地图，默认选择第一个
+      if (navMapList.value.length > 0 && !selectedNavMap.value) {
+        selectedNavMap.value = navMapList.value[0]
+      }
+    } else {
+      console.warn('缓存中没有地图列表数据')
+    }
+  } catch (err) {
+    console.error('读取地图列表缓存失败:', err)
+  }
+}
+
+// 从API刷新地图列表缓存
+const refreshMapListCache = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  try {
+    const response = await navigationApi.getMapList(robotId)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      localStorage.setItem('cached_map_list', JSON.stringify(response.msg.result))
+    }
+  } catch (err) {
+    console.error('刷新地图列表缓存失败:', err)
+  }
+}
+
+// 获取地图编辑页面的地图列表（从缓存读取）
+const fetchEditMapList = () => {
+  try {
+    // 从缓存读取地图列表
+    const cached = localStorage.getItem('cached_map_list')
+    if (cached) {
+      editMapList.value = JSON.parse(cached)
+      // 如果有地图列表且当前未选择地图，默认选择第一个
+      if (editMapList.value.length > 0 && !selectedEditMap.value) {
+        selectedEditMap.value = editMapList.value[0]
+      }
+    } else {
+      console.warn('缓存中没有地图列表数据')
+    }
+  } catch (err) {
+    console.error('读取地图编辑列表缓存失败:', err)
+  }
+}
+
+// 获取路线录制页面的地图列表（从缓存读取）
+const fetchTrackMapList = () => {
+  try {
+    const cached = localStorage.getItem('cached_map_list')
+    if (cached) {
+      trackMapList.value = JSON.parse(cached)  
+      if (trackMapList.value.length > 0 && !trackRecordMap.value) {
+        trackRecordMap.value = trackMapList.value[0]
+      }
+    } else {
+      console.warn('缓存中没有地图列表数据')
+    }
+  } catch (err) {
+    console.error('读取路线录制地图列表缓存失败:', err)
+  }
+}
+
+// 获取文件管理页面的地图列表（从缓存读取）
+const fetchFileMapList = () => {
+  try {
+    const cached = localStorage.getItem('cached_map_list')
+    if (cached) {
+      const rawList: string[] = JSON.parse(cached)
+      // 处理地图名称：移除 @ 及后面的内容
+      fileMapList.value = rawList.map(mapName => {
+        const atIndex = mapName.indexOf('@')
+        return atIndex > -1 ? mapName.substring(0, atIndex) : mapName
+      })
+      
+      if (fileMapList.value.length > 0 && !fileManageMap.value) {
+        fileManageMap.value = fileMapList.value[0]
+      }
+    } else {
+      console.warn('缓存中没有地图列表数据')
+    }
+  } catch (err) {
+    console.error('读取文件管理地图列表缓存失败:', err)
+  }
+}
+
+// 数据包列表
+const dataPackageList = ref<string[]>([])
+
+// 获取数据包列表
+const fetchDataPackageList = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    console.warn('未选择机器人，无法获取数据包列表')
+    return
+  }
+  
+  try {
+    const response = await navigationApi.getDataList(robotId)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      // 处理数据包名称：移除 .bag 及后面的内容
+      dataPackageList.value = response.msg.result.map(item => {
+        const bagIndex = item.indexOf('.bag')
+        if (bagIndex !== -1) {
+          return item.substring(0, bagIndex)
+        }
+        // 如果没有 .bag，尝试移除 @ 及后面的内容
+        const atIndex = item.indexOf('@')
+        return atIndex !== -1 ? item.substring(0, atIndex) : item
+      })
+      
+      // 如果有数据包且当前未选择，默认选择第一个
+      if (dataPackageList.value.length > 0) {
+        // 总是选择第一个，或者仅当未选择时选择第一个？
+        // 用户说"有数据时默认显示第一个"，通常意味着每次刷新都重置，或者仅初始化时重置。
+        // 为了稳妥，如果当前选中的不在列表中，或者当前为空，就选择第一个。
+        if (!fileManagePackage.value || !dataPackageList.value.includes(fileManagePackage.value)) {
+          fileManagePackage.value = dataPackageList.value[0]
+        }
+      } else {
+        fileManagePackage.value = ''
+      }
+    } else {
+      console.warn('获取数据包列表失败或格式错误')
+      dataPackageList.value = []
+    }
+  } catch (error) {
+    console.error('获取数据包列表失败:', error)
+    dataPackageList.value = []
+  }
 }
 
 const handleCloseGPS = () => {
-  console.log('关闭GPS')
-  // TODO: 调用关闭GPS API
+  const action = gpsEnabled.value ? '关闭' : '开启'
+  showConfirmDialog({
+    title: `${action}GPS`,
+    message: `确定要${action}GPS吗？`,
+    onConfirm: async () => {
+      try {
+        const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+        if (!robotId) {
+          showErrorMessage('未选择机器人')
+          return
+        }
+
+        await navigationApi.useGps(robotId, {
+          action: gpsEnabled.value ? 0 : 1
+        })
+        
+        gpsEnabled.value = !gpsEnabled.value
+        showSuccessMessage(`${action}GPS成功`)
+      } catch (err) {
+        console.error(`${action}GPS失败:`, err)
+        showErrorMessage(`${action}GPS失败`)
+      }
+    }
+  })
 }
+
 
 const handleSetOrigin = () => {
   console.log('原点设置')
@@ -872,7 +1444,18 @@ type PcdHeaderInfo = {
 
 const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 const navPointCloudCanvas = ref<HTMLCanvasElement | null>(null)
-const navPointCloudData = ref<PointCloudPoint[]>([])
+const navPointCloudData = shallowRef<PointCloudPoint[]>([])
+// 保存原始地图点云数据（归一化后的），用于叠加轨迹
+const baseNavPointCloudData = shallowRef<PointCloudPoint[]>([])
+// 保存点云归一化参数
+const navPointCloudNormalizationParams = ref({
+  minX: 0, maxX: 0,
+  minY: 0, maxY: 0,
+  minZ: 0, maxZ: 0,
+  rangeX: 1, rangeY: 1, rangeZ: 1,
+  maxRange: 1,
+  centerX: 0, centerY: 0, centerZ: 0
+})
 const navPointCloudLoading = ref(false)
 const navPointCloudError = ref('')
 const navPointCloudScale = ref(1.5)
@@ -957,14 +1540,64 @@ const drawNavPointCloud = () => {
     }
 
     const radius = (1.2 + point.intensity * 2) * perspective * 0.5
-    const red = Math.floor(40 + point.intensity * 200)
-    const green = Math.floor(120 + point.intensity * 100)
-    const blue = 255
-    ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${0.35 + point.intensity * 0.4})`
-    ctx.beginPath()
-    ctx.arc(projectedX, projectedY, radius, 0, Math.PI * 2)
-    ctx.fill()
+    
+    // 如果强度 >= 2.0，说明是轨迹点，显示为亮绿色
+    if (point.intensity >= 1.9) {
+      ctx.fillStyle = `rgba(0, 255, 0, 0.9)`
+      ctx.beginPath()
+      // 轨迹点显示为2像素大小
+      ctx.arc(projectedX, projectedY, 1.0 * dpr, 0, Math.PI * 2)
+      ctx.fill()
+    } else {
+      const red = Math.floor(40 + point.intensity * 200)
+      const green = Math.floor(120 + point.intensity * 100)
+      const blue = 255
+      ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${0.35 + point.intensity * 0.4})`
+      ctx.beginPath()
+      ctx.arc(projectedX, projectedY, radius, 0, Math.PI * 2)
+      ctx.fill()
+    }
   })
+
+  // 绘制原点
+  const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
+  
+  if (maxRange > 1e-6) {
+    // 计算原点 (0,0,0) 的归一化坐标
+    const originNormX = (0 - centerX) / maxRange
+    const originNormY = (0 - centerY) / maxRange
+    const originNormZ = (0 - centerZ) / maxRange
+    
+    // 应用与点云相同的变换
+    const centeredX = originNormX
+    const centeredY = -originNormZ
+    const centeredZ = originNormY
+
+    const xzRotatedX = centeredX * cosYaw + centeredZ * sinYaw
+    const xzRotatedZ = -centeredX * sinYaw + centeredZ * cosYaw
+
+    const yRotatedY = centeredY * cosPitch - xzRotatedZ * sinPitch
+    const yRotatedZ = centeredY * sinPitch + xzRotatedZ * cosPitch
+
+    const perspectiveZ = yRotatedZ * depthScale
+    const perspective = cameraDistance / (cameraDistance - perspectiveZ)
+    const projectedX = xzRotatedX * baseScale * perspective + rect.width / 2 + panOffsetX
+    const projectedY = yRotatedY * baseScale * perspective + rect.height / 2 + panOffsetY
+    
+    // 绘制原点标记
+    ctx.beginPath()
+    ctx.arc(projectedX, projectedY, 3 * dpr, 0, Math.PI * 2)
+    ctx.fillStyle = '#FF0000' // 红色
+    ctx.fill()
+    ctx.strokeStyle = '#FFFFFF'
+    ctx.lineWidth = 1.5 * dpr
+    ctx.stroke()
+    
+    // 绘制文字
+    ctx.fillStyle = '#FF0000' // 红色
+    ctx.font = `bold ${12 * dpr}px Arial`
+    ctx.fillText('原点', projectedX + 6 * dpr, projectedY - 6 * dpr)
+  }
 }
 
 const handleNavPointCloudWheel = (e: WheelEvent) => {
@@ -1033,7 +1666,7 @@ const handleNavPointCloudKeydown = (e: KeyboardEvent) => {
   }
 }
 
-import { navigationApi } from '../api/services'
+import { navigationApi, mapFileApi } from '../api/services'
 import { useDeviceStore } from '../stores/device'
 
 const deviceStore = useDeviceStore()
@@ -1069,6 +1702,16 @@ const normalizeNavPointCloud = (rawPoints: RawPointCloudPoint[]): PointCloudPoin
   const centerX = (maxX + minX) / 2
   const centerY = (maxY + minY) / 2
   const centerZ = (maxZ + minZ) / 2
+
+  // 保存归一化参数，供轨迹叠加使用
+  navPointCloudNormalizationParams.value = {
+    minX, maxX,
+    minY, maxY,
+    minZ, maxZ,
+    rangeX, rangeY, rangeZ,
+    maxRange,
+    centerX, centerY, centerZ
+  }
 
   const intensityValues = rawPoints
     .map(p => (p.intensityValue !== undefined && Number.isFinite(p.intensityValue) ? p.intensityValue : undefined))
@@ -1237,22 +1880,55 @@ const parseNavPcdBuffer = (buffer: ArrayBuffer): PointCloudPoint[] => {
 }
 
 // 刷新点云数据
-const refreshNavPointCloud = async () => {
+const refreshNavPointCloud = async (mapName?: string) => {
+  const targetMap = mapName || selectedNavMap.value
+  if (!targetMap) {
+    console.warn('未选择地图，无法加载点云数据')
+    return
+  }
+
   navPointCloudLoading.value = true
   navPointCloudError.value = ''
-  console.log('开始加载导航点云数据，URL:', tinymapPcdUrl)
+  console.log('开始加载导航点云数据，地图:', targetMap)
+  
   try {
-    const response = await fetch(tinymapPcdUrl)
-    if (!response.ok) {
-      throw new Error('PCD 文件加载失败')
+    // 1. 尝试从 IndexedDB 获取
+    let blob = await getMapFile(targetMap, 'tinyMap.pcd')
+    
+    // 2. 如果缓存中没有，尝试下载
+    if (!blob) {
+      try {
+        console.log('本地缓存未找到点云文件，尝试下载...')
+        await downloadMapFiles(targetMap)
+        blob = await getMapFile(targetMap, 'tinyMap.pcd')
+      } catch (downloadErr) {
+        console.error('下载地图文件失败:', downloadErr)
+      }
     }
-    const buffer = await response.arrayBuffer()
+    
+    let buffer: ArrayBuffer
+    
+    if (blob) {
+      console.log('从缓存加载点云文件')
+      buffer = await blob.arrayBuffer()
+    } else {
+      // 3. 如果还是没有，尝试加载默认文件（作为后备）
+      console.warn('无法获取地图点云文件，尝试加载默认文件')
+      const response = await fetch(tinymapPcdUrl)
+      if (!response.ok) {
+        throw new Error('默认 PCD 文件加载失败')
+      }
+      buffer = await response.arrayBuffer()
+    }
+    
     console.log('PCD文件已加载，大小:', buffer.byteLength, 'bytes')
     const parsedPoints = parseNavPcdBuffer(buffer)
     console.log('解析点云数据，点数:', parsedPoints.length)
     
     if (parsedPoints.length > 0) {
       navPointCloudData.value = parsedPoints
+      // 保存原始地图数据，用于叠加轨迹
+      baseNavPointCloudData.value = parsedPoints
     } else {
       console.warn('未解析到点云数据，使用模拟数据')
       navPointCloudData.value = generateMockNavPointCloud()
@@ -1358,7 +2034,9 @@ onMounted(async () => {
   // 如果默认就是导航标签，则初始化
   if (currentTab.value === 'nav') {
     await nextTick()
+    fetchMapList()
     initNavPointCloud()
+    fetchGpsStatus()
   }
 })
 
@@ -1473,7 +2151,8 @@ const handleStopMapping = () => {
 }
 
 // 地图编辑相关状态
-const selectedEditMap = ref('FA0625')
+const selectedEditMap = ref('')
+const editMapList = ref<string[]>([]) // 地图编辑页面的地图列表
 const gridMapCanvas = ref<HTMLCanvasElement | null>(null)
 const gridMapLoading = ref(false)
 const gridMapError = ref('')
@@ -1489,6 +2168,246 @@ let missionGridImageData: ImageData | null = null
 let currentScale = 1
 let currentOffsetX = 0
 let currentOffsetY = 0
+
+// IndexedDB 相关
+const MAP_DB_NAME = 'MapFilesDB'
+const MAP_STORE_NAME = 'mapFiles'
+
+const openMapDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(MAP_DB_NAME, 1)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains(MAP_STORE_NAME)) {
+        db.createObjectStore(MAP_STORE_NAME, { keyPath: 'id' })
+      }
+    }
+  })
+}
+
+const getMapFile = async (mapName: string, fileName: string): Promise<Blob | null> => {
+  try {
+    const db = await openMapDB()
+    return new Promise((resolve) => {
+      const tx = db.transaction([MAP_STORE_NAME], 'readonly')
+      const request = tx.objectStore(MAP_STORE_NAME).get(`${mapName}/${fileName}`)
+      request.onsuccess = () => resolve(request.result?.blob || null)
+      request.onerror = () => resolve(null)
+    })
+  } catch {
+    return null
+  }
+}
+
+// 保存地图文件
+const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promise<void> => {
+  const db = await openMapDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([MAP_STORE_NAME], 'readwrite')
+    const store = tx.objectStore(MAP_STORE_NAME)
+    store.put({ id: `${mapName}/${fileName}`, blob })
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+// 下载地图文件
+const downloadMapFiles = async (mapName: string) => {
+  // 获取机器人 IP
+  const robotInfo = deviceStore.selectedRobot
+  if (!robotInfo?.ip_address) {
+    throw new Error('未获取到机器人IP，无法下载地图')
+  }
+  
+  const robotIp = robotInfo.ip_address
+  
+  // 下载文件
+  const files = await mapFileApi.downloadAllMapFiles(robotIp, mapName)
+  
+  // 保存文件到 IndexedDB
+  for (const [fileName, blob] of files) {
+    await saveMapFile(mapName, fileName, blob)
+  }
+}
+
+// 加载栅格地图
+const loadGridMap = async (mapName: string) => {
+  if (!mapName) return
+  
+  try {
+    gridMapLoading.value = true
+    gridMapError.value = ''
+    
+    await nextTick()
+    
+    const canvas = gridMapCanvas.value
+    if (!canvas) {
+      gridMapLoading.value = false
+      return
+    }
+    
+    // 从IndexedDB获取地图文件
+    let blob = await getMapFile(mapName, 'gridMap.pgm')
+    
+    // 如果缓存中没有，尝试下载
+    if (!blob) {
+      try {
+        showSuccessMessage('正在下载地图文件...')
+        await downloadMapFiles(mapName)
+        // 下载完成后再次尝试获取
+        blob = await getMapFile(mapName, 'gridMap.pgm')
+      } catch (downloadErr) {
+        console.error('下载地图失败:', downloadErr)
+        // 如果下载失败，继续执行，后面会处理 blob 为空的情况
+      }
+    }
+
+    if (!blob) {
+      gridMapError.value = '未找到地图文件，且下载失败'
+      gridMapLoading.value = false
+      return
+    }
+    
+    const buffer = await blob.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    
+    // 解析PGM头部
+    // 重新定位数据开始位置，更健壮的方式
+    let ptr = 0
+    let tokenCount = 0
+    let inComment = false
+    let headerTokens: string[] = []
+    
+    // 读取头部 tokens (magic, width, height, maxVal)
+    while (ptr < bytes.length && tokenCount < 4) {
+        const char = String.fromCharCode(bytes[ptr])
+        if (inComment) {
+            if (char === '\n') inComment = false
+            ptr++
+            continue
+        }
+        if (char === '#') {
+            inComment = true
+            ptr++
+            continue
+        }
+        if (/\s/.test(char)) {
+            ptr++
+            continue
+        }
+        // 找到token
+        let tokenStart = ptr
+        while (ptr < bytes.length && !/\s/.test(String.fromCharCode(bytes[ptr]))) {
+            ptr++
+        }
+        let token = String.fromCharCode(...bytes.subarray(tokenStart, ptr))
+        headerTokens.push(token)
+        tokenCount++
+    }
+    
+    // 跳过最后一个token后的空白字符
+    if (ptr < bytes.length && /\s/.test(String.fromCharCode(bytes[ptr]))) {
+        ptr++
+    }
+    let dataStart = ptr
+    
+    const magic = headerTokens[0]
+    const width = parseInt(headerTokens[1])
+    const height = parseInt(headerTokens[2])
+    const maxVal = parseInt(headerTokens[3]) || 255
+    
+    canvas.width = width
+    canvas.height = height
+    
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    
+    const imageData = ctx.createImageData(width, height)
+    
+    // 解析图像数据
+    if (magic === 'P5') {
+      // 二进制格式
+      let p = dataStart
+      for (let idx = 0; idx < width * height; idx++) {
+        if (p >= bytes.length) break
+        const v = bytes[p++]
+        // 简单的灰度映射
+        const c = v
+        const off = idx * 4
+        imageData.data[off] = c
+        imageData.data[off + 1] = c
+        imageData.data[off + 2] = c
+        imageData.data[off + 3] = 255
+      }
+    } else if (magic === 'P2') {
+      // ASCII格式
+      // 将剩余的字节转换为字符串
+      const textDecoder = new TextDecoder()
+      const asciiData = textDecoder.decode(bytes.subarray(dataStart))
+      // 使用正则分割空白字符
+      const tokens = asciiData.trim().split(/\s+/)
+      
+      for (let idx = 0; idx < width * height; idx++) {
+        if (idx >= tokens.length) break
+        const v = parseInt(tokens[idx], 10)
+        // 归一化到 0-255
+        const c = Math.floor((v / maxVal) * 255)
+        const off = idx * 4
+        imageData.data[off] = c
+        imageData.data[off + 1] = c
+        imageData.data[off + 2] = c
+        imageData.data[off + 3] = 255
+      }
+    } else {
+      throw new Error('不支持的PGM格式: ' + magic)
+    }
+    
+    // 黑白映射优化显示
+    for (let k = 0; k < imageData.data.length; k += 4) {
+      const g = imageData.data[k]
+      // 205是未知区域，显示为灰色
+      // 0是障碍，显示为黑色
+      // 254/255是空闲，显示为白色
+      if (g === 205) {
+        imageData.data[k] = 205
+        imageData.data[k + 1] = 205
+        imageData.data[k + 2] = 205
+      } else if (g < 128) {
+        imageData.data[k] = 0
+        imageData.data[k + 1] = 0
+        imageData.data[k + 2] = 0
+      } else {
+        imageData.data[k] = 255
+        imageData.data[k + 1] = 255
+        imageData.data[k + 2] = 255
+      }
+    }
+    
+    ctx.putImageData(imageData, 0, 0)
+    missionGridImageData = imageData
+    gridImageData = null // 清除编辑缓存
+    editHistory.value = [] // 清除历史记录
+    
+    // 重置缩放
+    resetZoom()
+    
+  } catch (err) {
+    console.error('加载地图失败:', err)
+    gridMapError.value = '加载地图失败: ' + (err as Error).message
+  } finally {
+    gridMapLoading.value = false
+  }
+}
+
+// 监听地图选择变化
+watch(selectedEditMap, (newMap) => {
+  if (newMap) {
+    loadGridMap(newMap)
+  }
+})
+
 let isDragging = false
 let lastX = 0
 let lastY = 0
@@ -1687,23 +2606,12 @@ const undoEdit = () => {
   }
 }
 
-// 清除编辑
-const clearGridEdit = () => {
-  const canvas = gridMapCanvas.value
-  const ctx = canvas?.getContext('2d')
-  if (!canvas || !ctx || !missionGridImageData) return
-  
-  ctx.putImageData(missionGridImageData, 0, 0)
-  gridImageData = null
-  editHistory.value = []
-}
-
 // 将ImageData转换为PGM格式
-const convertImageDataToPGM = (imageData: ImageData): Uint8Array => {
+const convertImageDataToPGM = (imageData: ImageData) => {
   const width = imageData.width
   const height = imageData.height
   
-  // 构建PGM文件头
+  // 构建PGM文件头 (P5格式 = 二进制)
   const header = `P5\n${width} ${height}\n255\n`
   const headerBytes = new TextEncoder().encode(header)
   
@@ -1723,6 +2631,18 @@ const convertImageDataToPGM = (imageData: ImageData): Uint8Array => {
   pgmData.set(pixels, headerBytes.length)
   
   return pgmData
+}
+
+// 清除编辑
+const clearGridEdit = () => {
+  const canvas = gridMapCanvas.value
+  const ctx = canvas?.getContext('2d')
+  if (!canvas || !ctx || !missionGridImageData) return
+  
+  // 恢复原始地图数据
+  ctx.putImageData(missionGridImageData, 0, 0)
+  gridImageData = null
+  editHistory.value = []
 }
 
 // 保存编辑后的地图
@@ -1754,39 +2674,63 @@ const handleSaveGridMap = async () => {
         // 将ImageData转换为PGM格式
         const pgmData = convertImageDataToPGM(currentImageData)
         
-        // TODO: 这里对接上传接口
+        // 创建Blob对象
+        const blob = new Blob([pgmData], { type: 'application/octet-stream' })
+        
+        // 获取机器人IP
+        const robotInfo = deviceStore.selectedRobot
+        if (!robotInfo?.ip_address) {
+          showErrorMessage('未获取到机器人IP，无法上传地图')
+          return
+        }
+        
+        const robotIp = robotInfo.ip_address
+        const mapName = selectedEditMap.value
+        const fileName = 'gridMap.pgm'
+        
         console.log('准备上传PGM文件:', {
-          mapName: selectedEditMap.value,
+          robotIp,
+          mapName,
+          fileName,
           dataSize: pgmData.length,
           width: currentImageData.width,
           height: currentImageData.height
         })
         
-        // 示例：上传到服务器
-        // const formData = new FormData()
-        // const blob = new Blob([pgmData], { type: 'application/octet-stream' })
-        // formData.append('file', blob, `${selectedEditMap.value}.pgm`)
-        // formData.append('mapName', selectedEditMap.value)
+        // 步骤1: 上传到服务器
+        showSuccessMessage('正在上传到服务器...')
+        const uploadSuccess = await mapFileApi.uploadMapFile(robotIp, mapName, fileName, blob)
         
-        // const response = await fetch('/api/upload-map', {
-        //   method: 'POST',
-        //   body: formData
-        // })
+        if (!uploadSuccess) {
+          throw new Error('上传到服务器失败')
+        }
+        console.log('✓ 服务器上传成功')
         
-        // if (response.ok) {
-        //   showSuccessMessage('地图保存成功！')
-        //   console.log('地图上传成功')
-        // } else {
-        //   throw new Error('上传失败')
-        // }
+        // 步骤2: 从服务器下载验证
+        showSuccessMessage('正在从服务器下载验证...')
+        const downloadedBlob = await mapFileApi.downloadMapFile(robotIp, mapName, fileName)
         
-        // 临时提示（等接口对接后删除）
-        showSuccessMessage('地图数据已准备好，等待接口对接后上传')
-        console.log('PGM数据已生成，大小:', pgmData.length, 'bytes')
+        if (!downloadedBlob) {
+          throw new Error('从服务器下载验证失败')
+        }
+        
+        // 验证文件大小
+        if (downloadedBlob.size !== blob.size) {
+          console.warn(`⚠ 文件大小不匹配: 原始=${blob.size}, 下载=${downloadedBlob.size}`)
+          showErrorMessage(`文件大小不匹配: 原始=${blob.size}bytes, 下载=${downloadedBlob.size}bytes`)
+        } else {
+          console.log('✓ 服务器下载验证成功，文件大小一致:', downloadedBlob.size)
+          
+          // 步骤3: 更新IndexedDB中的缓存
+          await saveMapFile(mapName, fileName, downloadedBlob)
+          console.log('✓ IndexedDB缓存已更新')
+          
+          showSuccessMessage('地图保存成功！')
+        }
         
       } catch (error) {
         console.error('保存地图失败:', error)
-        showErrorMessage('保存地图失败，请重试')
+        showErrorMessage('保存地图失败: ' + (error as Error).message)
       }
     },
     onCancel: () => {
@@ -2011,7 +2955,12 @@ const setupCanvasEvents = () => {
 watch(currentTab, async (newTab) => {
   if (newTab === 'map_edit') {
     await nextTick()
-    loadAndRenderGridMap()
+    // 如果已经选中了地图，加载该地图；否则加载默认地图
+    if (selectedEditMap.value) {
+      loadGridMap(selectedEditMap.value)
+    } else {
+      loadAndRenderGridMap()
+    }
   }
 })
 
@@ -2052,20 +3001,123 @@ const fileList = ref([
 ])
 
 // 文件管理（路线/任务组）列表
-const fileManageMap = ref('FA0625')
+const fileManageMap = ref('')
+const fileMapList = ref<string[]>([]) // 文件管理页面的地图列表
 const fileManagePackage = ref('包A')
-const fileManageList = ref([
-  { id: 'A001', type: '地图', name: 'FA0625_展区A', createTime: '2024-12-20 10:30:00' },
-  { id: 'A002', type: '路线', name: 'FA0625_路线B', createTime: '2024-12-21 14:20:00' },
-  { id: 'A003', type: '任务组', name: 'FA0625_任务组C', createTime: '2024-12-22 09:15:00' }
-])
+const fileManageList = ref<any[]>([])
+
+// 获取文件列表
+const fetchNavigationList = async () => {
+  if (!fileManageMap.value) {
+    fileManageList.value = []
+    return
+  }
+  
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  try {
+    let response = await navigationApi.getNavigationList(robotId, fileManageMap.value)
+    
+    // 如果是字符串，尝试解析
+    if (typeof response === 'string') {
+      try {
+        response = JSON.parse(response)
+      } catch (e) {
+        console.error('JSON解析失败:', e)
+      }
+    }
+    
+    if (response && response.code === 200 && response.data) {
+      fileManageList.value = response.data.map((item: any) => ({
+        ...item, // 保留所有原始字段（包括可能存在的path）
+        id: item.name + item.time, // 生成唯一ID
+        name: (item.prefix || '') + item.name, // 加上前缀
+        createTime: item.time,
+      }))
+    } else {
+      console.warn('Invalid response format:', response)
+      fileManageList.value = []
+    }
+  } catch (error) {
+    console.error('获取文件列表失败:', error)
+    fileManageList.value = []
+  }
+}
+
+// 监听地图选择变化
+watch(fileManageMap, () => {
+  fetchNavigationList()
+})
 
 const handleDeleteMap = () => {
-  console.log('删除地图:', fileManageMap.value)
+  if (!fileManageMap.value) {
+    showErrorMessage('请先选择要删除的地图')
+    return
+  }
+  
+  showConfirmDialog({
+    title: '删除地图',
+    message: `确定要删除地图 "${fileManageMap.value}" 吗？此操作不可恢复。`,
+    type: 'warning',
+    onConfirm: async () => {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (!robotId) {
+        showErrorMessage('未选择机器人')
+        return
+      }
+      
+      try {
+        await navigationApi.deleteMap(robotId, fileManageMap.value)
+        showSuccessMessage('删除地图成功')
+        
+        // 清空当前选择
+        fileManageMap.value = ''
+        
+        // 刷新地图列表缓存（从API获取最新列表并更新缓存）
+        await refreshMapListCache()
+        // 更新文件管理页面的地图列表（从缓存读取）
+        fetchFileMapList()
+      } catch (error) {
+        console.error('删除地图失败:', error)
+        showErrorMessage('删除地图失败')
+      }
+    }
+  })
 }
 
 const handleDeletePackage = () => {
-  console.log('删除数据包:', fileManagePackage.value)
+  if (!fileManagePackage.value) {
+    showErrorMessage('请先选择要删除的数据包')
+    return
+  }
+  
+  showConfirmDialog({
+    title: '删除数据包',
+    message: `确定要删除数据包 "${fileManagePackage.value}" 吗？此操作不可恢复。`,
+    type: 'warning',
+    onConfirm: async () => {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (!robotId) {
+        showErrorMessage('未选择机器人')
+        return
+      }
+      
+      try {
+        await navigationApi.deleteDataPackage(robotId, fileManagePackage.value)
+        showSuccessMessage('删除数据包成功')
+        
+        // 清空当前选择
+        fileManagePackage.value = ''
+        
+        // 刷新列表
+        await fetchDataPackageList()
+      } catch (error) {
+        console.error('删除数据包失败:', error)
+        showErrorMessage('删除数据包失败')
+      }
+    }
+  })
 }
 
 const handleAdd = () => {
@@ -2073,9 +3125,28 @@ const handleAdd = () => {
   // TODO: 根据currentTab实现对应的添加逻辑
 }
 
-const handleDelete = (id: string) => {
-  console.log('删除:', id)
-  // TODO: 实现删除逻辑
+const handleDelete = (item: any) => {
+  showConfirmDialog({
+    title: '删除文件',
+    message: `确定要删除 "${item.name}" 吗？此操作不可恢复。`,
+    type: 'warning',
+    onConfirm: async () => {
+      try {
+        await navigationApi.deleteNavigationData({
+          map_name: fileManageMap.value,
+          type: item.type,
+          pwd: item.pwd,
+          is_file: item.is_file,
+          path: '/root/dxr_data/map'
+        })
+        showSuccessMessage('删除成功')
+        fetchNavigationList()
+      } catch (error) {
+        console.error('删除失败:', error)
+        showErrorMessage('删除失败')
+      }
+    }
+  })
 }
 </script>
 
@@ -3211,4 +4282,249 @@ const handleDelete = (id: string) => {
   font-size: 13px;
   font-weight: 600;
 }
+
+/* 录包对话框样式 */
+.recording-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.recording-dialog-card {
+  background: linear-gradient(135deg, #0a2a3a 0%, #0f1f2e 100%);
+  border: 1px solid rgba(103, 213, 253, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  min-width: 400px;
+  max-width: 500px;
+}
+
+.recording-dialog-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.2);
+  font-size: 16px;
+  font-weight: 600;
+  color: #67d5fd;
+}
+
+.recording-dialog-body {
+  padding: 24px;
+}
+
+.recording-input {
+  width: 100%;
+  height: 40px;
+  background: #0c3c56;
+  border: 1px solid rgba(38, 131, 182, 0.8);
+  border-radius: 4px;
+  padding: 0 12px;
+  color: #67d5fd;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.recording-input:focus {
+  border-color: #67d5fd;
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
+}
+
+.recording-dialog-actions {
+  padding: 16px 24px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  border-top: 1px solid rgba(103, 213, 253, 0.1);
+}
+
+
+/* 循迹避障模式选项样式 */
+.obs-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.obs-mode-option {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(12, 60, 86, 0.5);
+  border: 2px solid rgba(38, 131, 182, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.obs-mode-option:hover {
+  background: rgba(12, 60, 86, 0.8);
+  border-color: rgba(103, 213, 253, 0.6);
+  transform: translateX(4px);
+}
+
+.obs-mode-option.active {
+  background: rgba(103, 213, 253, 0.15);
+  border-color: #67d5fd;
+  box-shadow: 0 0 12px rgba(103, 213, 253, 0.3);
+}
+
+.obs-mode-option input[type="radio"] {
+  margin-right: 12px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #67d5fd;
+}
+
+.obs-mode-option span {
+  color: #b8dcf5;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.obs-mode-option.active span {
+  color: #67d5fd;
+}
+
+
+/* 文件管理样式 */
+.file-manage-content {
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: calc(100vh - 260px);
+  overflow: hidden;
+}
+
+.file-manage-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.2);
+}
+
+.file-manage-label {
+  color: #b8dcf5;
+  font-size: 14px;
+}
+
+.file-manage-package-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.file-table {
+  flex: 1;
+  background: rgba(10, 42, 58, 0.6);
+  border: 1px solid rgba(103, 213, 253, 0.2);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-table-header {
+  display: flex;
+  background: rgba(12, 60, 86, 0.5);
+  border-bottom: 1px solid rgba(103, 213, 253, 0.2);
+  padding: 12px 16px;
+  font-weight: 600;
+  color: #67d5fd;
+  flex-shrink: 0; /* 防止头部被压缩 */
+}
+
+.file-table-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 滚动条样式 */
+.file-table-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.file-table-body::-webkit-scrollbar-track {
+  background: rgba(10, 42, 58, 0.3);
+}
+
+.file-table-body::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 3px;
+}
+
+.file-table-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
+}
+
+.file-table-row {
+  display: flex;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.1);
+  color: #b8dcf5;
+  transition: background 0.2s;
+}
+
+.file-table-row:hover {
+  background: rgba(12, 60, 86, 0.3);
+}
+
+.file-table-cell {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-table-check {
+  flex: 0 0 60px;
+  text-align: center;
+}
+
+.file-table-name {
+  flex: 2;
+}
+
+.file-table-action {
+  flex: 0 0 100px;
+  display: flex;
+  justify-content: center;
+}
+
+.file-delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: #fd6767;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.file-delete-btn:hover {
+  background: rgba(253, 103, 103, 0.1);
+}
+
+.file-delete-btn img {
+  width: 16px;
+  height: 16px;
+}
+
+
 </style>

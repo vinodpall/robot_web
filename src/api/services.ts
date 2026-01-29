@@ -1185,6 +1185,10 @@ export const navigationApi = {
   getMapList: (robotId: string) => {
     return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/map_list`)
   },
+  // 删除地图
+  deleteMap: (robotId: string, mapName: string) => {
+    return apiClient.delete(`/navigation/${robotId}/map/${mapName}`)
+  },
   // 导航控制
   controlNavigation: (robotId: string, data: { action: number; map_name: string }) => {
     return apiClient.post(`/navigation/${robotId}/ctrl_nav`, data)
@@ -1254,8 +1258,8 @@ export const navigationApi = {
     action: number;
     data_name: string;
   }) => {
-    // 后端接口路径按照 /v1/navigation/{robot_id}/data_record
-    return apiClient.post(`/v1/navigation/${robotId}/data_record`, data)
+    // 后端接口路径按照 /navigation/{robot_id}/data_record
+    return apiClient.post(`/navigation/${robotId}/data_record`, data)
   },
   // INS控制
   insControl: (robotId: string, data: {
@@ -1279,8 +1283,66 @@ export const navigationApi = {
   // 取消多任务组
   cancelMultiTaskGroup: (robotId: string) => {
     return apiClient.post(`/multitasks/${robotId}/cancel_multitask_group`, {})
+  },
+  // 设置障碍处理模式
+  setObsHandle: (robotId: string, data: {
+    action: number; // 0: 近障, 1: 停障, 2: 绕障
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/set_obs_handle`, data)
+  },
+  // GPS控制
+  useGps: (robotId: string, data: {
+    action: number; // 0: 关闭GPS, 1: 开启GPS
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/use_gps`, data)
+  },
+  // 获取GPS状态
+  getGpsStatus: (robotId: string) => {
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: number }; request_id: string }>(`/navigation/${robotId}/use_gps`)
+  },
+  // 获取数据包列表
+  getDataList: (robotId: string) => {
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/data_list`)
+  },
+  // 删除数据包
+  deleteDataPackage: (robotId: string, dataName: string) => {
+    return apiClient.delete(`/navigation/${robotId}/data/${dataName}`)
+  },
+  // 获取文件列表
+  getNavigationList: (robotId: string, mapName: string, path?: string) => {
+    return apiClient.get<{ code: number; msg: string; data: any[] }>('/navigation_list', {
+      map_name: mapName,
+      path
+    }, {
+      baseURL: '' // 覆盖 baseURL，请求根路径下的 /navigation_list
+    })
+  },
+  // 删除导航数据
+  deleteNavigationData: (data: {
+    map_name: string;
+    type: string;
+    pwd?: string;
+    is_file?: number;
+    path?: string;
+  }) => {
+    // 转换为 URLSearchParams
+    const params = new URLSearchParams()
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value))
+      }
+    })
+
+    return apiClient.post<{ code: number; msg: string }>('/navigation_delete', params.toString(), {
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded'
+      },
+      baseURL: '' // 覆盖 baseURL
+    })
   }
 }
+
+
 
 // 摄像头相关接口
 export interface CameraInfo {
@@ -1354,6 +1416,66 @@ export const mapFileApi = {
     }
 
     return results
+  },
+
+  // 上传单个地图文件
+  uploadMapFile: async (robotIp: string, mapName: string, fileName: string, file: Blob): Promise<boolean> => {
+    // 通过 Vite 代理，避免 CORS 问题
+    // remote_path 只包含目录路径，不包含文件名
+    const remotePath = `/root/dxr_data/map/${mapName}`
+    const url = `/upload_single_file`
+
+    const formData = new FormData()
+    formData.append('file', file, fileName)
+    formData.append('remote_path', remotePath)  // remote_path 作为 form data 字段
+
+    console.log('上传文件详情:', {
+      url,
+      remotePath,
+      fileName,
+      fileSize: file.size
+    })
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        mode: 'cors',
+        body: formData
+      })
+
+      if (!response.ok) {
+        console.error(`上传文件失败: ${fileName}, 状态: ${response.status}`)
+        const responseText = await response.text()
+        console.error('响应内容:', responseText)
+        return false
+      }
+      console.log('上传成功')
+      return true
+    } catch (error) {
+      console.error(`上传文件失败: ${fileName}`, error)
+      return false
+    }
+  },
+
+  // 下载轨迹文件
+  downloadTrajectoryFile: async (trajectoryName: string): Promise<Blob | null> => {
+    // 通过 Vite 代理，避免 CORS 问题
+    const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt`
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors'
+      })
+      if (!response.ok) {
+        console.error(`下载轨迹文件失败: ${trajectoryName}, 状态: ${response.status}`)
+        return null
+      }
+      return await response.blob()
+    } catch (error) {
+      console.error(`下载轨迹文件失败: ${trajectoryName}`, error)
+      return null
+    }
   }
+
 }
 
