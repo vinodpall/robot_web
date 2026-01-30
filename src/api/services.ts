@@ -1201,6 +1201,35 @@ export const navigationApi = {
   getTaskpointList: (robotId: string, trackName: string) => {
     return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/taskpoint_list`, { track_name: trackName })
   },
+  // 获取所有循迹任务点列表
+  getAllTrackTaskList: (robotId: string) => {
+    return apiClient.get<{
+      data: Array<{
+        createtime: string;
+        no_switch: string;
+        preset?: string;
+        remark?: string;
+        task_id: string;
+        theta: string;
+        time: string;
+        track_name: string;
+        track_point_name: string;
+        type: string;
+        type_text: string;
+        x: string;
+        y: string;
+        z?: string;
+        cam_key?: string;
+        extra?: string;
+        gait?: string;
+        ground?: string;
+        nostop?: string;
+        presetID?: string;
+        type_id?: string;
+      }>;
+      request_id: string;
+    }>(`/tracks/${robotId}/alltask_list`)
+  },
   // 获取发布点任务列表
   getPointTaskList: (robotId: string) => {
     return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/task_list`)

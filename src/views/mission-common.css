@@ -1,4 +1,4 @@
-/* 公共样式：航线管理、任务记录等页面通用 */
+﻿/* 公共样式：航线管理、任务记录等页面通用 */
 
 .drone-control-main {
   display: flex;
@@ -926,7 +926,7 @@
     gap: 20px; /* 在高分辨率下稍微减少间距 */
   }
 } 
-/* ��״̬������״̬������״̬ */
+/* ��״̬������״̬������״̬ */
 .mission-loading,
 .mission-empty,
 .mission-error {
@@ -1030,7 +1030,7 @@
 .file-table-header,
 .file-table-row {
   display: grid;
-  grid-template-columns: 60px 1fr 1fr 100px 100px 100px 150px 150px 100px 140px;
+  grid-template-columns: 80px 180px 200px 200px 200px 200px 180px 1fr 280px;
   align-items: center;
 }
 

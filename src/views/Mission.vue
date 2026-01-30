@@ -57,35 +57,47 @@
                 <button class="mission-btn mission-btn-secondary">预览</button>
               </div>
             </div>
-            <div class="file-table">
-              <div class="file-table-header">
-                <div class="file-table-cell" style="width: 80px;">序号</div>
-                <div class="file-table-cell" style="width: 120px;">任务类型</div>
-                <div class="file-table-cell" style="width: 100px;">X坐标</div>
-                <div class="file-table-cell" style="width: 100px;">Y坐标</div>
-                <div class="file-table-cell" style="width: 100px;">Z坐标</div>
-                <div class="file-table-cell" style="width: 100px;">角度</div>
-                <div class="file-table-cell" style="width: 120px;">预置点</div>
-                <div class="file-table-cell" style="flex: 1;">描述</div>
-                <div class="file-table-cell file-table-action" style="width: 120px;">操作</div>
+            <div class="file-table" style="min-height: 600px;">
+              <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center;">
+                <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
+                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">任务类型</div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">X坐标</div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">Y坐标</div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">Z坐标</div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">角度</div>
+                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">预置点</div>
+                <div class="file-table-cell" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
+                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
+              <!-- 显示实际数据行 -->
               <template v-if="waypointsData.length > 0">
-                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
-                  <div class="file-table-cell" style="width: 80px;">{{ waypoint.index + 1 }}</div>
-                  <div class="file-table-cell" style="width: 120px;">{{ waypoint.type || '-' }}</div>
-                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.x || '-' }}</div>
-                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.y || '-' }}</div>
-                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.z || '-' }}</div>
-                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.angle || '-' }}</div>
-                  <div class="file-table-cell" style="width: 120px;">{{ waypoint.preset || '-' }}</div>
-                  <div class="file-table-cell file-table-name" style="flex: 1;">{{ waypoint.description || '-' }}</div>
-                  <div class="file-table-cell file-table-action" style="width: 120px;">
-                    <button class="mission-btn mission-btn-secondary" disabled style="min-width: 80px; padding: 0 12px;">删除</button>
+                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index" style="min-height: 60px;">
+                  <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">{{ waypoint.index + 1 }}</div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.x || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.y || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.z || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.angle || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.preset || '-' }}</div>
+                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">{{ waypoint.description || '-' }}</div>
+                  <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
+                    <button class="mission-btn mission-btn-primary" disabled style="width: 50px !important; min-width: 50px !important; max-width: 50px !important; padding: 6px 0; text-align: center;">编辑</button>
+                    <button class="mission-btn mission-btn-stop" disabled style="width: 50px !important; min-width: 50px !important; max-width: 50px !important; padding: 6px 0; text-align: center;">删除</button>
+                    <button class="mission-btn mission-btn-secondary" disabled style="width: 50px !important; min-width: 50px !important; max-width: 50px !important; padding: 6px 0; text-align: center;">到点</button>
                   </div>
                 </div>
               </template>
-              <div v-else class="mission-empty">
-                暂无航点数据
+              <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
+              <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i" style="min-height: 60px;">
+                <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
+                <div class="file-table-cell" style="flex: 1; text-align: center;"></div>
+                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center;"></div>
               </div>
             </div>
           </div>
@@ -602,12 +614,47 @@ watch(selectedTrack, (newValue, oldValue) => {
   }
 }, { immediate: false })
 
-// 计算属性：获取航点数据
+// 计算属性：获取航点数据（从缓存的循迹任务点列表中筛选）
 const waypointsData = computed(() => {
-  if (!waylineDetail.value || !waylineDetail.value.waylines || waylineDetail.value.waylines.length === 0) {
+  // 从 localStorage 获取所有循迹任务点列表
+  const cachedData = localStorage.getItem('all_track_task_list')
+  if (!cachedData) {
     return []
   }
-  return waylineDetail.value.waylines[0].waypoints || []
+  
+  try {
+    const allTaskList = JSON.parse(cachedData)
+    
+    // 如果没有选择路线或任务组，返回空数组
+    if (!selectedRouteName.value || !selectedTaskGroupName.value) {
+      return []
+    }
+    
+    // 根据 track_name 和 track_point_name 筛选
+    const filteredTasks = allTaskList.filter((task: any) => {
+      return task.track_name === selectedRouteName.value && 
+             task.track_point_name === selectedTaskGroupName.value
+    })
+    
+    // 转换为表格需要的格式
+    return filteredTasks.map((task: any, index: number) => ({
+      index: index,
+      type: task.type_text || task.type || '-',
+      coordinates: {
+        x: task.x || '-',
+        y: task.y || '-',
+        z: task.z || '-'
+      },
+      angle: task.theta || '-',
+      preset: task.preset || task.presetID || '-',
+      description: task.remark || '-',
+      // 保留原始数据以备后用
+      rawData: task
+    }))
+  } catch (err) {
+    console.error('解析循迹任务点列表失败:', err)
+    return []
+  }
 })
 
 // 获取当前航线名称

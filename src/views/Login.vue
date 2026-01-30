@@ -85,7 +85,7 @@ import { useUserStore } from '../stores/user'
 import { useAuth } from '../composables/useApi'
 import { initUserPermissions, initAllPermissions } from '../utils/initPermissions'
 import { debugPermissions } from '../utils/permissionDebug'
-import { robotApi, cameraApi } from '../api/services'
+import { robotApi, cameraApi, navigationApi } from '../api/services'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -183,6 +183,19 @@ const handleLogin = async () => {
                 } catch (e) {}
               }
             }
+          }
+          
+          // 获取所有循迹任务点列表
+          try {
+            const trackTaskResponse = await navigationApi.getAllTrackTaskList(robotId)
+            if (trackTaskResponse && trackTaskResponse.data) {
+              // 存储到本地缓存
+              localStorage.setItem('all_track_task_list', JSON.stringify(trackTaskResponse.data))
+              console.log('所有循迹任务点列表已缓存，共', trackTaskResponse.data.length, '条')
+            }
+          } catch (trackErr) {
+            console.error('获取循迹任务点列表失败:', trackErr)
+            // 获取失败不影响登录流程
           }
         }
       } catch (cameraErr) {
