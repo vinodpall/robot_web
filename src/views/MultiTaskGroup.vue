@@ -26,8 +26,11 @@
           <div class="mission-content-wrapper">
             <div class="mission-toolbar">
               <span class="mission-toolbar-label" style="margin-right: -8px;">多任务组名称：</span>
-              <select class="mission-toolbar-select" style="min-width: 180px;">
-                <option value="">多任务组-001</option>
+              <select v-model="selectedMultiTaskName" class="mission-toolbar-select" style="min-width: 180px;">
+                <option v-if="multiTaskList.length === 0" value="">暂无任务组</option>
+                <option v-for="group in multiTaskList" :key="group.multitask_id" :value="group.multitask_name">
+                  {{ group.multitask_name }}
+                </option>
               </select>
 
               <div style="display: flex; gap: 12px; margin-left: 8px;">
@@ -43,16 +46,16 @@
                 异常时原地启动
               </label>
             </div>
-            <div class="file-table">
-              <div class="file-table-header">
-                <div class="file-table-cell" style="width: 80px;">序号</div>
-                <div class="file-table-cell">地图</div>
-                <div class="file-table-cell">轨迹</div>
-                <div class="file-table-cell">任务组</div>
-                <div class="file-table-cell">圈数</div>
-                <div class="file-table-cell">避障模式</div>
-                <div class="file-table-cell">原点发布</div>
-                <div class="file-table-cell file-table-action" style="width: 240px;">操作</div>
+            <div class="file-table" style="min-height: 600px;">
+              <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center; display: flex;">
+                <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
+                <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">地图</div>
+                <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">轨迹</div>
+                <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">任务组</div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">圈数</div>
+                <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center; display: flex; align-items: center; justify-content: center;">避障模式</div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">原点发布</div>
+                <div class="file-table-cell file-table-action" style="min-width: 360px; width: 360px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
               <div v-if="loading" class="mission-loading">
                 加载中...
@@ -61,22 +64,45 @@
                 暂无任务组数据
               </div>
               <template v-else>
-                <div class="file-table-row" v-for="taskGroup in taskGroups" :key="taskGroup.id">
-                  <div class="file-table-cell" style="width: 80px;">{{ taskGroup.index ?? taskGroup.id ?? '-' }}</div>
-                  <div class="file-table-cell">{{ taskGroup.mapName || '-' }}</div>
-                  <div class="file-table-cell">{{ taskGroup.trackName || '-' }}</div>
-                  <div class="file-table-cell">{{ taskGroup.groupName || taskGroup.name || '-' }}</div>
-                  <div class="file-table-cell">{{ taskGroup.laps || '-' }}</div>
-                  <div class="file-table-cell">{{ taskGroup.obstacleMode || '-' }}</div>
-                  <div class="file-table-cell">{{ taskGroup.originPublish || '-' }}</div>
-                  <div class="file-table-cell file-table-action" style="width: 240px;">
-                    <button class="mission-btn mission-btn-secondary" @click="handleEditTaskGroup(taskGroup)">编辑</button>
-                    <button class="mission-btn mission-btn-secondary" @click="handleDeleteTaskGroup">删除</button>
-                    <button class="mission-btn mission-btn-secondary">上移</button>
-                    <button class="mission-btn mission-btn-secondary">下移</button>
+                <div class="file-table-row" v-for="(task, index) in currentTaskGroupList" :key="index" style="min-height: 60px; display: flex;">
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ index + 1 }}</div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.map_name || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.task_name || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.task_pointname || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.circle || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.obs_mode || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.is_origin_publish === 1 ? '是' : '否' }}</div>
+                  <div class="file-table-cell file-table-action" style="min-width: 360px; width: 360px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
+                    <button class="action-btn action-btn-edit" @click="handleEditTaskGroup(task)">
+                      <img :src="editIcon" alt="编辑" />
+                      编辑
+                    </button>
+                    <button class="action-btn action-btn-delete" @click="handleDeleteTaskGroup">
+                      <img :src="deleteIcon" alt="删除" />
+                      删除
+                    </button>
+                    <button class="action-btn action-btn-secondary" style="padding: 0 8px; color: #67d5fd;">
+                      <img :src="upIcon" alt="上移" style="width: 14px; height: 14px;" />
+                      上移
+                    </button>
+                    <button class="action-btn action-btn-secondary" style="padding: 0 8px; color: #67d5fd;">
+                      <img :src="downIcon" alt="下移" style="width: 14px; height: 14px;" />
+                      下移
+                    </button>
                   </div>
                 </div>
               </template>
+              <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
+              <div class="file-table-row" v-for="i in Math.max(0, 10 - currentTaskGroupList.length)" :key="'empty-' + i" style="min-height: 60px; display: flex;">
+                <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;"></div>
+                <div class="file-table-cell file-table-action" style="min-width: 360px; width: 360px; text-align: center;"></div>
+              </div>
             </div>
           </div>
         </section>
@@ -86,12 +112,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
 import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
+import editIcon from '@/assets/source_data/svg_data/robot_source/edit.png'
+import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
+import upIcon from '@/assets/source_data/svg_data/robot_source/up.png'
+import downIcon from '@/assets/source_data/svg_data/robot_source/down.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -110,7 +140,13 @@ const handleTabClick = (tab: any) => {
 }
 
 const loading = ref(false)
-const taskGroups = ref<any[]>([])
+const multiTaskList = ref<any[]>([])
+const selectedMultiTaskName = ref('')
+const currentTaskGroupList = ref<any[]>([])
+
+// Deprecated taskGroups ref, using computed or updated currentTaskGroupList
+// const taskGroups = ref<any[]>([])
+const taskGroups = computed(() => currentTaskGroupList.value) // For template compatibility logic check
 const exceptionStart = ref(false)
 
 const getStatusClass = (status: string) => {
@@ -147,16 +183,47 @@ const handleEditTaskGroup = (taskGroup: any) => {
 onMounted(() => {
   // 初始化加载任务组数据
   loading.value = true
-  setTimeout(() => {
-    // 模拟数据加载
-    taskGroups.value = []
+  
+  try {
+    const cachedData = localStorage.getItem('cached_multi_task_list')
+    if (cachedData) {
+      const parsedData = JSON.parse(cachedData)
+      if (Array.isArray(parsedData)) {
+        multiTaskList.value = parsedData
+        // Default select first one
+        if (multiTaskList.value.length > 0) {
+          selectedMultiTaskName.value = multiTaskList.value[0].multitask_name
+        }
+      }
+    }
+  } catch (e) {
+    console.error('加载缓存多任务组数据失败', e)
+  } finally {
     loading.value = false
-  }, 500)
+  }
 })
+
+watch(selectedMultiTaskName, (newVal) => {
+  if (!newVal) {
+    currentTaskGroupList.value = []
+    return
+  }
+  const selectedGroup = multiTaskList.value.find(item => item.multitask_name === newVal)
+  if (selectedGroup && selectedGroup.multitask_list) {
+    currentTaskGroupList.value = selectedGroup.multitask_list
+  } else {
+    currentTaskGroupList.value = []
+  }
+}, { immediate: true })
 </script>
 
 <style>
 @import './mission-common.css';
+
+/* Fix potential whitespace issue */
+.file-table-row {
+  width: 100%;
+}
 
 /* 多任务组标题左对齐 */
 .mission-top-header.mission-top-header-left {
@@ -208,5 +275,46 @@ onMounted(() => {
   background: rgba(144, 147, 153, 0.2);
   color: #909399;
   border: 1px solid rgba(144, 147, 153, 0.3);
+}
+
+/* 列表操作按钮样式 */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 8px;
+  min-width: auto;
+}
+
+.action-btn img {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn-edit {
+  color: #67d5fd;
+}
+
+.action-btn-edit img {
+  filter: drop-shadow(0 0 4px rgba(103, 213, 253, 0.4));
+}
+
+.action-btn-delete {
+  color: #ff4d4f;
+}
+
+.action-btn-delete img {
+  filter: drop-shadow(0 0 4px rgba(255, 77, 79, 0.4));
+}
+
+/* Override grid layout from mission-common.css */
+.file-table-header,
+.file-table-row {
+  display: flex !important;
+  width: 100%;
 }
 </style>

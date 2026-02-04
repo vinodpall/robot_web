@@ -121,7 +121,7 @@ export class ApiClient {
     }
 
     // POST请求
-    async post<T>(endpoint: string, data?: any, options?: RequestInit & { responseType?: 'blob' }): Promise<T> {
+    async post<T>(endpoint: string, data?: any, options?: RequestInit & { responseType?: 'blob', baseURL?: string }): Promise<T> {
         let body: string | undefined
 
         // 如果data是字符串且options中指定了Content-Type为form-urlencoded，直接使用
@@ -158,8 +158,11 @@ export class ApiClient {
     }
 
     // DELETE请求
-    async delete<T>(endpoint: string): Promise<T> {
-        return this.request<T>(endpoint, { method: 'DELETE' })
+    async delete<T>(endpoint: string, data?: any): Promise<T> {
+        return this.request<T>(endpoint, {
+            method: 'DELETE',
+            body: data ? JSON.stringify(data) : undefined
+        })
     }
 
     // 构建带参数的URL

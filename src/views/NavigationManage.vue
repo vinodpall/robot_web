@@ -325,7 +325,13 @@
                     </span>
                   </div>
                 </div>
-                <button class="map-btn map-btn-secondary track-btn" @click="handleTrackRecord">录制路线</button>
+                <button 
+                  class="map-btn map-btn-secondary track-btn" 
+                  :class="{'map-btn-danger': isTrackRecording}"
+                  @click="handleTrackRecord"
+                >
+                  {{ isTrackRecording ? '停止录制' : '录制路线' }}
+                </button>
                 <div class="track-toolbar-group">
                   <span class="track-label">路线:</span>
                   <div class="track-select-wrapper">
@@ -410,27 +416,37 @@
                   <button class="map-btn map-btn-danger" @click="handleDeletePackage">删除数据包</button>
                 </div>
               </div>
-              <div class="file-table">
-                <div class="file-table-header">
-                  <div class="file-table-cell file-table-check">序号</div>
-                  <div class="file-table-cell">类型</div>
-                  <div class="file-table-cell file-table-name">名称</div>
-                  <div class="file-table-cell">创建时间</div>
-                  <div class="file-table-cell file-table-action">操作</div>
+              <div class="file-table" style="min-height: 600px;">
+                <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center; display: flex;">
+                  <div class="file-table-cell file-table-check" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">类型</div>
+                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">名称</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">创建时间</div>
+                  <div class="file-table-cell file-table-action" style="min-width: 150px; width: 150px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
                 </div>
-                <div class="file-table-body">
-                  <div class="file-table-row" v-for="(item, index) in fileManageList" :key="item.id">
-                    <div class="file-table-cell file-table-check">{{ index + 1 }}</div>
-                    <div class="file-table-cell">{{ item.type }}</div>
-                    <div class="file-table-cell file-table-name">{{ item.name }}</div>
-                    <div class="file-table-cell">{{ item.createTime }}</div>
-                    <div class="file-table-cell file-table-action">
-                      <button class="file-delete-btn" @click="handleDelete(item)">
-                        <img :src="rubbishIcon" alt="删除" />
+                
+                <template v-if="fileManageList.length > 0">
+                  <div class="file-table-row" v-for="(item, index) in fileManageList" :key="item.id" style="min-height: 60px; display: flex; align-items: center;">
+                    <div class="file-table-cell file-table-check" style="min-width: 80px; width: 80px; text-align: center;">{{ index + 1 }}</div>
+                    <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">{{ item.type }}</div>
+                    <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">{{ item.name }}</div>
+                    <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ item.createTime }}</div>
+                    <div class="file-table-cell file-table-action" style="min-width: 150px; width: 150px; text-align: center; display: flex; justify-content: center; align-items: center;">
+                      <button class="action-btn action-btn-delete" @click="handleDelete(item)">
+                        <img :src="deleteIcon" alt="删除" />
                         删除
                       </button>
                     </div>
                   </div>
+                </template>
+                
+                <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
+                <div class="file-table-row" v-for="i in Math.max(0, 10 - fileManageList.length)" :key="'empty-' + i" style="min-height: 60px; display: flex; align-items: center;">
+                  <div class="file-table-cell file-table-check" style="min-width: 80px; width: 80px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;"></div>
+                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                  <div class="file-table-cell file-table-action" style="min-width: 150px; width: 150px; text-align: center;"></div>
                 </div>
               </div>
             </div>
@@ -497,6 +513,29 @@
       </div>
     </div>
 
+    <!-- 路线录制命名弹窗 -->
+    <div v-if="trackRecordDialog.visible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card">
+        <div class="recording-dialog-header">录制路线</div>
+        <div class="recording-dialog-body">
+          <div style="display: flex; align-items: center; width: 100%; border: 1px solid #1fa3d3; border-radius: 4px; background: rgba(5, 26, 48, 0.6); overflow: hidden;">
+            <span style="color: #67d5fd; font-size: 14px; padding: 0 12px; background: rgba(31, 163, 211, 0.15); height: 40px; line-height: 40px; border-right: 1px solid #1fa3d3; white-space: nowrap;">{{ trackRecordMap }}_</span>
+            <input 
+              v-model="trackRecordDialog.trackName" 
+              placeholder="输入路线名称" 
+              style="flex: 1; min-width: 0; background: transparent; border: none; color: #fff; padding: 0 12px; height: 40px; outline: none; font-size: 14px;" 
+            />
+          </div>
+        </div>
+        <div class="recording-dialog-actions">
+          <button class="map-btn" @click="cancelTrackRecord">取消</button>
+          <button class="map-btn map-btn-primary" @click="confirmTrackRecord" :disabled="trackRecordDialog.loading">
+            {{ trackRecordDialog.loading ? '提交中...' : '开始录制' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 确认对话框 -->
     <ConfirmDialog
       :show="confirmDialog.show"
@@ -546,6 +585,7 @@ import mapRollbackIcon from '@/assets/source_data/svg_data/robot_source/map_roll
 import mapInitIcon from '@/assets/source_data/svg_data/robot_source/map_init.svg'
 import mapUploadIcon from '@/assets/source_data/svg_data/robot_source/map_upload.svg'
 import { saveTrajectoryFile, getTrajectoryFile } from '@/utils/trajectoryDB'
+import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 
 // 导航点云图相关变量（需要在前面声明，因为在cleanupNavPointCloud中使用）
 let navPointCloudInitialized = false
@@ -865,12 +905,117 @@ watch(trackRecordLine, async (newLine) => {
   }
 })
 
+// 路线录制状态
+const isTrackRecording = ref(false)
+const trackRecordDialog = ref({
+  visible: false,
+  trackName: '',
+  loading: false
+})
+
 const handleTrackRecord = () => {
-  console.log('录制路线')
+  if (isTrackRecording.value) {
+    // 正在录制 -> 停止录制
+    stopTrackRecord()
+  } else {
+    // 未录制 -> 打开弹窗开始录制
+    if (!trackRecordMap.value) {
+      alert('请先选择地图')
+      return
+    }
+    trackRecordDialog.value.trackName = ''
+    trackRecordDialog.value.visible = true
+  }
+}
+
+// 停止录制逻辑
+const stopTrackRecord = async () => {
+  if (!confirm('确定要完成录制吗？')) return
+
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  try {
+    // action 0 是停止
+    const response = await navigationApi.trackRecord(robotId, {
+      action: 0,
+      track_name: '' 
+    })
+    
+    isTrackRecording.value = false
+    alert('录制完成')
+    
+    // 刷新列表
+    await fetchAllTrackList()
+    
+  } catch(error: any) {
+      console.error('停止录制失败:', error)
+      alert(`停止录制失败: ${error.message || '未知错误'}`)
+  }
+}
+
+// 确认开始录制
+const confirmTrackRecord = async () => {
+  if (!trackRecordDialog.value.trackName) {
+    alert('请输入路线名称')
+    return
+  }
+  
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  trackRecordDialog.value.loading = true
+  try {
+    const fullTrackName = `${trackRecordMap.value}_${trackRecordDialog.value.trackName}`
+    const response = await navigationApi.trackRecord(robotId, {
+      action: 1, // 开始
+      track_name: fullTrackName
+    })
+    
+    isTrackRecording.value = true
+    trackRecordDialog.value.visible = false
+    alert('开始录制路线')
+  } catch (error: any) {
+    console.error('开始录制失败:', error)
+    alert(`开始录制失败: ${error.message || '未知错误'}`)
+  } finally {
+    trackRecordDialog.value.loading = false
+  }
+}
+
+const cancelTrackRecord = () => {
+  trackRecordDialog.value.visible = false
 }
 
 const handleTrackDelete = () => {
-  console.log('删除路线')
+  if (!trackRecordLine.value) {
+    alert('请先选择要删除的路线') // 保持简单的alert提示，或改用showErrorMessage
+    return
+  }
+  
+  showConfirmDialog({
+    title: '删除路线',
+    message: `确定要删除路线 "${trackRecordLine.value}" 吗？`,
+    type: 'warning',
+    confirmText: '删除',
+    onConfirm: async () => {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (!robotId) return
+      
+      try {
+        await navigationApi.deleteTrack(robotId, {
+          track_name: trackRecordLine.value
+        })
+        showSuccessMessage('删除成功')
+        // 刷新列表
+        await fetchAllTrackList()
+        trackRecordLine.value = ''
+      } catch (error: any) {
+        console.error('删除路线失败:', error)
+        showErrorMessage(`删除失败: ${error.message || '未知错误'}`)
+      }
+    }
+  })
 }
 
 const handleTrackDownload = () => {
@@ -999,8 +1144,24 @@ const handleTrackPreview = async () => {
   }
 }
 
-const handleTrackSmooth = () => {
-  console.log('轨迹平滑')
+const handleTrackSmooth = async () => {
+  if (!trackRecordLine.value) {
+    alert('请先选择要平滑的路线')
+    return
+  }
+  
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  try {
+    await navigationApi.trajectorySmooth(robotId, {
+      track_name: trackRecordLine.value
+    })
+    showSuccessMessage('轨迹平滑处理成功')
+  } catch (error: any) {
+    console.error('轨迹平滑失败:', error)
+    showErrorMessage(`轨迹平滑失败: ${error.message || '未知错误'}`)
+  }
 }
 
 // 导航相关状态
@@ -1080,14 +1241,36 @@ const handleStartNav = () => {
   })
 }
 
-const handlePauseNav = () => {
+const handlePauseNav = async () => {
   console.log('暂停导航')
-  // TODO: 调用暂停导航API
+  try {
+    const robotId = deviceStore.selectedRobotId
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+    await navigationApi.pauseNavigation(robotId, { action: 1 })
+    showSuccessMessage('暂停指令已发送')
+  } catch (err) {
+    console.error('暂停导航失败:', err)
+    showErrorMessage('暂停导航失败')
+  }
 }
 
-const handleResumeNav = () => {
+const handleResumeNav = async () => {
   console.log('暂停恢复')
-  // TODO: 调用恢复导航API
+  try {
+    const robotId = deviceStore.selectedRobotId
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+    await navigationApi.pauseNavigation(robotId, { action: 0 })
+    showSuccessMessage('恢复指令已发送')
+  } catch (err) {
+    console.error('恢复导航失败:', err)
+    showErrorMessage('恢复导航失败')
+  }
 }
 
 const handleStartINS = () => {
@@ -1244,14 +1427,20 @@ const fetchGpsStatus = async () => {
 }
 
 // 获取地图列表（从缓存读取，不需要robotId，但为了保持一致性保留检查逻辑如果后续需要API）
+// 获取地图列表（从缓存读取，不需要robotId，但为了保持一致性保留检查逻辑如果后续需要API）
 const fetchMapList = () => {
   try {
     // 从缓存读取地图列表
     const cached = localStorage.getItem('cached_map_list')
     if (cached) {
       navMapList.value = JSON.parse(cached)
-      // 如果有地图列表且当前未选择地图，默认选择第一个
-      if (navMapList.value.length > 0 && !selectedNavMap.value) {
+      
+      // 尝试恢复选中的地图
+      const cachedMapName = localStorage.getItem('selected_map_name')
+      if (cachedMapName && navMapList.value.includes(cachedMapName)) {
+        selectedNavMap.value = cachedMapName
+      } else if (navMapList.value.length > 0 && !selectedNavMap.value) {
+        // 如果有地图列表且当前未选择地图，默认选择第一个
         selectedNavMap.value = navMapList.value[0]
       }
     } else {
@@ -1261,6 +1450,13 @@ const fetchMapList = () => {
     console.error('读取地图列表缓存失败:', err)
   }
 }
+
+// 监听导航地图选择变化，同步到全局缓存
+watch(selectedNavMap, (newMapName) => {
+  if (newMapName) {
+    localStorage.setItem('selected_map_name', newMapName)
+  }
+})
 
 // 从API刷新地图列表缓存
 const refreshMapListCache = async () => {
@@ -1284,8 +1480,13 @@ const fetchEditMapList = () => {
     const cached = localStorage.getItem('cached_map_list')
     if (cached) {
       editMapList.value = JSON.parse(cached)
-      // 如果有地图列表且当前未选择地图，默认选择第一个
-      if (editMapList.value.length > 0 && !selectedEditMap.value) {
+      
+      // 尝试恢复选中的地图
+      const cachedMapName = localStorage.getItem('selected_map_name')
+      if (cachedMapName && editMapList.value.includes(cachedMapName)) {
+        selectedEditMap.value = cachedMapName
+      } else if (editMapList.value.length > 0 && !selectedEditMap.value) {
+        // 如果有地图列表且当前未选择地图，默认选择第一个
         selectedEditMap.value = editMapList.value[0]
       }
     } else {
@@ -1301,8 +1502,13 @@ const fetchTrackMapList = () => {
   try {
     const cached = localStorage.getItem('cached_map_list')
     if (cached) {
-      trackMapList.value = JSON.parse(cached)  
-      if (trackMapList.value.length > 0 && !trackRecordMap.value) {
+      trackMapList.value = JSON.parse(cached)
+      
+      // 尝试恢复选中的地图
+      const cachedMapName = localStorage.getItem('selected_map_name')
+      if (cachedMapName && trackMapList.value.includes(cachedMapName)) {
+        trackRecordMap.value = cachedMapName
+      } else if (trackMapList.value.length > 0 && !trackRecordMap.value) {
         trackRecordMap.value = trackMapList.value[0]
       }
     } else {
@@ -1325,7 +1531,12 @@ const fetchFileMapList = () => {
         return atIndex > -1 ? mapName.substring(0, atIndex) : mapName
       })
       
-      if (fileMapList.value.length > 0 && !fileManageMap.value) {
+      // 尝试恢复选中的地图
+      const cachedMapName = localStorage.getItem('selected_map_name')
+      // 对于文件管理，如果处理后的列表中包含缓存的名字
+      if (cachedMapName && fileMapList.value.includes(cachedMapName)) {
+        fileManageMap.value = cachedMapName
+      } else if (fileMapList.value.length > 0 && !fileManageMap.value) {
         fileManageMap.value = fileMapList.value[0]
       }
     } else {
@@ -2402,11 +2613,31 @@ const loadGridMap = async (mapName: string) => {
 }
 
 // 监听地图选择变化
+// 监听地图选择变化，同步到全局缓存
+watch(selectedEditMap, (newMap) => {
+  if (newMap) {
+    localStorage.setItem('selected_map_name', newMap)
+    loadGridMap(newMap)
+  }
+})
+
+// 监听地图编辑选择变化
 watch(selectedEditMap, (newMap) => {
   if (newMap) {
     loadGridMap(newMap)
   }
 })
+
+// [新增] 同步地图选择到全局缓存
+watch(selectedEditMap, (newMap) => {
+  if (newMap) localStorage.setItem('selected_map_name', newMap)
+})
+
+watch(trackRecordMap, (newMap) => {
+  if (newMap) localStorage.setItem('selected_map_name', newMap)
+})
+
+
 
 let isDragging = false
 let lastX = 0
@@ -3050,6 +3281,12 @@ watch(fileManageMap, () => {
   fetchNavigationList()
 })
 
+watch(fileManageMap, (newMap) => {
+  if (newMap) localStorage.setItem('selected_map_name', newMap)
+})
+
+
+
 const handleDeleteMap = () => {
   if (!fileManageMap.value) {
     showErrorMessage('请先选择要删除的地图')
@@ -3253,15 +3490,15 @@ const handleDelete = (item: any) => {
 }
 
 .file-manage-content {
-  padding: 12px 16px 20px 16px;
+  padding: 16px 20px 24px;
 }
 
 .file-manage-toolbar {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 16px;
-  padding: 8px 0 12px;
+  margin-bottom: -4px;
+  padding: 0;
 }
 
 .file-manage-package-group {
@@ -3290,27 +3527,18 @@ const handleDelete = (item: any) => {
   background: transparent;
 }
 
-.file-table-header,
-.file-table-row {
-  display: grid;
-  grid-template-columns: 60px 120px 1fr 200px 140px;
-  align-items: center;
-}
-
 .file-table-header {
   background: #1c4b64;
   color: #e9f7ff;
   font-size: 13px;
   font-weight: 600;
   height: 44px;
-  text-align: center;
 }
 
 .file-table-row {
   background: transparent;
   color: #cfe9ff;
   font-size: 13px;
-  height: 44px;
   border-top: 1px solid rgba(45, 111, 145, 0.5);
 }
 
@@ -3337,23 +3565,6 @@ const handleDelete = (item: any) => {
   border-radius: 50%;
   background: #ffffff;
   display: inline-block;
-}
-
-.file-delete-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  color: #fd6767;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.file-delete-btn img {
-  width: 14px;
-  height: 14px;
-  filter: drop-shadow(0 0 4px rgba(253, 103, 103, 0.4));
 }
 
 .nav-page-content {
@@ -3589,6 +3800,33 @@ const handleDelete = (item: any) => {
 .map-btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+
+/* 列表操作按钮样式 */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 8px;
+  min-width: auto;
+}
+
+.action-btn img {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn-delete {
+  color: #ff4d4f;
+}
+
+.action-btn-delete img {
+  filter: drop-shadow(0 0 4px rgba(255, 77, 79, 0.4));
 }
 
 .map-btn-stop {
@@ -4411,7 +4649,6 @@ const handleDelete = (item: any) => {
   align-items: center;
   gap: 16px;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(103, 213, 253, 0.2);
 }
 
 .file-manage-label {

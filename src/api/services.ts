@@ -1253,6 +1253,19 @@ export const navigationApi = {
   getMultiTaskList: (robotId: string) => {
     return apiClient.get<{ msg: { multitask_id: string; multitask_name: string; multitask_list: any[] }[]; request_id: string }>(`/multitasks/${robotId}/multitask_list`)
   },
+  // 获取任务类型列表
+  getTaskTypeList: (robotId: string) => {
+    return apiClient.get<{
+      data: Array<{
+        type: string;
+        type_text: string;
+        iType: number;
+        single: boolean;
+        cn_name: string;
+      }>;
+      request_id: string;
+    }>(`/taskpoints/${robotId}/task_type_list`)
+  },
   // 启动循迹任务
   startTrack: (robotId: string, data: {
     action: number;
@@ -1273,6 +1286,18 @@ export const navigationApi = {
     taskpoint_name: string;
   }) => {
     return apiClient.post(`/navigation/${robotId}/start_track`, data)
+  },
+  // 添加循迹任务点
+  addTrackPoint: (robotId: string, data: any) => {
+    return apiClient.post(`/tracks/${robotId}/add_track_point`, data)
+  },
+  // 更新循迹任务点
+  updateTaskPoint: (robotId: string, data: any) => {
+    return apiClient.put(`/tracks/${robotId}/update_taskpoint`, data)
+  },
+  // 删除循迹任务点
+  deleteTrackPoint: (robotId: string, data: any) => {
+    return apiClient.delete(`/tracks/${robotId}/delete_track_point`, data)
   },
   // MSF控制
   msfControl: (robotId: string, data: {
@@ -1368,6 +1393,26 @@ export const navigationApi = {
       },
       baseURL: '' // 覆盖 baseURL
     })
+  },
+  // 路线录制
+  trackRecord: (robotId: string, data: { action: number; track_name: string }) => {
+    return apiClient.post(`/navigation/${robotId}/track_record`, data)
+  },
+  // 删除录制的路线
+  deleteTrack: (robotId: string, data: { track_name: string }) => {
+    return apiClient.post(`/navigation/${robotId}/delete_track`, data)
+  },
+  // 轨迹平滑
+  trajectorySmooth: (robotId: string, data: { track_name: string }) => {
+    return apiClient.post(`/navigation/${robotId}/trajectory_smooth`, data)
+  },
+  // 一键充电/到点
+  oneKeyRecharge: (robotId: string, data: { sn: string; action: number; chargeIndex: string }) => {
+    return apiClient.post(`/charging/${robotId}/one_key_recharge`, data)
+  },
+  // 暂停导航/循迹
+  pauseNavigation: (robotId: string, data: any = {}) => {
+    return apiClient.post(`/navigation/${robotId}/nav_pause`, data)
   }
 }
 

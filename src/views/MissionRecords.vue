@@ -1,5 +1,5 @@
 <template>
-  <div class="drone-control-main">
+  <div class="drone-control-main" @click="closeDropdown">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
       <div class="sidebar-tabs">
@@ -34,48 +34,70 @@
             <div class="mission-toolbar">
               <!-- 任务组选择 -->
               <span class="mission-toolbar-label" style="margin-right: -8px;">任务组名称：</span>
-              <select class="mission-toolbar-select" style="min-width: 180px;">
-                <option value="">FA0625_new_line_mode1</option>
+              <select v-model="selectedPointTaskId" class="mission-toolbar-select" style="min-width: 180px;">
+                <option v-if="filteredPointTaskList.length === 0" value="">暂无任务组</option>
+                <option v-for="task in filteredPointTaskList" :key="task.task_id" :value="task.task_id">{{ task.task_name }}</option>
               </select>
               
               <!-- 操作按钮组 -->
               <div style="display: flex; gap: 12px; margin-left: 8px;">
-                <button class="mission-btn mission-btn-primary">开始</button>
-                <button class="mission-btn mission-btn-secondary">暂停</button>
+                <button class="mission-btn mission-btn-primary" @click="handleStartTask">开始</button>
+                <button class="mission-btn mission-btn-secondary" @click="handleStopTask">暂停</button>
                 <button class="mission-btn mission-btn-primary">添加任务组</button>
                 <button class="mission-btn mission-btn-stop">删除任务组</button>
-                <button class="mission-btn mission-btn-primary">添加任务</button>
+                <button class="mission-btn mission-btn-primary" @click="handleAddTask">添加任务</button>
               </div>
             </div>
-            <div class="file-table">
-              <div class="file-table-header">
-                <div class="file-table-cell" style="width: 80px;">序号</div>
-                <div class="file-table-cell" style="width: 120px;">任务类型</div>
-                <div class="file-table-cell" style="width: 100px;">X坐标</div>
-                <div class="file-table-cell" style="width: 100px;">Y坐标</div>
-                <div class="file-table-cell" style="width: 100px;">Z坐标</div>
-                <div class="file-table-cell" style="width: 100px;">角度</div>
-                <div class="file-table-cell" style="width: 120px;">预置点</div>
-                <div class="file-table-cell" style="flex: 1;">描述</div>
-                <div class="file-table-cell file-table-action" style="width: 120px;">操作</div>
+            <div class="file-table" style="min-height: 600px;">
+              <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center;">
+                <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
+                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">任务类型</div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">X坐标</div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">Y坐标</div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">Z坐标</div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">角度</div>
+                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">预置点</div>
+                <div class="file-table-cell" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
+                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
+              <!-- 显示实际数据行 -->
               <template v-if="waypointsData.length > 0">
-                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
-                  <div class="file-table-cell" style="width: 80px;">{{ waypoint.index + 1 }}</div>
-                  <div class="file-table-cell" style="width: 120px;">{{ waypoint.type || '-' }}</div>
-                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.x || '-' }}</div>
-                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.y || '-' }}</div>
-                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.coordinates?.z || '-' }}</div>
-                  <div class="file-table-cell" style="width: 100px;">{{ waypoint.angle || '-' }}</div>
-                  <div class="file-table-cell" style="width: 120px;">{{ waypoint.preset || '-' }}</div>
-                  <div class="file-table-cell file-table-name" style="flex: 1;">{{ waypoint.description || '-' }}</div>
-                  <div class="file-table-cell file-table-action" style="width: 120px;">
-                    <button class="mission-btn mission-btn-secondary" disabled style="min-width: 80px; padding: 0 12px;">删除</button>
+                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index" style="min-height: 60px;">
+                  <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">{{ waypoint.index + 1 }}</div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.x || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.y || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.z || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.angle || '-' }}</div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.preset || '-' }}</div>
+                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">{{ waypoint.description || '-' }}</div>
+                  <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
+                    <button class="action-btn action-btn-edit">
+                      <img :src="editIcon" alt="编辑" />
+                      编辑
+                    </button>
+                    <button class="action-btn action-btn-delete">
+                      <img :src="deleteIcon" alt="删除" />
+                      删除
+                    </button>
+                    <button class="action-btn action-btn-arrive">
+                      <img :src="arriveIcon" alt="到点" />
+                      到点
+                    </button>
                   </div>
                 </div>
               </template>
-              <div v-else class="mission-empty">
-                暂无任务数据
+              <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
+              <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i" style="min-height: 60px;">
+                <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
+                <div class="file-table-cell" style="flex: 1; text-align: center;"></div>
+                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center;"></div>
               </div>
             </div>
             <!-- 分页组件 -->
@@ -272,18 +294,146 @@
     </div>
 
 
+    <!-- 添加任务弹窗 -->
+    <Teleport to="body">
+      <div v-if="addTaskDialog.visible" class="custom-dialog-mask">
+        <div class="simple-modal-card">
+          <!-- Header -->
+          <div class="simple-modal-header">
+            <span>添加任务</span>
+            <span class="simple-close-icon" @click="cancelAddTask">×</span>
+          </div>
+          
+          <!-- Body -->
+          <div class="simple-modal-body">
+            <!-- 任务类型 -->
+            <div class="simple-form-item">
+              <div class="simple-flex-row" style="margin-bottom: 8px;">
+                 <label class="simple-label" style="margin-bottom: 0; margin-right: 15px;"><span class="required-star">*</span>任务类型</label>
+                 <label class="simple-radio"><input type="radio" v-model="addTaskDialog.form.isMulti" value="0"> <span>单选</span></label>
+                 <label class="simple-radio"><input type="radio" v-model="addTaskDialog.form.isMulti" value="1"> <span>多选</span></label>
+              </div>
+              <div class="simple-flex-row">
+                 <input v-model="addTaskDialog.form.typeInput" class="simple-input" style="flex: 2;">
+                 <div class="custom-select-wrapper" style="flex: 1; position: relative;" @click.stop="showTypeDropdown = !showTypeDropdown">
+                    <div class="simple-select" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                      <span>{{ addTaskDialog.form.actionType || '请选择' }}</span>
+                      <span :style="{transform: showTypeDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s', fontSize: '12px', opacity: 0.7}">▼</span>
+                    </div>
+                    <div v-show="showTypeDropdown" class="custom-select-dropdown">
+                      <div v-for="item in filteredTaskTypes" :key="item.type" :class="['custom-select-option', { 'selected': isSelected(item) }]" @click.stop="selectTaskType(item)">
+                        {{ item.cn_name }}
+                      </div>
+                    </div>
+                 </div>
+              </div>
+            </div>
+
+            <!-- 坐标 XYZ -->
+            <div class="simple-form-item">
+               <label class="simple-label">X坐标</label>
+               <input v-model="addTaskDialog.form.x" class="simple-input">
+            </div>
+            <div class="simple-form-item">
+               <label class="simple-label">Y坐标</label>
+               <input v-model="addTaskDialog.form.y" class="simple-input">
+            </div>
+            <div class="simple-form-item">
+               <label class="simple-label">Z坐标</label>
+               <input v-model="addTaskDialog.form.z" class="simple-input">
+            </div>
+            <div class="simple-form-item">
+               <label class="simple-label">角度</label>
+               <input v-model="addTaskDialog.form.angle" class="simple-input">
+            </div>
+
+            <!-- 预置点 -->
+             <div class="simple-form-item">
+               <label class="simple-label">预置点</label>
+               <div class="simple-flex-row">
+                  <input v-model="addTaskDialog.form.preset" class="simple-input" style="flex: 1;">
+                 <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;">选择</button>
+               </div>
+            </div>
+
+            <!-- 额外事务 -->
+             <div class="simple-form-item">
+               <label class="simple-label">额外事务</label>
+               <div class="simple-flex-row" style="justify-content: space-between;">
+                  <span style="color: #fff;">{{ addTaskDialog.form.extraConfig || '未配置' }}</span>
+                  <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;">配置</button>
+               </div>
+            </div>
+
+            <!-- 描述 -->
+             <div class="simple-form-item">
+               <label class="simple-label">描述</label>
+               <input v-model="addTaskDialog.form.description" class="simple-input">
+            </div>
+
+            <!-- 步态 & 地形 -->
+             <div class="simple-form-item">
+               <label class="simple-label">步态切换</label>
+                <select v-model="addTaskDialog.form.gait" class="simple-select">
+                  <option value="1">行走步态</option>
+                  <option value="2">斜坡步态</option>
+                  <option value="3">越障步态</option>
+                  <option value="4">楼梯步态</option>
+                  <option value="5">帧楼梯步态</option>
+                  <option value="6">帧45°楼梯步态</option>
+                  <option value="7">L行走步态</option>
+                  <option value="8">山地步态</option>
+                  <option value="9">静音步态</option>
+                </select>
+            </div>
+             <div class="simple-form-item">
+               <label class="simple-label">地形图设置</label>
+                <select v-model="addTaskDialog.form.ground" class="simple-select">
+                  <option value="1">实心地面</option>
+                  <option value="2">镂空地面</option>
+                  <option value="3">无踢面地面</option>
+                  <option value="4">累积帧模式</option>
+                </select>
+            </div>
+
+             <!-- Switch -->
+             <div class="simple-form-item">
+               <label class="simple-label">到点停止运动</label>
+               <div class="simple-flex-row" style="justify-content: flex-start;">
+                 <div class="simple-switch" @click="addTaskDialog.form.stopAtPoint = !addTaskDialog.form.stopAtPoint" :class="{active: addTaskDialog.form.stopAtPoint}">
+                    <div class="simple-switch-dot"></div>
+                 </div>
+                 <img :src="addTaskDialog.form.stopAtPoint ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
+               </div>
+            </div>
+
+          </div>
+
+          <!-- Footer -->
+          <div class="simple-modal-footer">
+             <button class="mission-btn mission-btn-primary" style="width: 100px;" @click="confirmAddTask">确定</button>
+             <button class="mission-btn" style="width: 100px; background: transparent; border: 1px solid #606266; color: #fff;" @click="cancelAddTask">取消</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
 import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
+import lockIcon from '@/assets/source_data/svg_data/robot_source/lock.png'
+import unlockIcon from '@/assets/source_data/svg_data/robot_source/unlock.png'
+import editIcon from '@/assets/source_data/svg_data/robot_source/edit.png'
+import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
+import arriveIcon from '@/assets/source_data/svg_data/robot_source/arrive.png'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
-import { waylineApi } from '../api/services'
+import { waylineApi, navigationApi } from '../api/services'
 import { getErrorMessage } from '@/utils/errorCodes'
 import { mediaApi } from '../api/services'
 
@@ -294,8 +444,111 @@ const route = useRoute()
 const { jobs, loading, error, pagination, fetchJobs, clearJobs } = useWaylineJobs()
 const { getCachedWorkspaceId } = useDevices()
 
-// 航点数据
-const waypointsData = ref<any[]>([])
+// 发布点任务列表
+interface PointTask {
+  isStart: boolean
+  task_id: string
+  task_name: string
+  taskcontent: any[]
+}
+
+const pointTaskList = ref<PointTask[]>([])
+const selectedPointTaskId = ref('')
+
+// 获取发布点任务列表
+const fetchPointTaskList = async () => {
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) {
+    console.warn('未选择机器人，尝试从缓存加载发布点任务列表')
+    // 尝试从缓存加载
+    const cached = localStorage.getItem('cached_point_task_list')
+    if (cached) {
+      pointTaskList.value = JSON.parse(cached)
+      if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
+        selectedPointTaskId.value = pointTaskList.value[0].task_id
+      }
+    }
+    return
+  }
+  
+  try {
+    const response = await navigationApi.getPointTaskList(robotId)
+    if (response && response.data) {
+      pointTaskList.value = response.data.map(task => ({
+        ...task,
+        task_id: String(task.task_id) // 统一转为字符串存储，方便比较
+      }))
+      // 缓存发布点任务列表
+      localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
+      
+      // 默认选择第一个
+      if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
+        selectedPointTaskId.value = pointTaskList.value[0].task_id
+      }
+    }
+  } catch (error) {
+    console.error('获取发布点任务列表失败:', error)
+    // 尝试从缓存加载
+    const cached = localStorage.getItem('cached_point_task_list')
+    if (cached) {
+      pointTaskList.value = JSON.parse(cached)
+      if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
+        selectedPointTaskId.value = pointTaskList.value[0].task_id
+      }
+    }
+  }
+}
+
+// 从缓存读取选中的地图名称
+const selectedMap = computed(() => {
+  return localStorage.getItem('selected_map_name') || ''
+})
+
+// 过滤后的发布点任务列表（根据缓存的地图筛选）
+const filteredPointTaskList = computed(() => {
+  if (!selectedMap.value) return pointTaskList.value // 如果没有缓存的地图，显示所有任务组
+  
+  // 根据地图名称筛选：task_name 以 "地图名称_" 开头
+  return pointTaskList.value.filter(task => {
+    return task.task_name.startsWith(selectedMap.value + '_')
+  })
+})
+
+// 监听筛选后的发布点任务列表变化，自动选择第一个
+watch(filteredPointTaskList, (newList) => {
+  if (newList.length > 0) {
+    selectedPointTaskId.value = newList[0].task_id
+  } else {
+    selectedPointTaskId.value = ''
+  }
+})
+
+// 根据选中的任务组ID获取任务详情
+const selectedTaskDetail = computed(() => {
+  if (!selectedPointTaskId.value) return null
+  return pointTaskList.value.find(task => task.task_id === selectedPointTaskId.value)
+})
+
+// 航点数据 - 从选中的任务组的taskcontent获取
+const waypointsData = computed(() => {
+  if (!selectedTaskDetail.value || !selectedTaskDetail.value.taskcontent) {
+    return []
+  }
+  
+  // 转换为表格需要的格式
+  return selectedTaskDetail.value.taskcontent.map((item: any, index: number) => ({
+    index: index,
+    type: item.type_text || item.type || '-',
+    coordinates: {
+      x: item.x || '-',
+      y: item.y || '-',
+      z: item.z || '-'
+    },
+    angle: item.theta || '-',
+    preset: item.preset || item.presetID || '-',
+    description: item.remark || '-'
+  }))
+})
 
 // 当前位置和任务信息
 const currentPosition = ref({
@@ -691,19 +944,172 @@ const loadJobRecords = async () => {
   pageInput.value = currentPage.value.toString()
 }
 
+// 启动发布点任务
+const handleStartTask = async () => {
+  if (!selectedPointTaskId.value) {
+    alert('请先选择任务组')
+    return
+  }
+  
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) {
+    alert('未找到机器人ID')
+    return
+  }
+  
+  try {
+    const response = await navigationApi.startPointTask(robotId, {
+      id: selectedPointTaskId.value,
+      // 与Home.vue保持一致，sn参数传入robotId
+      sn: robotId
+    })
+    
+    // 检查响应 - 假设 API 返回成功会有正常的响应结构
+    // 这里简单弹窗提示
+    alert('任务启动指令已发送')
+    console.log('启动任务响应:', response)
+  } catch (error: any) {
+    console.error('启动任务失败:', error)
+    alert(`启动任务失败: ${error.message || '未知错误'}`)
+  }
+}
+
+// 暂停发布点任务
+const handleStopTask = () => {
+  console.log('暂停发布点任务')
+  // TODO: 调用暂停发布点任务API
+}
+
+// 添加任务弹窗
+const addTaskDialog = ref({
+  visible: false,
+  form: {
+    isMulti: '0', // '0' 单选, '1' 多选
+    typeInput: '', // 任务类型输入框
+    actionType: '回充', // 下拉默认值
+    x: '10.55', // 示例默认值
+    y: '44.88',
+    z: '-13.52',
+    angle: '1.55',
+    preset: '',
+    extraConfig: '', // 未配置
+    description: '',
+    gait: '1', // 行走步态
+    ground: '1', // 实心地面
+    stopAtPoint: false
+  }
+})
+
+const showTypeDropdown = ref(false)
+const selectTaskType = (item: any) => {
+  addTaskDialog.value.form.actionType = item.cn_name
+  
+  const isMulti = addTaskDialog.value.form.isMulti === '1'
+  if (isMulti) {
+    let list = addTaskDialog.value.form.typeInput ? addTaskDialog.value.form.typeInput.split(',') : []
+    // Remove if exists (toggle)
+    if (list.includes(item.cn_name)) {
+      list = list.filter((name: string) => name !== item.cn_name)
+    } else {
+      list.push(item.cn_name)
+    }
+    addTaskDialog.value.form.typeInput = list.join(',')
+  } else {
+    addTaskDialog.value.form.typeInput = item.cn_name
+    showTypeDropdown.value = false
+  }
+}
+
+const isSelected = (item: any) => {
+  const current = addTaskDialog.value.form.typeInput
+  if (!current) return false
+  const list = current.split(',')
+  return list.includes(item.cn_name)
+}
+
+const closeDropdown = () => {
+  showTypeDropdown.value = false
+}
+
+const taskTypeList = ref<any[]>([])
+
+const filteredTaskTypes = computed(() => {
+  const isSingle = addTaskDialog.value.form.isMulti === '0'
+  return taskTypeList.value.filter(item => item.single === isSingle)
+})
+
+const fetchTaskTypeList = async () => {
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  const cached = localStorage.getItem('cached_task_type_list')
+  if (cached) {
+    try {
+      taskTypeList.value = JSON.parse(cached)
+    } catch (e) {
+      console.error('解析任务类型缓存失败', e)
+    }
+  }
+
+  try {
+    const res = await navigationApi.getTaskTypeList(robotId)
+    if (res && res.data) {
+      taskTypeList.value = res.data
+      localStorage.setItem('cached_task_type_list', JSON.stringify(res.data))
+    }
+  } catch (err) {
+    console.error('获取任务类型列表失败', err)
+  }
+}
+
+watch(() => addTaskDialog.value.form.isMulti, () => {
+  // 切换单/多选时，直接清空输入框
+  addTaskDialog.value.form.typeInput = ''
+})
+
+watch(filteredTaskTypes, (list) => {
+  // 列表变化时（如下载完成或切换单多选），默认选中第一个
+  if (list && list.length > 0) {
+    addTaskDialog.value.form.actionType = list[0].cn_name
+  } else {
+    addTaskDialog.value.form.actionType = ''
+  }
+}, { immediate: true })
+
+const handleAddTask = () => {
+  addTaskDialog.value.visible = true
+  fetchTaskTypeList()
+}
+
+const cancelAddTask = () => {
+  addTaskDialog.value.visible = false
+}
+
+const confirmAddTask = () => {
+  // TODO: Implement add task logic
+  console.log('添加任务:', addTaskDialog.value.form)
+  addTaskDialog.value.visible = false
+}
+
 // 页面加载时获取数据
 onMounted(async () => {
+  fetchPointTaskList()
   // 初始化分页输入框
   pageInput.value = currentPage.value.toString()
+  
+  // 获取发布点任务列表
+  await fetchPointTaskList()
   
   await loadJobRecords()
   // 点击页面空白关闭
   window.addEventListener('click', closeErrorTooltip)
+  window.addEventListener('click', closeDropdown)
 })
 
 // 离开时移除监听
 onUnmounted(() => {
   window.removeEventListener('click', closeErrorTooltip)
+  window.removeEventListener('click', closeDropdown)
   cleanupBlobUrls() // 清理所有blob URL
 })
 
@@ -1403,4 +1809,168 @@ const handleDeleteJob = (job: any) => {
 }
 
 
+
+/* Rewritten Simple Modal Styles - Dark Theme Balanced */
+.custom-dialog-mask {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.6); z-index: 9999;
+  display: flex; justify-content: center; align-items: center;
+}
+.simple-modal-card {
+  width: 440px; margin: auto;
+  background: #102a43; /* Slightly lighter deep blue */
+  border: 1px solid #244f78;
+  border-radius: 16px; 
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  display: flex; flex-direction: column;
+  max-height: 85vh;
+  overflow: hidden;
+}
+.simple-modal-header {
+  height: 48px; background: #163654; 
+  border-bottom: 1px solid #244f78;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 20px; color: #fff; font-size: 16px; font-weight: 500;
+  flex-shrink: 0;
+}
+.simple-close-icon { cursor: pointer; font-size: 20px; color: #909399; }
+.simple-close-icon:hover { color: #fff; }
+
+.simple-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+/* Custom Scrollbar for Webkit */
+.simple-modal-body::-webkit-scrollbar { width: 6px; }
+.simple-modal-body::-webkit-scrollbar-track { background: transparent; }
+.simple-modal-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
+.simple-modal-body::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+.simple-form-item { margin-bottom: 18px; }
+.simple-label { display: block; margin-bottom: 8px; font-size: 13px; color: #b0d0ff; } 
+.required-star { color: #ff4d4f; margin-right: 4px; }
+.simple-flex-row { display: flex; align-items: center; gap: 10px; }
+.simple-radio { margin-right: 20px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; color: #fff; }
+
+.simple-input, .simple-select {
+  width: 100%; height: 34px;
+  background: rgba(30, 60, 90, 0.5); 
+  border: 1px solid #244f78;
+  border-radius: 2px; padding: 0 10px; color: #fff; outline: none;
+  font-size: 13px; box-sizing: border-box;
+}
+.simple-input:focus, .simple-select:focus { border-color: #409eff; background: rgba(30, 60, 90, 0.8); }
+.simple-select option { background-color: #102a43; color: #fff; }
+
+.simple-btn-blue {
+  background: #409eff; border: none; color: #fff;
+  border-radius: 2px; cursor: pointer; font-size: 13px;
+  padding: 0 15px; height: 34px; white-space: nowrap;
+}
+.simple-btn-blue:hover { background: #66b1ff; }
+.small-btn { height: 34px; line-height: 34px; padding: 0 15px; }
+
+/* Switch */
+.simple-switch {
+  width: 36px; height: 18px; background: #4c4d4f; border-radius: 10px;
+  position: relative; cursor: pointer; transition: 0.3s;
+}
+.simple-switch.active { background: #409eff; }
+.simple-switch-dot {
+  width: 14px; height: 14px; background: #fff; border-radius: 50%;
+  position: absolute; top: 2px; left: 2px; transition: 0.3s;
+}
+.simple-switch.active .simple-switch-dot { left: 20px; }
+
+.simple-modal-footer {
+  padding: 16px 20px; border-top: 1px solid #244f78;
+  display: flex; justify-content: center; gap: 20px;
+  background: #102a43;
+  flex-shrink: 0;
+}
+.simple-modal-btn {
+  width: 100px; height: 34px; border-radius: 2px; border: none;
+  font-size: 14px; cursor: pointer;
+}
+.simple-modal-btn.confirm { background: #409eff; color: #fff; }
+.simple-modal-btn.confirm:hover { background: #66b1ff; }
+.simple-modal-btn.cancel { background: transparent; color: #fff; border: 1px solid #4c4d4f; }
+.simple-modal-btn.cancel:hover { border-color: #409eff; color: #409eff; }
+
+/* Custom Select Dropdown */
+.custom-select-dropdown {
+  position: absolute;
+  top: 100%; left: 0; right: 0;
+  background: #102a43;
+  border: 1px solid #244f78;
+  border-radius: 4px;
+  max-height: 200px; /* Reduced height as requested */
+  overflow-y: auto;
+  z-index: 10100;
+  margin-top: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+.custom-select-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+.custom-select-option:hover {
+  background: #1e4b7a;
+}
+.custom-select-option.selected {
+  background: #1e4b7a;
+  color: #409eff;
+  font-weight: 500;
+}
+/* Scrollbar for dropdown */
+.custom-select-dropdown::-webkit-scrollbar { width: 6px; }
+.custom-select-dropdown::-webkit-scrollbar-track { background: transparent; }
+.custom-select-dropdown::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
+.custom-select-dropdown::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* 列表操作按钮样式 */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 8px;
+  min-width: auto;
+}
+
+.action-btn img {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn-edit {
+  color: #67d5fd;
+}
+
+.action-btn-edit img {
+  filter: drop-shadow(0 0 4px rgba(103, 213, 253, 0.4));
+}
+
+.action-btn-delete {
+  color: #ff4d4f;
+}
+
+.action-btn-delete img {
+  filter: drop-shadow(0 0 4px rgba(255, 77, 79, 0.4));
+}
+
+.action-btn-arrive {
+  color: #67d5fd;
+}
+
+.action-btn-arrive img {
+  filter: drop-shadow(0 0 4px rgba(103, 213, 253, 0.4));
+}
 </style>

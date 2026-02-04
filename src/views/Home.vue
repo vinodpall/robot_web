@@ -3503,8 +3503,11 @@ const fetchMapList = async () => {
       localStorage.setItem('cached_map_list', JSON.stringify(mapList.value))
       localStorage.setItem('cached_map_update_time_map', JSON.stringify(mapUpdateTimeMap.value))
       
-      // 默认选择第一个地图
-      if (mapList.value.length > 0) {
+      // 尝试恢复选中的地图
+      const cachedMapName = localStorage.getItem('selected_map_name')
+      if (cachedMapName && mapList.value.includes(cachedMapName)) {
+        selectedMap.value = cachedMapName
+      } else if (mapList.value.length > 0) {
         selectedMap.value = mapList.value[0]
       }
     } else {
@@ -3520,7 +3523,11 @@ const fetchMapList = async () => {
       if (cachedTimeMap) {
         mapUpdateTimeMap.value = JSON.parse(cachedTimeMap)
       }
-      if (mapList.value.length > 0 && !selectedMap.value) {
+      
+      const cachedMapName = localStorage.getItem('selected_map_name')
+      if (cachedMapName && mapList.value.includes(cachedMapName)) {
+        selectedMap.value = cachedMapName
+      } else if (mapList.value.length > 0 && !selectedMap.value) {
         selectedMap.value = mapList.value[0]
       }
     }
@@ -3558,6 +3565,11 @@ const filteredTrackList = computed(() => {
 
 // 监听地图变化，重置选中的循迹任务并下载地图文件
 watch(selectedMap, async (newMapName) => {
+  // 缓存当前选中的地图名称，供其他页面（如Mission.vue, MissionRecords.vue）使用
+  if (newMapName) {
+    localStorage.setItem('selected_map_name', newMapName)
+  }
+  
   selectedTrack.value = ''
   // 自动选择第一个
   if (filteredTrackList.value.length > 0) {
