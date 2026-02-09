@@ -51,13 +51,13 @@
               <div style="display: flex; gap: 12px; margin-left: 8px;">
                 <button class="mission-btn mission-btn-primary" @click="handleStartTrack">开始</button>
                 <button class="mission-btn mission-btn-secondary" @click="handlePauseTrack">暂停</button>
-                <button class="mission-btn mission-btn-primary">添加任务组</button>
-                <button class="mission-btn mission-btn-stop">删除任务组</button>
+                <button class="mission-btn mission-btn-primary" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
+                <button class="mission-btn mission-btn-stop" @click="handleDeleteTaskGroup">删除任务组</button>
                 <button class="mission-btn mission-btn-primary" @click="handleAddTask">添加任务</button>
                 <button class="mission-btn mission-btn-secondary">预览</button>
               </div>
             </div>
-            <div class="file-table" style="min-height: 600px;">
+            <div class="file-table" style="min-height: 650px;">
               <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center;">
                 <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">任务类型</div>
@@ -69,8 +69,9 @@
                 <div class="file-table-cell" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
                 <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
-              <!-- 显示实际数据行 -->
-              <template v-if="waypointsData.length > 0">
+              <div class="file-table-body">
+                <!-- 显示实际数据行 -->
+                <template v-if="waypointsData.length > 0">
                 <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index" style="min-height: 60px;">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">{{ waypoint.index + 1 }}</div>
                   <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type }}</div>
@@ -96,17 +97,18 @@
                   </div>
                 </div>
               </template>
-              <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
-              <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i" style="min-height: 60px;">
-                <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
-                <div class="file-table-cell" style="flex: 1; text-align: center;"></div>
-                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center;"></div>
+                <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
+                <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i" style="min-height: 60px;">
+                  <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
+                  <div class="file-table-cell" style="flex: 1; text-align: center;"></div>
+                  <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center;"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -316,6 +318,29 @@
         </div>
       </div>
     </div>
+    <!-- 添加任务组弹窗 -->
+    <div v-if="showCreateTaskGroupDialog" class="custom-dialog-mask" @click="closeCreateTaskGroupDialog">
+      <div class="simple-modal-card task-group-modal" @click.stop>
+        <div class="simple-modal-header">
+          <span>添加任务组</span>
+          <span class="simple-close-icon" @click="closeCreateTaskGroupDialog">×</span>
+        </div>
+        <div class="simple-modal-body" style="padding: 35px 40px;">
+          <div style="display: flex; justify-content: center;">
+            <input
+              v-model="createTaskGroupForm.keypoint_name"
+              type="text"
+              class="task-form-input task-group-input"
+              placeholder="请输入任务组名称"
+            />
+          </div>
+        </div>
+        <div class="simple-modal-footer">
+          <button class="mission-btn mission-btn-secondary" @click="closeCreateTaskGroupDialog">取消</button>
+          <button class="mission-btn mission-btn-primary" @click="handleCreateTaskGroup">确定</button>
+        </div>
+      </div>
+    </div>
     <!-- 循迹任务启动弹窗 -->
     <div v-if="trackStartDialog.visible" class="custom-dialog-mask">
       <div class="dispatch-task-modal">
@@ -450,7 +475,7 @@
                <label class="simple-label">额外事务</label>
                <div class="simple-flex-row" style="justify-content: space-between;">
                   <span style="color: #fff;">{{ addTaskDialog.form.extraConfig || '未配置' }}</span>
-                  <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;">配置</button>
+                  <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
                </div>
             </div>
 
@@ -510,24 +535,33 @@
     <!-- Preset Selection Modal -->
    <Teleport to="body">
       <div v-if="presetDialog.visible" class="custom-dialog-mask">
-         <div class="simple-modal-card" style="width: 900px; max-width: 95vw; height: 620px;">
+         <div class="simple-modal-card" style="width: 1160px; max-width: 95vw; height: 610px;">
             <div class="simple-modal-header">
                <span>设置预置点</span>
                <span class="simple-close-icon" @click="closePresetDialog">×</span>
             </div>
             <div class="simple-modal-body" style="display: flex; gap: 20px; padding: 20px; overflow: hidden; height: 100%;">
                <!-- Left Video -->
-               <div style="flex: 6; background: #000; position: relative; border: 1px solid #244f78; display: flex; align-items: center; justify-content: center; color: #aaa;">
-                   <span>Visible Light Stream</span>
-                   <div style="position: absolute; top: 10px; left: 10px; color: #fff;">02-03-2026 星期二 17:28:32</div>
+               <div style="flex: 0 0 800px; height: 450px; background: #000; position: relative; border: 1px solid #244f78; display: flex; align-items: center; justify-content: center; color: #aaa; overflow: hidden;">
+                   <video 
+                     ref="videoElement"
+                     controls
+                     muted
+                     playsinline
+                     webkit-playsinline
+                     style="width: 100%; height: 100%; object-fit: fill; background: #000;"
+                   >
+                     您的浏览器不支持视频播放
+                   </video>
+                   <div v-if="!isPlaying" style="position: absolute; pointer-events: none;">Visible Light Stream</div>
                </div>
                
                <!-- Right Controls -->
-               <div style="flex: 4; display: flex; flex-direction: column; gap: 10px; padding-top: 10px;">
+                <div style="flex: 0 0 300px; display: flex; flex-direction: column; gap: 10px; padding-top: 10px;">
                    <!-- PTZ -->
-                   <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                   <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
                         <button class="ptz-btn" @mousedown="ptzMove('up')" @mouseup="ptzStop">▲</button>
-                        <div style="display: flex; gap: 8px;">
+                        <div style="display: flex; gap: 12px;">
                              <button class="ptz-btn" @mousedown="ptzMove('left')" @mouseup="ptzStop">◀</button>
                              <button class="ptz-btn" @click="ptzStop">↺</button>
                              <button class="ptz-btn" @mousedown="ptzMove('right')" @mouseup="ptzStop">▶</button>
@@ -536,28 +570,42 @@
                    </div>
 
                    <!-- Actions -->
-                   <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
-                        <button class="mission-btn-blue" style="width: 40px; font-weight: bold;" @click="ptzZoom(true)">+</button>
-                        <button class="mission-btn-blue" style="width: 40px; font-weight: bold;" @click="ptzZoom(false)">-</button>
-                        <button class="mission-btn-blue" style="width: 40px;" @click="ptzFocus(true)">
+                   <div style="display: flex; gap: 12px; justify-content: center; margin-top: 8px;">
+                        <button class="mission-btn-blue" style="width: 50px; font-weight: bold; font-size: 24px;" @click="ptzZoom(true)">+</button>
+                        <button class="mission-btn-blue" style="width: 50px; font-weight: bold; font-size: 24px;" @click="ptzZoom(false)">-</button>
+                        <button class="mission-btn-blue" style="width: 50px;" @click="ptzFocus(true)">
                            <div style="border: 1px dashed #fff; width: 14px; height: 14px;"></div>
                         </button>
-                        <button class="mission-btn-blue" style="width: 40px;" @click="ptzFocus(false)">
+                        <button class="mission-btn-blue" style="width: 50px;" @click="ptzFocus(false)">
                            <div style="border: 1px solid #fff; width: 14px; height: 14px;"></div>
                         </button>
                    </div>
                    
-                   <div class="simple-form-item" style="margin-top: 20px;">
+                   <div class="simple-form-item" style="margin-top: 8px; margin-bottom: 8px;">
                        <label class="simple-label">设置预置点：</label>
-                        <select v-model="presetDialog.form.id" class="simple-select">
-                           <option v-for="p in presetList" :key="p.id" :value="p.id">{{ p.name }}</option>
-                        </select>
+                        <div class="custom-select-wrapper" ref="presetDropdownRef" style="position: relative;" tabindex="0" @blur="isPresetDropdownOpen = false">
+                             <div class="simple-select" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" @click="isPresetDropdownOpen = !isPresetDropdownOpen">
+                                 <span>{{ presetDialog.form.name || '请选择预置点' }}</span>
+                                 <span style="font-size:12px; transform: scaleY(0.6);">▼</span>
+                             </div>
+                             <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="max-height: 340px; background: #102a43; border: 1px solid #244f78;">
+                                  <div 
+                                    v-for="p in presetList" 
+                                    :key="p.id" 
+                                    class="custom-select-option" 
+                                    :class="{ selected: presetDialog.form.id === p.id }"
+                                    @mousedown.prevent="selectPreset(p)"
+                                  >
+                                     {{ p.name }}
+                                  </div>
+                             </div>
+                        </div>
                    </div>
                    
-                    <div style="display: flex; gap: 8px;">
-                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px;" @click="handleSetPreset">设置预置点</button>
-                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px;" @click="handleGotoPreset">转到预置点</button>
-                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px;">转速</button>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;" @click="handleSetPreset">设置预置点</button>
+                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;" @click="handleGotoPreset">转到预置点</button>
+                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;">转速</button>
                    </div>
                    
                    <div class="simple-form-item">
@@ -573,11 +621,52 @@
          </div>
       </div>
    </Teleport>
+
+    <!-- 额外配置弹窗 -->
+    <Teleport to="body">
+      <div v-if="extraConfigDialog.visible" class="custom-dialog-mask" style="z-index: 10001;">
+        <div class="simple-modal-card" style="width: 500px; max-width: 95vw;" @click.stop>
+          <div class="simple-modal-header">
+            <span>额外配置</span>
+            <span class="simple-close-icon" @click="closeExtraConfigDialog">×</span>
+          </div>
+          <div class="simple-modal-body" style="padding: 30px;">
+            <div class="simple-form-item">
+              <label class="simple-label">额外事务</label>
+              <textarea 
+                v-model="extraConfigDialog.content" 
+                class="simple-textarea"
+                placeholder="请输入额外事务配置"
+                rows="6"
+              ></textarea>
+            </div>
+          </div>
+          <div class="simple-modal-footer">
+            <button class="mission-btn mission-btn-primary" style="width: 100px;" @click="confirmExtraConfig">确定</button>
+            <button class="mission-btn mission-btn-secondary" style="width: 100px;" @click="closeExtraConfigDialog">取消</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+  <!-- 成功提示 -->
+  <SuccessMessage 
+    :show="successMessage.show" 
+    :message="successMessage.text"
+    @close="successMessage.show = false"
+  />
+
+  <!-- 错误提示 -->
+  <ErrorMessage 
+    :show="errorMessage.show" 
+    :message="errorMessage.text"
+    @close="errorMessage.show = false"
+  />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
@@ -600,6 +689,8 @@ import iconStopVideo from '@/assets/source_data/svg_data/task_line_svg/stop_vide
 import iconTakePhoto from '@/assets/source_data/svg_data/task_line_svg/take_photo.svg'
 import lockIcon from '@/assets/source_data/svg_data/robot_source/lock.png'
 import unlockIcon from '@/assets/source_data/svg_data/robot_source/unlock.png'
+import SuccessMessage from '@/components/SuccessMessage.vue'
+import ErrorMessage from '@/components/ErrorMessage.vue'
 import editIcon from '@/assets/source_data/svg_data/robot_source/edit.png'
 import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import arriveIcon from '@/assets/source_data/svg_data/robot_source/arrive.png'
@@ -631,6 +722,22 @@ const selectedRouteName = ref('')
 const taskGroupList = ref<string[]>([])
 const selectedTaskGroupName = ref('')
 
+// 添加任务组弹窗
+const showCreateTaskGroupDialog = ref(false)
+const createTaskGroupForm = ref({
+  keypoint_name: ''
+})
+
+// 成功/失败提示
+const successMessage = ref({
+  show: false,
+  text: ''
+})
+const errorMessage = ref({
+  show: false,
+  text: ''
+})
+
 // 获取路线列表
 const loadRouteList = async () => {
   const robotId = localStorage.getItem('selected_robot_id')
@@ -655,6 +762,67 @@ const loadRouteList = async () => {
     }
   } catch (err) {
     console.error('获取路线列表失败:', err)
+  }
+}
+
+// 打开添加任务组弹窗
+const handleOpenCreateTaskGroupDialog = () => {
+  showCreateTaskGroupDialog.value = true
+  // 重置表单
+  createTaskGroupForm.value.keypoint_name = ''
+}
+
+// 关闭添加任务组弹窗
+const closeCreateTaskGroupDialog = () => {
+  showCreateTaskGroupDialog.value = false
+  createTaskGroupForm.value.keypoint_name = ''
+}
+
+// 创建任务组
+const handleCreateTaskGroup = async () => {
+  // 验证表单
+  if (!selectedRouteName.value) {
+    errorMessage.value = { show: true, text: '请先选择路线名称' }
+    return
+  }
+  if (!createTaskGroupForm.value.keypoint_name) {
+    errorMessage.value = { show: true, text: '请输入任务组名称' }
+    return
+  }
+  
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) {
+    errorMessage.value = { show: true, text: '未选择机器人' }
+    return
+  }
+  
+  try {
+    const response = await navigationApi.createTaskpointFile(robotId, {
+      track_name: selectedRouteName.value,
+      keypoint_name: createTaskGroupForm.value.keypoint_name
+    })
+    
+    console.log('创建任务组返回:', response)
+    
+    successMessage.value = { show: true, text: '添加任务组成功' }
+    setTimeout(() => {
+      successMessage.value.show = false
+    }, 2000)
+    
+    closeCreateTaskGroupDialog()
+    
+    // 刷新任务组列表
+    const taskGroupResponse = await navigationApi.getTaskpointList(robotId, selectedRouteName.value)
+    if (taskGroupResponse && taskGroupResponse.msg && taskGroupResponse.msg.error_code === 0 && taskGroupResponse.msg.result) {
+      taskGroupList.value = taskGroupResponse.msg.result
+      // 默认选择第一条数据
+      if (taskGroupList.value.length > 0) {
+        selectedTaskGroupName.value = taskGroupList.value[0]
+      }
+    }
+  } catch (error: any) {
+    console.error('创建任务组失败:', error)
+    errorMessage.value = { show: true, text: `创建失败: ${error.message || '网络错误'}` }
   }
 }
 
@@ -748,6 +916,75 @@ const handlePauseTrack = async () => {
     console.error('暂停失败', err)
     alert('暂停失败')
   }
+}
+
+// 删除任务组
+const handleDeleteTaskGroup = () => {
+  if (!selectedRouteName.value) {
+    errorMessage.value = { show: true, text: '请先选择路线' }
+    setTimeout(() => { errorMessage.value.show = false }, 2000)
+    return
+  }
+  if (!selectedTaskGroupName.value) {
+    errorMessage.value = { show: true, text: '请先选择任务组' }
+    setTimeout(() => { errorMessage.value.show = false }, 2000)
+    return
+  }
+
+  showConfirmDialog(
+    `确定要删除任务组 "${selectedTaskGroupName.value}" 吗？删除后无法恢复。`,
+    async () => {
+      const robotId = localStorage.getItem('selected_robot_id')
+      if (!robotId) return
+
+      const deletingTaskGroupName = selectedTaskGroupName.value
+
+      try {
+        await navigationApi.deleteTaskpointFile(robotId, {
+          action: 1,
+          track_name: selectedRouteName.value,
+          taskpoint_name: deletingTaskGroupName
+        })
+
+        // 从任务组列表中移除
+        taskGroupList.value = taskGroupList.value.filter(
+          group => group !== deletingTaskGroupName
+        )
+
+        // 清空当前选择
+        if (taskGroupList.value.length > 0) {
+          selectedTaskGroupName.value = taskGroupList.value[0]
+        } else {
+          selectedTaskGroupName.value = ''
+        }
+
+        // 从缓存中删除该任务组的所有任务
+        const cachedData = localStorage.getItem('all_track_task_list')
+        if (cachedData) {
+          let allTaskList = JSON.parse(cachedData)
+          allTaskList = allTaskList.filter((task: any) => 
+            !(task.track_name === selectedRouteName.value && 
+              task.track_point_name === deletingTaskGroupName)
+          )
+          localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
+        }
+
+        // 触发列表刷新
+        taskListRefreshKey.value++
+
+        successMessage.value = { show: true, text: '删除任务组成功' }
+        setTimeout(() => {
+          successMessage.value.show = false
+        }, 2000)
+      } catch (err) {
+        console.error('删除任务组失败', err)
+        errorMessage.value = { show: true, text: '删除任务组失败' }
+        setTimeout(() => {
+          errorMessage.value.show = false
+        }, 2000)
+      }
+    }
+  )
 }
 
 const onTrackStartConfirm = async () => {
@@ -851,8 +1088,14 @@ watch(selectedTrack, (newValue, oldValue) => {
   }
 }, { immediate: false })
 
+// 响应式刷新标志，用于触发列表更新
+const taskListRefreshKey = ref(0)
+
 // 计算属性：获取航点数据（从缓存的循迹任务点列表中筛选）
 const waypointsData = computed(() => {
+  // 使用刷新标志作为依赖，确保响应式更新
+  taskListRefreshKey.value
+  
   // 从 localStorage 获取所有循迹任务点列表
   const cachedData = localStorage.getItem('all_track_task_list')
   if (!cachedData) {
@@ -874,20 +1117,26 @@ const waypointsData = computed(() => {
     })
     
     // 转换为表格需要的格式
-    return filteredTasks.map((task: any, index: number) => ({
-      index: index,
-      type: task.type_text || task.type,
-      coordinates: {
-        x: task.x,
-        y: task.y,
-        z: task.z
-      },
-      angle: task.theta,
-      preset: task.preset || task.presetID,
-      description: task.remark,
-      // 保留原始数据以备后用
-      rawData: task
-    }))
+    return filteredTasks.map((task: any, index: number) => {
+      return {
+        index: index,
+        type: task.type_text || task.type,
+        coordinates: {
+          x: task.x,
+          y: task.y,
+          z: task.z
+        },
+        angle: task.theta,
+        preset: task.preset || '',  // 只显示 preset 信息，不组合序号
+        description: task.remark,
+        extra: task.extra,
+        gait: task.gait,
+        ground: task.ground,
+        no_switch: task.no_switch,
+        // 保留原始数据以备后用
+        rawData: task
+      }
+    })
   } catch (err) {
     console.error('解析循迹任务点列表失败:', err)
     return []
@@ -1521,6 +1770,17 @@ watch(filteredTaskTypes, (list) => {
 }, { immediate: true })
 
 const handleAddTask = () => {
+  // 重置表单
+  addTaskDialog.value.form.typeInput = ''
+  addTaskDialog.value.form.actionType = ''
+  addTaskDialog.value.form.preset = ''
+  addTaskDialog.value.form.description = ''
+  addTaskDialog.value.form.extraConfig = ''
+  addTaskDialog.value.form.gait = '1'
+  addTaskDialog.value.form.ground = '1'
+  addTaskDialog.value.form.stopAtPoint = false
+  addTaskDialog.value.form.isMulti = '0'
+  
   if (currentPosition.value) {
     addTaskDialog.value.form.x = (currentPosition.value.x || '0').toString()
     addTaskDialog.value.form.y = (currentPosition.value.y || '0').toString()
@@ -1558,6 +1818,22 @@ const handleEditTask = (waypoint: any) => {
   isEditMode.value = true
   editingTaskItem.value = waypoint // This might be partial. 
   
+  // 处理预置点信息：从 preset 和 presetID 组合回原始格式
+  let presetDisplay = ''
+  const rawPreset = waypoint.rawData?.preset || waypoint.preset || ''
+  const rawPresetID = waypoint.rawData?.presetID || ''
+  if (rawPreset && rawPresetID) {
+    // presetID 格式为 "预置点4"，提取数字
+    const match = rawPresetID.match(/预置点(\d+)/)
+    if (match) {
+      presetDisplay = `${match[1]}.${rawPreset}`  // 组合成 "4.测试点123"
+    } else {
+      presetDisplay = rawPreset
+    }
+  } else if (rawPreset) {
+    presetDisplay = rawPreset
+  }
+  
   addTaskDialog.value.form.isMulti = '0' // Edit is always single
   addTaskDialog.value.form.typeInput = waypoint.type || ''
   addTaskDialog.value.form.actionType = waypoint.type || ''
@@ -1565,12 +1841,12 @@ const handleEditTask = (waypoint: any) => {
   addTaskDialog.value.form.y = (waypoint.coordinates?.y || '0').toString()
   addTaskDialog.value.form.z = (waypoint.coordinates?.z || '0').toString()
   addTaskDialog.value.form.angle = (waypoint.angle || '0').toString()
-  addTaskDialog.value.form.preset = waypoint.preset || ''
+  addTaskDialog.value.form.preset = presetDisplay
   addTaskDialog.value.form.description = waypoint.description || ''
-  addTaskDialog.value.form.extraConfig = waypoint.extra || ''
-  addTaskDialog.value.form.gait = waypoint.gait || '1'
-  addTaskDialog.value.form.ground = waypoint.ground || '1'
-  addTaskDialog.value.form.stopAtPoint = !(waypoint.no_switch === 'true' || waypoint.no_switch === true)
+  addTaskDialog.value.form.extraConfig = waypoint.extra || waypoint.rawData?.extra || ''
+  addTaskDialog.value.form.gait = waypoint.gait || waypoint.rawData?.gait || '1'
+  addTaskDialog.value.form.ground = waypoint.ground || waypoint.rawData?.ground || '1'
+  addTaskDialog.value.form.stopAtPoint = !(waypoint.no_switch === 'true' || waypoint.no_switch === true || waypoint.rawData?.no_switch === 'true' || waypoint.rawData?.no_switch === true)
 
   addTaskDialog.value.visible = true
 }
@@ -1584,7 +1860,7 @@ const confirmAddTask = async () => {
   if (!robotId) return
 
   if (!selectedRouteName.value || !selectedTaskGroupName.value) {
-    console.warn('Please select route and task group first')
+    console.warn('请先选择路线和任务组')
     return
   }
 
@@ -1592,123 +1868,151 @@ const confirmAddTask = async () => {
   const now = Math.floor(Date.now() / 1000)
   const timestamp = now.toString()
 
-  const params: any = {
+  // 处理预置点信息：格式如 "4.测试点123"
+  let presetValue = ''
+  let presetIDValue = ''
+  if (form.preset) {
+    const match = form.preset.match(/^(\d+)\.(.+)$/)
+    if (match) {
+      const [, number, name] = match
+      presetValue = name  // "测试点123"
+      presetIDValue = `预置点${number}`  // "预置点4"
+    } else {
+      // 如果格式不匹配，使用原值
+      presetValue = form.preset
+      presetIDValue = form.preset
+    }
+  }
+
+  const taskData: any = {
+    task_id: isEditMode.value ? (editingTaskItem.value?.rawData?.task_id || `track_${timestamp}`) : `track_${timestamp}`,
+    type: form.typeInput || '',
     type_text: form.typeInput || '',
-    x: form.x || '0',
-    y: form.y || '0',
-    z: form.z || '0',
-    theta: form.angle || '0',
-    preset: form.preset || '',
+    x: parseFloat(form.x) || 0,
+    y: parseFloat(form.y) || 0,
+    z: parseFloat(form.z) || 0,
+    theta: parseFloat(form.angle) || 0,
+    preset: presetValue,
+    presetID: presetIDValue,
     remark: form.description || '',
-    extra: form.extraConfig || '',
-    no_switch: !form.stopAtPoint,
-    presetID: isEditMode.value ? (editingTaskItem.value?.presetID || null) : null,
-    nostop: false,
-    type: form.typeInput || '', // Assuming type is same as type_text/input
-    type_id: '',
-    gait: form.gait,
-    ground: form.ground,
-    // task_id: isEditMode.value ? editingTaskItem.value?.task_id : `track_${timestamp}`,
-    // Wait, update API requires task_id.
-    task_id: isEditMode.value ? (editingTaskItem.value?.task_id || '') : `track_${timestamp}`,
-    createtime: isEditMode.value ? (editingTaskItem.value?.createtime || timestamp) : timestamp,
-    time: '0',
+    time: 0,
     cam_key: 'cam_rtsp_left',
     track_name: selectedRouteName.value,
-    track_point_name: selectedTaskGroupName.value
+    track_point_name: selectedTaskGroupName.value,
+    extra: form.extraConfig || '',
+    no_switch: !form.stopAtPoint,
+    gait: form.gait,
+    ground: form.ground,
+    createtime: isEditMode.value ? (editingTaskItem.value?.rawData?.createtime || timestamp) : timestamp
   }
-  
-  // Ensure required fields for compatibility
-  if (!params.type) params.type = params.type_text
 
   try {
+    let response
+    
     if (isEditMode.value) {
-       // Update
-       await navigationApi.updateTaskPoint(robotId, params)
-       alert('修改成功')
+      // 编辑模式：调用更新接口
+      response = await navigationApi.updateTaskPoint(robotId, taskData)
     } else {
-       // Add
-       await navigationApi.addTrackPoint(robotId, params)
-       alert('添加成功')
+      // 添加模式：调用添加接口
+      response = await navigationApi.addTrackPoint(robotId, taskData)
     }
-    
-    // Refresh list
-    // Trigger selectedRouteName watcher or re-fetch
-    const currentGroup = selectedTaskGroupName.value
-    // Re-trigger fetch or manually update list if possible. 
-    // Simply resetting selectedRouteName might work but user preference is to stay.
-    // Let's call the fetch API manually.
-    if (selectedRouteName.value) {
-        // This repeats the watcher logic
-         const response = await navigationApi.getTaskpointList(robotId, selectedRouteName.value)
-        if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-          taskGroupList.value = response.msg.result
-          // Ideally we should also refresh the waypoints data for the selected group.
-          // Since waypointsData is computed from... wait I still don't know where waypointsData comes from.
-          // It must be from a 'taskPoints' ref that is populated when group changes.
-          // I'll reload the page data essentially.
-          window.location.reload() // Fastest way to ensure sync without knowing full internal state structure, but ugly.
-          // Better:
-          // trigger a refresh.
-        }
+
+    // 重新获取任务列表更新缓存
+    const cachedData = localStorage.getItem('all_track_task_list')
+    let allTaskList = cachedData ? JSON.parse(cachedData) : []
+
+    if (isEditMode.value && editingTaskItem.value?.rawData) {
+      // 编辑模式：查找并更新本地缓存
+      const index = allTaskList.findIndex((task: any) => 
+        task.task_id === editingTaskItem.value.rawData.task_id &&
+        task.track_name === selectedRouteName.value &&
+        task.track_point_name === selectedTaskGroupName.value
+      )
+      if (index !== -1) {
+        allTaskList[index] = taskData
+      }
+    } else {
+      // 添加模式：追加到本地缓存
+      allTaskList.push(taskData)
     }
-    // Since I can't find 'waypointsData' source, I'll rely on reloading or hope the reactivity handles it if I update the source.
-    // Actually, force reload to be safe and simple for now as I missed the data source.
-    // Or just let the user know.
-    // Removing the reload, let's try to reference `selectedRouteName.value = selectedRouteName.value` to trigger watch? 
-    // No, watch checks value change.
+
+    localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
     
-    // I will try to find where `taskPoints` (or whatever backs `waypointsData`) is loaded.
-    // It's likely `loadTaskPoints(groupName)`.
+    // 触发列表刷新
+    taskListRefreshKey.value++
+    
+    successMessage.value = { show: true, text: isEditMode.value ? '编辑成功' : '添加成功' }
+    setTimeout(() => {
+      successMessage.value.show = false
+    }, 2000)
     
   } catch (err: any) {
-    if (err && err.message) {
-      console.error('操作失败', err)
-      alert('操作失败: ' + err.message)
-    } else {
-       console.error('操作失败', err)
-       alert('操作失败')
-    }
+    console.error('操作失败', err)
+    errorMessage.value = { show: true, text: '操作失败: ' + (err.message || '未知错误') }
+    setTimeout(() => {
+      errorMessage.value.show = false
+    }, 2000)
   }
+  
   addTaskDialog.value.visible = false
-  addTaskDialog.value.visible = false
+  isEditMode.value = false
+  editingTaskItem.value = null
 }
 
 const handleDeleteTask = (waypoint: any) => {
-  showConfirmDialog('确定要删除该任务点吗？', () => {
+  showConfirmDialog('确定要删除该任务点吗？', async () => {
     const robotId = localStorage.getItem('selected_robot_id')
     if (!robotId) return
 
+    if (!selectedRouteName.value || !selectedTaskGroupName.value) return
+
     const rawData = waypoint.rawData || {}
     
-    // Construct params as requested
-    const params = {
-      cam_key: rawData.cam_key || '',
-      preset: rawData.preset || '',
-      presetID: rawData.presetID || '',
-      remark: rawData.remark || '',
-      task_id: rawData.task_id || '',
-      theta: rawData.theta ? Number(rawData.theta) : 0,
-      time: rawData.time ? Number(rawData.time) : 0,
-      track_name: rawData.track_name || selectedRouteName.value || '',
-      track_point_name: rawData.track_point_name || selectedTaskGroupName.value || '',
-      type: rawData.type || '',
-      type_text: rawData.type_text || '',
-      x: rawData.x ? Number(rawData.x) : 0,
-      y: rawData.y ? Number(rawData.y) : 0,
-      z: rawData.z ? Number(rawData.z) : 0
-    }
-
     try {
-       navigationApi.deleteTrackPoint(robotId, params).then(() => {
-          alert('删除成功')
-          window.location.reload()
-       }).catch((err: any) => {
-          console.error('删除失败', err)
-          alert('删除失败')
-       })
+      // 调用删除接口，传递完整的任务数据
+      await navigationApi.deleteTrackPoint(robotId, {
+        task_id: rawData.task_id || '',
+        type: rawData.type || rawData.type_text || '',
+        type_text: rawData.type_text || rawData.type || '',
+        x: parseFloat(rawData.x) || 0,
+        y: parseFloat(rawData.y) || 0,
+        z: parseFloat(rawData.z) || 0,
+        theta: parseFloat(rawData.theta) || 0,
+        preset: rawData.preset || '',
+        presetID: rawData.presetID || '',
+        remark: rawData.remark || '',
+        time: 0,
+        cam_key: rawData.cam_key || 'cam_rtsp_left',
+        track_name: selectedRouteName.value,
+        track_point_name: selectedTaskGroupName.value
+      })
+
+      // 更新本地缓存
+      const cachedData = localStorage.getItem('all_track_task_list')
+      let allTaskList = cachedData ? JSON.parse(cachedData) : []
+
+      // 删除指定任务
+      allTaskList = allTaskList.filter((task: any) => 
+        !(task.task_id === rawData.task_id &&
+          task.track_name === selectedRouteName.value &&
+          task.track_point_name === selectedTaskGroupName.value)
+      )
+
+      localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
+      
+      // 触发列表刷新
+      taskListRefreshKey.value++
+      
+      successMessage.value = { show: true, text: '删除成功' }
+      setTimeout(() => {
+        successMessage.value.show = false
+      }, 2000)
     } catch (err) {
-        console.error('删除异常', err)
+      console.error('删除异常', err)
+      errorMessage.value = { show: true, text: '删除失败' }
+      setTimeout(() => {
+        errorMessage.value.show = false
+      }, 2000)
     }
   })
 }
@@ -1718,16 +2022,8 @@ const handleArriveTask = async (waypoint: any) => {
     const robotId = localStorage.getItem('selected_robot_id')
     if (!robotId) return
 
-    // Need SN. User example said '123'.
-    // Try to find device SN.
     const { droneSns } = getCachedDeviceSns()
     const sn = (droneSns && droneSns.length > 0) ? droneSns[0] : '123'
-    
-    // chargeIndex is (index - 1) according to user description?
-    // User said: "chargeIndex的值取前面的序号-1"
-    // In table, "序号" (Serial Number) displayed is waypoint.index + 1.
-    // So (waypoint.index + 1) - 1 = waypoint.index.
-    // So we use waypoint.index.
     
     const params = {
       sn: sn,
@@ -1736,20 +2032,17 @@ const handleArriveTask = async (waypoint: any) => {
     }
     
     try {
-       const response: any = await navigationApi.oneKeyRecharge(robotId, params)
-       
-       // Check response similar to other APIs
-       if (response && response.data && response.data.code === '0') {
-           alert('指令下发成功')
-       } else if (response && response.error_code === 0) { // Some APIs return error_code in root
-            alert('指令下发成功')
-       } else {
-           // Some APIs just return ok.
-           alert('指令下发成功')
-       }
+       await navigationApi.oneKeyRecharge(robotId, params)
+       successMessage.value = { show: true, text: '到点指令下发成功' }
+       setTimeout(() => {
+         successMessage.value.show = false
+       }, 2000)
     } catch (err) {
        console.error('到点指令失败', err)
-       alert('指令下发失败')
+       errorMessage.value = { show: true, text: '到点指令失败' }
+       setTimeout(() => {
+         errorMessage.value.show = false
+       }, 2000)
     }
   })
 }
@@ -1764,20 +2057,233 @@ const presetDialog = ref({
 })
 
 // Mock preset list for UI layout - replace with API call later if needed
-const presetList = ref<{id: string, name: string}[]>([
-  {id: '1', name: '1.预置点1'}
-])
+const presetList = ref<{id: string, name: string}[]>(
+  Array.from({ length: 300 }, (_, i) => ({
+    id: String(i + 1),
+    name: `${i + 1}.预置点${i + 1}`
+  }))
+)
+const isPresetDropdownOpen = ref(false)
+const presetDropdownRef = ref<HTMLElement | null>(null)
 
-const openPresetDialog = () => {
+const selectPreset = (p: {id: string, name: string}) => {
+    presetDialog.value.form.id = p.id
+    presetDialog.value.form.name = p.name
+    isPresetDropdownOpen.value = false
+}
+
+// 监听预置点下拉列表打开，自动滚动到选中项
+watch(isPresetDropdownOpen, (isOpen) => {
+  if (isOpen && presetDialog.value.form.id) {
+    nextTick(() => {
+      const index = presetList.value.findIndex(p => p.id === presetDialog.value.form.id)
+      if (index !== -1 && presetDropdownRef.value) {
+        const dropdown = presetDropdownRef.value.querySelector('.custom-select-dropdown')
+        if (dropdown) {
+          // 获取实际的选项高度
+          const firstOption = dropdown.querySelector('.custom-select-option')
+          const optionHeight = firstOption ? firstOption.getBoundingClientRect().height : 40
+          
+          // 滚动到选中项，使其在可视区域顶部显示，留一些间距
+          const scrollTop = index * optionHeight
+          dropdown.scrollTop = Math.max(0, scrollTop)
+        }
+      }
+    })
+  }
+})
+
+// Video Playback Logic
+const videoElement = ref<HTMLVideoElement | null>(null)
+let pc: RTCPeerConnection | null = null
+const isPlaying = ref(false)
+const videoStreamUrl = ref('')
+
+const buildApiUrl = (webrtcUrl: string) => {
+  try {
+    const url = new URL(webrtcUrl)
+    return `http://${url.hostname}:1985`
+  } catch (error) {
+    return webrtcUrl.replace('webrtc://', 'http://').replace(':8000', ':1985').split('/')[0]
+  }
+}
+
+const startWebRTCPlayback = async (url: string) => {
+  if (pc) {
+    pc.close()
+    pc = null
+  }
+  
+  videoStreamUrl.value = url
+  
+  try {
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    })
+    
+    pc.ontrack = (e) => {
+      if (videoElement.value && e.streams && e.streams[0]) {
+        videoElement.value.srcObject = e.streams[0]
+        videoElement.value.play().then(() => {
+          isPlaying.value = true
+        }).catch(e => console.error('Video play failed', e))
+      }
+    }
+    
+    // ICE连接状态监听
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE Connection State:', pc?.iceConnectionState)
+      if (pc?.iceConnectionState === 'connected') {
+        isPlaying.value = true
+      }
+    }
+
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true
+    })
+    
+    await pc.setLocalDescription(offer)
+    
+    const apiUrl = buildApiUrl(url)
+    console.log('Requesting stream from:', apiUrl)
+    
+    const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sdp: offer.sdp, streamurl: url })
+    })
+    
+    if (!response.ok) {
+        throw new Error(`Server response error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (data.code === 0 && data.sdp) {
+       await pc.setRemoteDescription({
+         type: 'answer',
+         sdp: data.sdp
+       })
+    } else {
+        console.error('SRS Error:', data)
+    }
+  } catch (e) {
+    console.error('WebRTC setup error', e)
+    isPlaying.value = false
+  }
+}
+
+const stopWebRTCPlayback = () => {
+  if (pc) {
+    pc.close()
+    pc = null
+  }
+  if (videoElement.value) {
+    videoElement.value.srcObject = null
+  }
+  isPlaying.value = false
+}
+
+const openPresetDialog = async () => {
   presetDialog.value.visible = true
-  if (presetList.value.length > 0) {
+  
+  // 获取当前表单中的预置点值
+  const currentPreset = addTaskDialog.value.form.preset
+  
+  // Get robot ID and camera list
+  const robotId = localStorage.getItem('selected_robot_id')
+  const cameraListStr = localStorage.getItem('camera_list')
+  
+  if (robotId && cameraListStr) {
+    try {
+      const cameraList = JSON.parse(cameraListStr)
+      if (cameraList && cameraList.length > 0) {
+        // Use the first camera's PtzName
+        const ptzName = cameraList[0].PtzName
+        if (ptzName) {
+           console.log('Fetching presets for:', ptzName)
+           try {
+             // Re-initialize preset list to default 1-300 if needed, or keep existing map
+             // We want to overwrite names where ID matches
+             const res = await navigationApi.getPresets(robotId, ptzName)
+             if (res && res.code === 200 && Array.isArray(res.list)) {
+                // Update presetList with fetched names
+                res.list.forEach((item: any) => {
+                    const idStr = String(item.id)
+                    const existingIndex = presetList.value.findIndex(p => p.id === idStr)
+                    if (existingIndex !== -1) {
+                        presetList.value[existingIndex].name = `${idStr}.${item.presetName}`
+                    }
+                })
+                console.log('Presets updated with API data')
+             }
+           } catch (err) {
+             console.error('Failed to get presets API:', err)
+           }
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing camera_list or fetching presets:', e)
+    }
+  }
+
+  // 根据当前选中的预置点设置选中项
+  if (currentPreset) {
+    // 从当前值中提取预置点名称（格式可能是 "4.测试点123"）
+    const match = currentPreset.match(/^(\d+)\.(.+)$/)
+    let targetPreset = null
+    
+    if (match) {
+      const [, number, name] = match
+      // 在 presetList 中查找匹配的项
+      targetPreset = presetList.value.find(p => {
+        const pMatch = p.name.match(/^(\d+)\.(.+)$/)
+        return pMatch && pMatch[1] === number
+      })
+    }
+    
+    if (targetPreset) {
+      presetDialog.value.form.id = targetPreset.id
+      presetDialog.value.form.name = targetPreset.name
+    } else if (presetList.value.length > 0) {
       presetDialog.value.form.id = presetList.value[0].id
       presetDialog.value.form.name = presetList.value[0].name
+    }
+  } else if (presetList.value.length > 0) {
+    presetDialog.value.form.id = presetList.value[0].id
+    presetDialog.value.form.name = presetList.value[0].name
   }
+  
+  // Start Video
+  nextTick(() => {
+      try {
+        const streamsStr = localStorage.getItem('video_streams')
+        if (streamsStr) {
+            const streams = JSON.parse(streamsStr)
+            // Retrieve the first stream as requested or specific visible stream
+            // User said: take first video, type is 'drone_visible'
+            // Structure: [{"type":"drone_visible", ...}, ...]
+            // I'll look for drone_visible first, or fallback to index 0
+            const visibleStream = streams.find((s: any) => s.type === 'drone_visible') || streams[0]
+            
+            if (visibleStream && visibleStream.url) {
+                console.log('Starting video stream:', visibleStream.url)
+                startWebRTCPlayback(visibleStream.url)
+            } else {
+                console.warn('No suitable video stream found')
+            }
+        } else {
+            console.warn('No video_streams in localStorage')
+        }
+      } catch (e) {
+          console.error('Failed to load video streams', e)
+      }
+  })
 }
 
 const closePresetDialog = () => {
   presetDialog.value.visible = false
+  stopWebRTCPlayback()
 }
 
 const confirmPresetChoice = () => {
@@ -1804,6 +2310,27 @@ const ptzFocus = (focusIn: boolean) => {
 const handleSetPreset = () => { console.log('Set Preset') }
 const handleGotoPreset = () => { console.log('Goto Preset') }
 // const handleSpeed = () => { console.log('Set Speed') }
+
+// ========== 额外配置相关 ==========
+const extraConfigDialog = ref({
+  visible: false,
+  content: ''
+})
+
+const openExtraConfigDialog = () => {
+  extraConfigDialog.value.content = addTaskDialog.value.form.extraConfig || ''
+  extraConfigDialog.value.visible = true
+}
+
+const closeExtraConfigDialog = () => {
+  extraConfigDialog.value.visible = false
+}
+
+const confirmExtraConfig = () => {
+  addTaskDialog.value.form.extraConfig = extraConfigDialog.value.content
+  closeExtraConfigDialog()
+}
+// ========== 额外配置相关结束 ==========
 
 </script>
 
@@ -2345,20 +2872,20 @@ const handleGotoPreset = () => { console.log('Goto Preset') }
 .simple-switch-dot { width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.3s; }
 .simple-switch.active .simple-switch-dot { left: 20px; }
 .simple-modal-footer { padding: 16px 20px; border-top: 1px solid #244f78; display: flex; justify-content: center; gap: 20px; background: #102a43; flex-shrink: 0; }
-.custom-select-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #102a43; border: 1px solid #244f78; border-radius: 4px; max-height: 200px; overflow-y: auto; z-index: 10100; margin-top: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+.custom-select-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #102a43; border: 1px solid #244f78; border-radius: 4px; max-height: 340px; overflow-y: auto; z-index: 10100; margin-top: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
 .custom-select-option { padding: 8px 12px; cursor: pointer; color: #fff; font-size: 13px; transition: background 0.2s; }
 .custom-select-option:hover { background: #1e4b7a; }
 .custom-select-option.selected { background: #1e4b7a; color: #409eff; font-weight: 500; }
-.custom-select-dropdown::-webkit-scrollbar { width: 6px; }
+.custom-select-dropdown::-webkit-scrollbar { width: 6px; background: transparent; }
 .custom-select-dropdown::-webkit-scrollbar-track { background: transparent; }
 .custom-select-dropdown::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
 .custom-select-dropdown::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
 
 /* PTZ Buttons */
-.ptz-btn { width: 40px; height: 40px; background: #0099ff; border: none; color: #fff; cursor: pointer; border-radius: 4px; display: flex; justify-content: center; align-items: center; font-size: 16px; transition: 0.2s; }
+.ptz-btn { width: 50px; height: 50px; background: #0099ff; border: none; color: #fff; cursor: pointer; border-radius: 4px; display: flex; justify-content: center; align-items: center; font-size: 24px; transition: 0.2s; }
 .ptz-btn:hover { background: #0077cc; }
 .ptz-btn:active { background: #0055aa; }
-.mission-btn-blue { background: #0099ff; color: #fff; border: none; height: 32px; border-radius: 4px; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
+.mission-btn-blue { background: #0099ff; color: #fff; border: none; height: 40px; border-radius: 4px; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
 .mission-btn-blue:hover { background: #0077cc; }
 
 /* 列表操作按钮样式 */
@@ -2401,5 +2928,136 @@ const handleGotoPreset = () => { console.log('Goto Preset') }
 
 .action-btn-arrive img {
   filter: drop-shadow(0 0 4px rgba(103, 213, 253, 0.4));
+}
+
+/* 添加任务组弹窗样式 */
+.task-form-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.task-form-row:last-child {
+  margin-bottom: 0;
+}
+
+.task-form-label {
+  min-width: 100px;
+  color: #b8c7d9;
+  font-size: 14px;
+  text-align: right;
+  margin-right: 16px;
+  white-space: nowrap;
+}
+
+.task-form-select,
+.task-form-input {
+  flex: 1;
+  height: 36px;
+  background: #0c3c56;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+  border-radius: 6px;
+  color: #fff;
+  padding: 0 12px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.task-form-select:focus,
+.task-form-input:focus {
+  outline: none;
+  border-color: #67d5fd;
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.1);
+}
+
+.task-form-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-form-select option {
+  background: #0c3c56;
+  color: #fff;
+}
+
+.simple-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #244f78;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.simple-modal-header {
+  height: 50px;
+  background: #163654;
+  border-bottom: 1px solid #244f78;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.simple-close-icon {
+  cursor: pointer;
+  font-size: 20px;
+  color: #909399;
+  transition: color 0.3s;
+}
+
+.simple-close-icon:hover {
+  color: #fff;
+}
+
+.simple-modal-body {
+  padding: 24px 40px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* 添加任务组弹窗样式 */
+.task-group-modal {
+  width: 420px !important;
+}
+
+.task-group-modal .simple-modal-body {
+  padding: 35px 40px;
+}
+
+.task-group-modal .task-group-input {
+  width: 280px;
+  height: 40px;
+  font-size: 15px;
+  text-align: center;
+}
+
+/* textarea样式 */
+.simple-textarea {
+  width: 100%;
+  padding: 12px 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.6;
+}
+
+.simple-textarea:focus {
+  outline: none;
+  border-color: #67d5fd;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.simple-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3);
 }
 </style>

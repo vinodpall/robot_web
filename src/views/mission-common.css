@@ -1152,11 +1152,31 @@
   flex-direction: column;
 }
 
+.file-table::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.file-table::-webkit-scrollbar-track {
+  background: rgba(12, 42, 62, 0.3);
+  border-radius: 4px;
+}
+
+.file-table::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 4px;
+}
+
+.file-table::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
+}
+
 .file-table-header,
 .file-table-row {
   display: grid;
   grid-template-columns: 80px 180px 200px 200px 200px 200px 180px 1fr 280px;
   align-items: center;
+  min-width: 100%;
 }
 
 .file-table-header {
@@ -1166,6 +1186,31 @@
   font-weight: 600;
   height: 44px;
   text-align: center;
+  flex-shrink: 0;
+}
+
+.file-table-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.file-table-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.file-table-body::-webkit-scrollbar-track {
+  background: rgba(12, 42, 62, 0.3);
+  border-radius: 4px;
+}
+
+.file-table-body::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 4px;
+}
+
+.file-table-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
 }
 
 .file-table-row {

@@ -25,48 +25,62 @@
           </div>
           <div class="mission-content-wrapper">
             <div class="mission-toolbar">
-              <span class="mission-toolbar-label" style="margin-right: -8px;">循迹任务名称：</span>
-              <select class="mission-toolbar-select" style="min-width: 180px;">
-                <option value="">FA0625_new_line_mode1</option>
+              <button class="mission-btn mission-btn-primary" @click="handleOpenCreateDialog">新增定时任务</button>
+
+              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">循迹任务名称：</span>
+              <select v-model="selectedTrackName" class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">全部</option>
+                <option v-for="track in trackList" :key="track" :value="track">{{ track }}</option>
               </select>
 
               <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">任务组名称：</span>
-              <select class="mission-toolbar-select" style="min-width: 180px;">
-                <option value="">任务组-001</option>
+              <select v-model="selectedTaskPointName" class="mission-toolbar-select" style="min-width: 180px;">
+                <option value="">全部</option>
+                <option v-for="group in taskGroupList" :key="group" :value="group">{{ group }}</option>
               </select>
-
-              <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">定时任务开始时间：</span>
-              <input
-                type="time"
-                class="mission-toolbar-select"
-                style="min-width: 140px;"
-              />
-
-              <div style="display: flex; gap: 12px; margin-left: 8px;">
-                <button class="mission-btn mission-btn-primary">提交</button>
-              </div>
             </div>
-            <div class="file-table">
-              <div class="file-table-header">
-                <div class="file-table-cell" style="width: 80px;">序号</div>
-                <div class="file-table-cell" style="flex: 1;">开始时间</div>
-                <div class="file-table-cell file-table-action" style="width: 120px;">操作</div>
+            <div class="file-table" style="min-height: 650px;">
+              <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center; display: flex;">
+                <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
+                <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">循迹任务名称</div>
+                <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">任务组名称</div>
+                <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center; display: flex; align-items: center; justify-content: center;">开始时间</div>
+                <div class="file-table-cell file-table-action" style="min-width: 160px; width: 160px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
-              <template v-if="alerts.length > 0">
-                <div class="file-table-row" v-for="(alert, idx) in alerts" :key="alert.id">
-                  <div class="file-table-cell" style="width: 80px;">
-                    {{ (currentPage - 1) * pageSize + idx + 1 }}
+              <div class="file-table-body">
+                <template v-if="alerts.length > 0">
+                <div class="file-table-row" v-for="(alert, idx) in alerts" :key="alert.id" style="min-height: 60px; display: flex;">
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    {{ idx + 1 }}
                   </div>
-                  <div class="file-table-cell" style="flex: 1;">
-                    {{ alert.detection_time ? formatTimeHM(alert.detection_time) : '-' }}
+                  <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    {{ alert.track_name || '-' }}
                   </div>
-                  <div class="file-table-cell file-table-action" style="width: 120px;">
-                    <button class="mission-btn mission-btn-secondary" disabled style="min-width: 80px; padding: 0 12px;">删除</button>
+                  <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    {{ alert.track_point_name || '-' }}
+                  </div>
+                  <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    {{ alert.start_time || '-' }}
+                  </div>
+                  <div class="file-table-cell file-table-action" style="min-width: 160px; width: 160px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
+                    <button class="action-btn action-btn-delete" @click="handleDeleteScheduledTask(alert)">
+                      <img :src="deleteIcon" />
+                      删除
+                    </button>
                   </div>
                 </div>
               </template>
-              <div v-else class="mission-empty">
+                <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
+                <div class="file-table-row" v-for="i in Math.max(0, 10 - alerts.length)" :key="'empty-' + i" style="min-height: 60px; height: 60px; display: flex;">
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell file-table-action" style="min-width: 160px; width: 160px; text-align: center;">&nbsp;</div>
+                </div>
+                <div v-if="alerts.length === 0" class="mission-empty">
                 暂无任务记录
+              </div>
               </div>
             </div>
             <!-- 分页组件 -->
@@ -122,6 +136,48 @@
         </section>
       </div>
     </main>
+
+    <!-- 新增定时任务弹窗 -->
+    <div v-if="showCreateDialog" class="custom-dialog-mask" @click="closeCreateDialog">
+      <div class="simple-modal-card" style="width: 500px;" @click.stop>
+        <div class="simple-modal-header">
+          <span>新增定时任务</span>
+          <span class="simple-close-icon" @click="closeCreateDialog">×</span>
+        </div>
+        <div class="simple-modal-body">
+          <div class="task-form-row">
+            <label class="task-form-label">循迹任务：</label>
+            <select v-model="createForm.track_name" class="task-form-select">
+              <option value="">请选择循迹任务</option>
+              <option v-for="track in trackList" :key="track" :value="track">{{ track }}</option>
+            </select>
+          </div>
+          <div class="task-form-row">
+            <label class="task-form-label">任务组：</label>
+            <select v-model="createForm.track_point_name" class="task-form-select" :disabled="!createForm.track_name">
+              <option value="">请选择任务组</option>
+              <option v-for="group in createTaskGroupList" :key="group" :value="group">{{ group }}</option>
+            </select>
+          </div>
+          <div class="task-form-row">
+            <label class="task-form-label">开始时间：</label>
+            <div class="time-input-wrapper" @click="focusTimeInput">
+              <input
+                ref="timeInputRef"
+                v-model="createForm.start_time"
+                type="time"
+                class="task-form-input"
+                placeholder="HH:MM"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="simple-modal-footer">
+          <button class="mission-btn mission-btn-secondary" @click="closeCreateDialog">取消</button>
+          <button class="mission-btn mission-btn-primary" @click="handleCreateScheduledTask">确定</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 大图预览弹窗 -->
     <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
@@ -241,15 +297,46 @@
       </div>
     </div>
   </div>
+
+  <!-- 成功提示 -->
+  <SuccessMessage 
+    :show="successMessage.show" 
+    :message="successMessage.text"
+    @close="successMessage.show = false"
+  />
+
+  <!-- 错误提示 -->
+  <ErrorMessage 
+    :show="errorMessage.show" 
+    :message="errorMessage.text"
+    @close="errorMessage.show = false"
+  />
+
+  <!-- 删除确认对话框 -->
+  <ConfirmDialog
+    :show="showDeleteConfirm"
+    title="删除定时任务"
+    :message="`确定要删除定时任务「${taskToDelete?.track_name}」吗？`"
+    type="warning"
+    confirm-text="删除"
+    cancel-text="取消"
+    @confirm="confirmDeleteScheduledTask"
+    @cancel="cancelDeleteScheduledTask"
+    @close="showDeleteConfirm = false"
+  />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { visionApi } from '@/api/services'
+import { visionApi, navigationApi } from '@/api/services'
 import { API_BASE_URL } from '@/api/config'
 import AMapLoader from '@amap/amap-jsapi-loader'
+import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
+import SuccessMessage from '@/components/SuccessMessage.vue'
+import ErrorMessage from '@/components/ErrorMessage.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 // 统一构建图片请求URL，避免本地出现 /api/v1/api/v1 的重复
 const buildImageFetchUrl = (path: string) => {
   if (!path) return ''
@@ -303,8 +390,111 @@ const total = ref(0)
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
 const pageInput = ref('')
 
-// 数据列表
-const alerts = ref<VisionAlert[]>([])
+// 数据列表（定时任务列表）
+const alerts = ref<any[]>([])
+
+// 循迹任务名称和任务组
+const trackList = ref<string[]>([])
+const selectedTrackName = ref('')
+const taskGroupList = ref<string[]>([])
+const selectedTaskPointName = ref('')
+
+// 新增定时任务弹窗
+const showCreateDialog = ref(false)
+const createForm = ref({
+  track_name: '',
+  track_point_name: '',
+  start_time: ''
+})
+const createTaskGroupList = ref<string[]>([])
+
+// 时间输入框引用
+const timeInputRef = ref<HTMLInputElement | null>(null)
+
+// 成功/失败提示
+const successMessage = ref({
+  show: false,
+  text: ''
+})
+const errorMessage = ref({
+  show: false,
+  text: ''
+})
+
+// 删除确认对话框
+const showDeleteConfirm = ref(false)
+const taskToDelete = ref<any>(null)
+
+// 从缓存读取选中的地图名称
+const selectedMap = computed(() => {
+  return localStorage.getItem('selected_map_name') || ''
+})
+
+// 过滤后的轨迹列表（根据缓存的地图筛选）
+const filteredTrackList = computed(() => {
+  if (!selectedMap.value) return trackList.value
+  return trackList.value.filter(track => track.startsWith(selectedMap.value + '_'))
+})
+
+// 获取轨迹列表
+const loadTrackList = async () => {
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) return
+  
+  try {
+    const response = await navigationApi.getTrackList(robotId)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      const rawList: string[] = response.msg.result
+      // 处理：移除 @ 及后缀，并去重
+      const processedSet = new Set<string>()
+      rawList.forEach(item => {
+        const atIndex = item.indexOf('@')
+        const name = atIndex > -1 ? item.substring(0, atIndex) : item
+        processedSet.add(name)
+      })
+      trackList.value = Array.from(processedSet)
+    }
+  } catch (err) {
+    console.error('获取轨迹列表失败:', err)
+  }
+}
+
+// 监听筛选后的轨迹列表变化
+watch(filteredTrackList, (newList) => {
+  // 不自动选择，保持为空
+  if (newList.length === 0) {
+    selectedTrackName.value = ''
+  }
+})
+
+// 监听轨迹选择变化，加载任务组列表
+watch(selectedTrackName, async (newVal) => {
+  taskGroupList.value = []
+  selectedTaskPointName.value = ''
+  
+  // 重新加载定时任务列表
+  await loadScheduledTasks()
+  
+  if (!newVal) return
+  
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) return
+  
+  try {
+    const response = await navigationApi.getTaskpointList(robotId, newVal)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      taskGroupList.value = response.msg.result
+    }
+  } catch (err) {
+    console.error('获取任务组列表失败:', err)
+  }
+})
+
+// 监听任务组选择变化，重新加载数据
+watch(selectedTaskPointName, () => {
+  loadScheduledTasks()
+})
+
 // 已移除设备和任务筛选
 
 // 获取workspaceId
@@ -317,33 +507,183 @@ const getWorkspaceId = () => {
   return '123456'
 }
 
-// 加载报警数据
-const loadAlerts = async () => {
+// 加载定时任务列表
+const loadScheduledTasks = async () => {
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) return
+  
   try {
-    const workspaceId = getWorkspaceId()
-    const params = {
-      ...filters.value,
-      limit: pageSize.value,
-      offset: (currentPage.value - 1) * pageSize.value
+    // 根据选择的条件构建参数
+    const params: any = {}
+    if (selectedTrackName.value) {
+      params.track_name = selectedTrackName.value
+    }
+    if (selectedTaskPointName.value) {
+      params.track_point_name = selectedTaskPointName.value
     }
     
-    const response = await visionApi.getAlerts(workspaceId, params)
-    alerts.value = response.alerts
-    total.value = response.total
+    const response = await navigationApi.getScheduledTasks(robotId, params)
     
-    // 保留简单数据加载，不再维护设备/任务列表
+    console.log('定时任务列表返回:', response)
     
-    // 异步下载图片
-    downloadImages(response.alerts)
+    // 根据返回的数据结构处理
+    if (response && response.data && Array.isArray(response.data)) {
+      // 反转数组顺序，让新添加的显示在最上面
+      alerts.value = response.data.reverse()
+      total.value = response.data.length
+    } else {
+      alerts.value = []
+      total.value = 0
+    }
   } catch (error) {
-    console.error('加载报警数据失败:', error)
+    console.error('加载定时任务列表失败:', error)
+    alerts.value = []
+    total.value = 0
   }
 }
 
-// 筛选条件变化
-const onFilterChange = () => {
-  currentPage.value = 1
-  loadAlerts()
+// 监听新增弹窗中的轨迹选择变化
+watch(() => createForm.value.track_name, async (newVal) => {
+  createForm.value.track_point_name = ''
+  createTaskGroupList.value = []
+  
+  if (!newVal) return
+  
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) return
+  
+  try {
+    const response = await navigationApi.getTaskpointList(robotId, newVal)
+    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
+      createTaskGroupList.value = response.msg.result
+      // 自动选择第一个任务组
+      if (createTaskGroupList.value.length > 0) {
+        createForm.value.track_point_name = createTaskGroupList.value[0]
+      }
+    }
+  } catch (err) {
+    console.error('获取任务组列表失败:', err)
+  }
+})
+
+// 打开新增弹窗
+const handleOpenCreateDialog = () => {
+  showCreateDialog.value = true
+  // 如果有轨迹列表，默认选择第一个
+  if (trackList.value.length > 0) {
+    createForm.value.track_name = trackList.value[0]
+  }
+}
+
+// 聚焦时间输入框
+const focusTimeInput = () => {
+  if (timeInputRef.value) {
+    timeInputRef.value.showPicker?.()
+  }
+}
+
+// 关闭新增弹窗
+const closeCreateDialog = () => {
+  showCreateDialog.value = false
+  createForm.value = {
+    track_name: '',
+    track_point_name: '',
+    start_time: ''
+  }
+  createTaskGroupList.value = []
+}
+
+// 新增定时任务
+const handleCreateScheduledTask = async () => {
+  // 验证表单
+  if (!createForm.value.track_name) {
+    errorMessage.value = { show: true, text: '请选择循迹任务' }
+    return
+  }
+  if (!createForm.value.track_point_name) {
+    errorMessage.value = { show: true, text: '请选择任务组' }
+    return
+  }
+  if (!createForm.value.start_time) {
+    errorMessage.value = { show: true, text: '请选择开始时间' }
+    return
+  }
+  
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) {
+    errorMessage.value = { show: true, text: '未选择机器人' }
+    return
+  }
+  
+  try {
+    const response = await navigationApi.createScheduledTask(robotId, {
+      track_name: createForm.value.track_name,
+      track_point_name: createForm.value.track_point_name,
+      start_time: createForm.value.start_time
+    })
+    
+    console.log('新增定时任务返回:', response)
+    
+    // 根据返回结构判断成功
+    if (response && response.response && response.response.msg && response.response.msg.error_code === 0) {
+      successMessage.value = { show: true, text: '新增定时任务成功' }
+      setTimeout(() => {
+        successMessage.value.show = false
+      }, 2000)
+      closeCreateDialog()
+      // 重新加载定时任务列表
+      await loadScheduledTasks()
+    } else {
+      const errorMsg = response?.response?.msg?.error_msg || response?.msg?.error_msg || '未知错误'
+      errorMessage.value = { show: true, text: `新增失败: ${errorMsg}` }
+    }
+  } catch (error: any) {
+    console.error('新增定时任务失败:', error)
+    errorMessage.value = { show: true, text: `新增失败: ${error.message || '网络错误'}` }
+  }
+}
+
+// 删除定时任务（显示确认弹窗）
+const handleDeleteScheduledTask = (task: any) => {
+  taskToDelete.value = task
+  showDeleteConfirm.value = true
+}
+
+// 确认删除定时任务
+const confirmDeleteScheduledTask = async () => {
+  showDeleteConfirm.value = false
+  
+  if (!taskToDelete.value) return
+  
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) {
+    errorMessage.value = { show: true, text: '未选择机器人' }
+    return
+  }
+  
+  try {
+    const response = await navigationApi.deleteScheduledTask(robotId, taskToDelete.value.id)
+    console.log('删除定时任务返回:', response)
+    
+    successMessage.value = { show: true, text: '删除定时任务成功' }
+    setTimeout(() => {
+      successMessage.value.show = false
+    }, 2000)
+    
+    // 重新加载定时任务列表
+    await loadScheduledTasks()
+  } catch (error: any) {
+    console.error('删除定时任务失败:', error)
+    errorMessage.value = { show: true, text: `删除失败: ${error.message || '网络错误'}` }
+  } finally {
+    taskToDelete.value = null
+  }
+}
+
+// 取消删除
+const cancelDeleteScheduledTask = () => {
+  showDeleteConfirm.value = false
+  taskToDelete.value = null
 }
 
 // 切换页面
@@ -351,7 +691,6 @@ const changePage = (page: number) => {
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page
     pageInput.value = page.toString()
-    loadAlerts()
   }
 }
 
@@ -360,7 +699,6 @@ const jumpToPage = () => {
   const page = parseInt(pageInput.value)
   if (page && page >= 1 && page <= totalPages.value) {
     currentPage.value = page
-    loadAlerts()
   } else {
     pageInput.value = currentPage.value.toString()
   }
@@ -620,15 +958,10 @@ const getThumbnailUrl = async (thumbPath: string) => {
 
 // 页面加载时获取数据
 onMounted(() => {
-  // 检查URL参数中是否有job_id
-  const urlParams = new URLSearchParams(window.location.search)
-  const jobId = urlParams.get('job_id')
-  if (jobId) {
-    filters.value.job_id = jobId
-    console.log('从URL参数获取到job_id:', jobId)
-  }
-  
-  loadAlerts()
+  // 加载轨迹列表
+  loadTrackList()
+  // 加载定时任务列表
+  loadScheduledTasks()
   pageInput.value = currentPage.value.toString()
   // 监听从地图缩略图触发的大图打开事件
   window.addEventListener('openBigImageFromMap', async (e: any) => {
@@ -733,8 +1066,8 @@ const submitStatus = async () => {
     // 关闭弹窗
     closeStatusDialog()
     
-    // 重新加载数据
-    await loadAlerts()
+    // 重新加载数据（定时任务页面不需要）
+    // await loadScheduledTasks()
     
     // 显示成功提示
     alert('状态更新成功')
@@ -942,7 +1275,7 @@ const transformLng = (lng: number, lat: number) => {
 }
 </script>
 
-<style>
+<style scoped>
 @import './mission-common.css';
 
 /* 定时循迹任务标题左对齐 */
@@ -1633,5 +1966,175 @@ const transformLng = (lng: number, lat: number) => {
 
 .status-default {
   color: #666;
+}
+
+/* Action button styles */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 8px;
+  min-width: auto;
+}
+
+.action-btn img {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn-delete {
+  color: #ff4d4f;
+}
+
+.action-btn-delete img {
+  filter: drop-shadow(0 0 4px rgba(255, 77, 79, 0.4));
+}
+
+/* 新增定时任务弹窗样式 */
+.custom-dialog-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.simple-modal-card {
+  background: #102a43;
+  border: 1px solid #244f78;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.simple-modal-header {
+  height: 50px;
+  background: #163654;
+  border-bottom: 1px solid #244f78;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.simple-close-icon {
+  cursor: pointer;
+  font-size: 20px;
+  color: #909399;
+  transition: color 0.3s;
+}
+
+.simple-close-icon:hover {
+  color: #fff;
+}
+
+.simple-modal-body {
+  padding: 24px 40px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.simple-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.simple-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.simple-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.simple-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.simple-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #244f78;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.simple-modal-card .task-form-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.simple-modal-card .task-form-row:last-child {
+  margin-bottom: 0;
+}
+
+.simple-modal-card .task-form-label {
+  min-width: 90px;
+  color: #b8c7d9;
+  font-size: 14px;
+  text-align: right;
+  margin-right: 16px;
+  white-space: nowrap;
+}
+
+.simple-modal-card .task-form-select,
+.simple-modal-card .task-form-input {
+  flex: 1;
+  height: 36px;
+  background: #0c3c56;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+  border-radius: 6px;
+  color: #fff;
+  padding: 0 12px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.simple-modal-card .task-form-select:focus,
+.simple-modal-card .task-form-input:focus {
+  outline: none;
+  border-color: #67d5fd;
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.1);
+}
+
+.simple-modal-card .task-form-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.simple-modal-card .task-form-select option {
+  background: #0c3c56;
+  color: #fff;
+}
+
+.simple-modal-card .time-input-wrapper {
+  flex: 1;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+}
+
+.simple-modal-card .time-input-wrapper .task-form-input {
+  cursor: pointer;
+  width: 100%;
+  flex: 1;
 }
 </style>

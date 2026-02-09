@@ -472,6 +472,96 @@
       </div>
     </div>
 
+    <!-- 生成地图对话框 -->
+    <div v-if="generateMapDialogVisible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card">
+        <div class="recording-dialog-header">
+          生成地图
+          <button class="dialog-close-btn" @click="cancelGenerateMap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="recording-dialog-body">
+          <div class="form-item">
+            <label class="form-label">选择数据包：</label>
+            <select v-model="selectedDataPackage" class="recording-input">
+              <option v-for="pkg in dataPackageList" :key="pkg" :value="pkg">
+                {{ pkg }}
+              </option>
+            </select>
+          </div>
+          <div class="form-item">
+            <label class="form-label">地图名称：</label>
+            <input v-model="newMapName" placeholder="请输入地图名称" class="recording-input" />
+          </div>
+        </div>
+        <div class="recording-dialog-actions">
+          <button class="map-btn map-btn-primary" @click="confirmGenerateMap" :disabled="generateMapLoading">
+            {{ generateMapLoading ? '生成中...' : '确定' }}
+          </button>
+          <button class="map-btn" @click="cancelGenerateMap">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 生成栅格地图对话框 -->
+    <div v-if="generateGridMapDialogVisible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card">
+        <div class="recording-dialog-header">
+          生成栅格地图
+          <button class="dialog-close-btn" @click="cancelGenerateGridMap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="recording-dialog-body">
+          <div class="form-item">
+            <label class="form-label">选择地图：</label>
+            <select v-model="selectedMapForGrid" class="recording-input">
+              <option v-for="map in gridMapList" :key="map" :value="map">
+                {{ map }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="recording-dialog-actions">
+          <button class="map-btn map-btn-primary" @click="confirmGenerateGridMap" :disabled="generateGridMapLoading">
+            {{ generateGridMapLoading ? '生成中...' : '确定' }}
+          </button>
+          <button class="map-btn" @click="cancelGenerateGridMap">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新建融合地图对话框 -->
+    <div v-if="createFusionMapDialogVisible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card">
+        <div class="recording-dialog-header">
+          新建融合地图
+          <button class="dialog-close-btn" @click="cancelCreateFusionMap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="recording-dialog-body">
+          <div class="form-item">
+            <label class="form-label">融合地图名称：</label>
+            <input v-model="fusionMapName" placeholder="请输入融合地图名称" class="recording-input" />
+          </div>
+        </div>
+        <div class="recording-dialog-actions">
+          <button class="map-btn map-btn-primary" @click="confirmCreateFusionMap" :disabled="createFusionMapLoading">
+            {{ createFusionMapLoading ? '创建中...' : '确定' }}
+          </button>
+          <button class="map-btn" @click="cancelCreateFusionMap">取消</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 循迹避障模式选择对话框 -->
     <div v-if="obsHandleDialogVisible" class="recording-dialog-overlay">
       <div class="recording-dialog-card card">
@@ -2257,6 +2347,23 @@ const mapProgress = ref(0)
 const recordingDialogVisible = ref(false)
 const recordingName = ref('')
 const recordingLoading = ref(false)
+// 生成地图对话框相关状态
+const generateMapDialogVisible = ref(false)
+const selectedDataPackage = ref('')
+const newMapName = ref('')
+const generateMapLoading = ref(false)
+// 当前建图的参数（用于终止建图）
+const currentMappingDataName = ref('')
+const currentMappingMapName = ref('')
+// 生成栅格地图对话框相关状态
+const generateGridMapDialogVisible = ref(false)
+const selectedMapForGrid = ref('')
+const gridMapList = ref<string[]>([])
+const generateGridMapLoading = ref(false)
+// 新建融合地图对话框相关状态
+const createFusionMapDialogVisible = ref(false)
+const fusionMapName = ref('')
+const createFusionMapLoading = ref(false)
 
 // 录包建图相关方法
 const handleStartRecording = () => {
@@ -2337,28 +2444,209 @@ const handleStopRecording = async () => {
   }
 }
 
-const handleGenerateMap = () => {
-  console.log('生成地图')
-  // TODO: 调用生成地图API
-  mapProgress.value = 10 // 示例：开始进度
+const handleGenerateMap = async () => {
+  // 弹出对话框，选择数据包和输入地图名称
+  newMapName.value = ''
+  generateMapDialogVisible.value = true
+  
+  // 使用现有的获取数据包列表的方法
+  await fetchDataPackageList()
+  
+  // 有数据时默认选择第一个
+  if (dataPackageList.value.length > 0) {
+    selectedDataPackage.value = dataPackageList.value[0]
+  } else {
+    selectedDataPackage.value = ''
+  }
+}
+
+const confirmGenerateMap = async () => {
+  const dataName = selectedDataPackage.value.trim()
+  const mapName = newMapName.value.trim()
+  
+  if (!dataName) {
+    showErrorMessage('请选择数据包')
+    return
+  }
+  
+  if (!mapName) {
+    showErrorMessage('请输入地图名称')
+    return
+  }
+  
+  if (generateMapLoading.value) return
+  generateMapLoading.value = true
+  
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+    
+    // 调用 slam 接口
+    await navigationApi.slam(robotId, {
+      action: 1,
+      data_name: dataName,
+      map_name: mapName
+    })
+    
+    // 保存当前建图参数，用于终止
+    currentMappingDataName.value = dataName
+    currentMappingMapName.value = mapName
+    
+    generateMapDialogVisible.value = false
+    showSuccessMessage('生成地图指令已发送')
+    mapProgress.value = 10 // 开始进度
+  } catch (err) {
+    console.error('生成地图失败:', err)
+    showErrorMessage('生成地图失败')
+  } finally {
+    generateMapLoading.value = false
+  }
+}
+
+const cancelGenerateMap = () => {
+  generateMapDialogVisible.value = false
 }
 
 const handleGenerateGridMap = () => {
-  console.log('生成栅格地图')
-  // TODO: 调用生成栅格地图API
-  mapProgress.value = 10 // 示例：开始进度
+  // 弹出对话框，选择地图
+  generateGridMapDialogVisible.value = true
+  
+  // 从缓存中获取地图列表
+  try {
+    const cached = localStorage.getItem('cached_map_list')
+    if (cached) {
+      gridMapList.value = JSON.parse(cached)
+      
+      // 有数据时默认选择第一个
+      if (gridMapList.value.length > 0) {
+        selectedMapForGrid.value = gridMapList.value[0]
+      } else {
+        selectedMapForGrid.value = ''
+      }
+    } else {
+      gridMapList.value = []
+      selectedMapForGrid.value = ''
+    }
+  } catch (err) {
+    console.error('读取地图列表失败:', err)
+    gridMapList.value = []
+    selectedMapForGrid.value = ''
+  }
+}
+
+const confirmGenerateGridMap = async () => {
+  const mapName = selectedMapForGrid.value.trim()
+  
+  if (!mapName) {
+    showErrorMessage('请选择地图')
+    return
+  }
+  
+  if (generateGridMapLoading.value) return
+  generateGridMapLoading.value = true
+  
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+    
+    // 调用 change_pcd 接口
+    await navigationApi.changePcd(robotId, {
+      action: 1,
+      map_name: mapName
+    })
+    
+    generateGridMapDialogVisible.value = false
+    showSuccessMessage('生成栅格地图指令已发送')
+    mapProgress.value = 10 // 开始进度
+  } catch (err) {
+    console.error('生成栅格地图失败:', err)
+    showErrorMessage('生成栅格地图失败')
+  } finally {
+    generateGridMapLoading.value = false
+  }
+}
+
+const cancelGenerateGridMap = () => {
+  generateGridMapDialogVisible.value = false
 }
 
 const handleCreateFusionMap = () => {
-  console.log('新建融合地图')
-  // TODO: 调用新建融合地图API
-  mapProgress.value = 10 // 示例：开始进度
+  // 弹出对话框，输入融合地图名称
+  fusionMapName.value = ''
+  createFusionMapDialogVisible.value = true
 }
 
-const handleStopMapping = () => {
-  console.log('终止建图')
-  mapProgress.value = 0
-  // TODO: 调用终止建图API
+const confirmCreateFusionMap = async () => {
+  const mapName = fusionMapName.value.trim()
+  
+  if (!mapName) {
+    showErrorMessage('请输入融合地图名称')
+    return
+  }
+  
+  if (createFusionMapLoading.value) return
+  createFusionMapLoading.value = true
+  
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+    
+    // 调用 create_msf_data 接口
+    await navigationApi.createMsfData(robotId, {
+      session: mapName
+    })
+    
+    createFusionMapDialogVisible.value = false
+    showSuccessMessage('新建融合地图指令已发送')
+    mapProgress.value = 10 // 开始进度
+  } catch (err) {
+    console.error('新建融合地图失败:', err)
+    showErrorMessage('新建融合地图失败')
+  } finally {
+    createFusionMapLoading.value = false
+  }
+}
+
+const cancelCreateFusionMap = () => {
+  createFusionMapDialogVisible.value = false
+}
+
+const handleStopMapping = async () => {
+  if (mapProgress.value === 0) return
+  
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+    
+    // 调用 slam 接口，action 为 0 表示终止
+    await navigationApi.slam(robotId, {
+      action: 0,
+      data_name: currentMappingDataName.value,
+      map_name: currentMappingMapName.value
+    })
+    
+    mapProgress.value = 0
+    showSuccessMessage('终止建图指令已发送')
+    
+    // 清空保存的参数
+    currentMappingDataName.value = ''
+    currentMappingMapName.value = ''
+  } catch (err) {
+    console.error('终止建图失败:', err)
+    showErrorMessage('终止建图失败')
+  }
 }
 
 // 地图编辑相关状态
@@ -4546,6 +4834,7 @@ const handleDelete = (item: any) => {
 }
 
 .recording-dialog-header {
+  position: relative;
   padding: 20px 24px;
   border-bottom: 1px solid rgba(103, 213, 253, 0.2);
   font-size: 16px;
@@ -4553,8 +4842,52 @@ const handleDelete = (item: any) => {
   color: #67d5fd;
 }
 
+.dialog-close-btn {
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #67d5fd;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.dialog-close-btn:hover {
+  background: rgba(103, 213, 253, 0.1);
+  color: #fff;
+}
+
+.dialog-close-btn:active {
+  background: rgba(103, 213, 253, 0.2);
+}
+
 .recording-dialog-body {
   padding: 24px;
+}
+
+.form-item {
+  margin-bottom: 20px;
+}
+
+.form-item:last-child {
+  margin-bottom: 0;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #67d5fd;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .recording-input {
@@ -4568,6 +4901,15 @@ const handleDelete = (item: any) => {
   font-size: 14px;
   outline: none;
   transition: all 0.2s;
+}
+
+select.recording-input {
+  cursor: pointer;
+}
+
+select.recording-input option {
+  background: #0c3c56;
+  color: #67d5fd;
 }
 
 .recording-input:focus {

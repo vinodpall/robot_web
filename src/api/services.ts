@@ -1234,6 +1234,16 @@ export const navigationApi = {
   getPointTaskList: (robotId: string) => {
     return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/task_list`)
   },
+  // 更新发布点任务列表
+  updatePointTaskList: (robotId: string, data: { data: { task_id: string; task_name: string; taskcontent: any[] }[] }) => {
+    return apiClient.post<{ 
+      message: string; 
+      response: { 
+        data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; 
+        request_id: string 
+      } 
+    }>(`/taskpoints/${robotId}/task_list`, data)
+  },
   // 启动发布点任务
   startPointTask: (robotId: string, data: {
     id: string;
@@ -1299,6 +1309,20 @@ export const navigationApi = {
   deleteTrackPoint: (robotId: string, data: any) => {
     return apiClient.delete(`/tracks/${robotId}/delete_track_point`, data)
   },
+  // 删除任务组
+  deleteTaskpointFile: (robotId: string, data: { action: number; track_name: string; taskpoint_name: string }) => {
+    return apiClient.post(`/navigation/${robotId}/delete_taskpoint_file`, data)
+  },
+  // 更新循迹任务列表（统一提交）
+  updateTrackTaskList: (robotId: string, trackName: string, taskPointName: string, data: { data: any[] }) => {
+    return apiClient.post<{
+      message: string;
+      response: {
+        data: any[];
+        request_id: string;
+      }
+    }>(`/tracks/${robotId}/task_list`, { track_name: trackName, track_point_name: taskPointName, ...data })
+  },
   // MSF控制
   msfControl: (robotId: string, data: {
     action: number;
@@ -1315,6 +1339,27 @@ export const navigationApi = {
     // 后端接口路径按照 /navigation/{robot_id}/data_record
     return apiClient.post(`/navigation/${robotId}/data_record`, data)
   },
+  // 生成地图（SLAM）
+  slam: (robotId: string, data: {
+    action: number;
+    data_name: string;
+    map_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/slam`, data)
+  },
+  // 生成栅格地图
+  changePcd: (robotId: string, data: {
+    action: number;
+    map_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/change_pcd`, data)
+  },
+  // 新建融合地图
+  createMsfData: (robotId: string, data: {
+    session: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/create_msf_data`, data)
+  },
   // INS控制
   insControl: (robotId: string, data: {
     action: number;
@@ -1329,14 +1374,134 @@ export const navigationApi = {
   },
   // 启动多任务组
   startMultiTaskGroup: (robotId: string, data: {
-    group_name: string;
-    loop: boolean;
+    multitask_name: string;
+    multitask_id: string;
+    middle_start: number;
+    action: number;
   }) => {
     return apiClient.post(`/multitasks/${robotId}/start_multitask_group`, data)
   },
   // 取消多任务组
   cancelMultiTaskGroup: (robotId: string) => {
     return apiClient.post(`/multitasks/${robotId}/cancel_multitask_group`, {})
+  },
+  // 创建多任务组
+  createMultiTaskGroup: (robotId: string, data: { multitask_name: string }) => {
+    return apiClient.post(`/multitasks/${robotId}/multitask_group`, data)
+  },
+  // 删除多任务组
+  deleteMultiTaskGroup: (robotId: string, data: { multitask_id: string }) => {
+    return apiClient.delete(`/multitasks/${robotId}/multitask_group`, data)
+  },
+  // 添加任务到多任务组
+  addTaskToMultiTaskGroup: (robotId: string, data: {
+    multitask_id: string;
+    task_data: {
+      map_name: string;
+      task_name: string;
+      task_pointname: string;
+      task_type: string;
+      circle: number;
+      task_id: string;
+      obs_mode: string;
+      is_origin_publish: number;
+      start_mode: string;
+      gait: string;
+      ground: string;
+    };
+  }) => {
+    return apiClient.post(`/multitasks/${robotId}/multitask`, data)
+  },
+  // 更新多任务组中的任务
+  updateTaskInMultiTaskGroup: (robotId: string, data: {
+    multitask_id: string;
+    task_data: {
+      map_name: string;
+      task_name: string;
+      task_pointname: string;
+      task_type: string;
+      circle: number;
+      task_id: string;
+      obs_mode: string;
+      is_origin_publish: number;
+      start_mode: string;
+      gait: string;
+      ground: string;
+    };
+  }) => {
+    return apiClient.put(`/multitasks/${robotId}/multitask`, data)
+  },
+  // 删除多任务组中的任务
+  deleteTaskFromMultiTaskGroup: (robotId: string, data: {
+    multitask_id: string;
+    child_id: string;
+  }) => {
+    return apiClient.delete(`/multitasks/${robotId}/multitask`, data)
+  },
+  // 调整多任务组中任务顺序
+  swapTaskOrder: (robotId: string, data: {
+    multitask_id: string;
+    child_id: string;
+    order: string;
+  }) => {
+    return apiClient.post(`/multitasks/${robotId}/order_swap`, data)
+  },
+  // 获取定时任务列表
+  getScheduledTasks: (robotId: string, params?: {
+    track_name?: string;
+    track_point_name?: string;
+  }) => {
+    return apiClient.get<{
+      data: Array<{
+        id: string;
+        sn: string;
+        start_time: string;
+        status: number;
+        track_name: string;
+        track_point_name: string;
+      }>;
+      request_id: string;
+    }>(`/scheduled/${robotId}/scheduled_tasks`, params || {})
+  },
+  // 新增定时任务
+  createScheduledTask: (robotId: string, data: {
+    track_name: string;
+    track_point_name: string;
+    start_time: string; // 格式: "HH:MM"
+  }) => {
+    return apiClient.post<{
+      message: string;
+      track_name: string;
+      track_point_name: string;
+      response: {
+        msg: {
+          error_code: number;
+          error_msg: string;
+          result: Array<{
+            id: string;
+            sn?: string;
+            start_time: string;
+            status: number;
+            track_name: string;
+            track_point_name: string;
+          }>;
+        };
+        request_id: string;
+      };
+    }>(`/scheduled/${robotId}/scheduled_tasks`, data)
+  },
+  // 删除定时任务
+  deleteScheduledTask: (robotId: string, taskId: string) => {
+    return apiClient.delete(`/scheduled/${robotId}/scheduled_tasks`, {
+      id: taskId
+    })
+  },
+  // 创建任务组文件
+  createTaskpointFile: (robotId: string, data: {
+    track_name: string;
+    keypoint_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/create_taskpoint_file`, data)
   },
   // 设置障碍处理模式
   setObsHandle: (robotId: string, data: {
@@ -1413,6 +1578,10 @@ export const navigationApi = {
   // 暂停导航/循迹
   pauseNavigation: (robotId: string, data: any = {}) => {
     return apiClient.post(`/navigation/${robotId}/nav_pause`, data)
+  },
+  // 获取预置点列表
+  getPresets: (robotId: string, deviceName: string) => {
+    return apiClient.get<{ list: { id: string | number; presetName: string }[]; code: number }>(`/ptz/${robotId}/presets`, { device_name: deviceName })
   }
 }
 

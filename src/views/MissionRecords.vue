@@ -23,10 +23,10 @@
               <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
               <span class="mission-top-title">发布点任务</span>
               <div class="mission-top-data">
-                <span class="mission-data-item">X坐标: <span class="mission-data-value">{{ currentPosition.x || '-' }}</span></span>
-                <span class="mission-data-item">Y坐标: <span class="mission-data-value">{{ currentPosition.y || '-' }}</span></span>
-                <span class="mission-data-item">Z坐标: <span class="mission-data-value">{{ currentPosition.z || '-' }}</span></span>
-                <span class="mission-data-item">角度: <span class="mission-data-value">{{ currentPosition.angle || '-' }}</span></span>
+                <span class="mission-data-item">X坐标: <span class="mission-data-value">{{ currentPosition.x }}</span></span>
+                <span class="mission-data-item">Y坐标: <span class="mission-data-value">{{ currentPosition.y }}</span></span>
+                <span class="mission-data-item">Z坐标: <span class="mission-data-value">{{ currentPosition.z }}</span></span>
+                <span class="mission-data-item">角度: <span class="mission-data-value">{{ currentPosition.angle }}</span></span>
               </div>
             </div>
           </div>
@@ -43,12 +43,12 @@
               <div style="display: flex; gap: 12px; margin-left: 8px;">
                 <button class="mission-btn mission-btn-primary" @click="handleStartTask">开始</button>
                 <button class="mission-btn mission-btn-secondary" @click="handleStopTask">暂停</button>
-                <button class="mission-btn mission-btn-primary">添加任务组</button>
-                <button class="mission-btn mission-btn-stop">删除任务组</button>
+                <button class="mission-btn mission-btn-primary" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
+                <button class="mission-btn mission-btn-stop" @click="handleDeleteTaskGroup">删除任务组</button>
                 <button class="mission-btn mission-btn-primary" @click="handleAddTask">添加任务</button>
               </div>
             </div>
-            <div class="file-table" style="min-height: 600px;">
+            <div class="file-table" style="min-height: 650px;">
               <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center;">
                 <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">任务类型</div>
@@ -58,31 +58,27 @@
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">角度</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">预置点</div>
                 <div class="file-table-cell" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
-                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
+                <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
               <!-- 显示实际数据行 -->
               <template v-if="waypointsData.length > 0">
                 <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index" style="min-height: 60px;">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">{{ waypoint.index + 1 }}</div>
-                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type || '-' }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.x || '-' }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.y || '-' }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.z || '-' }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.angle || '-' }}</div>
-                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.preset || '-' }}</div>
-                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">{{ waypoint.description || '-' }}</div>
-                  <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
-                    <button class="action-btn action-btn-edit">
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.x }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.y }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.z }}</div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.angle }}</div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.preset }}</div>
+                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">{{ waypoint.description }}</div>
+                  <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center; display: flex; gap: 25px; justify-content: center; align-items: center;">
+                    <button class="action-btn action-btn-edit" @click="handleEditTask(waypoint)">
                       <img :src="editIcon" alt="编辑" />
                       编辑
                     </button>
-                    <button class="action-btn action-btn-delete">
+                    <button class="action-btn action-btn-delete" @click="handleDeleteTask(waypoint)">
                       <img :src="deleteIcon" alt="删除" />
                       删除
-                    </button>
-                    <button class="action-btn action-btn-arrive">
-                      <img :src="arriveIcon" alt="到点" />
-                      到点
                     </button>
                   </div>
                 </div>
@@ -97,7 +93,7 @@
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
                 <div class="file-table-cell" style="flex: 1; text-align: center;"></div>
-                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center;"></div>
+                <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center;"></div>
               </div>
             </div>
             <!-- 分页组件 -->
@@ -352,7 +348,7 @@
                <label class="simple-label">预置点</label>
                <div class="simple-flex-row">
                   <input v-model="addTaskDialog.form.preset" class="simple-input" style="flex: 1;">
-                 <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;">选择</button>
+                 <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openPresetDialog">选择</button>
                </div>
             </div>
 
@@ -361,7 +357,7 @@
                <label class="simple-label">额外事务</label>
                <div class="simple-flex-row" style="justify-content: space-between;">
                   <span style="color: #fff;">{{ addTaskDialog.form.extraConfig || '未配置' }}</span>
-                  <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;">配置</button>
+                  <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
                </div>
             </div>
 
@@ -417,11 +413,180 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Preset Selection Modal -->
+   <Teleport to="body">
+      <div v-if="presetDialog.visible" class="custom-dialog-mask">
+         <div class="simple-modal-card" style="width: 1160px; max-width: 95vw; height: 610px;">
+            <div class="simple-modal-header">
+               <span>设置预置点</span>
+               <span class="simple-close-icon" @click="closePresetDialog">×</span>
+            </div>
+            <div class="simple-modal-body" style="display: flex; gap: 20px; padding: 20px; overflow: hidden; height: 100%;">
+               <!-- Left Video -->
+               <div style="flex: 0 0 800px; height: 450px; background: #000; position: relative; border: 1px solid #244f78; display: flex; align-items: center; justify-content: center; color: #aaa; overflow: hidden;">
+                   <video 
+                     ref="videoElement"
+                     controls
+                     muted
+                     playsinline
+                     webkit-playsinline
+                     style="width: 100%; height: 100%; object-fit: fill; background: #000;"
+                   >
+                     您的浏览器不支持视频播放
+                   </video>
+                   <div v-if="!isPlaying" style="position: absolute; pointer-events: none;">Visible Light Stream</div>
+               </div>
+               
+               <!-- Right Controls -->
+                <div style="flex: 0 0 300px; display: flex; flex-direction: column; gap: 10px; padding-top: 10px;">
+                   <!-- PTZ -->
+                   <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                        <button class="ptz-btn" @mousedown="ptzMove('up')" @mouseup="ptzStop">▲</button>
+                        <div style="display: flex; gap: 12px;">
+                             <button class="ptz-btn" @mousedown="ptzMove('left')" @mouseup="ptzStop">◀</button>
+                             <button class="ptz-btn" @click="ptzStop">↺</button>
+                             <button class="ptz-btn" @mousedown="ptzMove('right')" @mouseup="ptzStop">▶</button>
+                        </div>
+                        <button class="ptz-btn" @mousedown="ptzMove('down')" @mouseup="ptzStop">▼</button>
+                   </div>
+
+                   <!-- Actions -->
+                   <div style="display: flex; gap: 12px; justify-content: center; margin-top: 8px;">
+                        <button class="mission-btn-blue" style="width: 50px; font-weight: bold; font-size: 24px;" @click="ptzZoom(true)">+</button>
+                        <button class="mission-btn-blue" style="width: 50px; font-weight: bold; font-size: 24px;" @click="ptzZoom(false)">-</button>
+                        <button class="mission-btn-blue" style="width: 50px;" @click="ptzFocus(true)">
+                           <div style="border: 1px dashed #fff; width: 14px; height: 14px;"></div>
+                        </button>
+                        <button class="mission-btn-blue" style="width: 50px;" @click="ptzFocus(false)">
+                           <div style="border: 1px solid #fff; width: 14px; height: 14px;"></div>
+                        </button>
+                   </div>
+                   
+                   <div class="simple-form-item" style="margin-top: 8px; margin-bottom: 8px;">
+                       <label class="simple-label">设置预置点：</label>
+                        <div class="custom-select-wrapper" style="position: relative;" tabindex="0" @blur="isPresetDropdownOpen = false">
+                             <div class="simple-select" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" @click="isPresetDropdownOpen = !isPresetDropdownOpen">
+                                 <span>{{ presetDialog.form.name || '请选择预置点' }}</span>
+                                 <span style="font-size:12px; transform: scaleY(0.6);">▼</span>
+                             </div>
+                             <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="max-height: 340px; background: #102a43; border: 1px solid #244f78;">
+                                  <div 
+                                    v-for="p in presetList" 
+                                    :key="p.id" 
+                                    class="custom-select-option" 
+                                    :class="{ selected: presetDialog.form.id === p.id }"
+                                    @mousedown.prevent="selectPreset(p)"
+                                  >
+                                     {{ p.name }}
+                                  </div>
+                             </div>
+                        </div>
+                   </div>
+                   
+                    <div style="display: flex; gap: 5px;">
+                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;" @click="handleSetPreset">设置预置点</button>
+                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;" @click="handleGotoPreset">转到预置点</button>
+                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;">转速</button>
+                   </div>
+                   
+                   <div class="simple-form-item">
+                       <label class="simple-label">预置点名称：</label>
+                       <input v-model="presetDialog.form.name" class="simple-input" />
+                   </div>
+               </div>
+            </div>
+            <div class="simple-modal-footer">
+               <button class="mission-btn mission-btn-primary" style="width: 100px;" @click="confirmPresetChoice">确定</button>
+               <button class="mission-btn" style="width: 100px; background: transparent; border: 1px solid #606266; color: #fff;" @click="closePresetDialog">取消</button>
+            </div>
+         </div>
+      </div>
+   </Teleport>
+
+    <!-- 额外配置弹窗 -->
+    <Teleport to="body">
+      <div v-if="extraConfigDialog.visible" class="custom-dialog-mask" style="z-index: 10001;">
+        <div class="simple-modal-card" style="width: 500px; max-width: 95vw;" @click.stop>
+          <div class="simple-modal-header">
+            <span>额外配置</span>
+            <span class="simple-close-icon" @click="closeExtraConfigDialog">×</span>
+          </div>
+          <div class="simple-modal-body" style="padding: 30px;">
+            <div class="simple-form-item">
+              <label class="simple-label">额外事务</label>
+              <textarea 
+                v-model="extraConfigDialog.content" 
+                class="simple-textarea"
+                placeholder="请输入额外事务配置"
+                rows="6"
+              ></textarea>
+            </div>
+          </div>
+          <div class="simple-modal-footer">
+            <button class="mission-btn mission-btn-primary" style="width: 100px;" @click="confirmExtraConfig">确定</button>
+            <button class="mission-btn mission-btn-secondary" style="width: 100px;" @click="closeExtraConfigDialog">取消</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 添加任务组弹窗 -->
+    <div v-if="showCreateTaskGroupDialog" class="custom-dialog-mask" @click="closeCreateTaskGroupDialog">
+      <div class="simple-modal-card task-group-modal" @click.stop>
+        <div class="simple-modal-header">
+          <span>添加任务组</span>
+          <span class="simple-close-icon" @click="closeCreateTaskGroupDialog">×</span>
+        </div>
+        <div class="simple-modal-body" style="padding: 35px 40px;">
+          <div style="display: flex; justify-content: center; align-items: center;">
+            <span v-if="selectedMap" class="map-name-prefix">{{ selectedMap }}_</span>
+            <input
+              v-model="createTaskGroupForm.keypoint_name"
+              type="text"
+              class="task-form-input task-group-input"
+              :placeholder="selectedMap ? '请输入任务组名称' : '请输入任务组名称（未选择地图）'"
+            />
+          </div>
+        </div>
+        <div class="simple-modal-footer">
+          <button class="mission-btn mission-btn-secondary" @click="closeCreateTaskGroupDialog">取消</button>
+          <button class="mission-btn mission-btn-primary" @click="handleCreateTaskGroup">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 成功提示 -->
+    <SuccessMessage 
+      :show="successMessage.show" 
+      :message="successMessage.text"
+      @close="successMessage.show = false"
+    />
+
+    <!-- 错误提示 -->
+    <ErrorMessage 
+      :show="errorMessage.show" 
+      :message="errorMessage.text"
+      @close="errorMessage.show = false"
+    />
+
+    <!-- 删除确认对话框 -->
+    <ConfirmDialog
+      :show="confirmDialog.show"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      type="warning"
+      confirm-text="删除"
+      cancel-text="取消"
+      @confirm="confirmDialog.onConfirm"
+      @cancel="confirmDialog.show = false"
+      @close="confirmDialog.show = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
@@ -436,6 +601,9 @@ import { useWaylineJobs, useDevices } from '../composables/useApi'
 import { waylineApi, navigationApi } from '../api/services'
 import { getErrorMessage } from '@/utils/errorCodes'
 import { mediaApi } from '../api/services'
+import SuccessMessage from '@/components/SuccessMessage.vue'
+import ErrorMessage from '@/components/ErrorMessage.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -538,15 +706,19 @@ const waypointsData = computed(() => {
   // 转换为表格需要的格式
   return selectedTaskDetail.value.taskcontent.map((item: any, index: number) => ({
     index: index,
-    type: item.type_text || item.type || '-',
+    type: item.type_text || item.type,
     coordinates: {
-      x: item.x || '-',
-      y: item.y || '-',
-      z: item.z || '-'
+      x: item.x,
+      y: item.y,
+      z: item.z
     },
-    angle: item.theta || '-',
-    preset: item.preset || item.presetID || '-',
-    description: item.remark || '-'
+    angle: item.theta,
+    preset: item.preset || item.presetID,
+    description: item.remark,
+    extra: item.extra,
+    gait: item.gait,
+    ground: item.ground,
+    no_switch: item.no_switch
   }))
 })
 
@@ -996,7 +1168,8 @@ const addTaskDialog = ref({
     description: '',
     gait: '1', // 行走步态
     ground: '1', // 实心地面
-    stopAtPoint: false
+    stopAtPoint: false,
+    remark: '' // 备注
   }
 })
 
@@ -1077,18 +1250,520 @@ watch(filteredTaskTypes, (list) => {
 }, { immediate: true })
 
 const handleAddTask = () => {
+  if (!selectedPointTaskId.value) {
+    errorMessage.value = { show: true, text: '请先选择任务组' }
+    return
+  }
+  // 重置表单为添加模式
+  editingTaskIndex.value = -1
+  // 重置表单数据
+  addTaskDialog.value.form = {
+    isMulti: '0',
+    typeInput: '',
+    actionType: '',
+    x: '0',
+    y: '0',
+    z: '0',
+    angle: '0',
+    preset: '',
+    extraConfig: '',
+    description: '',
+    gait: '1',
+    ground: '1',
+    stopAtPoint: false,
+    remark: ''
+  }
   addTaskDialog.value.visible = true
   fetchTaskTypeList()
 }
 
 const cancelAddTask = () => {
   addTaskDialog.value.visible = false
+  editingTaskIndex.value = -1
 }
 
-const confirmAddTask = () => {
-  // TODO: Implement add task logic
-  console.log('添加任务:', addTaskDialog.value.form)
+const confirmAddTask = async () => {
+  if (!selectedPointTaskId.value) {
+    errorMessage.value = { show: true, text: '请先选择任务组' }
+    return
+  }
+  
+  console.log('表单数据:', {
+    description: addTaskDialog.value.form.description,
+    extraConfig: addTaskDialog.value.form.extraConfig
+  })
+  
+  // 构建任务数据
+  const taskData = {
+    task_id: editingTaskIndex.value >= 0 
+      ? (selectedTaskDetail.value?.taskcontent[editingTaskIndex.value] as any)?.task_id || `task_${Date.now()}`
+      : `task_${Date.now()}`,
+    type: addTaskDialog.value.form.actionType,
+    type_text: addTaskDialog.value.form.typeInput,
+    x: String(parseFloat(addTaskDialog.value.form.x) || 0),
+    y: String(parseFloat(addTaskDialog.value.form.y) || 0),
+    z: String(parseFloat(addTaskDialog.value.form.z) || 0),
+    theta: String(parseFloat(addTaskDialog.value.form.angle) || 0),
+    preset: addTaskDialog.value.form.preset,
+    presetID: addTaskDialog.value.form.preset,
+    remark: addTaskDialog.value.form.description || '',
+    extra: addTaskDialog.value.form.extraConfig || '',
+    gait: addTaskDialog.value.form.gait || '1',
+    ground: addTaskDialog.value.form.ground || '1',
+    no_switch: !addTaskDialog.value.form.stopAtPoint
+  }
+  
+  console.log('准备提交的 taskData:', taskData)
+  
+  const taskGroup = pointTaskList.value.find(task => task.task_id === selectedPointTaskId.value)
+  if (!taskGroup) {
+    errorMessage.value = { show: true, text: '未找到任务组' }
+    return
+  }
+  
+  if (editingTaskIndex.value >= 0) {
+    // 编辑模式
+    taskGroup.taskcontent[editingTaskIndex.value] = taskData
+    successMessage.value = { show: true, text: '编辑任务成功' }
+  } else {
+    // 添加模式
+    if (!taskGroup.taskcontent) {
+      taskGroup.taskcontent = []
+    }
+    taskGroup.taskcontent.push(taskData)
+    successMessage.value = { show: true, text: '添加任务成功' }
+  }
+  
+  // 更新缓存
+  await updateCache()
+  
+  setTimeout(() => {
+    successMessage.value.show = false
+  }, 2000)
+  
   addTaskDialog.value.visible = false
+  editingTaskIndex.value = -1
+}
+
+// 编辑任务索引
+const editingTaskIndex = ref(-1)
+
+// 编辑任务
+const handleEditTask = (waypoint: any) => {
+  if (!selectedTaskDetail.value || !selectedTaskDetail.value.taskcontent) return
+  
+  editingTaskIndex.value = waypoint.index
+  const taskData = selectedTaskDetail.value.taskcontent[waypoint.index]
+  
+  // 填充表单数据
+  addTaskDialog.value.form = {
+    isMulti: '0',
+    typeInput: taskData.type_text || taskData.type,
+    actionType: taskData.type,
+    x: String(taskData.x || 0),
+    y: String(taskData.y || 0),
+    z: String(taskData.z || 0),
+    angle: String(taskData.theta || 0),
+    preset: taskData.preset || taskData.presetID || '',
+    remark: taskData.remark || '',
+    extraConfig: taskData.extra || '',
+    description: taskData.remark || '',
+    gait: taskData.gait || '1',
+    ground: taskData.ground || '1',
+    stopAtPoint: !(taskData.no_switch === 'true' || taskData.no_switch === true)
+  }
+  
+  addTaskDialog.value.visible = true
+  fetchTaskTypeList()
+}
+
+// 删除任务
+const handleDeleteTask = (waypoint: any) => {
+  confirmDialog.value = {
+    show: true,
+    title: '删除任务',
+    message: `确定要删除第 ${waypoint.index + 1} 个任务吗？`,
+    onConfirm: async () => {
+      const taskGroup = pointTaskList.value.find(task => task.task_id === selectedPointTaskId.value)
+      if (!taskGroup || !taskGroup.taskcontent) return
+      
+      taskGroup.taskcontent.splice(waypoint.index, 1)
+      await updateCache()
+      
+      successMessage.value = { show: true, text: '删除任务成功' }
+      setTimeout(() => {
+        successMessage.value.show = false
+      }, 2000)
+      
+      confirmDialog.value.show = false
+    }
+  }
+}
+
+// ========== 预置点选择相关 ==========
+const presetDialog = ref({
+  visible: false,
+  form: {
+    id: '',
+    name: ''
+  }
+})
+
+const presetList = ref<{id: string, name: string}[]>(
+  Array.from({ length: 300 }, (_, i) => ({
+    id: String(i + 1),
+    name: `${i + 1}.预置点${i + 1}`
+  }))
+)
+
+const isPresetDropdownOpen = ref(false)
+
+const selectPreset = (p: {id: string, name: string}) => {
+    presetDialog.value.form.id = p.id
+    presetDialog.value.form.name = p.name
+    isPresetDropdownOpen.value = false
+}
+
+// Video Playback Logic
+const videoElement = ref<HTMLVideoElement | null>(null)
+let pc: RTCPeerConnection | null = null
+const isPlaying = ref(false)
+const videoStreamUrl = ref('')
+
+const buildApiUrl = (webrtcUrl: string) => {
+  try {
+    const url = new URL(webrtcUrl)
+    return `http://${url.hostname}:1985`
+  } catch (error) {
+    return webrtcUrl.replace('webrtc://', 'http://').replace(':8000', ':1985').split('/')[0]
+  }
+}
+
+const startWebRTCPlayback = async (url: string) => {
+  if (pc) {
+    pc.close()
+    pc = null
+  }
+  
+  videoStreamUrl.value = url
+  
+  try {
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    })
+    
+    pc.ontrack = (e) => {
+      if (videoElement.value && e.streams && e.streams[0]) {
+        videoElement.value.srcObject = e.streams[0]
+        videoElement.value.play().then(() => {
+          isPlaying.value = true
+        }).catch(e => console.error('Video play failed', e))
+      }
+    }
+    
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE Connection State:', pc?.iceConnectionState)
+      if (pc?.iceConnectionState === 'connected') {
+        isPlaying.value = true
+      }
+    }
+
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true
+    })
+    
+    await pc.setLocalDescription(offer)
+    
+    const apiUrl = buildApiUrl(url)
+    console.log('Requesting stream from:', apiUrl)
+    
+    const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sdp: offer.sdp, streamurl: url })
+    })
+    
+    if (!response.ok) {
+        throw new Error(`Server response error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (data.code === 0 && data.sdp) {
+       await pc.setRemoteDescription({
+         type: 'answer',
+         sdp: data.sdp
+       })
+    } else {
+        console.error('SRS Error:', data)
+    }
+  } catch (e) {
+    console.error('WebRTC setup error', e)
+    isPlaying.value = false
+  }
+}
+
+const stopWebRTCPlayback = () => {
+  if (pc) {
+    pc.close()
+    pc = null
+  }
+  if (videoElement.value) {
+    videoElement.value.srcObject = null
+  }
+  isPlaying.value = false
+}
+
+const openPresetDialog = async () => {
+  presetDialog.value.visible = true
+  
+  const robotId = localStorage.getItem('selected_robot_id')
+  const cameraListStr = localStorage.getItem('camera_list')
+  
+  if (robotId && cameraListStr) {
+    try {
+      const cameraList = JSON.parse(cameraListStr)
+      if (cameraList && cameraList.length > 0) {
+        const ptzName = cameraList[0].PtzName
+        if (ptzName) {
+           console.log('Fetching presets for:', ptzName)
+           try {
+             const res = await navigationApi.getPresets(robotId, ptzName)
+             if (res && res.code === 200 && Array.isArray(res.list)) {
+                res.list.forEach((item: any) => {
+                    const idStr = String(item.id)
+                    const existingIndex = presetList.value.findIndex(p => p.id === idStr)
+                    if (existingIndex !== -1) {
+                        presetList.value[existingIndex].name = `${idStr}.${item.presetName}`
+                    }
+                })
+                console.log('Presets updated with API data')
+             }
+           } catch (err) {
+             console.error('Failed to get presets API:', err)
+           }
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing camera_list or fetching presets:', e)
+    }
+  }
+
+  if (presetList.value.length > 0) {
+      presetDialog.value.form.id = presetList.value[0].id
+      presetDialog.value.form.name = presetList.value[0].name
+  }
+  
+  nextTick(() => {
+      try {
+        const streamsStr = localStorage.getItem('video_streams')
+        if (streamsStr) {
+            const streams = JSON.parse(streamsStr)
+            const visibleStream = streams.find((s: any) => s.type === 'drone_visible') || streams[0]
+            
+            if (visibleStream && visibleStream.url) {
+                console.log('Starting video stream:', visibleStream.url)
+                startWebRTCPlayback(visibleStream.url)
+            } else {
+                console.warn('No suitable video stream found')
+            }
+        } else {
+            console.warn('No video_streams in localStorage')
+        }
+      } catch (e) {
+          console.error('Failed to load video streams', e)
+      }
+  })
+}
+
+const closePresetDialog = () => {
+  presetDialog.value.visible = false
+  stopWebRTCPlayback()
+}
+
+const confirmPresetChoice = () => {
+  addTaskDialog.value.form.preset = presetDialog.value.form.name
+  closePresetDialog()
+}
+
+const ptzMove = (direction: string) => {
+  console.log('PTZ Move:', direction)
+}
+
+const ptzStop = () => {
+    console.log('PTZ Stop')
+}
+
+const ptzZoom = (zoomIn: boolean) => {
+    console.log('Zoom:', zoomIn ? 'In' : 'Out')
+}
+
+const ptzFocus = (focusIn: boolean) => {
+    console.log('Focus:', focusIn ? 'In' : 'Out')
+}
+
+const handleSetPreset = () => { 
+  console.log('Set Preset') 
+}
+
+const handleGotoPreset = () => { 
+  console.log('Goto Preset') 
+}
+// ========== 预置点选择相关结束 ==========
+
+// ========== 额外配置相关 ==========
+const extraConfigDialog = ref({
+  visible: false,
+  content: ''
+})
+
+const openExtraConfigDialog = () => {
+  extraConfigDialog.value.content = addTaskDialog.value.form.extraConfig || ''
+  extraConfigDialog.value.visible = true
+}
+
+const closeExtraConfigDialog = () => {
+  extraConfigDialog.value.visible = false
+}
+
+const confirmExtraConfig = () => {
+  addTaskDialog.value.form.extraConfig = extraConfigDialog.value.content
+  closeExtraConfigDialog()
+}
+// ========== 额外配置相关结束 ==========
+
+// 添加任务组弹窗
+const showCreateTaskGroupDialog = ref(false)
+const createTaskGroupForm = ref({
+  keypoint_name: ''
+})
+
+// 打开添加任务组弹窗
+const handleOpenCreateTaskGroupDialog = () => {
+  showCreateTaskGroupDialog.value = true
+  createTaskGroupForm.value.keypoint_name = ''
+}
+
+// 关闭添加任务组弹窗
+const closeCreateTaskGroupDialog = () => {
+  showCreateTaskGroupDialog.value = false
+  createTaskGroupForm.value.keypoint_name = ''
+}
+
+// 创建任务组
+const handleCreateTaskGroup = async () => {
+  if (!createTaskGroupForm.value.keypoint_name) {
+    errorMessage.value = { show: true, text: '请输入任务组名称' }
+    return
+  }
+  
+  const mapName = selectedMap.value
+  const taskName = mapName 
+    ? `${mapName}_${createTaskGroupForm.value.keypoint_name}`
+    : createTaskGroupForm.value.keypoint_name
+  
+  const newTaskGroup: PointTask = {
+    isStart: false,
+    task_id: String(Date.now()),
+    task_name: taskName,
+    taskcontent: []
+  }
+  
+  pointTaskList.value.push(newTaskGroup)
+  await updateCache()
+  
+  successMessage.value = { show: true, text: '添加任务组成功' }
+  setTimeout(() => {
+    successMessage.value.show = false
+  }, 2000)
+  
+  // 选择新创建的任务组
+  selectedPointTaskId.value = newTaskGroup.task_id
+  
+  closeCreateTaskGroupDialog()
+}
+
+// 删除任务组
+const handleDeleteTaskGroup = () => {
+  if (!selectedPointTaskId.value) {
+    errorMessage.value = { show: true, text: '请先选择要删除的任务组' }
+    return
+  }
+  
+  const taskGroup = pointTaskList.value.find(task => task.task_id === selectedPointTaskId.value)
+  if (!taskGroup) return
+  
+  confirmDialog.value = {
+    show: true,
+    title: '删除任务组',
+    message: `确定要删除任务组「${taskGroup.task_name}」吗？`,
+    onConfirm: async () => {
+      const index = pointTaskList.value.findIndex(task => task.task_id === selectedPointTaskId.value)
+      if (index > -1) {
+        pointTaskList.value.splice(index, 1)
+        await updateCache()
+        
+        // 选择过滤列表中的第一个任务组
+        if (filteredPointTaskList.value.length > 0) {
+          selectedPointTaskId.value = filteredPointTaskList.value[0].task_id
+        } else {
+          selectedPointTaskId.value = ''
+        }
+        
+        successMessage.value = { show: true, text: '删除任务组成功' }
+        setTimeout(() => {
+          successMessage.value.show = false
+        }, 2000)
+      }
+      confirmDialog.value.show = false
+    }
+  }
+}
+
+// 成功/失败提示
+const successMessage = ref({
+  show: false,
+  text: ''
+})
+const errorMessage = ref({
+  show: false,
+  text: ''
+})
+
+// 确认对话框
+const confirmDialog = ref({
+  show: false,
+  title: '',
+  message: '',
+  onConfirm: () => {}
+})
+
+// 更新缓存并同步到服务器
+const updateCache = async () => {
+  try {
+    // 1. 更新本地缓存
+    localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
+    
+    // 2. 获取 robotId
+    const robotId = localStorage.getItem('selected_robot_id')
+    if (!robotId) {
+      console.error('未找到机器人ID')
+      return
+    }
+    
+    // 3. POST 提交数据到服务器，接口返回完整列表
+    const response = await navigationApi.updatePointTaskList(robotId, { data: pointTaskList.value })
+    
+    // 4. 使用返回的数据更新列表
+    if (response.response?.data) {
+      pointTaskList.value = response.response.data
+      // 5. 更新缓存
+      localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
+    }
+  } catch (error) {
+    console.error('更新缓存失败:', error)
+    errorMessage.value = { show: true, text: '同步数据失败，请重试' }
+  }
 }
 
 // 页面加载时获取数据
@@ -1972,5 +2647,146 @@ const handleDeleteJob = (job: any) => {
 
 .action-btn-arrive img {
   filter: drop-shadow(0 0 4px rgba(103, 213, 253, 0.4));
+}
+
+/* 任务组模态框样式 */
+.task-group-modal .modal-content {
+  width: 500px;
+  padding: 0;
+}
+
+.task-group-modal .simple-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.task-group-modal .simple-modal-body {
+  padding: 24px;
+}
+
+.task-group-modal .simple-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.task-form-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.task-form-input:focus {
+  outline: none;
+  border-color: #3b9cff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.task-form-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* textarea样式 */
+.simple-textarea {
+  width: 100%;
+  padding: 12px 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.6;
+}
+
+.simple-textarea:focus {
+  outline: none;
+  border-color: #67d5fd;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.simple-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.map-name-prefix {
+  color: rgba(103, 213, 253, 0.85);
+  font-size: 14px;
+  font-weight: 400;
+  margin-right: 0;
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
+.simple-modal-footer button {
+  min-width: 80px;
+}
+
+.simple-close-icon {
+  cursor: pointer;
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.6);
+  transition: color 0.3s;
+}
+
+.simple-close-icon:hover {
+  color: #fff;
+}
+
+/* PTZ控制按钮样式 */
+.ptz-btn {
+  width: 50px;
+  height: 50px;
+  background: #0099ff;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
+  transition: 0.2s;
+}
+
+.ptz-btn:hover {
+  background: #0077cc;
+}
+
+.ptz-btn:active {
+  background: #0055aa;
+}
+
+.mission-btn-blue {
+  background: #0099ff;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 8px 12px;
+  transition: 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.mission-btn-blue:hover {
+  background: #0077cc;
+}
+
+.mission-btn-blue:active {
+  background: #0055aa;
 }
 </style>
