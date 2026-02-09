@@ -34,6 +34,7 @@ export interface EnvironmentConfig {
   services: {
     vision: string
     livestream: string
+    mapFile: string  // 地图文件服务地址
   }
 }
 
@@ -54,7 +55,8 @@ const intranetConfig: EnvironmentConfig = {
   },
   services: {
     vision: 'http://172.16.88.152:8000',
-    livestream: 'http://172.16.88.152:8000'
+    livestream: 'http://172.16.88.152:8000',
+    mapFile: 'http://172.16.88.152:5000'  // 地图文件服务
   }
 }
 
@@ -75,7 +77,8 @@ const internetConfig: EnvironmentConfig = {
   },
   services: {
     vision: 'http://10.10.1.3:8000',
-    livestream: 'http://10.10.1.3:8000'
+    livestream: 'http://10.10.1.3:8000',
+    mapFile: 'http://10.10.1.3:5000'  // 地图文件服务
   }
 }
 

@@ -936,6 +936,7 @@ import { useDeviceStore } from '../stores/device'
 import { getVideoStreams, getVideoStream, getDefaultVideoType, setVideoStreams } from '../utils/videoCache'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import flvjs from 'flv.js'
+import * as echarts from 'echarts'
 import mapDockIcon from '@/assets/source_data/svg_data/map_dock3.svg'
 import mapDroneIcon from '@/assets/source_data/svg_data/map_drone.svg'
 import droneArrowIcon from '@/assets/source_data/svg_data/drone_control_svg/drone_arrow.svg'
@@ -976,6 +977,39 @@ const taskProgressStore = useTaskProgressStore()
 
 // 设备告警数据
 const deviceAlarmData = ref<any[]>([])
+
+// 机场位置信息（用于地图显示）
+const position = computed(() => {
+  // 返回机场状态中的坐标信息
+  const status = dockStatus.value
+  if (status && 'longitude' in status && 'latitude' in status) {
+    return {
+      longitude: (status as any).longitude,
+      latitude: (status as any).latitude,
+      height: (status as any).height || 0
+    }
+  }
+  return null
+})
+
+// 获取设备HMS告警的函数
+const fetchDeviceHms = async (sn: string) => {
+  try {
+    // 这里应该调用真实的HMS API，暂时返回空数组
+    return []
+  } catch (err) {
+    console.error('获取HMS告警失败:', err)
+    return []
+  }
+}
+
+// 解析错误消息
+const parseErrorMessage = (error: any): string => {
+  if (typeof error === 'string') return error
+  if (error?.message) return error.message
+  if (error?.response?.data?.message) return error.response.data.message
+  return '未知错误'
+}
 
 // ================= 机器人实时状态缓存读取 ================
 const selectedRobotInfo = ref<any>(null)
@@ -1715,7 +1749,7 @@ const loadFlightStatistics = async (days = 7) => {
 }
 
 // 无人机显示位置计算属性
-const droneDisplayPosition = computed(() => {
+const droneDisplayPosition = computed<{ longitude: number; latitude: number; height: number } | null>(() => {
   // 检查无人机是否在仓
   const isInDock = droneStatus.value?.inDock === 1
   
@@ -2875,7 +2909,7 @@ const startWebRTCPlayback = async () => {
       offerToReceiveVideo: true
     })
     console.log('[WebRTC播放] offer 创建成功')
-    console.log('[WebRTC播放] offer SDP:', offer.sdp.substring(0, 200) + '...')  // 只显示前200个字符
+    console.log('[WebRTC播放] offer SDP:', offer.sdp?.substring(0, 200) + '...')  // 只显示前200个字符
     
     await pc.setLocalDescription(offer)
     console.log('[WebRTC播放] 已设置本地描述')
@@ -3363,13 +3397,21 @@ const openMapDB = (): Promise<IDBDatabase> => {
 
 // 保存地图文件
 const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promise<void> => {
+  console.log(`[地图缓存] 开始保存文件: ${mapName}/${fileName}, 大小: ${blob.size} 字节`)
   const db = await openMapDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction([MAP_STORE_NAME], 'readwrite')
     const store = tx.objectStore(MAP_STORE_NAME)
-    store.put({ id: `${mapName}/${fileName}`, blob })
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
+    const key = `${mapName}/${fileName}`
+    store.put({ id: key, blob })
+    tx.oncomplete = () => {
+      console.log(`[地图缓存] ✅ 文件保存成功: ${key}`)
+      resolve()
+    }
+    tx.onerror = () => {
+      console.error(`[地图缓存] ❌ 文件保存失败: ${key}`, tx.error)
+      reject(tx.error)
+    }
   })
 }
 
@@ -3379,11 +3421,20 @@ const getMapFile = async (mapName: string, fileName: string): Promise<Blob | nul
     const db = await openMapDB()
     return new Promise((resolve) => {
       const tx = db.transaction([MAP_STORE_NAME], 'readonly')
-      const request = tx.objectStore(MAP_STORE_NAME).get(`${mapName}/${fileName}`)
-      request.onsuccess = () => resolve(request.result?.blob || null)
-      request.onerror = () => resolve(null)
+      const key = `${mapName}/${fileName}`
+      const request = tx.objectStore(MAP_STORE_NAME).get(key)
+      request.onsuccess = () => {
+        const blob = request.result?.blob || null
+        console.log(`[地图缓存] 读取文件: ${key}, 结果: ${blob ? `${blob.size} 字节` : '不存在'}`)
+        resolve(blob)
+      }
+      request.onerror = () => {
+        console.error(`[地图缓存] 读取文件失败: ${key}`, request.error)
+        resolve(null)
+      }
     })
-  } catch {
+  } catch (err) {
+    console.error('[地图缓存] openMapDB 失败:', err)
     return null
   }
 }
@@ -3417,7 +3468,7 @@ const updateMapConfig = (mapName: string, updateTime: string): void => {
 }
 
 // 检查地图是否需要下载（比对配置文件中的更新时间）
-const shouldDownloadMap = (mapName: string, serverUpdateTime: string): boolean => {
+const shouldDownloadMap = async (mapName: string, serverUpdateTime: string): Promise<boolean> => {
   const config = getMapConfig()
   const localUpdateTime = config[mapName]
   
@@ -3427,35 +3478,66 @@ const shouldDownloadMap = (mapName: string, serverUpdateTime: string): boolean =
   }
   
   // 更新时间不一致，需要重新下载
-  return localUpdateTime !== serverUpdateTime
+  if (localUpdateTime !== serverUpdateTime) {
+    return true
+  }
+  
+  // 即使配置显示是最新的，也要检查 IndexedDB 中文件是否真实存在
+  try {
+    const blob = await getMapFile(mapName, 'tinyMap.pcd')
+    if (!blob) {
+      console.log(`地图 ${mapName} 配置存在但文件缺失，需要重新下载`)
+      return true
+    }
+  } catch (err) {
+    console.error('检查地图文件存在性失败:', err)
+    return true
+  }
+  
+  return false
 }
 
 // 下载地图文件
 const downloadMapFiles = async (mapName: string, updateTime: string) => {
+  console.log(`[地图缓存] 开始处理地图: ${mapName}, 更新时间: ${updateTime}`)
+  
   // 验证配置文件，检查是否需要下载
-  if (!shouldDownloadMap(mapName, updateTime)) {
+  if (!(await shouldDownloadMap(mapName, updateTime))) {
+    console.log(`[地图缓存] 地图已是最新，跳过下载: ${mapName}`)
     return
   }
   
   // 获取机器人 IP
   const robotInfo = deviceStore.selectedRobot
   if (!robotInfo?.ip_address) {
+    console.warn('[地图缓存] 机器人IP地址不存在，无法下载')
     return
   }
   
   const robotIp = robotInfo.ip_address
+  console.log(`[地图缓存] 机器人 IP: ${robotIp}`)
   
   // 下载文件
+  console.log(`[地图缓存] 开始下载文件...`)
   const files = await mapFileApi.downloadAllMapFiles(robotIp, mapName)
+  console.log(`[地图缓存] 下载完成，共 ${files.size} 个文件`)
   
   // 保存文件到 IndexedDB
+  let savedCount = 0
   for (const [fileName, blob] of files) {
-    await saveMapFile(mapName, fileName, blob)
+    try {
+      await saveMapFile(mapName, fileName, blob)
+      savedCount++
+    } catch (err) {
+      console.error(`[地图缓存] 保存文件失败: ${fileName}`, err)
+    }
   }
+  console.log(`[地图缓存] 保存完成，成功 ${savedCount}/${files.size} 个文件`)
   
   // 下载成功后更新配置文件
   if (files.size === mapFileApi.MAP_FILES.length) {
     updateMapConfig(mapName, updateTime)
+    console.log(`[地图缓存] 配置已更新: ${mapName} -> ${updateTime}`)
   }
 }
 
@@ -3806,6 +3888,7 @@ const dispatchTrackTask = (trackName: string, taskLabel: string) => {
   // 根据之前的 API 结构，下发任务通常需要 file_id。
   // 对于循迹任务，file_id 可能就是 trackName。
   
+  const deviceSns = getCachedDeviceSns()
   dispatchTaskDialog.value.form = {
     name: `${taskLabel}_${Date.now()}`,
     dock_sn: deviceSns.dockSns[0] || '',
@@ -4331,8 +4414,10 @@ const onMultiTaskStartConfirm = async () => {
     
     // 调用启动多任务组API
     const response = await navigationApi.startMultiTaskGroup(robotId, {
-      group_name: form.group_name,
-      loop: form.loop
+      multitask_name: form.group_name,
+      multitask_id: selectedMultiTask.value || '',
+      middle_start: 0,
+      action: 1
     })
     
     console.log('启动多任务组响应:', response)
@@ -5041,13 +5126,14 @@ onMounted(async () => {
   
   // 航线任务进度数据现在由全局store管理，无需本地加载
   
-  // 初始化摄像头流（需要先调用API获取视频流URL并缓存）
-  await initCameraStreams()
-  
-  // 初始化视频播放器（会从localStorage读取视频流URL
-  initVideoPlayer()
-  initInfraredVideo()
-  await refreshPointCloud()
+  // 如果机器人已就绪，初始化视频和点云
+  // 否则等待 watch(selectedRobot) 触发
+  if (deviceStore.selectedRobot) {
+    await initCameraStreams()
+    initVideoPlayer()
+    initInfraredVideo()
+    await refreshPointCloud()
+  }
   
   // 初始化图表
   nextTick(() => {
@@ -5573,20 +5659,63 @@ watch(() => deviceStore.selectedRobotId, async (newId) => {
   }
 })
 
-onMounted(async () => {
-  // 如果有选中的机器人，获取其状态
-  if (deviceStore.selectedRobotId) {
-    await fetchDeviceStatus(deviceStore.selectedRobotId)
+// 监听 selectedRobot 对象的变化（修复首次登录数据不显示的问题）
+// 当 Layout.vue 加载完机器人列表后，selectedRobot 会从 undefined 变为有值
+watch(() => deviceStore.selectedRobot, async (newRobot, oldRobot) => {
+  // 从无到有，说明机器人列表刚加载完成，此时触发首次数据加载
+  if (newRobot && !oldRobot) {
+    console.log('[首次加载] 机器人信息已就绪，开始加载数据')
+    
+    // 加载所有列表数据
+    await fetchMapList()
+    await fetchTrackList()
+    await fetchPointTaskList()
+    await fetchMultiTaskList()
+    
+    // 初始化视频流（需要机器人信息）
+    await initCameraStreams()
+    initVideoPlayer()
+    initInfraredVideo()
+    
+    // 如果已经有选中的地图，触发刷新
+    if (selectedMap.value) {
+      await nextTick()
+      const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
+      await downloadMapFiles(selectedMap.value, updateTime)
+      await refreshPointCloud()
+    }
   }
-  
-  // 获取地图列表
-  await fetchMapList()
-  // 获取循迹任务列表
-  await fetchTrackList()
-  // 获取发布点任务列表
-  await fetchPointTaskList()
-  // 获取多任务组列表
-  await fetchMultiTaskList()
+}, { immediate: false })
+
+onMounted(async () => {
+  // 等待 selectedRobotId 就绪后再加载数据（避免首次加载时 robotId 为空）
+  // 如果已经有 robotId（从 l和视频
+    if (deviceStore.selectedRobot) {
+      await fetchMapList()
+      await fetchTrackList()
+      await fetchPointTaskList()
+      await fetchMultiTaskList()
+      
+      await initCameraStreams()
+      initVideoPlayer()
+      initInfraredVideo
+    // 如果机器人对象已就绪，加载数据
+    if (deviceStore.selectedRobot) {
+      await fetchMapList()
+      await fetchTrackList()
+      await fetchPointTaskList()
+      await fetchMultiTaskList()
+      
+      if (selectedMap.value) {
+        await nextTick()
+        const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
+        await downloadMapFiles(selectedMap.value, updateTime)
+        await refreshPointCloud()
+      }
+    }
+    // 否则等待 watch(selectedRobot) 触发
+  }
+  // 如果连 robotId 都没有，等待 Layout.vue 加载机器人列表后由 watch 触发
 })
 
 </script>

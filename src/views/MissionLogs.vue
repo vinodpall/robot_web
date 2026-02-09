@@ -634,7 +634,7 @@ const handleCreateScheduledTask = async () => {
       // 重新加载定时任务列表
       await loadScheduledTasks()
     } else {
-      const errorMsg = response?.response?.msg?.error_msg || response?.msg?.error_msg || '未知错误'
+      const errorMsg = response?.response?.msg?.error_msg || '未知错误'
       errorMessage.value = { show: true, text: `新增失败: ${errorMsg}` }
     }
   } catch (error: any) {

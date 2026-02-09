@@ -137,7 +137,7 @@ const isSelectedRobotOnline = computed(() => {
   
   // 2. 如果静态状态不在线，检查实时设备状态 (仅针对当前选中的机器人)
   // 注意：deviceStatus 是当前选中机器人的实时状态
-  return deviceStatus.value?.isOnline || false
+  return deviceStatus.value?.online || false
 })
 
 // 判断列表中的机器人是否在线

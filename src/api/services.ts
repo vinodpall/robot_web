@@ -1,5 +1,6 @@
 import { apiClient, API_BASE_URL, type ApiResponse, type PaginatedResponse } from './config'
 import type { User, Dock, Drone, Mission, MissionRecord, Alert, Role, Device, HmsAlert, VisionAlert, VisionAlertsResponse, Permission, Robot, RobotsResponse } from '../types'
+import { getCurrentConfig } from '../config/environment'
 
 // 认证相关接口
 export const authApi = {
@@ -1529,11 +1530,12 @@ export const navigationApi = {
   },
   // 获取文件列表
   getNavigationList: (robotId: string, mapName: string, path?: string) => {
+    // 使用相对路径，由 nginx 代理处理
     return apiClient.get<{ code: number; msg: string; data: any[] }>('/navigation_list', {
       map_name: mapName,
       path
     }, {
-      baseURL: '' // 覆盖 baseURL，请求根路径下的 /navigation_list
+      baseURL: ''
     })
   },
   // 删除导航数据
@@ -1544,7 +1546,7 @@ export const navigationApi = {
     is_file?: number;
     path?: string;
   }) => {
-    // 转换为 URLSearchParams
+    // 使用相对路径，由 nginx 代理处理
     const params = new URLSearchParams()
     Object.entries(data).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
@@ -1556,7 +1558,7 @@ export const navigationApi = {
       headers: {
         'content-type': 'application/x-www-form-urlencoded'
       },
-      baseURL: '' // 覆盖 baseURL
+      baseURL: ''
     })
   },
   // 路线录制
@@ -1629,18 +1631,36 @@ export const mapFileApi = {
 
   // 下载单个地图文件
   downloadMapFile: async (robotIp: string, mapName: string, fileName: string): Promise<Blob | null> => {
-    // 通过 Vite 代理，避免 CORS 问题
+    // 使用相对路径，由 nginx 代理到后端服务（开发环境由 Vite 代理）
     const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}`
+    
+    console.log(`下载地图文件: ${fileName}, URL: ${url}`)
+    
     try {
       const response = await fetch(url, {
-        method: 'GET',
-        mode: 'cors'
+        method: 'GET'
       })
+      
+      console.log(`下载响应: ${fileName}, 状态: ${response.status}, Content-Type: ${response.headers.get('content-type')}, 大小: ${response.headers.get('content-length')}`)
+      
       if (!response.ok) {
         console.error(`下载文件失败: ${fileName}, 状态: ${response.status}`)
+        const text = await response.text()
+        console.error(`错误响应内容: ${text.substring(0, 500)}`)
         return null
       }
-      return await response.blob()
+      
+      const blob = await response.blob()
+      
+      // 检查是否下载到了 HTML 错误页面而不是真实文件
+      if (blob.type.includes('text/html')) {
+        console.error(`❌ 下载的是 HTML 页面而不是文件: ${fileName}`)
+        const text = await blob.text()
+        console.error(`HTML 内容: ${text.substring(0, 500)}`)
+        return null
+      }
+      
+      return blob
     } catch (error) {
       console.error(`下载文件失败: ${fileName}`, error)
       return null
@@ -1663,8 +1683,7 @@ export const mapFileApi = {
 
   // 上传单个地图文件
   uploadMapFile: async (robotIp: string, mapName: string, fileName: string, file: Blob): Promise<boolean> => {
-    // 通过 Vite 代理，避免 CORS 问题
-    // remote_path 只包含目录路径，不包含文件名
+    // 使用相对路径，由 nginx 代理到后端服务（开发环境由 Vite 代理）
     const remotePath = `/root/dxr_data/map/${mapName}`
     const url = `/upload_single_file`
 
@@ -1682,7 +1701,6 @@ export const mapFileApi = {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        mode: 'cors',
         body: formData
       })
 

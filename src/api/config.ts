@@ -7,7 +7,7 @@ const getApiConfig = () => {
     if (import.meta.env.PROD) {
         // 生产环境：同域部署，使用相对路径
         return {
-            baseUrl: '/api/v1',
+            baseUrl: '/v1',
             domain: window.location.origin
         }
     } else {

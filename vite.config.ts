@@ -78,15 +78,15 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           configure: (proxy, options) => {
-            proxy.on('error', (err, req, res) => {
+            proxy.on('error', (err, req, _res) => {
               console.error('❌ 代理错误:', err.message)
               console.error('   请求URL:', req.url)
               console.error('   目标服务器:', options.target)
             })
-            proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxy.on('proxyReq', (_proxyReq, req, _res) => {
               console.log('📤 代理请求:', req.method, req.url, '→', options.target)
             })
-            proxy.on('proxyRes', (proxyRes, req, res) => {
+            proxy.on('proxyRes', (proxyRes, req, _res) => {
               console.log('📥 代理响应:', proxyRes.statusCode, req.url)
             })
           }
