@@ -23,13 +23,15 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useTaskProgressStore } from './stores/taskProgress'
 import TaskCompletionDialog from './components/TaskCompletionDialog.vue'
 import AlertNotificationDialog from './components/AlertNotificationDialog.vue'
-
 import PermissionDenied from './components/PermissionDenied.vue'
 import { initUserPermissions, initAllPermissions } from './utils/initPermissions'
-
 import { usePermissionStore } from './stores/permission'
+import { useRobotWebSocket } from './composables/useRobotWebSocket'
+import { useDeviceStore } from './stores/device'
 
 const taskProgressStore = useTaskProgressStore()
+const deviceStore = useDeviceStore()
+const { connect: connectRobotWs, disconnect: disconnectRobotWs } = useRobotWebSocket()
 
 // 权限管理状态
 const showPermissionDenied = ref(false)
@@ -57,6 +59,10 @@ const contactAdmin = () => {
 onMounted(async () => {
   // 开始任务进度轮询
   taskProgressStore.startPolling()
+
+  // 启动机器人 WebSocket（不指定 robot_id，订阅所有机器人消息）
+  const robotId = deviceStore.selectedRobotId || undefined
+  connectRobotWs(robotId)
   
   // 初始化权限系统
   try {
@@ -72,9 +78,10 @@ onMounted(async () => {
   document.addEventListener('permission-denied', handlePermissionDenied as EventListener)
 })
 
-// 应用卸载时停止轮询
+// 应用卸载时停止轮询并断开 WebSocket
 onUnmounted(() => {
   taskProgressStore.stopPolling()
+  disconnectRobotWs()
   document.removeEventListener('permission-denied', handlePermissionDenied as EventListener)
 })
 </script>

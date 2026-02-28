@@ -59,8 +59,8 @@
         <div class="on3-bottom">
           <div class="on3-bottom-center">
             <div class="task-row">
-              <div class="map-dropdown-wrapper">
-                <select class="map-dropdown" v-model="selectedMap">
+              <div class="map-dropdown-wrapper" :class="{ 'disabled': navigationEnabled || insEnabled || msfEnabled }">
+                <select class="map-dropdown" v-model="selectedMap" :disabled="navigationEnabled || insEnabled || msfEnabled">
                   <option v-if="mapList.length === 0" value="">选择地图</option>
                   <option v-for="map in mapList" :key="map" :value="map">
                     {{ map }}
@@ -77,7 +77,8 @@
                   class="task-btn" 
                   :class="{ 
                     'active': navigationEnabled, 
-                    'disabled': insEnabled || msfEnabled 
+                    'disabled': insEnabled || msfEnabled,
+                    'loading': navigationLoading
                   }"
                   @click="handleEnableNavigation"
                 >导航</span>
@@ -85,7 +86,8 @@
                   class="task-btn" 
                   :class="{ 
                     'active': insEnabled, 
-                    'disabled': navigationEnabled || msfEnabled 
+                    'disabled': navigationEnabled || msfEnabled,
+                    'loading': insLoading
                   }"
                   @click="handleEnableIns"
                 >INS</span>
@@ -93,7 +95,8 @@
                   class="task-btn" 
                   :class="{ 
                     'active': msfEnabled, 
-                    'disabled': navigationEnabled || insEnabled 
+                    'disabled': navigationEnabled || insEnabled,
+                    'loading': msfLoading
                   }"
                   @click="handleEnableMsf"
                 >MSF</span>
@@ -106,6 +109,7 @@
                   <select 
                     v-model="selectedTrack" 
                     class="wayline-select"
+                    :disabled="activeTaskType === 'track' || robotStore.isTracking"
                   >
                     <option v-if="filteredTrackList.length === 0" value="">暂无循迹任务</option>
                     <option 
@@ -130,7 +134,10 @@
                   >下发任务</span>
                   <span 
                     class="span1" 
-                    :class="{ disabled: activeTaskType !== 'wayline' }"
+                    :class="{ 
+                      disabled: activeTaskType !== 'track' && !robotStore.isTracking,
+                      active: activeTaskType === 'track' || robotStore.isTracking
+                    }"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -143,6 +150,7 @@
                   <select 
                     v-model="selectedPointTask" 
                     class="wayline-select"
+                    :disabled="activeTaskType === 'point' || robotStore.isPointTaskRunning"
                   >
                     <option v-if="filteredPointTaskList.length === 0" value="">暂无发布点任务</option>
                     <option 
@@ -167,7 +175,10 @@
                   >下发任务</span>
                   <span 
                     class="span1" 
-                    :class="{ disabled: activeTaskType !== 'point' }"
+                    :class="{ 
+                      disabled: activeTaskType !== 'point' && !robotStore.isPointTaskRunning,
+                      active: activeTaskType === 'point' || robotStore.isPointTaskRunning
+                    }"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -180,6 +191,7 @@
                   <select 
                     v-model="selectedMultiTask" 
                     class="wayline-select"
+                    :disabled="activeTaskType === 'multi'"
                   >
                     <option v-if="multiTaskList.length === 0" value="">暂无多任务组</option>
                     <option 
@@ -204,7 +216,7 @@
                   >下发任务</span>
                   <span 
                     class="span1" 
-                    :class="{ disabled: activeTaskType !== 'multi' }"
+                    :class="{ disabled: activeTaskType !== 'multi', active: activeTaskType === 'multi' }"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -252,6 +264,7 @@
                 <th title="警情类型">警情类型</th>
                 <th title="图片">图片</th>
                 <th title="内容">内容</th>
+                <th title="描述">描述</th>
                 <th title="报警时间">报警时间</th>
               </tr>
             </thead>
@@ -268,10 +281,12 @@
                     alt="警情图片"
                     class="target-image-small"
                     @click="handleAlertImageClick(item.imageUrl)"
+                    @error="item.imageUrl = ''"
                     style="cursor:pointer;"
                   />
                 </td>
                 <td :title="item.content || '--'">{{ item.content || '--' }}</td>
+                <td :title="item.description || '--'">{{ item.description || '--' }}</td>
                 <td :title="item.time || '--'">{{ item.time || '--' }}</td>
               </tr>
             </tbody>
@@ -304,21 +319,21 @@
                   <div class="b-top-rightDiv">
                     <img src="@/assets/source_data/speed.png" alt="" />
                   <div>
-                    <p>{{ formatSpeed(droneStatus?.horizontalSpeed) }}</p>
+                    <p>{{ robotStore.currentSpeed !== null ? robotStore.currentSpeed.toFixed(2) + ' m/s' : '--' }}</p>
                       <p>当前速度</p>
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
                   <img src="@/assets/source_data/today_time.png" alt="" />
                   <div>
-                    <p>{{ formatAccTime(droneStatus?.totalFlightTime) }}</p>
+                    <p>{{ robotStore.currentMileage !== null ? robotStore.currentMileage.toFixed(1) + ' m' : '--' }}</p>
                       <p>本次行走里程</p>
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
                   <img src="@/assets/source_data/total_miles.png" alt="" />
                   <div>
-                    <p>{{ formatFlightDistance(droneStatus?.totalFlightDistance) }}</p>
+                    <p>{{ robotStore.totalMileage !== null ? robotStore.totalMileage.toFixed(1) + ' m' : '--' }}</p>
                       <p>累计行走里程</p>
                   </div>
                 </div>
@@ -330,29 +345,29 @@
                 <!-- 第一行 -->
                 <div class="status-item">
                   <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/longitude.svg" alt="经度" />
-                    <span class="label">经度</span>
+                    <img src="@/assets/source_data/svg_data/longitude.svg" alt="X坐标" />
+                    <span class="label">X坐标</span>
                   </div>
-                  <span class="value">{{ formatCoordinate(droneDisplayPosition?.longitude, 'longitude') }}</span>
+                  <span class="value">{{ robotStore.pose ? robotStore.pose.x.toFixed(3) + ' m' : '--' }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/latitude.svg" alt="纬度" />
-                    <span class="label">纬度</span>
+                    <img src="@/assets/source_data/svg_data/latitude.svg" alt="Y坐标" />
+                    <span class="label">Y坐标</span>
                   </div>
-                  <span class="value">{{ formatCoordinate(droneDisplayPosition?.latitude, 'latitude') }}</span>
+                  <span class="value">{{ robotStore.pose ? robotStore.pose.y.toFixed(3) + ' m' : '--' }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/altitude.svg" alt="高度" />
-                    <span class="label">高度</span>
+                    <img src="@/assets/source_data/svg_data/altitude.svg" alt="角度" />
+                    <span class="label">角度</span>
                   </div>
-                  <span class="value">{{ formatHeight(droneDisplayPosition?.height) }}</span>
+                  <span class="value">{{ robotStore.pose ? (robotStore.pose.theta * 180 / Math.PI).toFixed(1) + '°' : '--' }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img 
-                      :src="droneStatus?.chargeState === 1 ? droneBatteryChargeIcon : droneBatteryIcon" 
+                      :src="robotStore.isCharging ? droneBatteryChargeIcon : droneBatteryIcon" 
                       alt="电量" 
                     />
                     <span class="label">电量</span>
@@ -364,7 +379,7 @@
                     <img src="@/assets/source_data/svg_data/status.svg" alt="状态" />
                     <span class="label">状态</span>
                   </div>
-                  <span class="value">{{ formatRobotStatus(droneStatus?.robotStatus) }}</span>
+                  <span class="value">{{ formatRobotStatus() }}</span>
                 </div>
                 
                 <!-- 第二行 -->
@@ -373,35 +388,35 @@
                     <img src="@/assets/source_data/svg_data/voltage.svg" alt="电压" />
                     <span class="label">电压</span>
                   </div>
-                  <span class="value">{{ formatRobotVoltage(droneStatus?.voltage) }}</span>
+                  <span class="value">{{ formatRobotVoltage() }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/current.svg" alt="电流" />
                     <span class="label">电流</span>
                   </div>
-                  <span class="value">{{ formatRobotCurrent(droneStatus?.current) }}</span>
+                  <span class="value">{{ formatRobotCurrent() }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/ground.svg" alt="地面" />
                     <span class="label">地面</span>
                   </div>
-                  <span class="value">{{ formatGroundType(droneStatus?.groundType) }}</span>
+                  <span class="value">{{ formatGroundType() }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/foot.svg" alt="步态" />
                     <span class="label">步态</span>
                   </div>
-                  <span class="value">{{ formatGaitType(droneStatus?.gaitType) }}</span>
+                  <span class="value">{{ formatGaitType() }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/height.svg" alt="姿态" />
                     <span class="label">姿态</span>
                   </div>
-                  <span class="value">{{ formatPosture(droneStatus?.postureType) }}</span>
+                  <span class="value">{{ formatPosture() }}</span>
                 </div>
               </div>
             </div>
@@ -866,6 +881,10 @@
     <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
       <img :src="bigImageUrl" class="big-image" @click.stop />
     </div>
+
+    <!-- 自定义成功/错误提示 -->
+    <SuccessMessage :show="successToast.show" :message="successToast.message" @close="successToast.show = false" />
+    <ErrorMessage :show="errorToast.show" :message="errorToast.message" @close="errorToast.show = false" />
   </div>
 </template>
 
@@ -927,12 +946,25 @@ const downloadAllTrajectoryFiles = async (trackList: string[]) => {
     }
   }
 }
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted, nextTick, watch } from 'vue'
 import { useDevices, useWaylineJobs } from '../composables/useApi'
-import { controlApi, waylineApi, livestreamApi, navigationApi, mapFileApi, cameraApi } from '../api/services'
+import {
+  navigationApi,
+  mapFileApi,
+  cameraApi,
+  waylineApi,
+  controlApi,
+  livestreamApi,
+} from '../api/services'
+import SuccessMessage from '../components/SuccessMessage.vue'
+import ErrorMessage from '../components/ErrorMessage.vue'
+import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
+import { load3MF } from '../utils/threemfParser'
+import type { MeshData } from '../utils/threemfParser'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
-import { config } from '../config/environment'
+import { config, getCurrentEnvironment } from '../config/environment'
 import { useDeviceStore } from '../stores/device'
+import { useRobotStore } from '../stores/robot'
 import { getVideoStreams, getVideoStream, getDefaultVideoType, setVideoStreams } from '../utils/videoCache'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import flvjs from 'flv.js'
@@ -951,6 +983,24 @@ const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 // 使用设备管理API
 const { getCachedDeviceSns, getCachedWorkspaceId } = useDevices()
 const deviceStore = useDeviceStore()
+const robotStore = useRobotStore()
+
+// 自定义提示消息（替代系统alert）
+const successToast = ref({ show: false, message: '' })
+const errorToast = ref({ show: false, message: '' })
+let successTimer: ReturnType<typeof setTimeout> | null = null
+let errorTimer: ReturnType<typeof setTimeout> | null = null
+
+const showSuccess = (msg: string, duration = 2500) => {
+  if (successTimer) clearTimeout(successTimer)
+  successToast.value = { show: true, message: msg }
+  successTimer = setTimeout(() => { successToast.value.show = false }, duration)
+}
+const showError = (msg: string, duration = 4000) => {
+  if (errorTimer) clearTimeout(errorTimer)
+  errorToast.value = { show: true, message: msg }
+  errorTimer = setTimeout(() => { errorToast.value.show = false }, duration)
+}
 
 // 使用设备状态API
 const { 
@@ -1011,44 +1061,114 @@ const parseErrorMessage = (error: any): string => {
   return '未知错误'
 }
 
-// ================= 机器人实时状态缓存读取 ================
-const selectedRobotInfo = ref<any>(null)
+// ================= 机器人实时状态（来自 WebSocket robotStore） ================
 let robotInfoTimer: number | null = null
 
-// 更新机器人信息
-const updateSelectedRobotInfo = () => {
-  try {
-    const infoStr = localStorage.getItem('selected_robot_info')
-    if (infoStr) {
-      selectedRobotInfo.value = JSON.parse(infoStr)
-    } else {
-      selectedRobotInfo.value = null
-    }
-  } catch (e) {
-    console.error('读取机器人缓存信息失败', e)
-    selectedRobotInfo.value = null
+// 计算属性：机器人是否在线（来自 robot_status 或 dog_udp_message wifi_error 心跳）
+const isRobotOnline = computed(() => robotStore.isOnline)
+
+// 计算属性：机器人电量（来自 0x21050f0a battery_level）
+const robotBatteryLevel = computed(() => robotStore.batteryLevel)
+
+// cmd_status 同步到本地按钮状态
+watch(() => robotStore.cmdStatus, (status) => {
+  if (!status) return
+  navigationEnabled.value = status.nav === 1
+  insEnabled.value = status.ins === 1
+  msfEnabled.value = status.msf === 1
+}, { deep: true })
+
+// 各字段单独监听：只有对应字段值发生变化时才清除 loading
+// 避免无关 cmd_status 消息将 loading 提前清除
+watch(() => robotStore.cmdStatus?.nav, (val, oldVal) => {
+  if (val !== oldVal && navigationLoading.value) {
+    navigationLoading.value = false
   }
+})
+watch(() => robotStore.cmdStatus?.ins, (val, oldVal) => {
+  if (val !== oldVal && insLoading.value) {
+    insLoading.value = false
+  }
+})
+watch(() => robotStore.cmdStatus?.msf, (val, oldVal) => {
+  if (val !== oldVal && msfLoading.value) {
+    msfLoading.value = false
+  }
+})
+
+const normalizeTrackName = (rawTrackName: string) => {
+  const trimmed = (rawTrackName || '').trim()
+  if (!trimmed) return ''
+  const atIndex = trimmed.indexOf('@')
+  return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
 }
 
-// 计算属性：机器人是否在线
-const isRobotOnline = computed(() => {
-  // 优先使用缓存中的状态
-  if (selectedRobotInfo.value) {
-    return selectedRobotInfo.value.status === 'online'
+const activeOverlayTrackName = ref('')
+
+// cmd_status.track 同步 activeTaskType：WebSocket 反馈 track=1 时标记循迹任务运行中
+watch(() => robotStore.cmdStatus?.track, (val) => {
+  if (val === 1) {
+    activeTaskType.value = 'track'
+    const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
+    const trackName = trackNameFromStatus || activeOverlayTrackName.value || normalizeTrackName(selectedTrack.value)
+    if (trackName) {
+      activeOverlayTrackName.value = trackName
+      overlayTrackTrajectory(trackName)
+    }
+  } else if (val === 0 && activeTaskType.value === 'track') {
+    activeTaskType.value = null
   }
-  // 回退到原有逻辑
-  return droneStatus.value?.isOnline || false
 })
 
-// 计算属性：机器人电量
-const robotBatteryLevel = computed(() => {
-  // 优先使用缓存中的电量
-  if (selectedRobotInfo.value && selectedRobotInfo.value.battery_level !== null) {
-    return selectedRobotInfo.value.battery_level
+// cmd_status.map_name 同步地图下拉：导航开启时将地图改为当前运行中的地图
+watch(() => robotStore.cmdStatus?.map_name, (mapName) => {
+  if (mapName && robotStore.cmdStatus?.nav === 1) {
+    selectedMap.value = mapName
   }
-  // 回退到原有逻辑
-  return droneStatus.value?.batteryPercent
 })
+
+// cmd_status.track_info 同步循迹任务下拉和 activeTrackInfo，并叠加轨迹到点云图
+watch(() => robotStore.cmdStatus?.track_info, (info) => {
+  if (!info) return
+  console.log('[WebSocket] 收到 track_info:', info)
+  if (robotStore.cmdStatus?.track === 1 && info.track_name) {
+    const normalizedTrackName = normalizeTrackName(info.track_name)
+    selectedTrack.value = normalizedTrackName
+    // 同时更新取消时需要的任务参数
+    activeTrackInfo.value = {
+      track_name: normalizedTrackName,
+      taskpoint_name: info.taskpoint_name || ''
+    }
+    console.log('[WebSocket] 更新 activeTrackInfo:', activeTrackInfo.value)
+    activeOverlayTrackName.value = normalizedTrackName
+    // 叠加路线轨迹到点云图
+    overlayTrackTrajectory(normalizedTrackName)
+  }
+}, { deep: true })
+
+// 循迹任务结束时，还原点云图（移除轨迹叠加），并重置下拉为第一条
+watch(() => robotStore.isTracking, (tracking) => {
+  if (!tracking) {
+    activeOverlayTrackName.value = ''
+    if (basePointCloudData.value.length > 0) {
+      pointCloudData.value = basePointCloudData.value
+      schedulePointCloudRender()
+    }
+    // 恢复显示列表第一项
+    if (filteredTrackList.value.length > 0) {
+      selectedTrack.value = filteredTrackList.value[0]
+    }
+  }
+})
+
+// task_status.task_name 同步发布点任务下拉：找到同名任务并选中
+watch(() => robotStore.taskStatus, (ts) => {
+  if (!ts?.is_running || !ts.task_name) return
+  const matched = pointTaskList.value.find(t => t.task_name === ts.task_name)
+  if (matched) {
+    selectedPointTask.value = matched.task_id
+  }
+}, { deep: true })
 
 
 
@@ -1120,41 +1240,31 @@ const gaitTypeMap: Record<number, string> = {
   9: '静音步态'
 }
 
-// 格式化机器人状态
-const formatRobotStatus = (value: number | undefined) => {
-  if (value === undefined || value === null) return '--'
-  return robotStatusMap[value] || '--'
+// 格式化机器人状态（来自 robotStore.robotStatusText）
+const formatRobotStatus = (_value?: number) => robotStore.robotStatusText
+
+// 格式化机器人电压（来自 robotStore.voltage，单位 V）
+const formatRobotVoltage = (_value?: number) => {
+  const v = robotStore.voltage
+  if (v === null) return '0.0V'
+  return `${v.toFixed(1)}V`
 }
 
-// 格式化机器人电压
-const formatRobotVoltage = (value: number | undefined) => {
-  if (value === undefined || value === null) return '0.0V'
-  return `${value.toFixed(1)}V`
+// 格式化机器人电流（来自 robotStore.current，单位 A）
+const formatRobotCurrent = (_value?: number) => {
+  const c = robotStore.current
+  if (c === null) return '0.0A'
+  return `${c.toFixed(1)}A`
 }
 
-// 格式化机器人电流
-const formatRobotCurrent = (value: number | undefined) => {
-  if (value === undefined || value === null) return '0.0A'
-  return `${value.toFixed(1)}A`
-}
+// 格式化地面类型（来自 robotStore.terrainModeText）
+const formatGroundType = () => robotStore.terrainModeText
 
-// 格式化地面类型
-const formatGroundType = (value: number | undefined) => {
-  if (value === undefined || value === null) return '--'
-  return groundTypeMap[value] || '--'
-}
+// 格式化步态（来自 robotStore.gaitText）
+const formatGaitType = () => robotStore.gaitText
 
-// 格式化步态
-const formatGaitType = (value: number | undefined) => {
-  if (value === undefined || value === null) return '--'
-  return gaitTypeMap[value] || '--'
-}
-
-// 格式化姿态
-const formatPosture = (value: number | undefined) => {
-  if (value === undefined || value === null) return '--'
-  return value === 1 ? '匍匐姿态' : '正常姿态'
-}
+// 格式化姿态（来自 robotStore.postureText: 0x11050f08 body_height_state.state）
+const formatPosture = () => robotStore.postureText
 
 type PointCloudPoint = { x: number; y: number; z: number; intensity: number }
 type RawPointCloudPoint = { x: number; y: number; z?: number; intensityValue?: number }
@@ -1171,6 +1281,10 @@ type PcdHeaderInfo = {
 }
 const pointCloudCanvas = ref<HTMLCanvasElement | null>(null)
 const pointCloudData = ref<PointCloudPoint[]>([])
+const basePointCloudData = ref<PointCloudPoint[]>([])
+/** 机器狗箭头 3MF 网格（加载完成后设置） */
+const arrowMesh = ref<MeshData | null>(null)
+const pointCloudNormalizationParams = ref({ centerX: 0, centerY: 0, centerZ: 0, maxRange: 1 })
 const pointCloudLoading = ref(false)
 const pointCloudError = ref('')
 const pointCloudScale = ref(1)
@@ -1207,16 +1321,28 @@ const generateMockPointCloud = (count = 800): PointCloudPoint[] => {
 const normalizePointCloud = (rawPoints: RawPointCloudPoint[]): PointCloudPoint[] => {
   if (!rawPoints.length) return []
 
-  const xs = rawPoints.map(p => p.x)
-  const ys = rawPoints.map(p => p.y)
-  const zs = rawPoints.map(p => p.z ?? 0)
+  let minX = Infinity, maxX = -Infinity
+  let minY = Infinity, maxY = -Infinity
+  let minZ = Infinity, maxZ = -Infinity
+  let minIntensity = Infinity, maxIntensity = -Infinity
+  let hasIntensity = false
 
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-  const minZ = Math.min(...zs)
-  const maxZ = Math.max(...zs)
+  for (const p of rawPoints) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+    const z = p.z ?? 0
+    if (z < minZ) minZ = z
+    if (z > maxZ) maxZ = z
+    if (p.intensityValue !== undefined && Number.isFinite(p.intensityValue)) {
+      hasIntensity = true
+      if (p.intensityValue < minIntensity) minIntensity = p.intensityValue
+      if (p.intensityValue > maxIntensity) maxIntensity = p.intensityValue
+    }
+  }
+
+  if (!hasIntensity) { minIntensity = 0; maxIntensity = 1 }
 
   const rangeX = maxX - minX
   const rangeY = maxY - minY
@@ -1226,13 +1352,10 @@ const normalizePointCloud = (rawPoints: RawPointCloudPoint[]): PointCloudPoint[]
   const centerX = (maxX + minX) / 2
   const centerY = (maxY + minY) / 2
   const centerZ = (maxZ + minZ) / 2
-
-  const intensityValues = rawPoints
-    .map(p => (p.intensityValue !== undefined && Number.isFinite(p.intensityValue) ? p.intensityValue : undefined))
-    .filter((val): val is number => typeof val === 'number')
-  const minIntensity = intensityValues.length ? Math.min(...intensityValues) : 0
-  const maxIntensity = intensityValues.length ? Math.max(...intensityValues) : 1
   const intensityRange = maxIntensity - minIntensity || 1
+
+  // 保存归一化参数，供轨迹叠加使用
+  pointCloudNormalizationParams.value = { centerX, centerY, centerZ, maxRange }
 
   return rawPoints.map(point => {
     const centeredZ = point.z ?? centerZ
@@ -1534,16 +1657,18 @@ const drawPointCloud = () => {
   if (rect.width === 0 || rect.height === 0) return
 
   const dpr = window.devicePixelRatio || 1
-  canvas.width = rect.width * dpr
-  canvas.height = rect.height * dpr
-  if ((ctx as any).resetTransform) {
-    ;(ctx as any).resetTransform()
-  } else {
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
+  const w = Math.floor(rect.width * dpr)
+  const h = Math.floor(rect.height * dpr)
+  canvas.width = w
+  canvas.height = h
+
+  const imageData = ctx.createImageData(w, h)
+  const data = imageData.data
+
+  // 背景色 #020915 -> rgb(2,9,21)
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 2; data[i + 1] = 9; data[i + 2] = 21; data[i + 3] = 255
   }
-  ctx.scale(dpr, dpr)
-  ctx.fillStyle = '#020915'
-  ctx.fillRect(0, 0, rect.width, rect.height)
 
   const yaw = pointCloudRotationY.value
   const pitch = pointCloudRotationX.value
@@ -1556,7 +1681,32 @@ const drawPointCloud = () => {
   const panOffsetY = pointCloudPanY.value * rect.height
   const cameraDistance = 2.2
   const depthScale = 1.4
+  const halfW = rect.width / 2
+  const halfH = rect.height / 2
+  const ptSize = Math.max(1, Math.round(pointCloudPointSize.value * dpr))
 
+  const writePixel = (px: number, py: number, r: number, g: number, b: number, a: number) => {
+    const ix = Math.round(px * dpr)
+    const iy = Math.round(py * dpr)
+    for (let dy = 0; dy < ptSize; dy++) {
+      for (let dx = 0; dx < ptSize; dx++) {
+        const nx = ix + dx
+        const ny = iy + dy
+        if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue
+        const idx = (ny * w + nx) * 4
+        const alpha = a / 255
+        data[idx]     = Math.round(data[idx]     * (1 - alpha) + r * alpha)
+        data[idx + 1] = Math.round(data[idx + 1] * (1 - alpha) + g * alpha)
+        data[idx + 2] = Math.round(data[idx + 2] * (1 - alpha) + b * alpha)
+        data[idx + 3] = 255
+      }
+    }
+  }
+
+  // 分两轮绘制：先绘制普通点云和轨迹，再绘制任务点（确保任务点在最上层）
+  const taskPoints: Array<{x: number, y: number, name?: string}> = []
+  let taskPointCount = 0
+  
   pointCloudData.value.forEach(point => {
     const centeredX = point.x
     const centeredY = -point.z
@@ -1570,56 +1720,444 @@ const drawPointCloud = () => {
 
     const perspectiveZ = yRotatedZ * depthScale
     const perspective = cameraDistance / (cameraDistance - perspectiveZ)
-    const projectedX = xzRotatedX * baseScale * perspective + rect.width / 2 + panOffsetX
-    const projectedY = yRotatedY * baseScale * perspective + rect.height / 2 + panOffsetY
+    const projectedX = xzRotatedX * baseScale * perspective + halfW + panOffsetX
+    const projectedY = yRotatedY * baseScale * perspective + halfH + panOffsetY
 
-    if (projectedX < -100 || projectedX > rect.width + 100 || projectedY < -100 || projectedY > rect.height + 100) {
-      return
+    if (projectedX < -10 || projectedX > rect.width + 10 || projectedY < -10 || projectedY > rect.height + 10) return
+
+    // 任务点（intensity >= 2.5 && < 3.5）延后绘制
+    if (point.intensity >= 2.5 && point.intensity < 3.5) {
+      taskPointCount++
+      taskPoints.push({ 
+        x: projectedX, 
+        y: projectedY, 
+        name: (point as any).name 
+      })
+    } else if (point.intensity >= 1.9) {
+      // 轨迹点 - 绿色
+      writePixel(projectedX, projectedY, 0, 255, 0, 230)
+    } else {
+      // 普通点云
+      const t = point.intensity
+      const r = Math.floor(40 + t * 200)
+      const g = Math.floor(120 + t * 100)
+      const b = 255
+      const a = Math.floor((0.35 + t * 0.4) * 255)
+      writePixel(projectedX, projectedY, r, g, b, a)
+    }
+  })
+
+  ctx.putImageData(imageData, 0, 0)
+
+  // 原点和任务点使用普通 arc 绘制（数量较少，无性能问题）
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+  // 绘制任务点（绿色圆圈+名称）
+  if (taskPoints.length > 0 && taskPointCount > 0) {
+    console.log(`[绘制] 正在绘制 ${taskPoints.length} 个任务点`)
+  }
+  
+  taskPoints.forEach(tp => {
+    ctx.beginPath()
+    ctx.arc(tp.x, tp.y, 4, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255, 216, 0, 0.92)'  // 黄色
+    ctx.fill()
+    ctx.strokeStyle = '#FFFFFF'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    
+    // 绘制任务点名称
+    if (tp.name) {
+      ctx.fillStyle = '#FFFFFF'
+      ctx.font = 'bold 10px Arial'
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
+      ctx.shadowBlur = 3
+      ctx.shadowOffsetX = 1
+      ctx.shadowOffsetY = 1
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(tp.name, tp.x, tp.y - 6)
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 0
+    }
+  })
+
+  // 绘制原点
+  const { centerX, centerY, centerZ, maxRange } = pointCloudNormalizationParams.value
+  if (maxRange > 1e-6) {
+    const originNormX = (0 - centerX) / maxRange
+    const originNormY = (0 - centerY) / maxRange
+    const originNormZ = (0 - centerZ) / maxRange
+
+    const oCenteredX = originNormX
+    const oCenteredY = -originNormZ
+    const oCenteredZ = originNormY
+
+    const oXzRotatedX = oCenteredX * cosYaw + oCenteredZ * sinYaw
+    const oXzRotatedZ = -oCenteredX * sinYaw + oCenteredZ * cosYaw
+
+    const oYRotatedY = oCenteredY * cosPitch - oXzRotatedZ * sinPitch
+    const oYRotatedZ = oCenteredY * sinPitch + oXzRotatedZ * cosPitch
+
+    const oPerspectiveZ = oYRotatedZ * depthScale
+    const oPerspective = cameraDistance / (cameraDistance - oPerspectiveZ)
+    const oProjX = oXzRotatedX * baseScale * oPerspective + halfW + panOffsetX
+    const oProjY = oYRotatedY * baseScale * oPerspective + halfH + panOffsetY
+
+    ctx.beginPath()
+    ctx.arc(oProjX, oProjY, 3, 0, Math.PI * 2)
+    ctx.fillStyle = '#FF0000'
+    ctx.fill()
+    ctx.strokeStyle = '#FFFFFF'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    ctx.fillStyle = '#FF0000'
+    ctx.font = 'bold 12px Arial'
+    ctx.fillText('原点', oProjX + 6, oProjY - 6)
+  }
+
+  // ===== 绘制机器狗实时位置（3MF 箭头模型）=====
+  const pose = robotStore.pose
+  if (pose && maxRange > 1e-6) {
+    // 机器狗位置归一化到点云空间
+    const robotNormX = (pose.x - centerX) / maxRange
+    const robotNormY = (pose.y - centerY) / maxRange
+    const robotNormZ = (pose.z - centerZ) / maxRange
+
+    // 用于投影的辅助函数（复用外层投影参数）
+    const projectNorm = (nx: number, ny: number, nz: number) => {
+      const cx2 = nx, cy2 = -nz, cz2 = ny
+      const rx = cx2 * cosYaw + cz2 * sinYaw
+      const rz = -cx2 * sinYaw + cz2 * cosYaw
+      const ry = cy2 * cosPitch - rz * sinPitch
+      const rzF = cy2 * sinPitch + rz * cosPitch
+      const persp = cameraDistance / (cameraDistance - rzF * depthScale)
+      return {
+        px: rx * baseScale * persp + halfW + panOffsetX,
+        py: ry * baseScale * persp + halfH + panOffsetY,
+      }
     }
 
-    const radius = (1.2 + point.intensity * 2) * perspective * pointCloudPointSize.value
-    const red = Math.floor(40 + point.intensity * 200)
-    const green = Math.floor(120 + point.intensity * 100)
-    const blue = 255
-    ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${0.35 + point.intensity * 0.4})`
-    ctx.beginPath()
-    ctx.arc(projectedX, projectedY, radius, 0, Math.PI * 2)
-    ctx.fill()
+    // 投影机器狗中心点（用于文字标注）
+    const { px: rProjX, py: rProjY } = projectNorm(robotNormX, robotNormY, robotNormZ)
+
+    const mesh = arrowMesh.value
+    if (mesh) {
+      // ===== 使用 3MF 网格渲染箭头 =====
+      // 动态缩放：基础比例0.004，最小宽度8px
+      const baseArrowScale = 0.004
+      const minArrowPx = 8
+      // 点云实际缩放后，保证箭头宽度不小于8px
+      const arrowScale = Math.max(
+        baseArrowScale * pointCloudScale.value,
+        minArrowPx / (baseScale || 1)
+      )
+      const cosT = Math.cos(pose.theta)
+      const sinT = Math.sin(pose.theta)
+
+      // 预先投影所有顶点
+      const projVerts: Array<{ px: number; py: number }> = mesh.vertices.map(v => {
+        // 1. 缩放
+        const sx = v.x * arrowScale
+        const sy = v.y * arrowScale
+        const sz = v.z * arrowScale
+        // 2. 绕 Z 轴旋转 theta（世界 XY 平面偏航）
+        const rx = sx * cosT - sy * sinT
+        const ry = sx * sinT + sy * cosT
+        const rz = sz
+        // 3. 平移到机器狗位置
+        return projectNorm(robotNormX + rx, robotNormY + ry, robotNormZ + rz)
+      })
+
+      // 收集所有三角面并按深度排序（画家算法）
+      const faces: Array<{ avgPy: number; i0: number; i1: number; i2: number }> = []
+      for (let i = 0; i < mesh.indices.length; i += 3) {
+        const i0 = mesh.indices[i], i1 = mesh.indices[i + 1], i2 = mesh.indices[i + 2]
+        faces.push({
+          avgPy: (projVerts[i0].py + projVerts[i1].py + projVerts[i2].py) / 3,
+          i0, i1, i2
+        })
+      }
+      faces.sort((a, b) => b.avgPy - a.avgPy)  // 从远到近绘制
+
+      ctx.save()
+      ctx.shadowColor = '#00ff88'
+      ctx.shadowBlur = 0
+      for (const face of faces) {
+        const p0 = projVerts[face.i0]
+        const p1 = projVerts[face.i1]
+        const p2 = projVerts[face.i2]
+        ctx.beginPath()
+        ctx.moveTo(p0.px, p0.py)
+        ctx.lineTo(p1.px, p1.py)
+        ctx.lineTo(p2.px, p2.py)
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(255, 0, 255, 0.85)'
+        ctx.fill()
+        ctx.strokeStyle = '#FFB6FF'
+        ctx.lineWidth = 0.5
+        ctx.stroke()
+      }
+      ctx.shadowBlur = 0
+      ctx.restore()
+    } else {
+      // ===== 降级：3MF未加载时使用简单三角形箭头 =====
+      // 计算朝向屏幕角度
+      const tipDist = 0.06
+      const { px: tProjX, py: tProjY } = projectNorm(
+        robotNormX + Math.cos(pose.theta) * tipDist,
+        robotNormY + Math.sin(pose.theta) * tipDist,
+        robotNormZ
+      )
+      const screenAngle = Math.atan2(tProjY - rProjY, tProjX - rProjX)
+      const arrowSize = 14
+      ctx.save()
+      ctx.translate(rProjX, rProjY)
+      ctx.rotate(screenAngle + Math.PI / 2)
+      ctx.beginPath()
+      ctx.moveTo(0, -arrowSize)
+      ctx.lineTo(-arrowSize * 0.55, arrowSize * 0.65)
+      ctx.lineTo(arrowSize * 0.55, arrowSize * 0.65)
+      ctx.closePath()
+      ctx.shadowColor = '#00ff88'
+      ctx.shadowBlur = 12
+      ctx.fillStyle = 'rgba(255, 0, 255, 0.88)'
+      ctx.fill()
+      ctx.shadowBlur = 0
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 1.5
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    // 标注文字
+    ctx.fillStyle = '#FF0000'
+    ctx.font = 'bold 11px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.shadowColor = 'rgba(0,0,0,0.85)'
+    ctx.shadowBlur = 4
+    ctx.fillText('机器狗', rProjX, rProjY + 18)
+    ctx.shadowBlur = 0
+  }
+}
+
+// 叠加循迹轨迹到点云图
+const overlayTrackTrajectory = async (trackName: string) => {
+  const normalizedTrackName = normalizeTrackName(trackName)
+  if (!normalizedTrackName || basePointCloudData.value.length === 0) return
+  try {
+    // 1. 读取轨迹路线数据
+    const blob = await getTrajectoryFile(normalizedTrackName)
+    if (!blob) return
+
+    const text = await blob.text()
+    const lines = text.trim().split('\n')
+    const trajectoryPoints: Array<{x: number, y: number, z: number}> = []
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
+      // 尝试 index, x, y, z 格式（4列+）
+      if (parts.length >= 4) {
+        const v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2]), v3 = parseFloat(parts[3])
+        if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
+          trajectoryPoints.push({ x: v1, y: v2, z: v3 })
+          continue
+        }
+      }
+      // 尝试 x, y, z 格式（3列）
+      if (parts.length >= 3) {
+        const v0 = parseFloat(parts[0]), v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2])
+        if (!isNaN(v0) && !isNaN(v1) && !isNaN(v2)) {
+          trajectoryPoints.push({ x: v0, y: v1, z: v2 })
+        }
+      }
+    }
+
+    // 2. 读取任务点数据（从 localStorage 的 all_track_task_list）
+    const taskPointsData: Array<{x: number, y: number, z: number, name: string}> = []
+    const currentTaskPointName = activeTrackInfo.value.taskpoint_name
+    
+    console.log('[任务点] 尝试加载任务点:', { 
+      trackName: normalizedTrackName, 
+      taskPointName: currentTaskPointName,
+      hasActiveInfo: !!activeTrackInfo.value
+    })
+    
+    if (currentTaskPointName) {
+      try {
+        const cachedData = localStorage.getItem('all_track_task_list')
+        if (cachedData) {
+          const allTaskList = JSON.parse(cachedData)
+          console.log('[任务点] localStorage 中共有', allTaskList.length, '条任务点记录')
+          
+          const filteredTasks = allTaskList.filter((task: any) => {
+            return task.track_name === normalizedTrackName && 
+                   task.track_point_name === currentTaskPointName
+          })
+          
+          console.log('[任务点] 过滤后匹配到', filteredTasks.length, '个任务点')
+          if (filteredTasks.length > 0) {
+            console.log('[任务点] 第一个任务点示例:', filteredTasks[0])
+          }
+          
+          filteredTasks.forEach((task: any, idx: number) => {
+            if (task.x !== undefined && task.y !== undefined && task.z !== undefined) {
+              // 优先使用 type_text，其次 preset，最后使用序号
+              const taskName = task.type_text || task.preset || `任务点${idx}`
+              taskPointsData.push({
+                x: task.x,
+                y: task.y,
+                z: task.z,
+                name: taskName
+              })
+            }
+          })
+          
+          if (taskPointsData.length > 0) {
+            console.log(`✓ 成功加载 ${taskPointsData.length} 个任务点到点云图`)
+          } else {
+            console.warn('[任务点] 未找到有效的任务点坐标数据')
+          }
+        } else {
+          console.warn('[任务点] localStorage 中没有 all_track_task_list 数据')
+        }
+      } catch (err) {
+        console.error('[任务点] 读取任务点数据失败:', err)
+      }
+    } else {
+      console.warn('[任务点] taskpoint_name 为空，无法加载任务点')
+    }
+
+    // 3. 归一化并合并数据
+    const { centerX, centerY, centerZ, maxRange } = pointCloudNormalizationParams.value
+    
+    const normalizedTrajectory = trajectoryPoints.map(p => ({
+      x: (p.x - centerX) / maxRange,
+      y: (p.y - centerY) / maxRange,
+      z: (p.z - centerZ) / maxRange,
+      intensity: 2.0  // 特殊值，渲染时识别为轨迹点（绿色）
+    }))
+
+    const normalizedTaskPoints = taskPointsData.map(p => ({
+      x: (p.x - centerX) / maxRange,
+      y: (p.y - centerY) / maxRange,
+      z: (p.z - centerZ) / maxRange,
+      intensity: 3.0,  // 特殊值，渲染时识别为任务点（绿色）
+      name: p.name      // 保留名称用于显示
+    }))
+
+    console.log('[点云叠加] 基础点云:', basePointCloudData.value.length, '轨迹点:', normalizedTrajectory.length, '任务点:', normalizedTaskPoints.length)
+
+    pointCloudData.value = [
+      ...basePointCloudData.value, 
+      ...normalizedTrajectory,
+      ...normalizedTaskPoints
+    ]
+    await nextTick()
+    schedulePointCloudRender()
+  } catch (e) {
+    console.warn('叠加轨迹失败:', e)
+  }
+}
+
+// 用 Web Worker 解析 PCD，避免阻塞主线程
+const parsePcdBufferInWorker = (buffer: ArrayBuffer): Promise<{ points: PointCloudPoint[], normParams: { centerX: number, centerY: number, centerZ: number, maxRange: number } }> => {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../workers/pcdParser.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e) => {
+      worker.terminate()
+      if (e.data.ok) {
+        resolve({ points: e.data.points, normParams: e.data.normParams })
+      } else {
+        reject(new Error(e.data.error))
+      }
+    }
+    worker.onerror = (err) => {
+      worker.terminate()
+      reject(err)
+    }
+    // 用 transfer 转移 ArrayBuffer 所有权，零拷贝
+    worker.postMessage({ buffer }, [buffer])
   })
+}
+
+const clearPointCloud = () => {
+  pointCloudData.value = []
+  basePointCloudData.value = []
+  // 重置归一化参数，使 drawPointCloud 中 maxRange <= 1e-6，不再绘制原点图标
+  pointCloudNormalizationParams.value = { centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 }
+  const canvas = pointCloudCanvas.value
+  if (canvas) {
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      // 用背景色填充，与 drawPointCloud 一致
+      const dpr = window.devicePixelRatio || 1
+      const rect = canvas.getBoundingClientRect()
+      const w = Math.floor(rect.width * dpr)
+      const h = Math.floor(rect.height * dpr)
+      canvas.width = w
+      canvas.height = h
+      ctx.fillStyle = '#020915'
+      ctx.fillRect(0, 0, w, h)
+    }
+  }
 }
 
 const refreshPointCloud = async () => {
   pointCloudLoading.value = true
   pointCloudError.value = ''
   try {
-    let buffer: ArrayBuffer | null = null
-    
-    // 优先从 IndexedDB 获取当前选中地图的点云文件
-    if (selectedMap.value) {
-      const blob = await getMapFile(selectedMap.value, 'tinyMap.pcd')
-      if (blob) {
-        buffer = await blob.arrayBuffer()
-      }
+    if (!selectedMap.value) {
+      pointCloudError.value = '请先选择地图'
+      clearPointCloud()
+      return
     }
-    
-    // 如果没有下载的地图文件，使用默认测试文件
-    if (!buffer) {
-      const response = await fetch(tinymapPcdUrl)
-      if (!response.ok) {
-        throw new Error('PCD 文件加载失败')
-      }
-      buffer = await response.arrayBuffer()
+
+    // 先检查栅格图是否存在，没有则直接报错，不加载其他文件
+    const gridBlob = await getMapFile(selectedMap.value, 'gridMap.pgm')
+    if (!gridBlob || gridBlob.size === 0) {
+      pointCloudError.value = '地图文件不存在'
+      clearPointCloud()
+      return
     }
-    
-    const parsedPoints = parsePcdBuffer(buffer)
-    pointCloudData.value = parsedPoints.length ? parsedPoints : generateMockPointCloud()
+
+    // 栅格图存在，再加载点云
+    const pcdBlob = await getMapFile(selectedMap.value, 'tinyMap.pcd')
+    if (!pcdBlob || pcdBlob.size === 0) {
+      pointCloudError.value = '点云文件不存在'
+      clearPointCloud()
+      return
+    }
+
+    const ab = await pcdBlob.arrayBuffer()
+    const { points, normParams } = await parsePcdBufferInWorker(ab)
+    if (points.length === 0) {
+      pointCloudError.value = '点云数据为空'
+      clearPointCloud()
+      return
+    }
+
+    pointCloudNormalizationParams.value = normParams
+    pointCloudData.value = points
+    basePointCloudData.value = points
     await nextTick()
-    schedulePointCloudRender()
+
+    const currentTrackName = activeOverlayTrackName.value || normalizeTrackName(selectedTrack.value)
+    if (robotStore.isTracking && currentTrackName) {
+      activeOverlayTrackName.value = currentTrackName
+      await overlayTrackTrajectory(currentTrackName)
+    } else {
+      schedulePointCloudRender()
+    }
   } catch (error) {
-    pointCloudError.value = '点云数据加载失败'
-    pointCloudData.value = generateMockPointCloud()
-    await nextTick()
-    schedulePointCloudRender()
+    console.error('[点云] 加载失败:', error)
+    pointCloudError.value = '地图加载失败'
+    clearPointCloud()
   } finally {
     pointCloudLoading.value = false
   }
@@ -1770,50 +2308,53 @@ const droneDisplayPosition = computed<{ longitude: number; latitude: number; hei
   }
 })
 
-    // 获取最新的三条报警数据
-const loadLatestAlarmData = async () => {
+// 获取最新4条告警日志并显示在实时警情表格
+const fetchLatestAlarmLogs = async () => {
   try {
-    const { dockSns, droneSns } = getCachedDeviceSns()
-    const allSns = [...dockSns, ...droneSns]
-    
-    if (allSns.length === 0) {
-      return
+    const params = new URLSearchParams({ page: '1', page_size: '4' })
+    const res = await fetch(`/api/dxr_api/getLog?${params.toString()}`)
+    if (!res.ok) return
+    const json = await res.json()
+    const rows: any[] = json.data?.data || []
+    const dxrBase = getCurrentEnvironment() === 'internet'
+      ? 'http://10.10.1.3:81'
+      : 'http://172.16.88.152:81'
+    const formatTs = (ts: number | null) => {
+      if (!ts) return '--'
+      const ms = ts > 1e10 ? ts : ts * 1000
+      return new Date(ms).toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      })
     }
-    
-    // 获取所有设备的报警数据
-    const allAlerts: any[] = []
-    
-    for (const sn of allSns) {
-      try {
-        const response = await fetchDeviceHms(sn)
-        if (response && response.length > 0) {
-          allAlerts.push(...response)
-        }
-      } catch (err) {
-        // 静默处理错误
-      }
-    }
-    
-    // 按时间排序，取最新的三条
-    const sortedAlerts = allAlerts
-      .sort((a, b) => b.create_time - a.create_time)
-      .slice(0, 3)
-    
-    // 转换为首页需要的格式
-    deviceAlarmData.value = sortedAlerts.map(alert => {
-      const deviceType = dockSns.includes(alert.device_sn) ? '机场' : '无人机'
+    deviceAlarmData.value = rows.slice(0, 4).map(row => {
+      const outmsg = typeof row?.outmessage === 'string'
+        ? (() => { try { return JSON.parse(row.outmessage) } catch { return {} } })()
+        : (row?.outmessage || {})
+      const imgPath = outmsg?.out_image
+      const imageUrl = imgPath
+        ? (imgPath.startsWith('http://') || imgPath.startsWith('https://')
+            ? imgPath
+            : dxrBase + (imgPath.startsWith('/') ? imgPath : '/' + imgPath))
+        : ''
       return {
-        deviceName: alert.device_sn,
-        time: formatTimestamp(alert.create_time),
-        type: deviceType,
-        level: alert.level === 1 ? '普通' : '严重',
-        content: alert.message_zh
+        deviceName: row.sn || '--',
+        type: row.content || '--',
+        imageUrl,
+        content: outmsg?.message || '--',
+        description: row.task_point_description || '--',
+        time: formatTs(row.create_time)
       }
     })
   } catch (err) {
-    // 静默处理错误
+    // 静默处理
   }
 }
+
+// WebSocket 收到 alert 消息时，重新拉取最新告警日志
+watch(() => robotStore.alerts[0], (newAlert) => {
+  if (newAlert) fetchLatestAlarmLogs()
+})
 
 // 云台切换函数
 const switchGimbal = async (videoType: 'dock' | 'drone_visible' | 'drone_infrared') => {
@@ -3217,9 +3758,14 @@ const showWaylineDropdown = ref(false)
 const navigationEnabled = ref(false)
 const insEnabled = ref(false)
 const msfEnabled = ref(false)
+const navigationLoading = ref(false)
+const insLoading = ref(false)
+const msfLoading = ref(false)
 
 // 当前活动任务类型：'wayline' | 'point' | 'multi' | null
 const activeTaskType = ref<'wayline' | 'point' | 'multi' | 'track' | null>(null)
+// 当前运行中的循迹任务参数（取消时需要）
+const activeTrackInfo = ref({ track_name: '', taskpoint_name: '' })
 
 // 确认对话框状态
 const confirmDialog = ref({
@@ -3628,9 +4174,17 @@ const fetchTrackList = async () => {
     const response = await navigationApi.getTrackList(robotId)
     if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
       trackList.value = response.msg.result
+      // 与 NavigationManage 共享同一缓存 key，保持数据一致
+      localStorage.setItem('cached_track_list', JSON.stringify(trackList.value))
+    } else {
+      // 接口返回格式异常，尝试从缓存加载
+      const cached = localStorage.getItem('cached_track_list')
+      if (cached) trackList.value = JSON.parse(cached)
     }
   } catch (error) {
-  // ...
+    // 接口异常，尝试从缓存加载
+    const cached = localStorage.getItem('cached_track_list')
+    if (cached) trackList.value = JSON.parse(cached)
   }
 }
 
@@ -3682,8 +4236,10 @@ watch(selectedMap, async (newMapName) => {
 })
 
 // 监听 filteredTrackList 变化，确保有数据时自动选择第一个
+// 循迹进行中时由 WebSocket 数据驱动，不强制覆盖
 watch(filteredTrackList, (newList) => {
-  if (newList.length > 0 && !selectedTrack.value) {
+  if (robotStore.isTracking) return
+  if (newList.length > 0 && !newList.includes(selectedTrack.value)) {
     selectedTrack.value = newList[0]
   }
 })
@@ -3842,8 +4398,8 @@ const dispatchWaylineTask = (waylineId: string, taskLabel: string) => {
 const canDispatchTask = computed(() => {
   // 必须开启导航、INS或MSF中的至少一个
   const hasNavEnabled = navigationEnabled.value || insEnabled.value || msfEnabled.value
-  // 没有活动任务
-  const noActiveTask = activeTaskType.value === null
+  // 没有活动任务（直接读 WebSocket 状态，避免 watch 时序问题）
+  const noActiveTask = activeTaskType.value === null && !robotStore.isTracking && !robotStore.isPointTaskRunning
   return hasNavEnabled && noActiveTask
 })
 
@@ -3851,16 +4407,16 @@ const canDispatchTask = computed(() => {
 const handleDispatchTask = () => {
   if (!canDispatchTask.value) {
     if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
-      alert('请先开启导航、INS或MSF')
+      showError('请先开启导航、INS或MSF')
     } else if (activeTaskType.value) {
-      alert('已有任务在执行中，请先取消当前任务')
+      showError('已有任务在执行中，请先取消当前任务')
     }
     return
   }
   
   // 检查是否选择了循迹任务
   if (!selectedTrack.value) {
-    alert('请先选择循迹任务')
+    showError('请先选择循迹任务')
     return
   }
   
@@ -3972,8 +4528,8 @@ const handleDispatchMultiTask = () => {
 
 // 取消任务
 const handleCancelTask = async () => {
-  if (activeTaskType.value === null) {
-    alert('当前没有正在执行的任务')
+  if (activeTaskType.value === null && !robotStore.isTracking) {
+    showError('当前没有正在执行的任务')
     return
   }
   
@@ -3984,45 +4540,47 @@ const handleCancelTask = async () => {
     track: '循迹任务'
   }
   
-  const taskName = taskTypeMap[activeTaskType.value] || '任务'
+  const taskName = (activeTaskType.value ? taskTypeMap[activeTaskType.value] : null) || '任务'
   
   showConfirmDialog(`确定要取消当前${taskName}吗？`, async () => {
     try {
       const robotId = deviceStore.selectedRobotId
       if (!robotId) {
-        alert('未找到机器人ID')
+        showError('未找到机器人ID')
         return
       }
       
       // 根据任务类型调用不同的取消接口
       if (activeTaskType.value === 'track') {
-        // 取消循迹任务
+        // 取消循迹任务，使用启动时保存的任务参数
         const response = await navigationApi.cancelTrack(robotId, {
           action: 0,
           wait: 0,
           obs_mode: 1,
-          track_name: '', // 取消时可能不需要具体名称，或者需要从某处获取当前运行的任务名，这里暂时传空或默认值
-          taskpoint_name: ''
+          track_name: activeTrackInfo.value.track_name,
+          taskpoint_name: activeTrackInfo.value.taskpoint_name
         })
   // ...
         
         if (response && (response as any).msg) {
           const { error_code, error_msg } = (response as any).msg
           if (error_code === 0) {
-            alert('循迹任务已取消')
+            showSuccess('循迹任务已取消')
             activeTaskType.value = null
+            activeTrackInfo.value = { track_name: '', taskpoint_name: '' }
           } else {
-            alert(`取消失败: ${error_msg || '未知错误'}`)
+            showError(`取消失败: ${error_msg || '未知错误'}`)
           }
         } else {
-          alert('循迹任务已取消')
+          showSuccess('循迹任务已取消')
           activeTaskType.value = null
+          activeTrackInfo.value = { track_name: '', taskpoint_name: '' }
         }
       } else if (activeTaskType.value === 'point') {
         // 停止发布点任务
         const taskId = selectedPointTask.value
         if (!taskId) {
-          alert('未找到任务ID')
+          showError('未找到任务ID')
           return
         }
         
@@ -4035,13 +4593,13 @@ const handleCancelTask = async () => {
         if (response && (response as any).msg) {
           const { error_code, error_msg } = (response as any).msg
           if (error_code === 0) {
-            alert('发布点任务已停止')
+            showSuccess('发布点任务已停止')
             activeTaskType.value = null
           } else {
-            alert(`停止失败: ${error_msg || '未知错误'}`)
+            showError(`停止失败: ${error_msg || '未知错误'}`)
           }
         } else {
-          alert('发布点任务已停止')
+          showSuccess('发布点任务已停止')
           activeTaskType.value = null
         }
       } else if (activeTaskType.value === 'multi') {
@@ -4052,24 +4610,24 @@ const handleCancelTask = async () => {
         if (response && (response as any).response && (response as any).response.msg) {
           const { error_code, error_msg } = (response as any).response.msg
           if (error_code === 0) {
-            alert((response as any).message || '多任务组已取消')
+            showSuccess((response as any).message || '多任务组已取消')
             activeTaskType.value = null
           } else {
-            alert(`取消失败: ${error_msg || '未知错误'}`)
+            showError(`取消失败: ${error_msg || '未知错误'}`)
           }
         } else {
-          alert('多任务组已取消')
+          showSuccess('多任务组已取消')
           activeTaskType.value = null
         }
       } else {
         // 其他任务类型的取消逻辑（暂时只清除状态）
         activeTaskType.value = null
   // ...
-        alert(`${taskName}已取消`)
+        showSuccess(`${taskName}已取消`)
       }
     } catch (error) {
   // ...
-      alert('取消任务失败，请稍后重试')
+      showError('取消任务失败，请稍后重试')
     }
   })
 }
@@ -4087,20 +4645,18 @@ const handleEnableNavigation = () => {
   
   const action = navigationEnabled.value ? '关闭' : '开启'
   showConfirmDialog(`确定要${action}导航吗？`, async () => {
+    navigationLoading.value = true
     try {
       const robotId = deviceStore.selectedRobotId
-      if (!robotId) return
+      if (!robotId) { navigationLoading.value = false; return }
 
-      // action: 1 开启, 0 关闭
+      // action: 1 开启, 0 关闭；状态由 cmd_status WebSocket 反馈更新
       await navigationApi.controlNavigation(robotId, {
         action: navigationEnabled.value ? 0 : 1,
         map_name: selectedMap.value
       })
-      
-      navigationEnabled.value = !navigationEnabled.value
-  // ...
     } catch (err) {
-  // ...
+      navigationLoading.value = false
       alert(`${action}导航失败`)
     }
   })
@@ -4114,18 +4670,17 @@ const handleEnableIns = () => {
   
   const action = insEnabled.value ? '关闭' : '开启'
   showConfirmDialog(`确定要${action}INS吗？`, async () => {
+    insLoading.value = true
     try {
       const robotId = deviceStore.selectedRobotId
-      if (!robotId) return
+      if (!robotId) { insLoading.value = false; return }
 
-      // action: 1 开启, 0 关闭
+      // action: 1 开启, 0 关闭；状态由 cmd_status WebSocket 反馈更新
       await navigationApi.insControl(robotId, {
         action: insEnabled.value ? 0 : 1
       })
-      
-      insEnabled.value = !insEnabled.value
-      alert(`${action}INS成功`)
     } catch (err) {
+      insLoading.value = false
       console.error(`${action}INS失败:`, err)
       alert(`${action}INS失败`)
     }
@@ -4145,20 +4700,19 @@ const handleEnableMsf = () => {
   
   const action = msfEnabled.value ? '关闭' : '开启'
   showConfirmDialog(`确定要${action}MSF吗？`, async () => {
+    msfLoading.value = true
     try {
       const robotId = deviceStore.selectedRobotId
-      if (!robotId) return
+      if (!robotId) { msfLoading.value = false; return }
 
-      // action: 1 开启, 0 关闭
+      // action: 1 开启, 0 关闭；状态由 cmd_status WebSocket 反馈更新
       await navigationApi.msfControl(robotId, {
         action: msfEnabled.value ? 0 : 1,
         mode: 3,
         session: selectedMap.value
       })
-      
-      msfEnabled.value = !msfEnabled.value
-      alert(`${action}MSF成功`)
     } catch (err) {
+      msfLoading.value = false
       console.error(`${action}MSF失败:`, err)
       alert(`${action}MSF失败`)
     }
@@ -4356,6 +4910,9 @@ const onTrackStartConfirm = async () => {
       return
     }
     
+    // 点击确定立即关闭弹窗，不等待接口返回
+    trackStartDialog.value.visible = false
+    
     // 调用启动循迹任务API
     const response = await navigationApi.startTrack(robotId, {
       action: form.action,
@@ -4371,20 +4928,28 @@ const onTrackStartConfirm = async () => {
     if (response && (response as any).response && (response as any).response.msg) {
       const { error_code, error_msg } = (response as any).response.msg
       if (error_code === 0) {
-        alert((response as any).message || '循迹任务启动成功')
-        trackStartDialog.value.visible = false
+        const normalizedTrackName = normalizeTrackName(form.track_name)
         activeTaskType.value = 'track'
+        selectedTrack.value = normalizedTrackName
+        activeTrackInfo.value = { track_name: normalizedTrackName, taskpoint_name: form.taskpoint_name }
+        activeOverlayTrackName.value = normalizedTrackName
+        await overlayTrackTrajectory(normalizedTrackName)
+        showSuccess((response as any).message || '循迹任务启动成功')
       } else {
-        alert(`启动失败: ${error_msg || '未知错误'}`)
+        showError(`启动失败: ${error_msg || '未知错误'}`)
       }
     } else {
-      alert('启动循迹任务成功')
-      trackStartDialog.value.visible = false
+      const normalizedTrackName = normalizeTrackName(form.track_name)
       activeTaskType.value = 'track'
+      selectedTrack.value = normalizedTrackName
+      activeTrackInfo.value = { track_name: normalizedTrackName, taskpoint_name: form.taskpoint_name }
+      activeOverlayTrackName.value = normalizedTrackName
+      await overlayTrackTrajectory(normalizedTrackName)
+      showSuccess('循迹任务启动成功')
     }
   } catch (error) {
     console.error('启动循迹任务失败:', error)
-    alert('启动循迹任务失败，请稍后重试')
+    showError('启动循迹任务失败，请稍后重试')
   }
 }
 
@@ -4401,16 +4966,19 @@ const onMultiTaskStartConfirm = async () => {
   
   // 验证任务组名称
   if (!form.group_name || form.group_name.trim() === '') {
-    alert('任务组名称不能为空')
+    showError('任务组名称不能为空')
     return
   }
   
   try {
     const robotId = deviceStore.selectedRobotId
     if (!robotId) {
-      alert('未找到机器人ID')
+      showError('未找到机器人ID')
       return
     }
+    
+    // 点击确定立即关闭弹窗
+    multiTaskStartDialog.value.visible = false
     
     // 调用启动多任务组API
     const response = await navigationApi.startMultiTaskGroup(robotId, {
@@ -4426,20 +4994,18 @@ const onMultiTaskStartConfirm = async () => {
     if (response && (response as any).response && (response as any).response.msg) {
       const { error_code, error_msg } = (response as any).response.msg
       if (error_code === 0) {
-        alert((response as any).message || '多任务组启动成功')
-        multiTaskStartDialog.value.visible = false
         activeTaskType.value = 'multi'
+        showSuccess((response as any).message || '多任务组启动成功')
       } else {
-        alert(`启动失败: ${error_msg || '未知错误'}`)
+        showError(`启动失败: ${error_msg || '未知错误'}`)
       }
     } else {
-      alert('启动多任务组成功')
-      multiTaskStartDialog.value.visible = false
       activeTaskType.value = 'multi'
+      showSuccess('多任务组启动成功')
     }
   } catch (error) {
     console.error('启动多任务组失败:', error)
-    alert('启动多任务组失败，请稍后重试')
+    showError('启动多任务组失败，请稍后重试')
   }
 }
 
@@ -4454,16 +5020,19 @@ const onPointTaskStartConfirm = async () => {
   
   // 验证任务ID
   if (!form.task_id) {
-    alert('任务ID不能为空')
+    showError('任务ID不能为空')
     return
   }
   
   try {
     const robotId = deviceStore.selectedRobotId
     if (!robotId) {
-      alert('未找到机器人ID')
+      showError('未找到机器人ID')
       return
     }
+
+    // 点击确定立即关闭弹窗
+    pointTaskStartDialog.value.visible = false
 
     // 调用启动发布点任务API
     const response = await navigationApi.startPointTask(robotId, {
@@ -4477,20 +5046,18 @@ const onPointTaskStartConfirm = async () => {
     if (response && (response as any).msg) {
       const { error_code, error_msg } = (response as any).msg
       if (error_code === 0) {
-        alert('发布点任务启动成功')
-        pointTaskStartDialog.value.visible = false
         activeTaskType.value = 'point'
+        showSuccess('发布点任务启动成功')
       } else {
-        alert(`启动失败: ${error_msg || '未知错误'}`)
+        showError(`启动失败: ${error_msg || '未知错误'}`)
       }
     } else {
-      alert('发布点任务启动成功')
-      pointTaskStartDialog.value.visible = false
       activeTaskType.value = 'point'
+      showSuccess('发布点任务启动成功')
     }
   } catch (error) {
     console.error('启动发布点任务失败:', error)
-    alert('启动发布点任务失败，请稍后重试')
+    showError('启动发布点任务失败，请稍后重试')
   }
 }
 
@@ -5104,25 +5671,36 @@ watch(pointCloudData, () => {
   schedulePointCloudRender()
 })
 
+// 机器狗位姿更新时重新绘制点云（实时显示位置）
+watch(() => robotStore.pose, () => {
+  if (pointCloudData.value.length > 0) {
+    schedulePointCloudRender()
+  }
+}, { deep: true })
+
 watch(pointCloudCanvas, (canvas) => {
   if (canvas && pointCloudData.value.length > 0) {
     schedulePointCloudRender()
   }
 })
 
-watch([pointCloudScale, pointCloudRotationX, pointCloudRotationY, pointCloudPanX, pointCloudPanY, pointCloudPointSize], () => {
-  schedulePointCloudRender()
-})
-
 onMounted(async () => {
   // 初始化警报声（使用Web Audio API生成）
   
-  // 启动机器人状态轮询
-  updateSelectedRobotInfo()
-  robotInfoTimer = window.setInterval(updateSelectedRobotInfo, 1000)
+  // WebSocket 在 App.vue 全局启动，此处无需再轮询机器人状态
 
-  // 获取最新报警数据
-  await loadLatestAlarmData()
+  // 加载机器狗箭头 3MF 模型
+  load3MF('/jiantou.3mf').then(mesh => {
+    if (mesh) {
+      arrowMesh.value = mesh
+      console.log(`[3MF] 箭头模型加载成功：${mesh.vertices.length} 顶点 / ${mesh.indices.length / 3} 三角面`)
+    } else {
+      console.warn('[3MF] 箭头模型加载失败，将使用内置三角形替代')
+    }
+  })
+
+  // 获取最新告警日志（底部实时警情表格）
+  await fetchLatestAlarmLogs()
   
   // 航线任务进度数据现在由全局store管理，无需本地加载
   
@@ -5229,11 +5807,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handlePointCloudKeydown)
   stopPointCloudDragging()
 
-  // 清理机场状态刷新定时器
-  if (robotInfoTimer) {
-    clearInterval(robotInfoTimer)
-    robotInfoTimer = null
-  }
+  // robotInfoTimer 已废弃，无需清理
 
 
   
@@ -5688,34 +6262,42 @@ watch(() => deviceStore.selectedRobot, async (newRobot, oldRobot) => {
 }, { immediate: false })
 
 onMounted(async () => {
-  // 等待 selectedRobotId 就绪后再加载数据（避免首次加载时 robotId 为空）
-  // 如果已经有 robotId（从 l和视频
-    if (deviceStore.selectedRobot) {
-      await fetchMapList()
-      await fetchTrackList()
-      await fetchPointTaskList()
-      await fetchMultiTaskList()
-      
-      await initCameraStreams()
-      initVideoPlayer()
-      initInfraredVideo
-    // 如果机器人对象已就绪，加载数据
-    if (deviceStore.selectedRobot) {
-      await fetchMapList()
-      await fetchTrackList()
-      await fetchPointTaskList()
-      await fetchMultiTaskList()
-      
-      if (selectedMap.value) {
-        await nextTick()
-        const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
-        await downloadMapFiles(selectedMap.value, updateTime)
-        await refreshPointCloud()
-      }
+  // 首次挂载时：如果 robot 已就绪（刷新页面直接进来的情况），加载列表并初始化
+  // 正常登录流程由 watch(selectedRobot) 触发，此处兜底
+  if (deviceStore.selectedRobot) {
+    if (mapList.value.length === 0) await fetchMapList()
+    if (trackList.value.length === 0) await fetchTrackList()
+    if (pointTaskList.value.length === 0) await fetchPointTaskList()
+    if (multiTaskList.value.length === 0) await fetchMultiTaskList()
+
+    await initCameraStreams()
+    initVideoPlayer()
+    initInfraredVideo()
+
+    if (selectedMap.value) {
+      await nextTick()
+      const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
+      await downloadMapFiles(selectedMap.value, updateTime)
+      await refreshPointCloud()
     }
-    // 否则等待 watch(selectedRobot) 触发
   }
-  // 如果连 robotId 都没有，等待 Layout.vue 加载机器人列表后由 watch 触发
+})
+
+// 从其他页面切回首页时（keep-alive 缓存，onMounted 不再重复执行）
+onActivated(async () => {
+  if (deviceStore.selectedRobot) {
+    // 重新拉取循迹列表，确保数据最新（接口失败时自动回退到缓存）
+    await fetchTrackList()
+
+    await initCameraStreams()
+    initVideoPlayer()
+    initInfraredVideo()
+
+    if (selectedMap.value) {
+      await nextTick()
+      await refreshPointCloud()
+    }
+  }
 })
 
 </script>
@@ -5750,6 +6332,11 @@ onMounted(async () => {
   outline: none;
   border: 1.5px solid #67d5fd;
   box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
+}
+
+.wayline-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .wayline-select option {
@@ -5828,7 +6415,8 @@ onMounted(async () => {
 }
 
 .dispatch-task-input {
-  flex: 0 1 70%;
+  flex: 1;
+  min-width: 0;
   height: 36px;
   border-radius: 6px;
   border: 1px solid #164159;
@@ -5854,8 +6442,8 @@ onMounted(async () => {
 
 .custom-select-wrapper {
   position: relative;
-  display: inline-block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .mission-select {
@@ -6016,12 +6604,12 @@ onMounted(async () => {
 /* 巡检告警列宽 - 使用百分比布局 */
 .tableOne th:nth-child(1),
 .tableOne td:nth-child(1) {
-  width: 20%;
+  width: 18%;
 }
 
 .tableOne th:nth-child(2),
 .tableOne td:nth-child(2) {
-  width: 15%;
+  width: 14%;
 }
 
 .tableOne th:nth-child(3),
@@ -6032,12 +6620,17 @@ onMounted(async () => {
 
 .tableOne th:nth-child(4),
 .tableOne td:nth-child(4) {
-  width: 20%;
+  width: 22%;
 }
 
 .tableOne th:nth-child(5),
 .tableOne td:nth-child(5) {
-  width: 35%;
+  width: 16%;
+}
+
+.tableOne th:nth-child(6),
+.tableOne td:nth-child(6) {
+  width: 20%;
 }
 
 .custom-select-arrow {
@@ -6684,6 +7277,21 @@ onMounted(async () => {
   background: rgba(12, 60, 86, 0.8);
 }
 
+.map-dropdown:disabled,
+.map-dropdown-wrapper.disabled .map-dropdown {
+  background: rgba(8, 30, 46, 0.7);
+  border-color: rgba(103, 213, 253, 0.15);
+  color: rgba(103, 213, 253, 0.45);
+  cursor: not-allowed;
+}
+.map-dropdown-wrapper.disabled .map-dropdown:hover {
+  border-color: rgba(103, 213, 253, 0.15);
+  background: rgba(8, 30, 46, 0.7);
+}
+.map-dropdown-wrapper.disabled .dropdown-arrow svg polygon {
+  fill: rgba(103, 213, 253, 0.35);
+}
+
 .map-dropdown option {
   background: #0c3c56;
   color: #67d5fd;
@@ -6758,6 +7366,33 @@ onMounted(async () => {
   border-color: rgba(100, 100, 100, 0.3);
   transform: none;
   box-shadow: none;
+}
+
+/* loading 状态 - 隐藏文字，显示旋转圆圈 */
+.task-btn.loading {
+  pointer-events: none;
+  color: transparent;
+  position: relative;
+  opacity: 0.85;
+}
+.task-btn.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(103, 213, 253, 0.25);
+  border-top-color: #67d5fd;
+  border-radius: 50%;
+  animation: task-btn-spin 0.7s linear infinite;
+}
+.task-btn.active.loading::after {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+}
+@keyframes task-btn-spin {
+  to { transform: rotate(360deg); }
 }
 
 .wayline-control-list {
@@ -6840,6 +7475,24 @@ onMounted(async () => {
 .control-row .span1:hover {
   border-color: rgba(182, 38, 38, 0.8);
   background: #662626;
+}
+
+/* 任务运行中 - 取消按钮高亮激活状态 */
+.control-row .span1.active {
+  background: #c62828;
+  border-color: #ff5252;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(198, 40, 40, 0.6);
+  animation: cancel-btn-pulse 2s ease-in-out infinite;
+}
+.control-row .span1.active:hover {
+  background: #d32f2f;
+  border-color: #ff6666;
+  box-shadow: 0 0 14px rgba(198, 40, 40, 0.8);
+}
+@keyframes cancel-btn-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(198, 40, 40, 0.5); }
+  50%       { box-shadow: 0 0 18px rgba(198, 40, 40, 0.9); }
 }
 
 /* 禁用状态样式 */
@@ -7280,7 +7933,7 @@ onMounted(async () => {
 .tableOne tbody {
   width: 100%;
   display: block;
-  height: 156px; /* 固定高度为3行的高度 52px * 3 */
+  height: 172px; /* 固定高度为4行的高度 43px * 4 */
   overflow-y: hidden;
 }
 
@@ -7295,18 +7948,21 @@ onMounted(async () => {
   padding: 0;
   text-align: center;
   border: none;
-  font-size: 14px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.9);
 }
 
 .tableOne th {
-  line-height: 38px;
-  height: 38px;
+  line-height: 34px;
+  height: 34px;
 }
 
 .tableOne td {
-  line-height: 52px;
-  height: 52px;
+  line-height: 43px;
+  height: 43px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 删除列分隔线的样式，改为行分隔线 */

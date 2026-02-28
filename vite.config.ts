@@ -62,6 +62,15 @@ export default defineConfig(({ mode }) => {
     }
   }
 
+  const getDxrApiTarget = () => {
+    const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
+    if (environment === 'internet') {
+      return 'http://10.10.1.3:81'
+    } else {
+      return 'http://172.16.88.152:81'
+    }
+  }
+
   return {
     base: './',
     plugins: [vue()],
@@ -90,6 +99,11 @@ export default defineConfig(({ mode }) => {
               console.log('📥 代理响应:', proxyRes.statusCode, req.url)
             })
           }
+        },
+        '/api/dxr_api': {
+          target: getDxrApiTarget(),
+          changeOrigin: true,
+          secure: false,
         },
         '/navigation_list': {
           target: 'http://10.10.1.3:5000',

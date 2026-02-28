@@ -101,7 +101,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
   box-sizing: border-box;
   margin: 20px 0 0 0;
   height: calc(100vh - 104px);
@@ -111,6 +111,8 @@
 .main-flex {
   display: flex;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
   gap: 0.8vw;
 }
 
@@ -122,6 +124,8 @@
   flex-direction: column;
   gap: 4px;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
   background: transparent;
   padding-bottom: 0;
   /* 取消原有padding-bottom */
@@ -1081,8 +1085,9 @@
   background: linear-gradient(135deg, #0a2a3a 80%, #0a0f1c 100%);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  padding: 16px 20px 24px;
+  padding: 16px 20px 12px;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1148,6 +1153,7 @@
   border: 1px solid rgba(62, 121, 150, 0.6);
   background: transparent;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -1187,12 +1193,15 @@
   height: 44px;
   text-align: center;
   flex-shrink: 0;
+  align-items: center;
 }
 
 .file-table-body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .file-table-body::-webkit-scrollbar {
@@ -1217,8 +1226,17 @@
   background: transparent;
   color: #cfe9ff;
   font-size: 13px;
-  height: 44px;
+  height: 48px;
+  flex-shrink: 0;
   border-top: 1px solid rgba(45, 111, 145, 0.5);
+  align-items: center;
+}
+
+/* 自适应行高模式：每行占容器高度的 10%，10行填满，超出时滚动，行高随屏幕动态变化 */
+.file-table-adaptive .file-table-row {
+  flex: 0 0 10%;
+  height: auto;
+  min-height: 36px;
 }
 
 .file-table-cell {

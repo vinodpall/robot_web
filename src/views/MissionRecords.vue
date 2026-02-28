@@ -48,8 +48,8 @@
                 <button class="mission-btn mission-btn-primary" @click="handleAddTask">添加任务</button>
               </div>
             </div>
-            <div class="file-table" style="min-height: 650px;">
-              <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center;">
+            <div class="file-table file-table-adaptive">
+              <div class="file-table-header">
                 <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">任务类型</div>
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">X坐标</div>
@@ -61,8 +61,9 @@
                 <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
               <!-- 显示实际数据行 -->
+              <div class="file-table-body">
               <template v-if="waypointsData.length > 0">
-                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index" style="min-height: 60px;">
+                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">{{ waypoint.index + 1 }}</div>
                   <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type }}</div>
                   <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.x }}</div>
@@ -84,7 +85,7 @@
                 </div>
               </template>
               <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
-              <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i" style="min-height: 60px;">
+              <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i">
                 <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
@@ -95,54 +96,6 @@
                 <div class="file-table-cell" style="flex: 1; text-align: center;"></div>
                 <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center;"></div>
               </div>
-            </div>
-            <!-- 分页组件 -->
-            <div class="pagination-wrapper" v-if="total > 0">
-              <div class="pagination-info">
-                共 {{ total }} 条记录，当前第 {{ currentPage }} 页
-              </div>
-              <div class="pagination-controls">
-                <button 
-                  class="pagination-btn pagination-btn-icon" 
-                  :disabled="currentPage <= 1"
-                  @click="changePage(currentPage - 1)"
-                  title="上一页"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#67d5fd" stroke-width="2">
-                    <path d="M15 18l-6-6 6-6"/>
-                  </svg>
-                </button>
-                
-                <div class="pagination-page-input">
-                  <input 
-                    v-model="pageInput" 
-                    type="text" 
-                    class="page-input"
-                    @keyup.enter="jumpToPage"
-                    @blur="jumpToPage"
-                  />
-                  <span class="page-separator">/</span>
-                  <span class="total-pages">{{ totalPages }}</span>
-                </div>
-                
-                <button 
-                  class="pagination-btn pagination-btn-icon" 
-                  :disabled="currentPage >= totalPages"
-                  @click="changePage(currentPage + 1)"
-                  title="下一页"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#67d5fd" stroke-width="2">
-                    <path d="M9 18l6-6-6-6"/>
-                  </svg>
-                </button>
-                
-                <button 
-                  class="pagination-btn pagination-btn-jump" 
-                  @click="jumpToPage"
-                  title="跳转到指定页码"
-                >
-                  跳转
-                </button>
               </div>
             </div>
           </div>

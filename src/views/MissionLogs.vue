@@ -39,8 +39,8 @@
                 <option v-for="group in taskGroupList" :key="group" :value="group">{{ group }}</option>
               </select>
             </div>
-            <div class="file-table" style="min-height: 650px;">
-              <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center; display: flex;">
+            <div class="file-table file-table-adaptive">
+              <div class="file-table-header">
                 <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
                 <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">循迹任务名称</div>
                 <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">任务组名称</div>
@@ -49,7 +49,7 @@
               </div>
               <div class="file-table-body">
                 <template v-if="alerts.length > 0">
-                <div class="file-table-row" v-for="(alert, idx) in alerts" :key="alert.id" style="min-height: 60px; display: flex;">
+                <div class="file-table-row" v-for="(alert, idx) in alerts" :key="alert.id">
                   <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">
                     {{ idx + 1 }}
                   </div>
@@ -71,7 +71,7 @@
                 </div>
               </template>
                 <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
-                <div class="file-table-row" v-for="i in Math.max(0, 10 - alerts.length)" :key="'empty-' + i" style="min-height: 60px; height: 60px; display: flex;">
+                <div class="file-table-row" v-for="i in Math.max(0, 10 - alerts.length)" :key="'empty-' + i">
                   <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">&nbsp;</div>
                   <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center;">&nbsp;</div>
                   <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center;">&nbsp;</div>
@@ -81,55 +81,6 @@
                 <div v-if="alerts.length === 0" class="mission-empty">
                 暂无任务记录
               </div>
-              </div>
-            </div>
-            <!-- 分页组件 -->
-            <div class="pagination-wrapper" v-if="total > 0">
-              <div class="pagination-info">
-                共 {{ total }} 条记录，当前第 {{ currentPage }} 页
-              </div>
-              <div class="pagination-controls">
-                <button
-                  class="pagination-btn pagination-btn-icon"
-                  :disabled="currentPage <= 1"
-                  @click="changePage(currentPage - 1)"
-                  title="上一页"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#67d5fd" stroke-width="2">
-                    <path d="M15 18l-6-6 6-6" />
-                  </svg>
-                </button>
-
-                <div class="pagination-page-input">
-                  <input
-                    v-model="pageInput"
-                    type="text"
-                    class="page-input"
-                    @keyup.enter="jumpToPage"
-                    @blur="jumpToPage"
-                  />
-                  <span class="page-separator">/</span>
-                  <span class="total-pages">{{ totalPages }}</span>
-                </div>
-
-                <button
-                  class="pagination-btn pagination-btn-icon"
-                  :disabled="currentPage >= totalPages"
-                  @click="changePage(currentPage + 1)"
-                  title="下一页"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#67d5fd" stroke-width="2">
-                    <path d="M9 18l6-6-6-6" />
-                  </svg>
-                </button>
-
-                <button
-                  class="pagination-btn pagination-btn-jump"
-                  @click="jumpToPage"
-                  title="跳转到指定页码"
-                >
-                  跳转
-                </button>
               </div>
             </div>
           </div>
@@ -1281,6 +1232,12 @@ const transformLng = (lng: number, lat: number) => {
 /* 定时循迹任务标题左对齐 */
 .mission-top-header.mission-top-header-left {
   justify-content: flex-start !important;
+}
+
+/* 覆盖公共 grid 列模板，适配本页 5 列布局 */
+.file-table-header,
+.file-table-row {
+  grid-template-columns: 120px 1fr 1fr 160px 160px;
 }
 
 /* 分页样式 */

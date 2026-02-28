@@ -57,8 +57,8 @@
                 <button class="mission-btn mission-btn-secondary">预览</button>
               </div>
             </div>
-            <div class="file-table" style="min-height: 650px;">
-              <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center;">
+            <div class="file-table file-table-adaptive">
+              <div class="file-table-header">
                 <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">任务类型</div>
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">X坐标</div>
@@ -72,7 +72,7 @@
               <div class="file-table-body">
                 <!-- 显示实际数据行 -->
                 <template v-if="waypointsData.length > 0">
-                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index" style="min-height: 60px;">
+                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">{{ waypoint.index + 1 }}</div>
                   <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type }}</div>
                   <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.x }}</div>
@@ -98,7 +98,7 @@
                 </div>
               </template>
                 <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
-                <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i" style="min-height: 60px;">
+                <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
                   <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
                   <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>

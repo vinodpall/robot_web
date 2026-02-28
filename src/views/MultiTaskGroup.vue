@@ -46,8 +46,8 @@
                 异常时原地启动
               </label>
             </div>
-            <div class="file-table" style="min-height: 650px;">
-              <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center; display: flex;">
+            <div class="file-table file-table-adaptive">
+              <div class="file-table-header">
                 <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
                 <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">地图</div>
                 <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">轨迹</div>
@@ -65,7 +65,7 @@
                   暂无任务组数据
                 </div>
                 <template v-else>
-                <div class="file-table-row" v-for="(task, index) in currentTaskGroupList" :key="index" style="min-height: 60px; display: flex;">
+                <div class="file-table-row" v-for="(task, index) in currentTaskGroupList" :key="index">
                   <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ index + 1 }}</div>
                   <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.map_name }}</div>
                   <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.task_type === 'task' ? '发布点任务' : task.task_name }}</div>
@@ -94,7 +94,7 @@
                 </div>
               </template>
               <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
-              <div class="file-table-row" v-for="i in Math.max(0, 10 - currentTaskGroupList.length)" :key="'empty-' + i" style="min-height: 60px; height: 60px; display: flex;">
+              <div class="file-table-row" v-for="i in Math.max(0, 10 - currentTaskGroupList.length)" :key="'empty-' + i">
                 <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">&nbsp;</div>
                 <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;">&nbsp;</div>
                 <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;">&nbsp;</div>
@@ -1173,6 +1173,12 @@ watch(selectedMultiTaskName, (newVal) => {
 
 <style scoped>
 @import './mission-common.css';
+
+/* 覆盖公共 grid 列模板，适配本页 8 列布局 */
+.file-table-header,
+.file-table-row {
+  grid-template-columns: 120px 1fr 1fr 1fr 140px 160px 140px 360px;
+}
 
 /* Fix potential whitespace issue */
 .file-table-row {

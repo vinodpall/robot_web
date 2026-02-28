@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -251,7 +251,7 @@
                 </div>
               </div>
               <div class="map-edit-grid-main">
-                <div class="gridmap-container">
+                <div ref="gridmapContainerEl" class="gridmap-container">
                   <canvas ref="gridMapCanvas" class="grid-canvas"></canvas>
                   <div v-if="gridMapLoading" class="map-overlay loading">地图加载中...</div>
                   <div v-else-if="gridMapError" class="map-overlay error">{{ gridMapError }}</div>
@@ -396,57 +396,50 @@
                 <span class="nav-top-title">文件管理</span>
               </div>
             </div>
-            <div class="nav-content-wrapper file-manage-content">
-              <div class="file-manage-toolbar">
-                <span class="file-manage-label">地图:</span>
-                <div class="track-select-wrapper">
-                  <select v-model="fileManageMap" class="map-edit-select">
-                    <option v-for="map in fileMapList" :key="map" :value="map">{{ map }}</option>
-                  </select>
-                </div>
-                <button class="map-btn map-btn-danger" @click="handleDeleteMap">删除地图</button>
-                <div class="file-manage-package-group">
-                  <span class="file-manage-label">数据包:</span>
-                  <div class="track-select-wrapper">
-                    <select v-model="fileManagePackage" class="map-edit-select">
-                      <option v-if="dataPackageList.length === 0" value="">暂无数据包</option>
-                      <option v-for="pkg in dataPackageList" :key="pkg" :value="pkg">{{ pkg }}</option>
-                    </select>
-                  </div>
-                  <button class="map-btn map-btn-danger" @click="handleDeletePackage">删除数据包</button>
-                </div>
+            <div class="mission-content-wrapper">
+              <div class="mission-toolbar">
+                <span class="mission-toolbar-label">地图:</span>
+                <select v-model="fileManageMap" class="mission-toolbar-select" style="min-width: 220px;">
+                  <option v-for="map in fileMapList" :key="map" :value="map">{{ map }}</option>
+                </select>
+                <button class="mission-btn mission-btn-stop" @click="handleDeleteMap">删除地图</button>
+                <span class="mission-toolbar-label" style="margin-left: 20px;">数据包:</span>
+                <select v-model="fileManagePackage" class="mission-toolbar-select" style="min-width: 220px;">
+                  <option v-if="dataPackageList.length === 0" value="">暂无数据包</option>
+                  <option v-for="pkg in dataPackageList" :key="pkg" :value="pkg">{{ pkg }}</option>
+                </select>
+                <button class="mission-btn mission-btn-stop" @click="handleDeletePackage">删除数据包</button>
               </div>
-              <div class="file-table" style="min-height: 600px;">
-                <div class="file-table-header" style="height: 50px !important; min-height: 44px !important; align-items: center; display: flex;">
-                  <div class="file-table-cell file-table-check" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
-                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">类型</div>
-                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">名称</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">创建时间</div>
-                  <div class="file-table-cell file-table-action" style="min-width: 150px; width: 150px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
+              <div class="file-table file-manage-table file-table-adaptive">
+                <div class="file-table-header" style="grid-template-columns: 100px 360px 1fr 180px 150px;">
+                  <div class="file-table-cell">序号</div>
+                  <div class="file-table-cell">类型</div>
+                  <div class="file-table-cell file-table-name">名称</div>
+                  <div class="file-table-cell">创建时间</div>
+                  <div class="file-table-cell file-table-action">操作</div>
                 </div>
-                
-                <template v-if="fileManageList.length > 0">
-                  <div class="file-table-row" v-for="(item, index) in fileManageList" :key="item.id" style="min-height: 60px; display: flex; align-items: center;">
-                    <div class="file-table-cell file-table-check" style="min-width: 80px; width: 80px; text-align: center;">{{ index + 1 }}</div>
-                    <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">{{ item.type }}</div>
-                    <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">{{ item.name }}</div>
-                    <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ item.createTime }}</div>
-                    <div class="file-table-cell file-table-action" style="min-width: 150px; width: 150px; text-align: center; display: flex; justify-content: center; align-items: center;">
-                      <button class="action-btn action-btn-delete" @click="handleDelete(item)">
-                        <img :src="deleteIcon" alt="删除" />
-                        删除
-                      </button>
+                <div class="file-table-body">
+                  <template v-if="fileManageList.length > 0">
+                    <div class="file-table-row" v-for="(item, index) in fileManageList" :key="item.id" style="grid-template-columns: 100px 360px 1fr 180px 150px;">
+                      <div class="file-table-cell">{{ index + 1 }}</div>
+                      <div class="file-table-cell">{{ item.type }}</div>
+                      <div class="file-table-cell file-table-name">{{ item.name }}</div>
+                      <div class="file-table-cell">{{ item.createTime }}</div>
+                      <div class="file-table-cell file-table-action">
+                        <button class="action-btn action-btn-delete" @click="handleDelete(item)">
+                          <img :src="deleteIcon" alt="删除" />
+                          删除
+                        </button>
+                      </div>
                     </div>
+                  </template>
+                  <div class="file-table-row" v-for="i in Math.max(0, 10 - fileManageList.length)" :key="'empty-' + i" style="grid-template-columns: 100px 360px 1fr 180px 150px;">
+                    <div class="file-table-cell"></div>
+                    <div class="file-table-cell"></div>
+                    <div class="file-table-cell file-table-name"></div>
+                    <div class="file-table-cell"></div>
+                    <div class="file-table-cell file-table-action"></div>
                   </div>
-                </template>
-                
-                <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
-                <div class="file-table-row" v-for="i in Math.max(0, 10 - fileManageList.length)" :key="'empty-' + i" style="min-height: 60px; display: flex; align-items: center;">
-                  <div class="file-table-cell file-table-check" style="min-width: 80px; width: 80px; text-align: center;"></div>
-                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;"></div>
-                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;"></div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                  <div class="file-table-cell file-table-action" style="min-width: 150px; width: 150px; text-align: center;"></div>
                 </div>
               </div>
             </div>
@@ -657,6 +650,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch, computed, shallowRef } from 'vue'
+import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
@@ -1729,456 +1723,26 @@ const increaseSpeed = () => {
 }
 
 // 导航点云图相关
-type PointCloudPoint = { x: number; y: number; z: number; intensity: number }
-type RawPointCloudPoint = { x: number; y: number; z?: number; intensityValue?: number }
-type PcdHeaderInfo = {
-  fields: string[]
-  size: number[]
-  type: string[]
-  count: number[]
-  points: number
-  width: number
-  height: number
-  dataType: string
-  dataStartIndex: number
-}
-
+// ===================== 点云图（复用 composable）=====================
+const navPc = usePointCloudRenderer({ initialScale: 1.5, initialPointSize: 0.5 })
+const navPointCloudCanvas = navPc.canvasRef
+const navPointCloudData = navPc.data
+const baseNavPointCloudData = navPc.baseData
+const navPointCloudNormalizationParams = navPc.normalizationParams
+const scheduleNavPointCloudRender = navPc.schedule
+const generateMockNavPointCloud = navPc.generateMockData
+const handleNavPointCloudWheel = navPc.onWheel
+const handleNavPointCloudPointerDown = navPc.onPointerDown
+const handleNavPointCloudKeydown = navPc.onKeydown
 const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
-const navPointCloudCanvas = ref<HTMLCanvasElement | null>(null)
-const navPointCloudData = shallowRef<PointCloudPoint[]>([])
-// 保存原始地图点云数据（归一化后的），用于叠加轨迹
-const baseNavPointCloudData = shallowRef<PointCloudPoint[]>([])
-// 保存点云归一化参数
-const navPointCloudNormalizationParams = ref({
-  minX: 0, maxX: 0,
-  minY: 0, maxY: 0,
-  minZ: 0, maxZ: 0,
-  rangeX: 1, rangeY: 1, rangeZ: 1,
-  maxRange: 1,
-  centerX: 0, centerY: 0, centerZ: 0
-})
 const navPointCloudLoading = ref(false)
 const navPointCloudError = ref('')
-const navPointCloudScale = ref(1.5)
-const navPointCloudRotationX = ref(-(20 * Math.PI) / 180)
-const navPointCloudRotationY = ref(0)
-const navPointCloudPanX = ref(0)
-const navPointCloudPanY = ref(0)
-let navPointCloudFrameRequested = false
-let isNavPointCloudDragging = false
-let lastNavPointerX = 0
-let lastNavPointerY = 0
-let navPointCloudDragMode: 'rotate' | 'pan' | null = null
-
-const scheduleNavPointCloudRender = () => {
-  if (navPointCloudFrameRequested) return
-  navPointCloudFrameRequested = true
-  requestAnimationFrame(() => {
-    navPointCloudFrameRequested = false
-    drawNavPointCloud()
-  })
-}
-
-const drawNavPointCloud = () => {
-  const canvas = navPointCloudCanvas.value
-  if (!canvas) return
-  
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-
-  const rect = canvas.getBoundingClientRect()
-  if (rect.width === 0 || rect.height === 0) return
-  
-  // 如果容器尺寸过小，说明还没有完全渲染，延迟绘制
-  if (rect.width < 100 || rect.height < 100) {
-    console.log('容器尺寸过小，延迟渲染:', rect.width, rect.height)
-    return
-  }
-
-  const dpr = window.devicePixelRatio || 1
-  canvas.width = rect.width * dpr
-  canvas.height = rect.height * dpr
-  
-  if ((ctx as any).resetTransform) {
-    ;(ctx as any).resetTransform()
-  } else {
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-  }
-  ctx.scale(dpr, dpr)
-  ctx.fillStyle = '#020915'
-  ctx.fillRect(0, 0, rect.width, rect.height)
-
-  const yaw = navPointCloudRotationY.value
-  const pitch = navPointCloudRotationX.value
-  const cosYaw = Math.cos(yaw)
-  const sinYaw = Math.sin(yaw)
-  const cosPitch = Math.cos(pitch)
-  const sinPitch = Math.sin(pitch)
-  const baseScale = Math.min(rect.width, rect.height) * 0.8 * navPointCloudScale.value
-  const panOffsetX = navPointCloudPanX.value * rect.width
-  const panOffsetY = navPointCloudPanY.value * rect.height
-  const cameraDistance = 2.2
-  const depthScale = 1.4
-
-  navPointCloudData.value.forEach(point => {
-    const centeredX = point.x
-    const centeredY = -point.z
-    const centeredZ = point.y
-
-    const xzRotatedX = centeredX * cosYaw + centeredZ * sinYaw
-    const xzRotatedZ = -centeredX * sinYaw + centeredZ * cosYaw
-
-    const yRotatedY = centeredY * cosPitch - xzRotatedZ * sinPitch
-    const yRotatedZ = centeredY * sinPitch + xzRotatedZ * cosPitch
-
-    const perspectiveZ = yRotatedZ * depthScale
-    const perspective = cameraDistance / (cameraDistance - perspectiveZ)
-    const projectedX = xzRotatedX * baseScale * perspective + rect.width / 2 + panOffsetX
-    const projectedY = yRotatedY * baseScale * perspective + rect.height / 2 + panOffsetY
-
-    if (projectedX < -100 || projectedX > rect.width + 100 || projectedY < -100 || projectedY > rect.height + 100) {
-      return
-    }
-
-    const radius = (1.2 + point.intensity * 2) * perspective * 0.5
-    
-    // 如果强度 >= 2.0，说明是轨迹点，显示为亮绿色
-    if (point.intensity >= 1.9) {
-      ctx.fillStyle = `rgba(0, 255, 0, 0.9)`
-      ctx.beginPath()
-      // 轨迹点显示为2像素大小
-      ctx.arc(projectedX, projectedY, 1.0 * dpr, 0, Math.PI * 2)
-      ctx.fill()
-    } else {
-      const red = Math.floor(40 + point.intensity * 200)
-      const green = Math.floor(120 + point.intensity * 100)
-      const blue = 255
-      ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${0.35 + point.intensity * 0.4})`
-      ctx.beginPath()
-      ctx.arc(projectedX, projectedY, radius, 0, Math.PI * 2)
-      ctx.fill()
-    }
-  })
-
-  // 绘制原点
-  const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
-  
-  if (maxRange > 1e-6) {
-    // 计算原点 (0,0,0) 的归一化坐标
-    const originNormX = (0 - centerX) / maxRange
-    const originNormY = (0 - centerY) / maxRange
-    const originNormZ = (0 - centerZ) / maxRange
-    
-    // 应用与点云相同的变换
-    const centeredX = originNormX
-    const centeredY = -originNormZ
-    const centeredZ = originNormY
-
-    const xzRotatedX = centeredX * cosYaw + centeredZ * sinYaw
-    const xzRotatedZ = -centeredX * sinYaw + centeredZ * cosYaw
-
-    const yRotatedY = centeredY * cosPitch - xzRotatedZ * sinPitch
-    const yRotatedZ = centeredY * sinPitch + xzRotatedZ * cosPitch
-
-    const perspectiveZ = yRotatedZ * depthScale
-    const perspective = cameraDistance / (cameraDistance - perspectiveZ)
-    const projectedX = xzRotatedX * baseScale * perspective + rect.width / 2 + panOffsetX
-    const projectedY = yRotatedY * baseScale * perspective + rect.height / 2 + panOffsetY
-    
-    // 绘制原点标记
-    ctx.beginPath()
-    ctx.arc(projectedX, projectedY, 3 * dpr, 0, Math.PI * 2)
-    ctx.fillStyle = '#FF0000' // 红色
-    ctx.fill()
-    ctx.strokeStyle = '#FFFFFF'
-    ctx.lineWidth = 1.5 * dpr
-    ctx.stroke()
-    
-    // 绘制文字
-    ctx.fillStyle = '#FF0000' // 红色
-    ctx.font = `bold ${12 * dpr}px Arial`
-    ctx.fillText('原点', projectedX + 6 * dpr, projectedY - 6 * dpr)
-  }
-}
-
-const handleNavPointCloudWheel = (e: WheelEvent) => {
-  const direction = e.deltaY < 0 ? 1 : -1
-  const MIN_SCALE = 0.01
-  const MAX_SCALE = 50
-  navPointCloudScale.value = Math.min(MAX_SCALE, Math.max(MIN_SCALE, navPointCloudScale.value + direction * 0.1))
-  scheduleNavPointCloudRender()
-}
-
-const handleNavPointCloudPointerDown = (e: PointerEvent) => {
-  e.preventDefault()
-  if (isNavPointCloudDragging) return
-  
-  isNavPointCloudDragging = true
-  lastNavPointerX = e.clientX
-  lastNavPointerY = e.clientY
-  
-  const shouldPan = e.button === 2 || (e.button === 0 && e.ctrlKey)
-  navPointCloudDragMode = shouldPan ? 'pan' : 'rotate'
-
-  const handlePointerMove = (e: PointerEvent) => {
-    if (!isNavPointCloudDragging) return
-    
-    const deltaX = e.clientX - lastNavPointerX
-    const deltaY = e.clientY - lastNavPointerY
-    lastNavPointerX = e.clientX
-    lastNavPointerY = e.clientY
-
-    if (navPointCloudDragMode === 'pan') {
-      const canvas = navPointCloudCanvas.value
-      if (!canvas) return
-      const rect = canvas.getBoundingClientRect()
-      navPointCloudPanX.value += deltaX / rect.width
-      navPointCloudPanY.value += deltaY / rect.height
-    } else {
-      navPointCloudRotationY.value += deltaX * 0.005
-      const nextPitch = navPointCloudRotationX.value - deltaY * 0.005
-      const clampPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, nextPitch))
-      navPointCloudRotationX.value = clampPitch
-    }
-    scheduleNavPointCloudRender()
-  }
-
-  const handlePointerUp = () => {
-    isNavPointCloudDragging = false
-    navPointCloudDragMode = null
-    window.removeEventListener('pointermove', handlePointerMove)
-    window.removeEventListener('pointerup', handlePointerUp)
-    window.removeEventListener('pointercancel', handlePointerUp)
-  }
-
-  window.addEventListener('pointermove', handlePointerMove)
-  window.addEventListener('pointerup', handlePointerUp)
-  window.addEventListener('pointercancel', handlePointerUp)
-}
-
-const handleNavPointCloudKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'r' || e.key === 'R') {
-    navPointCloudScale.value = 1
-    navPointCloudRotationX.value = -(20 * Math.PI) / 180
-    navPointCloudRotationY.value = 0
-    navPointCloudPanX.value = 0
-    navPointCloudPanY.value = 0
-    scheduleNavPointCloudRender()
-  }
-}
 
 import { navigationApi, mapFileApi } from '../api/services'
 import { useDeviceStore } from '../stores/device'
 
 const deviceStore = useDeviceStore()
-const generateMockNavPointCloud = (count = 800): PointCloudPoint[] => {
-  return Array.from({ length: count }, () => ({
-    x: Math.random(),
-    y: Math.random(),
-    z: Math.random(),
-    intensity: Math.random()
-  }))
-}
 
-// 点云数据归一化
-const normalizeNavPointCloud = (rawPoints: RawPointCloudPoint[]): PointCloudPoint[] => {
-  if (!rawPoints.length) return []
-
-  const xs = rawPoints.map(p => p.x)
-  const ys = rawPoints.map(p => p.y)
-  const zs = rawPoints.map(p => p.z ?? 0)
-
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-  const minZ = Math.min(...zs)
-  const maxZ = Math.max(...zs)
-
-  const rangeX = maxX - minX
-  const rangeY = maxY - minY
-  const rangeZ = maxZ - minZ
-  const maxRange = Math.max(rangeX, rangeY, rangeZ, 1e-6)
-
-  const centerX = (maxX + minX) / 2
-  const centerY = (maxY + minY) / 2
-  const centerZ = (maxZ + minZ) / 2
-
-  // 保存归一化参数，供轨迹叠加使用
-  navPointCloudNormalizationParams.value = {
-    minX, maxX,
-    minY, maxY,
-    minZ, maxZ,
-    rangeX, rangeY, rangeZ,
-    maxRange,
-    centerX, centerY, centerZ
-  }
-
-  const intensityValues = rawPoints
-    .map(p => (p.intensityValue !== undefined && Number.isFinite(p.intensityValue) ? p.intensityValue : undefined))
-    .filter((val): val is number => typeof val === 'number')
-  const minIntensity = intensityValues.length ? Math.min(...intensityValues) : 0
-  const maxIntensity = intensityValues.length ? Math.max(...intensityValues) : 1
-  const intensityRange = maxIntensity - minIntensity || 1
-
-  return rawPoints.map(point => {
-    const centeredZ = point.z ?? centerZ
-    let normalizedIntensity: number
-    if (point.intensityValue !== undefined && Number.isFinite(point.intensityValue)) {
-      normalizedIntensity = (point.intensityValue - minIntensity) / intensityRange
-    } else if (point.z !== undefined && Number.isFinite(point.z)) {
-      normalizedIntensity = (point.z - minZ) / (rangeZ || 1)
-    } else {
-      normalizedIntensity = 0.5
-    }
-    normalizedIntensity = Math.min(1, Math.max(0, normalizedIntensity))
-
-    return {
-      x: (point.x - centerX) / maxRange,
-      y: (point.y - centerY) / maxRange,
-      z: (centeredZ - centerZ) / maxRange,
-      intensity: normalizedIntensity
-    }
-  })
-}
-
-// 解析PCD文件
-const parseNavPcdBuffer = (buffer: ArrayBuffer): PointCloudPoint[] => {
-  const decoder = new TextDecoder('utf-8')
-  let headerEndIndex = 0
-  const maxHeaderSize = Math.min(2048, buffer.byteLength)
-  const headerChunk = decoder.decode(buffer.slice(0, maxHeaderSize))
-  const headerEndMarker = '\nDATA '
-  const headerEndPos = headerChunk.indexOf(headerEndMarker)
-
-  if (headerEndPos === -1) {
-    console.warn('未找到PCD头部结束标记，尝试解析前1024字节作为header')
-    headerEndIndex = 1024
-  } else {
-    const dataLineStart = headerEndPos + headerEndMarker.length
-    const dataLineEnd = headerChunk.indexOf('\n', dataLineStart)
-    headerEndIndex = dataLineEnd !== -1 ? dataLineEnd + 1 : dataLineStart + 10
-  }
-
-  const headerBytes = buffer.slice(0, headerEndIndex)
-  const headerText = decoder.decode(headerBytes)
-  const lines = headerText.split('\n').map(l => l.trim()).filter(Boolean)
-
-  const headerInfo: PcdHeaderInfo = {
-    fields: [],
-    size: [],
-    type: [],
-    count: [],
-    points: 0,
-    width: 0,
-    height: 0,
-    dataType: 'ascii',
-    dataStartIndex: headerEndIndex
-  }
-
-  for (const line of lines) {
-    const [key, ...values] = line.split(/\s+/)
-    if (key === 'FIELDS') headerInfo.fields = values
-    else if (key === 'SIZE') headerInfo.size = values.map(Number)
-    else if (key === 'TYPE') headerInfo.type = values
-    else if (key === 'COUNT') headerInfo.count = values.map(Number)
-    else if (key === 'POINTS') headerInfo.points = parseInt(values[0], 10) || 0
-    else if (key === 'WIDTH') headerInfo.width = parseInt(values[0], 10) || 0
-    else if (key === 'HEIGHT') headerInfo.height = parseInt(values[0], 10) || 0
-    else if (key === 'DATA') headerInfo.dataType = values[0]?.toLowerCase() || 'ascii'
-  }
-
-  if (headerInfo.dataType === 'ascii') {
-    const dataText = decoder.decode(buffer.slice(headerEndIndex))
-    const dataLines = dataText.split('\n').map(l => l.trim()).filter(Boolean)
-    const rawPoints: RawPointCloudPoint[] = []
-
-    for (const line of dataLines) {
-      const vals = line.split(/\s+/).map(Number)
-      if (vals.length < headerInfo.fields.length) continue
-      const point: RawPointCloudPoint = { x: 0, y: 0 }
-      headerInfo.fields.forEach((field, i) => {
-        const val = vals[i]
-        if (!Number.isFinite(val)) return
-        if (field === 'x') point.x = val
-        else if (field === 'y') point.y = val
-        else if (field === 'z') point.z = val
-        else if (field === 'intensity') point.intensityValue = val
-      })
-      rawPoints.push(point)
-    }
-    return normalizeNavPointCloud(rawPoints)
-  }
-
-  const counts = headerInfo.count.length ? headerInfo.count : headerInfo.fields.map(() => 1)
-  const stride = headerInfo.size.reduce((sum, size, i) => sum + size * counts[i], 0)
-  const bytesAvailable = buffer.byteLength - headerInfo.dataStartIndex
-  const pointsToRead = Math.min(headerInfo.points || 0, Math.floor(bytesAvailable / stride))
-
-  const readBinaryValue = (view: DataView, offset: number, type: string, size: number): number => {
-    if (type === 'F') return size === 4 ? view.getFloat32(offset, true) : view.getFloat64(offset, true)
-    if (type === 'I') {
-      if (size === 1) return view.getInt8(offset)
-      if (size === 2) return view.getInt16(offset, true)
-      if (size === 4) return view.getInt32(offset, true)
-    }
-    if (type === 'U') {
-      if (size === 1) return view.getUint8(offset)
-      if (size === 2) return view.getUint16(offset, true)
-      if (size === 4) return view.getUint32(offset, true)
-    }
-    return 0
-  }
-
-  const view = new DataView(buffer, headerInfo.dataStartIndex)
-  const rawPoints: RawPointCloudPoint[] = []
-
-  for (let pointIndex = 0; pointIndex < pointsToRead; pointIndex++) {
-    const baseOffset = pointIndex * stride
-    let fieldOffset = 0
-    let truncated = false
-    const point: RawPointCloudPoint = { x: 0, y: 0, z: 0 }
-
-    for (let fieldIndex = 0; fieldIndex < headerInfo.fields.length; fieldIndex++) {
-      const field = headerInfo.fields[fieldIndex]
-      const size = headerInfo.size[fieldIndex] || 0
-      const repeat = counts[fieldIndex] || 1
-      const type = headerInfo.type[fieldIndex] || 'F'
-
-      for (let repeatIndex = 0; repeatIndex < repeat; repeatIndex++) {
-        const valueOffset = baseOffset + fieldOffset + repeatIndex * size
-        if (valueOffset + size > bytesAvailable) {
-          truncated = true
-          break
-        }
-
-        if (field === 'rgb') {
-          const rgbValue = view.getUint32(valueOffset, true)
-          const r = rgbValue & 0xff
-          const g = (rgbValue >> 8) & 0xff
-          const b = (rgbValue >> 16) & 0xff
-          point.intensityValue = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-        } else {
-          const value = readBinaryValue(view, valueOffset, type, size)
-          if (field === 'x') point.x = value
-          else if (field === 'y') point.y = value
-          else if (field === 'z') point.z = value
-          else if (field === 'intensity') point.intensityValue = value
-        }
-      }
-
-      if (truncated) break
-      fieldOffset += size * repeat
-    }
-
-    if (truncated) break
-    if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
-      rawPoints.push(point)
-    }
-  }
-
-  return normalizeNavPointCloud(rawPoints)
-}
 
 // 刷新点云数据
 const refreshNavPointCloud = async (mapName?: string) => {
@@ -2223,7 +1787,7 @@ const refreshNavPointCloud = async (mapName?: string) => {
     }
     
     console.log('PCD文件已加载，大小:', buffer.byteLength, 'bytes')
-    const parsedPoints = parseNavPcdBuffer(buffer)
+    const parsedPoints = navPc.parsePcdBuffer(buffer)
     console.log('解析点云数据，点数:', parsedPoints.length)
     
     if (parsedPoints.length > 0) {
@@ -2650,6 +2214,7 @@ const handleStopMapping = async () => {
 }
 
 // 地图编辑相关状态
+const gridmapContainerEl = ref<HTMLElement | null>(null)
 const selectedEditMap = ref('')
 const editMapList = ref<string[]>([]) // 地图编辑页面的地图列表
 const gridMapCanvas = ref<HTMLCanvasElement | null>(null)
@@ -2892,6 +2457,9 @@ const loadGridMap = async (mapName: string) => {
     // 重置缩放
     resetZoom()
     
+    // 绑定事件
+    setupCanvasEvents()
+    
   } catch (err) {
     console.error('加载地图失败:', err)
     gridMapError.value = '加载地图失败: ' + (err as Error).message
@@ -2933,6 +2501,7 @@ let lastY = 0
 let drawing = false
 let editLastX = 0
 let editLastY = 0
+let canvasEventsController: AbortController | null = null
 
 // 编辑模式切换
 const toggleEditMode = () => {
@@ -3391,6 +2960,13 @@ const loadAndRenderGridMap = async () => {
 const setupCanvasEvents = () => {
   const canvas = gridMapCanvas.value
   if (!canvas) return
+
+  // 先清理旧的事件监听器，避免重复绑定
+  if (canvasEventsController) {
+    canvasEventsController.abort()
+  }
+  canvasEventsController = new AbortController()
+  const signal = canvasEventsController.signal
   
   // 鼠标滚轮事件
   const onWheel = (e: WheelEvent) => {
@@ -3461,13 +3037,14 @@ const setupCanvasEvents = () => {
     }
   }
   
-  // 添加事件监听
-  canvas.addEventListener('wheel', onWheel, { passive: false })
-  canvas.addEventListener('mousedown', onMouseDown)
-  canvas.addEventListener('mousemove', onMouseMove)
-  canvas.addEventListener('mouseup', endDrag)
-  canvas.addEventListener('mouseleave', endDrag)
-  canvas.addEventListener('contextmenu', (e) => e.preventDefault())
+  // 添加事件监听：wheel 绑定在容器上，确保鼠标在空白区域也能缩放
+  const container = gridmapContainerEl.value ?? canvas
+  container.addEventListener('wheel', onWheel, { passive: false, signal })
+  canvas.addEventListener('mousedown', onMouseDown, { signal })
+  canvas.addEventListener('mousemove', onMouseMove, { signal })
+  canvas.addEventListener('mouseup', endDrag, { signal })
+  canvas.addEventListener('mouseleave', endDrag, { signal })
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault(), { signal })
 }
 
 // 监听tab切换，加载地图
@@ -3777,18 +3354,6 @@ const handleDelete = (item: any) => {
   height: 100%;
 }
 
-.file-manage-content {
-  padding: 16px 20px 24px;
-}
-
-.file-manage-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: -4px;
-  padding: 0;
-}
-
 .file-manage-package-group {
   display: flex;
   align-items: center;
@@ -3796,55 +3361,20 @@ const handleDelete = (item: any) => {
   margin-left: 18px;
 }
 
-.file-manage-label {
-  color: #b8dcf5;
-  font-size: 14px;
-  line-height: 40px;
-}
-
 .file-manage-toolbar .map-edit-select {
   height: 40px;
   min-width: 220px;
 }
 
-.file-table {
-  width: 100%;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid rgba(62, 121, 150, 0.6);
-  background: transparent;
-}
+/* 文件管理表格列定义见底部非 scoped style 块 */
 
-.file-table-header {
-  background: #1c4b64;
-  color: #e9f7ff;
-  font-size: 13px;
-  font-weight: 600;
-  height: 44px;
-}
-
-.file-table-row {
-  background: transparent;
-  color: #cfe9ff;
-  font-size: 13px;
-  border-top: 1px solid rgba(45, 111, 145, 0.5);
-}
-
-.file-table-cell {
-  padding: 0 12px;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.file-table-name {
-  text-align: left;
-}
-
-.file-table-action {
+.file-table-empty {
   display: flex;
+  align-items: center;
   justify-content: center;
+  height: 120px;
+  color: rgba(184, 220, 245, 0.4);
+  font-size: 14px;
 }
 
 .file-check-dot {
@@ -5016,19 +4546,16 @@ select.recording-input option {
 }
 
 .file-table-header {
-  display: flex;
-  background: rgba(12, 60, 86, 0.5);
-  border-bottom: 1px solid rgba(103, 213, 253, 0.2);
-  padding: 12px 16px;
-  font-weight: 600;
-  color: #67d5fd;
-  flex-shrink: 0; /* 防止头部被压缩 */
+  flex-shrink: 0;
 }
 
 .file-table-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 滚动条样式 */
@@ -5050,8 +4577,6 @@ select.recording-input option {
 }
 
 .file-table-row {
-  display: flex;
-  padding: 12px 16px;
   border-bottom: 1px solid rgba(103, 213, 253, 0.1);
   color: #b8dcf5;
   transition: background 0.2s;
@@ -5062,7 +4587,6 @@ select.recording-input option {
 }
 
 .file-table-cell {
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5106,4 +4630,12 @@ select.recording-input option {
 }
 
 
+</style>
+
+<!-- 非 scoped 全局覆写：确保文件管理表格列宽不被 @import 覆盖 -->
+<style>
+.file-manage-table .file-table-header,
+.file-manage-table .file-table-row {
+  grid-template-columns: 100px 360px 1fr 180px 150px !important;
+}
 </style>
