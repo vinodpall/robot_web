@@ -958,13 +958,14 @@ import {
 } from '../api/services'
 import SuccessMessage from '../components/SuccessMessage.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
-import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
+import { useSharedPointCloudRenderer } from '../composables/usePointCloudRenderer'
 import { load3MF } from '../utils/threemfParser'
 import type { MeshData } from '../utils/threemfParser'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config, getCurrentEnvironment } from '../config/environment'
 import { useDeviceStore } from '../stores/device'
 import { useRobotStore } from '../stores/robot'
+import { useTaskExecutionStore } from '../stores/taskExecution'
 import { getVideoStreams, getVideoStream, getDefaultVideoType, setVideoStreams } from '../utils/videoCache'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import flvjs from 'flv.js'
@@ -984,6 +985,7 @@ const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 const { getCachedDeviceSns, getCachedWorkspaceId } = useDevices()
 const deviceStore = useDeviceStore()
 const robotStore = useRobotStore()
+const taskExecutionStore = useTaskExecutionStore()
 
 // 自定义提示消息（替代系统alert）
 const successToast = ref({ show: false, message: '' })
@@ -1103,6 +1105,20 @@ const normalizeTrackName = (rawTrackName: string) => {
   return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
 }
 
+const normalizeTaskPointName = (rawTaskPointName: string) => {
+  const trimmed = (rawTaskPointName || '').trim()
+  if (!trimmed) return ''
+  const atIndex = trimmed.indexOf('@')
+  return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
+}
+
+const extractTrackTaskList = (payload: any): any[] => {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.response?.data)) return payload.response.data
+  return []
+}
+
 const activeOverlayTrackName = ref('')
 
 // cmd_status.track 同步 activeTaskType：WebSocket 反馈 track=1 时标记循迹任务运行中
@@ -1137,7 +1153,8 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
     // 同时更新取消时需要的任务参数
     activeTrackInfo.value = {
       track_name: normalizedTrackName,
-      taskpoint_name: info.taskpoint_name || ''
+      // 某些固件在运行中可能回传空 taskpoint_name，这里保留已有值避免任务点丢失
+      taskpoint_name: info.taskpoint_name || activeTrackInfo.value.taskpoint_name || trackStartDialog.value.form.taskpoint_name || ''
     }
     console.log('[WebSocket] 更新 activeTrackInfo:', activeTrackInfo.value)
     activeOverlayTrackName.value = normalizedTrackName
@@ -1279,20 +1296,21 @@ type PcdHeaderInfo = {
   dataType: string
   dataStartIndex: number
 }
-const pointCloudCanvas = ref<HTMLCanvasElement | null>(null)
-const pointCloudData = ref<PointCloudPoint[]>([])
-const basePointCloudData = ref<PointCloudPoint[]>([])
+const sharedPointCloud = useSharedPointCloudRenderer()
+const pointCloudCanvas = sharedPointCloud.canvasRef
+const pointCloudData = sharedPointCloud.data
+const basePointCloudData = sharedPointCloud.baseData
 /** 机器狗箭头 3MF 网格（加载完成后设置） */
 const arrowMesh = ref<MeshData | null>(null)
-const pointCloudNormalizationParams = ref({ centerX: 0, centerY: 0, centerZ: 0, maxRange: 1 })
+const pointCloudNormalizationParams = sharedPointCloud.normalizationParams
 const pointCloudLoading = ref(false)
 const pointCloudError = ref('')
-const pointCloudScale = ref(1)
-const pointCloudRotationX = ref(-(20 * Math.PI) / 180)
-const pointCloudRotationY = ref(0)
-const pointCloudPanX = ref(0)
-const pointCloudPanY = ref(0)
-const pointCloudPointSize = ref(0.5)
+const pointCloudScale = sharedPointCloud.scale
+const pointCloudRotationX = sharedPointCloud.rotationX
+const pointCloudRotationY = sharedPointCloud.rotationY
+const pointCloudPanX = sharedPointCloud.panX
+const pointCloudPanY = sharedPointCloud.panY
+const pointCloudPointSize = sharedPointCloud.pointSize
 const isPointCloudDragging = ref(false)
 let lastPointerX = 0
 let lastPointerY = 0
@@ -1980,7 +1998,7 @@ const overlayTrackTrajectory = async (trackName: string) => {
 
     // 2. 读取任务点数据（从 localStorage 的 all_track_task_list）
     const taskPointsData: Array<{x: number, y: number, z: number, name: string}> = []
-    const currentTaskPointName = activeTrackInfo.value.taskpoint_name
+    const currentTaskPointName = normalizeTaskPointName(activeTrackInfo.value.taskpoint_name)
     
     console.log('[任务点] 尝试加载任务点:', { 
       trackName: normalizedTrackName, 
@@ -1988,49 +2006,59 @@ const overlayTrackTrajectory = async (trackName: string) => {
       hasActiveInfo: !!activeTrackInfo.value
     })
     
-    if (currentTaskPointName) {
-      try {
-        const cachedData = localStorage.getItem('all_track_task_list')
-        if (cachedData) {
-          const allTaskList = JSON.parse(cachedData)
-          console.log('[任务点] localStorage 中共有', allTaskList.length, '条任务点记录')
-          
-          const filteredTasks = allTaskList.filter((task: any) => {
-            return task.track_name === normalizedTrackName && 
-                   task.track_point_name === currentTaskPointName
+    try {
+      const cachedData = localStorage.getItem('all_track_task_list')
+      if (cachedData) {
+        const parsed = JSON.parse(cachedData)
+        const allTaskList = extractTrackTaskList(parsed)
+        console.log('[任务点] localStorage 中共有', allTaskList.length, '条任务点记录')
+        
+        let filteredTasks = allTaskList.filter((task: any) => {
+          const taskTrackName = normalizeTrackName(String(task.track_name || ''))
+          const taskPointName = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+          return taskTrackName === normalizedTrackName &&
+                 taskPointName === currentTaskPointName
+        })
+
+        // taskpoint_name 为空或匹配不到时，回退为按 track_name 匹配
+        if (!currentTaskPointName || filteredTasks.length === 0) {
+          filteredTasks = allTaskList.filter((task: any) => {
+            const taskTrackName = normalizeTrackName(String(task.track_name || ''))
+            return taskTrackName === normalizedTrackName
           })
-          
-          console.log('[任务点] 过滤后匹配到', filteredTasks.length, '个任务点')
           if (filteredTasks.length > 0) {
-            console.log('[任务点] 第一个任务点示例:', filteredTasks[0])
+            console.warn(`[任务点] taskpoint_name=${currentTaskPointName || '(空)'} 未匹配，回退为按轨迹匹配，共 ${filteredTasks.length} 条`)
           }
-          
-          filteredTasks.forEach((task: any, idx: number) => {
-            if (task.x !== undefined && task.y !== undefined && task.z !== undefined) {
-              // 优先使用 type_text，其次 preset，最后使用序号
-              const taskName = task.type_text || task.preset || `任务点${idx}`
-              taskPointsData.push({
-                x: task.x,
-                y: task.y,
-                z: task.z,
-                name: taskName
-              })
-            }
-          })
-          
-          if (taskPointsData.length > 0) {
-            console.log(`✓ 成功加载 ${taskPointsData.length} 个任务点到点云图`)
-          } else {
-            console.warn('[任务点] 未找到有效的任务点坐标数据')
-          }
-        } else {
-          console.warn('[任务点] localStorage 中没有 all_track_task_list 数据')
         }
-      } catch (err) {
-        console.error('[任务点] 读取任务点数据失败:', err)
+        
+        console.log('[任务点] 过滤后匹配到', filteredTasks.length, '个任务点')
+        if (filteredTasks.length > 0) {
+          console.log('[任务点] 第一个任务点示例:', filteredTasks[0])
+        }
+        
+        filteredTasks.forEach((task: any, idx: number) => {
+          if (task.x !== undefined && task.y !== undefined && task.z !== undefined) {
+            // 优先使用 type_text，其次 preset，最后使用序号
+            const taskName = task.type_text || task.preset || `任务点${idx}`
+            taskPointsData.push({
+              x: task.x,
+              y: task.y,
+              z: task.z,
+              name: taskName
+            })
+          }
+        })
+        
+        if (taskPointsData.length > 0) {
+          console.log(`✓ 成功加载 ${taskPointsData.length} 个任务点到点云图`)
+        } else {
+          console.warn('[任务点] 未找到有效的任务点坐标数据')
+        }
+      } else {
+        console.warn('[任务点] localStorage 中没有 all_track_task_list 数据')
       }
-    } else {
-      console.warn('[任务点] taskpoint_name 为空，无法加载任务点')
+    } catch (err) {
+      console.error('[任务点] 读取任务点数据失败:', err)
     }
 
     // 3. 归一化并合并数据
@@ -3868,30 +3896,49 @@ const taskpointList = ref<string[]>([])
 
 // 获取关键点文件列表
 const fetchTaskpointList = async (trackName: string) => {
-  const robotId = deviceStore.selectedRobotId
-  if (!robotId || !trackName) {
+  if (!trackName) {
     taskpointList.value = []
     return
   }
-  
-  try {
-    const response = await navigationApi.getTaskpointList(robotId, trackName)
-    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-      taskpointList.value = response.msg.result
-      // 默认选中第一个
-      if (taskpointList.value.length > 0) {
-        trackStartDialog.value.form.taskpoint_name = taskpointList.value[0]
-      } else {
-        trackStartDialog.value.form.taskpoint_name = ''
-      }
-    } else {
-      taskpointList.value = []
-      trackStartDialog.value.form.taskpoint_name = ''
+
+  const normalizedTrack = normalizeTrackName(trackName)
+  const groupSet = new Set<string>()
+
+  // 优先使用登录阶段缓存的任务组映射
+  const cachedGroupMapRaw = localStorage.getItem('cached_taskpoint_group_map')
+  if (cachedGroupMapRaw) {
+    try {
+      const groupMap = JSON.parse(cachedGroupMapRaw) as Record<string, string[]>
+      const groups = groupMap[normalizedTrack] || groupMap[trackName] || []
+      groups.forEach(group => {
+        const normalizedGroup = normalizeTaskPointName(String(group || ''))
+        if (normalizedGroup) groupSet.add(normalizedGroup)
+      })
+    } catch (err) {
+      console.warn('[任务组缓存] 解析失败:', err)
     }
-  } catch (error) {
-    taskpointList.value = []
-    trackStartDialog.value.form.taskpoint_name = ''
   }
+
+  // 次级回退：从 all_track_task_list 推导
+  if (groupSet.size === 0) {
+    const cachedTaskListRaw = localStorage.getItem('all_track_task_list')
+    if (cachedTaskListRaw) {
+      try {
+        const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
+        allTaskList.forEach((task: any) => {
+          const taskTrack = normalizeTrackName(String(task.track_name || ''))
+          if (taskTrack !== normalizedTrack) return
+          const taskGroup = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+          if (taskGroup) groupSet.add(taskGroup)
+        })
+      } catch (err) {
+        console.warn('[任务组缓存] 从 all_track_task_list 推导失败:', err)
+      }
+    }
+  }
+
+  taskpointList.value = Array.from(groupSet)
+  trackStartDialog.value.form.taskpoint_name = taskpointList.value.length > 0 ? taskpointList.value[0] : ''
 }
 
 // 获取航线文件列表
@@ -4098,67 +4145,17 @@ const mapUpdateTimeMap = ref<Record<string, string>>({})
 
 // 获取地图列表
 const fetchMapList = async () => {
-  const robotId = deviceStore.selectedRobotId
-  if (!robotId) {
-    console.warn('未选择机器人，无法获取地图列表')
-    return
-  }
-  
-  try {
-    const response = await navigationApi.getMapList(robotId)
-    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-      // 处理地图名称和更新时间
-      const tempMapList: string[] = []
-      const tempUpdateTimeMap: Record<string, string> = {}
-      
-      response.msg.result.forEach(item => {
-        const atIndex = item.indexOf('@')
-        if (atIndex !== -1) {
-          const mapName = item.substring(0, atIndex)
-          const updateTime = item.substring(atIndex + 1) // @ 后面的部分是更新时间
-          tempMapList.push(mapName)
-          tempUpdateTimeMap[mapName] = updateTime
-        } else {
-          tempMapList.push(item)
-          tempUpdateTimeMap[item] = '' // 没有更新时间
-        }
-      })
-      
-      mapList.value = tempMapList
-      mapUpdateTimeMap.value = tempUpdateTimeMap
-      
-      // 缓存地图列表和更新时间映射
-      localStorage.setItem('cached_map_list', JSON.stringify(mapList.value))
-      localStorage.setItem('cached_map_update_time_map', JSON.stringify(mapUpdateTimeMap.value))
-      
-      // 尝试恢复选中的地图
-      const cachedMapName = localStorage.getItem('selected_map_name')
-      if (cachedMapName && mapList.value.includes(cachedMapName)) {
-        selectedMap.value = cachedMapName
-      } else if (mapList.value.length > 0) {
-        selectedMap.value = mapList.value[0]
-      }
-    } else {
-  // ...
-    }
-  } catch (err) {
-  // ...
-    // 尝试从缓存加载
-    const cached = localStorage.getItem('cached_map_list')
-    const cachedTimeMap = localStorage.getItem('cached_map_update_time_map')
-    if (cached) {
-      mapList.value = JSON.parse(cached)
-      if (cachedTimeMap) {
-        mapUpdateTimeMap.value = JSON.parse(cachedTimeMap)
-      }
-      
-      const cachedMapName = localStorage.getItem('selected_map_name')
-      if (cachedMapName && mapList.value.includes(cachedMapName)) {
-        selectedMap.value = cachedMapName
-      } else if (mapList.value.length > 0 && !selectedMap.value) {
-        selectedMap.value = mapList.value[0]
-      }
-    }
+  const cached = localStorage.getItem('cached_map_list')
+  const cachedTimeMap = localStorage.getItem('cached_map_update_time_map')
+
+  mapList.value = cached ? JSON.parse(cached) : []
+  mapUpdateTimeMap.value = cachedTimeMap ? JSON.parse(cachedTimeMap) : {}
+
+  const cachedMapName = localStorage.getItem('selected_map_name')
+  if (cachedMapName && mapList.value.includes(cachedMapName)) {
+    selectedMap.value = cachedMapName
+  } else if (mapList.value.length > 0 && !selectedMap.value) {
+    selectedMap.value = mapList.value[0]
   }
 }
 
@@ -4167,24 +4164,29 @@ const trackList = ref<string[]>([])
 const selectedTrack = ref('')
 
 const fetchTrackList = async () => {
-  const robotId = deviceStore.selectedRobotId
-  if (!robotId) return
-  
-  try {
-    const response = await navigationApi.getTrackList(robotId)
-    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-      trackList.value = response.msg.result
-      // 与 NavigationManage 共享同一缓存 key，保持数据一致
-      localStorage.setItem('cached_track_list', JSON.stringify(trackList.value))
-    } else {
-      // 接口返回格式异常，尝试从缓存加载
-      const cached = localStorage.getItem('cached_track_list')
-      if (cached) trackList.value = JSON.parse(cached)
+  const cached = localStorage.getItem('cached_track_list')
+  if (cached) {
+    trackList.value = JSON.parse(cached)
+    return
+  }
+
+  // 兜底：从 all_track_task_list 推导轨迹列表
+  const cachedTaskListRaw = localStorage.getItem('all_track_task_list')
+  if (cachedTaskListRaw) {
+    try {
+      const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
+      const trackSet = new Set<string>()
+      allTaskList.forEach((task: any) => {
+        const trackName = String(task.track_name || '').trim()
+        if (trackName) trackSet.add(trackName)
+      })
+      trackList.value = Array.from(trackSet)
+    } catch (err) {
+      console.warn('[循迹缓存] 从 all_track_task_list 推导失败:', err)
+      trackList.value = []
     }
-  } catch (error) {
-    // 接口异常，尝试从缓存加载
-    const cached = localStorage.getItem('cached_track_list')
-    if (cached) trackList.value = JSON.parse(cached)
+  } else {
+    trackList.value = []
   }
 }
 
@@ -4610,12 +4612,14 @@ const handleCancelTask = async () => {
         if (response && (response as any).response && (response as any).response.msg) {
           const { error_code, error_msg } = (response as any).response.msg
           if (error_code === 0) {
+            taskExecutionStore.markMultiTaskStopped()
             showSuccess((response as any).message || '多任务组已取消')
             activeTaskType.value = null
           } else {
             showError(`取消失败: ${error_msg || '未知错误'}`)
           }
         } else {
+          taskExecutionStore.markMultiTaskStopped()
           showSuccess('多任务组已取消')
           activeTaskType.value = null
         }
@@ -4639,7 +4643,7 @@ const handleEnableNavigation = () => {
   }
   
   if (!selectedMap.value) {
-    alert('请先选择地图')
+    showError('请先选择地图')
     return
   }
   
@@ -4657,7 +4661,7 @@ const handleEnableNavigation = () => {
       })
     } catch (err) {
       navigationLoading.value = false
-      alert(`${action}导航失败`)
+      showError(`${action}导航失败: ${parseErrorMessage(err)}`)
     }
   })
 }
@@ -4930,6 +4934,7 @@ const onTrackStartConfirm = async () => {
       if (error_code === 0) {
         const normalizedTrackName = normalizeTrackName(form.track_name)
         activeTaskType.value = 'track'
+        taskExecutionStore.markMultiTaskStopped()
         selectedTrack.value = normalizedTrackName
         activeTrackInfo.value = { track_name: normalizedTrackName, taskpoint_name: form.taskpoint_name }
         activeOverlayTrackName.value = normalizedTrackName
@@ -4941,6 +4946,7 @@ const onTrackStartConfirm = async () => {
     } else {
       const normalizedTrackName = normalizeTrackName(form.track_name)
       activeTaskType.value = 'track'
+      taskExecutionStore.markMultiTaskStopped()
       selectedTrack.value = normalizedTrackName
       activeTrackInfo.value = { track_name: normalizedTrackName, taskpoint_name: form.taskpoint_name }
       activeOverlayTrackName.value = normalizedTrackName
@@ -4995,12 +5001,14 @@ const onMultiTaskStartConfirm = async () => {
       const { error_code, error_msg } = (response as any).response.msg
       if (error_code === 0) {
         activeTaskType.value = 'multi'
+        taskExecutionStore.markMultiTaskStarted()
         showSuccess((response as any).message || '多任务组启动成功')
       } else {
         showError(`启动失败: ${error_msg || '未知错误'}`)
       }
     } else {
       activeTaskType.value = 'multi'
+      taskExecutionStore.markMultiTaskStarted()
       showSuccess('多任务组启动成功')
     }
   } catch (error) {
@@ -5047,12 +5055,14 @@ const onPointTaskStartConfirm = async () => {
       const { error_code, error_msg } = (response as any).msg
       if (error_code === 0) {
         activeTaskType.value = 'point'
+        taskExecutionStore.markMultiTaskStopped()
         showSuccess('发布点任务启动成功')
       } else {
         showError(`启动失败: ${error_msg || '未知错误'}`)
       }
     } else {
       activeTaskType.value = 'point'
+      taskExecutionStore.markMultiTaskStopped()
       showSuccess('发布点任务启动成功')
     }
   } catch (error) {
@@ -6335,8 +6345,19 @@ onActivated(async () => {
 }
 
 .wayline-select:disabled {
-  opacity: 0.45;
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+  border-color: rgba(103, 213, 253, 0.3);
+  color: rgba(180, 205, 220, 0.62);
   cursor: not-allowed;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
+}
+
+.wayline-select:disabled + .wayline-custom-arrow svg polygon {
+  fill: rgba(168, 192, 210, 0.5);
 }
 
 .wayline-select option {
@@ -6524,6 +6545,18 @@ onActivated(async () => {
   outline: none;
   border: 1.5px solid #67d5fd;
   box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
+}
+
+.mission-select:disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%) !important;
+  border-color: rgba(103, 213, 253, 0.3) !important;
+  color: rgba(180, 205, 220, 0.62) !important;
+  cursor: not-allowed !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08) !important;
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
 }
 
 /* 隐藏所有浏览器的默认下拉箭头 */
@@ -7200,6 +7233,22 @@ onActivated(async () => {
   color: #67d5fd;
 }
 
+.map-select:disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+  border-color: rgba(103, 213, 253, 0.3);
+  color: rgba(180, 205, 220, 0.62);
+  cursor: not-allowed;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
+}
+
+.map-select:disabled + .map-custom-arrow svg polygon {
+  fill: rgba(168, 192, 210, 0.5);
+}
+
 .map-custom-arrow {
   position: absolute;
   right: 8px;
@@ -7279,17 +7328,23 @@ onActivated(async () => {
 
 .map-dropdown:disabled,
 .map-dropdown-wrapper.disabled .map-dropdown {
-  background: rgba(8, 30, 46, 0.7);
-  border-color: rgba(103, 213, 253, 0.15);
-  color: rgba(103, 213, 253, 0.45);
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+  border-color: rgba(103, 213, 253, 0.3);
+  color: rgba(180, 205, 220, 0.62);
   cursor: not-allowed;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
 }
 .map-dropdown-wrapper.disabled .map-dropdown:hover {
-  border-color: rgba(103, 213, 253, 0.15);
-  background: rgba(8, 30, 46, 0.7);
+  border-color: rgba(103, 213, 253, 0.3);
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
 }
 .map-dropdown-wrapper.disabled .dropdown-arrow svg polygon {
-  fill: rgba(103, 213, 253, 0.35);
+  fill: rgba(168, 192, 210, 0.5);
 }
 
 .map-dropdown option {
@@ -9522,6 +9577,3 @@ onActivated(async () => {
 }
 
 </style>
-
-
-

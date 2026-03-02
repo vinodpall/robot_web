@@ -35,7 +35,7 @@
             <div class="mission-toolbar">
               <!-- 任务组选择 -->
               <span class="mission-toolbar-label" style="margin-right: -8px;">路线名称：</span>
-              <select v-model="selectedRouteName" class="mission-toolbar-select" style="min-width: 180px;">
+              <select v-model="selectedRouteName" class="mission-toolbar-select" style="min-width: 180px;" :disabled="isTrackTaskRunning">
                 <option v-if="filteredRouteList.length === 0" value="">暂无路线</option>
                 <option v-for="route in filteredRouteList" :key="route" :value="route">{{ route }}</option>
               </select>
@@ -49,12 +49,21 @@
               
               <!-- 操作按钮组 -->
               <div style="display: flex; gap: 12px; margin-left: 8px;">
-                <button class="mission-btn mission-btn-primary" @click="handleStartTrack">开始</button>
-                <button class="mission-btn mission-btn-secondary" @click="handlePauseTrack">暂停</button>
-                <button class="mission-btn mission-btn-primary" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
-                <button class="mission-btn mission-btn-stop" @click="handleDeleteTaskGroup">删除任务组</button>
-                <button class="mission-btn mission-btn-primary" @click="handleAddTask">添加任务</button>
-                <button class="mission-btn mission-btn-secondary">预览</button>
+                <button
+                  class="mission-btn"
+                  :class="isTrackTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
+                  :disabled="!canStartTrackTask && !isTrackTaskRunning"
+                  @click="handleStartTrack"
+                >
+                  {{ isTrackTaskRunning ? '关闭' : '开始' }}
+                </button>
+                <button class="mission-btn mission-btn-secondary" :disabled="!isNavigationEnabled" @click="handlePauseTrack">
+                  {{ isNavPaused ? '恢复' : '暂停' }}
+                </button>
+                <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
+                <button class="mission-btn mission-btn-stop" :disabled="isTrackTaskRunning" @click="handleDeleteTaskGroup">删除任务组</button>
+                <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" @click="handleAddTask">添加任务</button>
+                <button class="mission-btn mission-btn-secondary" @click="openPreviewDialog">预览</button>
               </div>
             </div>
             <div class="file-table file-table-adaptive">
@@ -123,6 +132,26 @@
         <div class="custom-dialog-actions">
           <button class="mission-btn mission-btn-pause" @click="onConfirmDialogOk">确定</button>
           <button v-if="confirmDialog.showCancel" class="mission-btn mission-btn-cancel" @click="onConfirmDialogCancel">取消</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="previewDialog.visible" class="custom-dialog-mask preview-dialog-mask" @click="closePreviewDialog">
+      <div class="preview-modal" @click.stop>
+        <div class="preview-modal-header">
+          <span>运行预览</span>
+          <span class="simple-close-icon" @click="closePreviewDialog">×</span>
+        </div>
+        <div class="preview-modal-body">
+          <div class="preview-map-wrap">
+            <canvas
+              ref="previewPointCloudCanvas"
+              class="pointcloud-canvas"
+              tabindex="0"
+              @contextmenu.prevent
+            ></canvas>
+            <div v-if="previewDialog.loading" class="pcd-overlay loading">点云加载中...</div>
+            <div v-else-if="previewDialog.error" class="pcd-overlay error">{{ previewDialog.error }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -694,6 +723,11 @@ import ErrorMessage from '@/components/ErrorMessage.vue'
 import editIcon from '@/assets/source_data/svg_data/robot_source/edit.png'
 import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import arriveIcon from '@/assets/source_data/svg_data/robot_source/arrive.png'
+import { useTaskExecutionStore } from '@/stores/taskExecution'
+import { useRobotStore } from '@/stores/robot'
+import { usePointCloudRenderer } from '@/composables/usePointCloudRenderer'
+import { getTrajectoryFile } from '@/utils/trajectoryDB'
+import { load3MF } from '@/utils/threemfParser'
 
 const router = useRouter()
 const route = useRoute()
@@ -702,6 +736,12 @@ const route = useRoute()
 const { waylineFiles, waylineDetail, fetchWaylineFiles, fetchWaylineDetail, createJob, executeJob } = useWaylineJobs()
 const { getCachedWorkspaceId, getCachedDeviceSns, getCachedDeviceBySn } = useDevices()
 const { droneStatus, fetchMainDeviceStatus, fetchDroneStatus } = useDeviceStatus()
+const taskExecutionStore = useTaskExecutionStore()
+const isTrackTaskRunning = taskExecutionStore.isTrackTaskRunning
+const canStartTrackTask = taskExecutionStore.canStartTrackTask
+const isNavigationEnabled = taskExecutionStore.isNavigationEnabled
+const isNavPaused = taskExecutionStore.navPaused
+const robotStore = useRobotStore()
 
 // 航线文件相关
 const selectedTrack = ref('')
@@ -722,6 +762,25 @@ const selectedRouteName = ref('')
 const taskGroupList = ref<string[]>([])
 const selectedTaskGroupName = ref('')
 
+// 预览弹窗点云
+const previewDialog = ref({
+  visible: false,
+  loading: false,
+  error: ''
+})
+const previewPc = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5 })
+const previewPointCloudCanvas = previewPc.canvasRef
+const previewPointCloudData = previewPc.data
+const previewBasePointCloudData = previewPc.baseData
+const previewPointCloudNormalization = previewPc.normalizationParams
+const previewOverlayTrajectory = ref<Array<{ x: number; y: number; z: number }>>([])
+const previewOverlayTaskPoints = ref<Array<{ x: number; y: number; z: number; name: string }>>([])
+let previewCanvasEventController: AbortController | null = null
+let previewResizeObserver: ResizeObserver | null = null
+
+const MAP_DB_NAME = 'MapFilesDB'
+const MAP_STORE_NAME = 'mapFiles'
+
 // 添加任务组弹窗
 const showCreateTaskGroupDialog = ref(false)
 const createTaskGroupForm = ref({
@@ -738,30 +797,116 @@ const errorMessage = ref({
   text: ''
 })
 
-// 获取路线列表
-const loadRouteList = async () => {
-  const robotId = localStorage.getItem('selected_robot_id')
-  if (!robotId) return
-  
-  try {
-    const response = await navigationApi.getTrackList(robotId)
-    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-      const rawList: string[] = response.msg.result
-      // 处理：移除 @ 及后缀，并去重
-      const processedSet = new Set<string>()
-      rawList.forEach(item => {
-        const atIndex = item.indexOf('@')
-        const name = atIndex > -1 ? item.substring(0, atIndex) : item
-        processedSet.add(name)
+const normalizeTrackName = (raw: string) => {
+  const name = (raw || '').trim()
+  const atIndex = name.indexOf('@')
+  return atIndex > -1 ? name.slice(0, atIndex) : name
+}
+
+const normalizeTaskPointName = (raw: string) => {
+  const name = (raw || '').trim()
+  const atIndex = name.indexOf('@')
+  return atIndex > -1 ? name.slice(0, atIndex) : name
+}
+
+const runningTrackName = computed(() => normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || ''))
+const runningTaskGroupName = computed(() => normalizeTaskPointName(robotStore.cmdStatus?.track_info?.taskpoint_name || ''))
+
+const extractTrackTaskList = (payload: any): any[] => {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.response?.data)) return payload.response.data
+  return []
+}
+
+const getTaskGroupListFromCache = (trackName: string): string[] => {
+  const normalizedTrack = normalizeTrackName(trackName)
+  const groupSet = new Set<string>()
+
+  const cachedGroupMapRaw = localStorage.getItem('cached_taskpoint_group_map')
+  if (cachedGroupMapRaw) {
+    try {
+      const groupMap = JSON.parse(cachedGroupMapRaw) as Record<string, string[]>
+      const groups = groupMap[normalizedTrack] || groupMap[trackName] || []
+      groups.forEach(group => {
+        const normalizedGroup = normalizeTaskPointName(String(group || ''))
+        if (normalizedGroup) groupSet.add(normalizedGroup)
       })
-      routeList.value = Array.from(processedSet)
-      
-      if (routeList.value.length > 0) {
-        selectedRouteName.value = routeList.value[0]
+    } catch (err) {
+      console.warn('读取任务组缓存失败:', err)
+    }
+  }
+
+  if (groupSet.size === 0) {
+    const cachedData = localStorage.getItem('all_track_task_list')
+    if (cachedData) {
+      try {
+        const allTaskList = extractTrackTaskList(JSON.parse(cachedData))
+        allTaskList.forEach((task: any) => {
+          const taskTrack = normalizeTrackName(String(task.track_name || ''))
+          if (taskTrack !== normalizedTrack) return
+          const taskGroup = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+          if (taskGroup) groupSet.add(taskGroup)
+        })
+      } catch (err) {
+        console.warn('从任务点缓存推导任务组失败:', err)
       }
     }
+  }
+
+  return Array.from(groupSet)
+}
+
+const setTaskGroupCache = (trackName: string, groups: string[]) => {
+  const normalizedTrack = normalizeTrackName(trackName)
+  if (!normalizedTrack) return
+
+  const normalizedGroups = Array.from(
+    new Set((groups || []).map(group => normalizeTaskPointName(String(group || ''))).filter(Boolean))
+  )
+  const cachedGroupMapRaw = localStorage.getItem('cached_taskpoint_group_map')
+  const groupMap = cachedGroupMapRaw ? JSON.parse(cachedGroupMapRaw) : {}
+  groupMap[normalizedTrack] = normalizedGroups
+  localStorage.setItem('cached_taskpoint_group_map', JSON.stringify(groupMap))
+}
+
+// 仅从本地缓存刷新全量任务点列表依赖
+const refreshAllTrackTaskListCache = async () => {
+  try {
+    const cachedData = localStorage.getItem('all_track_task_list')
+    const taskList = cachedData ? extractTrackTaskList(JSON.parse(cachedData)) : []
+    localStorage.setItem('all_track_task_list', JSON.stringify(taskList))
+    taskListRefreshKey.value++
   } catch (err) {
-    console.error('获取路线列表失败:', err)
+    console.error('刷新循迹任务点缓存失败:', err)
+  }
+}
+
+// 获取路线列表
+const loadRouteList = async () => {
+  try {
+    const cachedTrackListRaw = localStorage.getItem('cached_track_list')
+    let rawList: string[] = cachedTrackListRaw ? JSON.parse(cachedTrackListRaw) : []
+    if (rawList.length === 0) {
+      const cachedTaskListRaw = localStorage.getItem('all_track_task_list')
+      if (cachedTaskListRaw) {
+        const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
+        rawList = allTaskList.map((task: any) => String(task.track_name || '')).filter(Boolean)
+      }
+    }
+    const processedSet = new Set<string>()
+    rawList.forEach(item => {
+      const name = normalizeTrackName(String(item || ''))
+      if (name) processedSet.add(name)
+    })
+    routeList.value = Array.from(processedSet)
+
+    if (routeList.value.length > 0) {
+      selectedRouteName.value = routeList.value[0]
+    }
+  } catch (err) {
+    console.error('读取路线缓存失败:', err)
+    routeList.value = []
   }
 }
 
@@ -811,15 +956,12 @@ const handleCreateTaskGroup = async () => {
     
     closeCreateTaskGroupDialog()
     
-    // 刷新任务组列表
-    const taskGroupResponse = await navigationApi.getTaskpointList(robotId, selectedRouteName.value)
-    if (taskGroupResponse && taskGroupResponse.msg && taskGroupResponse.msg.error_code === 0 && taskGroupResponse.msg.result) {
-      taskGroupList.value = taskGroupResponse.msg.result
-      // 默认选择第一条数据
-      if (taskGroupList.value.length > 0) {
-        selectedTaskGroupName.value = taskGroupList.value[0]
-      }
-    }
+    // 更新缓存与本地任务组列表（页面展示只读缓存）
+    const normalizedNewGroup = normalizeTaskPointName(createTaskGroupForm.value.keypoint_name)
+    const mergedGroups = Array.from(new Set([...taskGroupList.value, normalizedNewGroup].filter(Boolean)))
+    taskGroupList.value = mergedGroups
+    setTaskGroupCache(selectedRouteName.value, mergedGroups)
+    selectedTaskGroupName.value = mergedGroups.length > 0 ? mergedGroups[0] : ''
   } catch (error: any) {
     console.error('创建任务组失败:', error)
     errorMessage.value = { show: true, text: `创建失败: ${error.message || '网络错误'}` }
@@ -843,6 +985,14 @@ const filteredRouteList = computed(() => {
 
 // 监听筛选后的路线列表变化，自动选择第一个
 watch(filteredRouteList, (newList) => {
+  if (isTrackTaskRunning.value && runningTrackName.value) {
+    const normalizedRunningTrack = normalizeTrackName(runningTrackName.value)
+    const matched = newList.find(item => normalizeTrackName(item) === normalizedRunningTrack)
+    if (matched) {
+      selectedRouteName.value = matched
+      return
+    }
+  }
   if (newList.length > 0) {
     selectedRouteName.value = newList[0]
   } else {
@@ -855,20 +1005,60 @@ watch(selectedRouteName, async (newVal) => {
   taskGroupList.value = []
   selectedTaskGroupName.value = ''
   if (!newVal) return
-  
-  const robotId = localStorage.getItem('selected_robot_id')
-  if (!robotId) return
-  
-  try {
-    const response = await navigationApi.getTaskpointList(robotId, newVal)
-    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-      taskGroupList.value = response.msg.result
-      if (taskGroupList.value.length > 0) {
-        selectedTaskGroupName.value = taskGroupList.value[0]
-      }
+
+  const groups = getTaskGroupListFromCache(newVal)
+  taskGroupList.value = groups
+  if (isTrackTaskRunning.value && runningTaskGroupName.value) {
+    const normalizedRunningGroup = normalizeTaskPointName(runningTaskGroupName.value)
+    const matchedGroup = groups.find(group => normalizeTaskPointName(group) === normalizedRunningGroup)
+    if (matchedGroup) {
+      selectedTaskGroupName.value = matchedGroup
+    } else if (groups.length > 0) {
+      selectedTaskGroupName.value = groups[0]
     }
-  } catch (err) {
-    console.error('获取任务组列表失败:', err)
+  } else if (groups.length > 0) {
+    selectedTaskGroupName.value = groups[0]
+  }
+  await refreshAllTrackTaskListCache()
+})
+
+watch(
+  [isTrackTaskRunning, runningTrackName, runningTaskGroupName],
+  async ([running]) => {
+    if (!running) return
+    const normalizedTrack = normalizeTrackName(runningTrackName.value)
+    if (!normalizedTrack) return
+
+    if (!routeList.value.some(item => normalizeTrackName(item) === normalizedTrack)) {
+      routeList.value = [...routeList.value, normalizedTrack]
+    }
+    selectedRouteName.value = routeList.value.find(item => normalizeTrackName(item) === normalizedTrack) || normalizedTrack
+
+    const groups = getTaskGroupListFromCache(selectedRouteName.value)
+    taskGroupList.value = groups
+    const normalizedGroup = normalizeTaskPointName(runningTaskGroupName.value || '')
+    if (normalizedGroup) {
+      if (!groups.some(item => normalizeTaskPointName(item) === normalizedGroup)) {
+        taskGroupList.value = [...groups, normalizedGroup]
+      }
+      selectedTaskGroupName.value = taskGroupList.value.find(item => normalizeTaskPointName(item) === normalizedGroup) || normalizedGroup
+    } else if (taskGroupList.value.length > 0) {
+      selectedTaskGroupName.value = taskGroupList.value[0]
+    } else {
+      selectedTaskGroupName.value = ''
+    }
+    await refreshAllTrackTaskListCache()
+  },
+  { immediate: true }
+)
+
+watch(selectedTaskGroupName, (newVal) => {
+  if (!isTrackTaskRunning.value || !runningTaskGroupName.value) return
+  const normalizedSelected = normalizeTaskPointName(newVal || '')
+  const normalizedRunning = normalizeTaskPointName(runningTaskGroupName.value || '')
+  if (normalizedSelected !== normalizedRunning) {
+    const matched = taskGroupList.value.find(item => normalizeTaskPointName(item) === normalizedRunning)
+    selectedTaskGroupName.value = matched || normalizedRunning
   }
 })
 
@@ -886,7 +1076,39 @@ const trackStartDialog = ref({
 })
 
 // 启动循迹任务
-const handleStartTrack = () => {
+const handleCloseTrack = async () => {
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) return
+  const runningTrackName = robotStore.cmdStatus?.track_info?.track_name || selectedRouteName.value
+  const runningTaskpoint = robotStore.cmdStatus?.track_info?.taskpoint_name || selectedTaskGroupName.value
+  if (!runningTrackName || !runningTaskpoint) {
+    alert('未找到运行中的循迹任务参数')
+    return
+  }
+  try {
+    await navigationApi.cancelTrack(robotId, {
+      action: 0,
+      wait: 0,
+      obs_mode: 1,
+      track_name: runningTrackName,
+      taskpoint_name: runningTaskpoint
+    })
+    alert('关闭指令已发送')
+  } catch (err) {
+    console.error('关闭循迹任务失败', err)
+    alert('关闭失败')
+  }
+}
+
+const handleStartTrack = async () => {
+  if (isTrackTaskRunning.value) {
+    await handleCloseTrack()
+    return
+  }
+  if (!canStartTrackTask.value) {
+    alert('当前有其他任务正在运行')
+    return
+  }
   if (!selectedRouteName.value) {
     alert('请先选择路线')
     return
@@ -906,12 +1128,15 @@ const handleStartTrack = () => {
 
 // 暂停循迹任务
 const handlePauseTrack = async () => {
+  if (!isNavigationEnabled.value) return
   const robotId = localStorage.getItem('selected_robot_id')
   if (!robotId) return
 
   try {
-    await navigationApi.pauseNavigation(robotId, { action: 1 })
-    alert('暂停指令已发送')
+    const nextPaused = !isNavPaused.value
+    await navigationApi.pauseNavigation(robotId, { action: nextPaused ? 1 : 0 })
+    taskExecutionStore.setNavPaused(nextPaused)
+    alert(nextPaused ? '暂停指令已发送' : '恢复指令已发送')
   } catch (err) {
     console.error('暂停失败', err)
     alert('暂停失败')
@@ -962,12 +1187,19 @@ const handleDeleteTaskGroup = () => {
         const cachedData = localStorage.getItem('all_track_task_list')
         if (cachedData) {
           let allTaskList = JSON.parse(cachedData)
+          const selectedTrack = normalizeTrackName(selectedRouteName.value)
+          const selectedGroup = normalizeTaskPointName(deletingTaskGroupName)
           allTaskList = allTaskList.filter((task: any) => 
-            !(task.track_name === selectedRouteName.value && 
-              task.track_point_name === deletingTaskGroupName)
+            !(
+              normalizeTrackName(String(task.track_name || '')) === selectedTrack &&
+              normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || '')) === selectedGroup
+            )
           )
           localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
         }
+
+        // 同步更新任务组缓存映射
+        setTaskGroupCache(selectedRouteName.value, taskGroupList.value)
 
         // 触发列表刷新
         taskListRefreshKey.value++
@@ -1031,9 +1263,314 @@ const onTrackStartCancel = () => {
   trackStartDialog.value.visible = false
 }
 
+const openMapDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(MAP_DB_NAME, 1)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains(MAP_STORE_NAME)) {
+        db.createObjectStore(MAP_STORE_NAME, { keyPath: 'id' })
+      }
+    }
+  })
+}
+
+const getMapFile = async (mapName: string, fileName: string): Promise<Blob | null> => {
+  try {
+    const db = await openMapDB()
+    return new Promise((resolve) => {
+      const tx = db.transaction([MAP_STORE_NAME], 'readonly')
+      const request = tx.objectStore(MAP_STORE_NAME).get(`${mapName}/${fileName}`)
+      request.onsuccess = () => resolve(request.result?.blob || null)
+      request.onerror = () => resolve(null)
+    })
+  } catch {
+    return null
+  }
+}
+
+const parseTrajectoryPoints = (text: string): Array<{ x: number; y: number; z: number }> => {
+  const lines = text.trim().split('\n')
+  const points: Array<{ x: number; y: number; z: number }> = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
+    if (parts.length >= 4) {
+      const v1 = parseFloat(parts[1])
+      const v2 = parseFloat(parts[2])
+      const v3 = parseFloat(parts[3])
+      if (!Number.isNaN(v1) && !Number.isNaN(v2) && !Number.isNaN(v3)) {
+        points.push({ x: v1, y: v2, z: v3 })
+        continue
+      }
+    }
+    if (parts.length >= 3) {
+      const v0 = parseFloat(parts[0])
+      const v1 = parseFloat(parts[1])
+      const v2 = parseFloat(parts[2])
+      if (!Number.isNaN(v0) && !Number.isNaN(v1) && !Number.isNaN(v2)) {
+        points.push({ x: v0, y: v1, z: v2 })
+      }
+    }
+  }
+  return points
+}
+
+const parsePcdBufferInWorker = (
+  buffer: ArrayBuffer
+): Promise<{
+  points: Array<{ x: number; y: number; z: number; intensity: number }>
+  normParams: { centerX: number; centerY: number; centerZ: number; maxRange: number }
+}> => {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../workers/pcdParser.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e) => {
+      worker.terminate()
+      if (e.data?.ok) {
+        resolve({ points: e.data.points, normParams: e.data.normParams })
+      } else {
+        reject(new Error(e.data?.error || 'PCD 解析失败'))
+      }
+    }
+    worker.onerror = (err) => {
+      worker.terminate()
+      reject(err)
+    }
+    worker.postMessage({ buffer }, [buffer])
+  })
+}
+
+const resolvePreviewTrackName = () => normalizeTrackName(selectedRouteName.value || '')
+const resolvePreviewTaskGroupName = () => normalizeTaskPointName(selectedTaskGroupName.value || '')
+
+const resolvePreviewMapName = (trackName: string): string => {
+  const selectedMapName = localStorage.getItem('selected_map_name') || ''
+  if (selectedMapName) return selectedMapName
+  if (!trackName.includes('_')) return ''
+  return trackName.split('_')[0] || ''
+}
+
+const getPreviewTaskPoints = (trackName: string, taskGroupName: string) => {
+  const taskPoints: Array<{ x: number; y: number; z: number; name: string }> = []
+  const cachedData = localStorage.getItem('all_track_task_list')
+  if (!cachedData) return taskPoints
+  try {
+    const allTaskList = extractTrackTaskList(JSON.parse(cachedData))
+    const normalizedTrack = normalizeTrackName(trackName)
+    const normalizedGroup = normalizeTaskPointName(taskGroupName)
+    if (!normalizedTrack || !normalizedGroup) return taskPoints
+
+    const filteredTasks = allTaskList.filter((task: any) => {
+      const taskTrack = normalizeTrackName(String(task.track_name || ''))
+      const taskPoint = normalizeTaskPointName(
+        String(
+          task.track_point_name ||
+          task.taskpoint_name ||
+          task.task_point_name ||
+          task.keypoint_name ||
+          task.group_name ||
+          ''
+        )
+      )
+      return taskTrack === normalizedTrack && taskPoint === normalizedGroup
+    })
+    filteredTasks.forEach((task: any) => {
+      const x = Number(task.x)
+      const y = Number(task.y)
+      const z = Number(task.z ?? 0)
+      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+        const name = String(task.type_text || task.preset || task.remark || task.task_id || '任务点')
+        taskPoints.push({ x, y, z, name })
+      }
+    })
+  } catch (err) {
+    console.warn('[Mission 预览] 任务点读取失败:', err)
+  }
+  return taskPoints
+}
+
+const applyPreviewOverlay = async () => {
+  if (!previewBasePointCloudData.value.length) return
+  const { centerX, centerY, centerZ, maxRange } = previewPointCloudNormalization.value
+  if (!maxRange || maxRange <= 1e-6) return
+
+  const normalizedTrajectory = previewOverlayTrajectory.value.map(point => ({
+    x: (point.x - centerX) / maxRange,
+    y: (point.y - centerY) / maxRange,
+    z: (point.z - centerZ) / maxRange,
+    intensity: 1.95
+  }))
+  const normalizedTaskPoints = previewOverlayTaskPoints.value.map(point => ({
+    x: (point.x - centerX) / maxRange,
+    y: (point.y - centerY) / maxRange,
+    z: (point.z - centerZ) / maxRange,
+    intensity: 1.75,
+    name: point.name
+  }))
+
+  previewPc.robotPose.value = robotStore.pose
+
+  previewPointCloudData.value = [
+    ...previewBasePointCloudData.value,
+    ...normalizedTrajectory,
+    ...normalizedTaskPoints
+  ]
+  await nextTick()
+  previewPc.schedule()
+}
+
+const setupPreviewCanvasEvents = () => {
+  const canvas = previewPointCloudCanvas.value
+  if (!canvas) return
+
+  if (previewCanvasEventController) {
+    previewCanvasEventController.abort()
+    previewCanvasEventController = null
+  }
+  previewCanvasEventController = new AbortController()
+  const signal = previewCanvasEventController.signal
+
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault()
+    previewPc.onWheel(event)
+  }, { passive: false, signal })
+  canvas.addEventListener('pointerdown', previewPc.onPointerDown, { signal })
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault(), { signal })
+  window.addEventListener('keydown', previewPc.onKeydown, { signal })
+
+  if (previewResizeObserver) {
+    previewResizeObserver.disconnect()
+    previewResizeObserver = null
+  }
+  previewResizeObserver = new ResizeObserver(() => {
+    previewPc.schedule()
+  })
+  const parent = canvas.parentElement || canvas
+  previewResizeObserver.observe(parent)
+}
+
+const destroyPreviewCanvasEvents = () => {
+  if (previewCanvasEventController) {
+    previewCanvasEventController.abort()
+    previewCanvasEventController = null
+  }
+  if (previewResizeObserver) {
+    previewResizeObserver.disconnect()
+    previewResizeObserver = null
+  }
+}
+
+const loadPreviewData = async () => {
+  previewDialog.value.loading = true
+  previewDialog.value.error = ''
+  try {
+    const trackName = resolvePreviewTrackName()
+    if (!trackName) {
+      previewDialog.value.error = '请先选择路线'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTrajectory.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+    const taskGroupName = resolvePreviewTaskGroupName()
+    if (!taskGroupName) {
+      previewDialog.value.error = '请先选择任务组'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTrajectory.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+    const mapName = resolvePreviewMapName(trackName)
+    if (!mapName) {
+      previewDialog.value.error = '未找到地图，请先在首页选择地图'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTrajectory.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+
+    const pcdBlob = await getMapFile(mapName, 'tinyMap.pcd')
+    if (!pcdBlob || pcdBlob.size === 0) {
+      previewDialog.value.error = '点云文件不存在'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTrajectory.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+    const { points: pcdPoints, normParams } = await parsePcdBufferInWorker(await pcdBlob.arrayBuffer())
+    if (!pcdPoints.length) {
+      previewDialog.value.error = '点云数据为空'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTrajectory.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+    previewPointCloudNormalization.value = normParams
+    previewBasePointCloudData.value = pcdPoints
+
+    const trajectoryBlob = await getTrajectoryFile(trackName)
+    previewOverlayTrajectory.value = trajectoryBlob ? parseTrajectoryPoints(await trajectoryBlob.text()) : []
+    previewOverlayTaskPoints.value = getPreviewTaskPoints(trackName, taskGroupName)
+    await applyPreviewOverlay()
+  } catch (err) {
+    console.error('[Mission 预览] 加载失败:', err)
+    previewDialog.value.error = '预览加载失败'
+    previewPointCloudData.value = []
+    previewBasePointCloudData.value = []
+    previewOverlayTrajectory.value = []
+    previewOverlayTaskPoints.value = []
+  } finally {
+    previewDialog.value.loading = false
+  }
+}
+
+const openPreviewDialog = async () => {
+  previewDialog.value.visible = true
+  await nextTick()
+  setupPreviewCanvasEvents()
+  await loadPreviewData()
+}
+
+const closePreviewDialog = () => {
+  previewDialog.value.visible = false
+  previewPc.robotPose.value = null
+  destroyPreviewCanvasEvents()
+}
+
+watch(
+  () => robotStore.pose,
+  async () => {
+    if (!previewDialog.value.visible || previewDialog.value.loading) return
+    const trackName = resolvePreviewTrackName()
+    if (!trackName || !previewBasePointCloudData.value.length) return
+    await applyPreviewOverlay()
+  },
+  { deep: true }
+)
+
+watch(
+  [selectedRouteName, selectedTaskGroupName, isNavigationEnabled],
+  async () => {
+    if (!previewDialog.value.visible) return
+    await loadPreviewData()
+  }
+)
+
 onMounted(() => {
   loadWaylineFiles()
   loadRouteList()
+  refreshAllTrackTaskListCache()
+  load3MF('/jiantou.3mf').then(mesh => {
+    if (mesh) previewPc.robotMesh.value = mesh
+  })
 })
 
 // 加载航线文件列表
@@ -1103,7 +1640,8 @@ const waypointsData = computed(() => {
   }
   
   try {
-    const allTaskList = JSON.parse(cachedData)
+    const parsed = JSON.parse(cachedData)
+    const allTaskList = extractTrackTaskList(parsed)
     
     // 如果没有选择路线或任务组，返回空数组
     if (!selectedRouteName.value || !selectedTaskGroupName.value) {
@@ -1111,9 +1649,13 @@ const waypointsData = computed(() => {
     }
     
     // 根据 track_name 和 track_point_name 筛选
+    const selectedTrack = normalizeTrackName(selectedRouteName.value)
+    const selectedTaskPoint = normalizeTaskPointName(String(selectedTaskGroupName.value || ''))
     const filteredTasks = allTaskList.filter((task: any) => {
-      return task.track_name === selectedRouteName.value && 
-             task.track_point_name === selectedTaskGroupName.value
+      const taskTrack = normalizeTrackName(String(task.track_name || ''))
+      const taskPointRaw = String(task.track_point_name || task.taskpoint_name || task.task_point_name || '')
+      const taskPoint = normalizeTaskPointName(taskPointRaw)
+      return taskTrack === selectedTrack && taskPoint === selectedTaskPoint
     })
     
     // 转换为表格需要的格式
@@ -1668,11 +2210,13 @@ function onDispatchTaskCancel() {
 // 页面加载时获取数据
 onMounted(async () => {
   await loadWaylineFiles()
+  await refreshAllTrackTaskListCache()
   window.addEventListener('click', closeDropdown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('click', closeDropdown)
+  destroyPreviewCanvasEvents()
 })
 
 /* Add Task Logic Copied from MissionRecords.vue */
@@ -3059,5 +3603,97 @@ const confirmExtraConfig = () => {
 
 .simple-textarea::placeholder {
   color: rgba(255, 255, 255, 0.3);
+}
+
+.mission-toolbar-select:disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%) !important;
+  border-color: rgba(103, 213, 253, 0.3) !important;
+  color: rgba(180, 205, 220, 0.62) !important;
+  cursor: not-allowed !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08) !important;
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
+}
+
+.preview-dialog-mask {
+  z-index: 10020;
+}
+
+.preview-modal {
+  width: min(1200px, 92vw);
+  height: min(760px, 86vh);
+  background: #102a43;
+  border: 1px solid #244f78;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.preview-modal-header {
+  height: 52px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #244f78;
+  background: #163654;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.preview-modal-body {
+  flex: 1;
+  padding: 14px;
+  min-height: 0;
+}
+
+.preview-map-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 440px;
+  border: 1px solid #214c72;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #020915;
+}
+
+.pointcloud-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+  cursor: grab;
+  touch-action: none;
+}
+
+.pointcloud-canvas:active {
+  cursor: grabbing;
+}
+
+.pcd-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.pcd-overlay.loading {
+  color: #67d5fd;
+  background: rgba(2, 9, 21, 0.45);
+}
+
+.pcd-overlay.error {
+  color: #ff8f8f;
+  background: rgba(50, 10, 10, 0.45);
 }
 </style>

@@ -34,8 +34,17 @@
               </select>
 
               <div style="display: flex; gap: 12px; margin-left: 8px;">
-                <button class="mission-btn mission-btn-primary" @click="handleExecuteTaskGroup">开始</button>
-                <button class="mission-btn mission-btn-secondary" @click="handlePauseMultiTask">暂停</button>
+                <button
+                  class="mission-btn"
+                  :class="isMultiTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
+                  :disabled="!canStartMultiTask && !isMultiTaskRunning"
+                  @click="handleExecuteTaskGroup"
+                >
+                  {{ isMultiTaskRunning ? '关闭' : '开始' }}
+                </button>
+                <button class="mission-btn mission-btn-secondary" :disabled="!isNavigationEnabled" @click="handlePauseMultiTask">
+                  {{ isNavPaused ? '恢复' : '暂停' }}
+                </button>
                 <button class="mission-btn mission-btn-primary" @click="handleCreateTaskGroup">添加多任务组</button>
                 <button class="mission-btn mission-btn-stop" @click="handleDeleteTaskGroup">删除多任务组</button>
                 <button class="mission-btn mission-btn-primary" @click="handleAddTaskGroup">添加任务组</button>
@@ -323,9 +332,15 @@ import upIcon from '@/assets/source_data/svg_data/robot_source/up.png'
 import downIcon from '@/assets/source_data/svg_data/robot_source/down.png'
 import lockIcon from '@/assets/source_data/svg_data/robot_source/lock.png'
 import unlockIcon from '@/assets/source_data/svg_data/robot_source/unlock.png'
+import { useTaskExecutionStore } from '@/stores/taskExecution'
 
 const router = useRouter()
 const route = useRoute()
+const taskExecutionStore = useTaskExecutionStore()
+const isMultiTaskRunning = taskExecutionStore.isMultiTaskRunning
+const canStartMultiTask = taskExecutionStore.canStartMultiTask
+const isNavigationEnabled = taskExecutionStore.isNavigationEnabled
+const isNavPaused = taskExecutionStore.navPaused
 
 const sidebarTabs = [
   { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission' },
@@ -561,6 +576,26 @@ const confirmDeleteGroup = async () => {
 }
 
 const handleExecuteTaskGroup = async () => {
+  if (isMultiTaskRunning.value) {
+    const robotId = localStorage.getItem('selected_robot_id')
+    if (!robotId) {
+      showErrorMessage('未找到机器人ID')
+      return
+    }
+    try {
+      await navigationApi.cancelMultiTaskGroup(robotId)
+      taskExecutionStore.markMultiTaskStopped()
+      showSuccessMessage('关闭指令已发送')
+    } catch (e: any) {
+      console.error('关闭多任务组失败', e)
+      showErrorMessage(e?.message || '关闭多任务组失败')
+    }
+    return
+  }
+  if (!canStartMultiTask.value) {
+    showErrorMessage('当前有其他任务正在运行')
+    return
+  }
   if (!selectedMultiTaskName.value) {
     showErrorMessage('请先选择多任务组')
     return
@@ -589,6 +624,7 @@ const handleExecuteTaskGroup = async () => {
     console.log('开始多任务组返回:', res)
     
     if (res && ((res.code === 200 || res.error_code === 0) || (res.response && res.response.msg && res.response.msg.result === 1))) {
+      taskExecutionStore.markMultiTaskStarted()
       showSuccessMessage('开始执行多任务组成功')
     } else {
       console.error('开始执行多任务组失败，返回数据:', res)
@@ -601,6 +637,7 @@ const handleExecuteTaskGroup = async () => {
 }
 
 const handlePauseMultiTask = async () => {
+  if (!isNavigationEnabled.value) return
   const robotId = localStorage.getItem('selected_robot_id')
   if (!robotId) {
     showErrorMessage('未找到机器人ID')
@@ -608,8 +645,10 @@ const handlePauseMultiTask = async () => {
   }
 
   try {
-    await navigationApi.pauseNavigation(robotId, { action: 1 })
-    showSuccessMessage('暂停指令已发送')
+    const nextPaused = !isNavPaused.value
+    await navigationApi.pauseNavigation(robotId, { action: nextPaused ? 1 : 0 })
+    taskExecutionStore.setNavPaused(nextPaused)
+    showSuccessMessage(nextPaused ? '暂停指令已发送' : '恢复指令已发送')
   } catch (err) {
     console.error('暂停失败', err)
     showErrorMessage('暂停失败')

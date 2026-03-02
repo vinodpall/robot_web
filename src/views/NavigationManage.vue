@@ -39,7 +39,8 @@
                     开始录包
                   </button>
                   <button 
-                    class="map-btn map-btn-secondary" 
+                    class="map-btn"
+                    :class="isRecording ? 'map-btn-danger' : 'map-btn-secondary'"
                     :disabled="!isRecording"
                     @click="handleStopRecording"
                   >
@@ -52,9 +53,9 @@
               <div class="map-section">
                 <div class="map-section-title">创建二维地图</div>
                 <div class="map-section-buttons">
-                  <button class="map-btn map-btn-primary" @click="handleGenerateMap">生成地图</button>
-                  <button class="map-btn map-btn-primary" @click="handleGenerateGridMap">生成栅格地图</button>
-                  <button class="map-btn map-btn-primary" @click="handleCreateFusionMap">新建融合地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording" @click="handleGenerateMap">生成地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording" @click="handleGenerateGridMap">生成栅格地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording" @click="handleCreateFusionMap">新建融合地图</button>
                 </div>
               </div>
 
@@ -96,7 +97,8 @@
                 <div class="nav-button-group">
                   <button 
                     class="map-btn" 
-                    :class="navigationEnabled ? 'map-btn-danger' : 'map-btn-primary'"
+                    :class="[navigationEnabled ? 'map-btn-danger' : 'map-btn-primary', { loading: navigationLoading }]"
+                    :disabled="insEnabled || msfEnabled || navigationLoading"
                     @click="handleStartNav"
                   >
                     {{ navigationEnabled ? '关闭导航' : '开始导航' }}
@@ -106,14 +108,16 @@
                   <button 
                     class="map-btn" 
                     :class="insEnabled ? 'map-btn-danger' : 'map-btn-primary'"
+                    :disabled="navigationEnabled || msfEnabled"
                     @click="handleStartINS"
                   >
                     {{ insEnabled ? '关闭INS' : '开始INS' }}
                   </button>
-                  <button class="map-btn map-btn-primary" @click="handleInitINS">INS初始化</button>
+                  <button class="map-btn map-btn-primary" :disabled="navigationEnabled || msfEnabled" @click="handleInitINS">INS初始化</button>
                   <button 
                     class="map-btn" 
                     :class="msfEnabled ? 'map-btn-danger' : 'map-btn-primary'"
+                    :disabled="navigationEnabled || insEnabled"
                     @click="handleStartMSF"
                   >
                     {{ msfEnabled ? '关闭MSF' : '开始MSF' }}
@@ -131,7 +135,7 @@
                   <!-- 地图选择 -->
                   <div class="nav-info-item">
                     <label class="nav-label">地图：</label>
-                    <select v-model="selectedNavMap" class="nav-select">
+                    <select v-model="selectedNavMap" class="nav-select" :disabled="isMapSelectionLocked">
                       <option v-for="map in navMapList" :key="map" :value="map">{{ map }}</option>
                     </select>
                   </div>
@@ -211,7 +215,7 @@
                           ref="navPointCloudCanvas"
                           class="pointcloud-canvas"
                           tabindex="0"
-                          @wheel.prevent="handleNavPointCloudWheel"
+                          @wheel.capture.prevent.stop="handleNavPointCloudWheel"
                           @pointerdown="handleNavPointCloudPointerDown"
                           @keydown="handleNavPointCloudKeydown"
                           @contextmenu.prevent
@@ -315,7 +319,7 @@
                 <div class="track-toolbar-group">
                   <span class="track-label">地图:</span>
                   <div class="track-select-wrapper">
-                    <select v-model="trackRecordMap" class="track-select">
+                    <select v-model="trackRecordMap" class="track-select" :disabled="isMapSelectionLocked">
                       <option v-for="map in trackMapList" :key="map" :value="map">{{ map }}</option>
                     </select>
                     <span class="track-select-arrow">
@@ -374,7 +378,7 @@
                         ref="navPointCloudCanvas"
                         class="pointcloud-canvas"
                         tabindex="0"
-                        @wheel.prevent="handleNavPointCloudWheel"
+                        @wheel.capture.prevent.stop="handleNavPointCloudWheel"
                         @pointerdown="handleNavPointCloudPointerDown"
                         @keydown="handleNavPointCloudKeydown"
                         @contextmenu.prevent
@@ -670,10 +674,19 @@ import mapInitIcon from '@/assets/source_data/svg_data/robot_source/map_init.svg
 import mapUploadIcon from '@/assets/source_data/svg_data/robot_source/map_upload.svg'
 import { saveTrajectoryFile, getTrajectoryFile } from '@/utils/trajectoryDB'
 import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
+import { load3MF } from '../utils/threemfParser'
+import type { MeshData } from '../utils/threemfParser'
+import { useRobotStore } from '../stores/robot'
+import { navigationApi, mapFileApi } from '../api/services'
+import { useDeviceStore } from '../stores/device'
+
+const deviceStore = useDeviceStore()
+const robotStore = useRobotStore()
 
 // 导航点云图相关变量（需要在前面声明，因为在cleanupNavPointCloud中使用）
 let navPointCloudInitialized = false
 let navResizeObserver: ResizeObserver | null = null
+let navCanvasEventController: AbortController | null = null
 
 // 对话框和消息提示状态
 interface ConfirmDialogState {
@@ -814,6 +827,11 @@ const handleTabClick = (key: string) => {
 const cleanupNavPointCloud = () => {
   console.log('清理点云图状态')
   navPointCloudInitialized = false
+  stopNavPointCloudDragging()
+  if (navCanvasEventController) {
+    navCanvasEventController.abort()
+    navCanvasEventController = null
+  }
   if (navResizeObserver) {
     (navResizeObserver as ResizeObserver | null)?.disconnect()
     navResizeObserver = null
@@ -1273,9 +1291,17 @@ const navData = ref({
   msfStatus: '未开启'
 })
 
-const navigationEnabled = ref(false)
-const insEnabled = ref(false)
-const msfEnabled = ref(false)
+const navigationEnabled = computed(() => robotStore.cmdStatus?.nav === 1)
+const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
+const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
+const navigationLoading = ref(false)
+const isMapSelectionLocked = computed(() => navigationEnabled.value || insEnabled.value || msfEnabled.value)
+
+watch(navigationEnabled, (newVal, oldVal) => {
+  if (newVal !== oldVal && navigationLoading.value) {
+    navigationLoading.value = false
+  }
+})
 
 // GPS状态
 const gpsEnabled = ref(false)
@@ -1303,10 +1329,12 @@ const handleStartNav = () => {
     title: `${action}导航`,
     message: `确定要${action}导航吗？`,
     onConfirm: async () => {
+      navigationLoading.value = true
       try {
         const robotId = deviceStore.selectedRobotId
         if (!robotId) {
           showErrorMessage('未选择机器人')
+          navigationLoading.value = false
           return
         }
 
@@ -1314,12 +1342,10 @@ const handleStartNav = () => {
           action: navigationEnabled.value ? 0 : 1,
           map_name: selectedNavMap.value
         })
-        
-        navigationEnabled.value = !navigationEnabled.value
-        showSuccessMessage(`${action}导航成功`)
       } catch (err) {
         console.error(`${action}导航失败:`, err)
         showErrorMessage(`${action}导航失败`)
+        navigationLoading.value = false
       }
     }
   })
@@ -1378,8 +1404,6 @@ const handleStartINS = () => {
         await navigationApi.insControl(robotId, {
           action: insEnabled.value ? 0 : 1
         })
-        
-        insEnabled.value = !insEnabled.value
         showSuccessMessage(`${action}INS成功`)
       } catch (err) {
         console.error(`${action}INS失败:`, err)
@@ -1442,8 +1466,6 @@ const handleStartMSF = () => {
           mode: 3,
           session: selectedNavMap.value
         })
-        
-        msfEnabled.value = !msfEnabled.value
         showSuccessMessage(`${action}MSF成功`)
       } catch (err) {
         console.error(`${action}MSF失败:`, err)
@@ -1724,24 +1746,528 @@ const increaseSpeed = () => {
 
 // 导航点云图相关
 // ===================== 点云图（复用 composable）=====================
-const navPc = usePointCloudRenderer({ initialScale: 1.5, initialPointSize: 0.5 })
+const navPc = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5 })
 const navPointCloudCanvas = navPc.canvasRef
 const navPointCloudData = navPc.data
 const baseNavPointCloudData = navPc.baseData
 const navPointCloudNormalizationParams = navPc.normalizationParams
-const scheduleNavPointCloudRender = navPc.schedule
+const navPointCloudScale = navPc.scale
+const navPointCloudRotationX = navPc.rotationX
+const navPointCloudRotationY = navPc.rotationY
+const navPointCloudPanX = navPc.panX
+const navPointCloudPanY = navPc.panY
+const navPointCloudPointSize = navPc.pointSize
 const generateMockNavPointCloud = navPc.generateMockData
-const handleNavPointCloudWheel = navPc.onWheel
-const handleNavPointCloudPointerDown = navPc.onPointerDown
-const handleNavPointCloudKeydown = navPc.onKeydown
 const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 const navPointCloudLoading = ref(false)
 const navPointCloudError = ref('')
+const arrowMesh = ref<MeshData | null>(null)
 
-import { navigationApi, mapFileApi } from '../api/services'
-import { useDeviceStore } from '../stores/device'
+// 用 Web Worker 解析 PCD，避免大文件在主线程解析失败
+const parsePcdBufferInWorker = (
+  buffer: ArrayBuffer
+): Promise<{
+  points: Array<{ x: number; y: number; z: number; intensity: number }>
+  normParams: { centerX: number; centerY: number; centerZ: number; maxRange: number }
+}> => {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../workers/pcdParser.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e) => {
+      worker.terminate()
+      if (e.data?.ok) {
+        resolve({ points: e.data.points, normParams: e.data.normParams })
+      } else {
+        reject(new Error(e.data?.error || 'PCD 解析失败'))
+      }
+    }
+    worker.onerror = (err) => {
+      worker.terminate()
+      reject(err)
+    }
+    worker.postMessage({ buffer }, [buffer])
+  })
+}
 
-const deviceStore = useDeviceStore()
+let navPointCloudFrameRequested = false
+const scheduleNavPointCloudRender = () => {
+  if (navPointCloudFrameRequested) return
+  navPointCloudFrameRequested = true
+  requestAnimationFrame(() => {
+    navPointCloudFrameRequested = false
+    drawNavPointCloud()
+  })
+}
+
+const clampNavPointCloudScale = (value: number) => {
+  const MIN_SCALE = 0.01
+  const MAX_SCALE = 50
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value))
+}
+
+const clampNavPointCloudPointSize = (value: number) => {
+  const MIN_SIZE = 0.5
+  const MAX_SIZE = 3
+  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, value))
+}
+
+const handleNavPointCloudWheel = (event: WheelEvent) => {
+  const direction = event.deltaY < 0 ? 1 : -1
+  navPointCloudScale.value = clampNavPointCloudScale(navPointCloudScale.value + direction * 0.1)
+  scheduleNavPointCloudRender()
+}
+
+const handleNavPointCloudKeydown = (event: KeyboardEvent) => {
+  const target = event.target as HTMLElement | null
+  const tagName = target?.tagName
+  const isTypingElement = tagName === 'INPUT' || tagName === 'TEXTAREA' || target?.isContentEditable
+  if (isTypingElement || event.ctrlKey || event.metaKey || event.altKey) {
+    return
+  }
+
+  if (event.key === '+' || event.key === '=') {
+    navPointCloudPointSize.value = clampNavPointCloudPointSize(navPointCloudPointSize.value + 0.1)
+    scheduleNavPointCloudRender()
+    event.preventDefault()
+  } else if (event.key === '-' || event.key === '_') {
+    navPointCloudPointSize.value = clampNavPointCloudPointSize(navPointCloudPointSize.value - 0.1)
+    scheduleNavPointCloudRender()
+    event.preventDefault()
+  }
+}
+
+const isNavPointCloudDragging = ref(false)
+let navLastPointerX = 0
+let navLastPointerY = 0
+let navActivePointerId: number | null = null
+let navPointCloudDragMode: 'rotate' | 'pan' | null = null
+
+const handleNavPointCloudPointerMove = (event: PointerEvent) => {
+  if (!isNavPointCloudDragging.value || (navActivePointerId !== null && event.pointerId !== navActivePointerId)) return
+  const deltaX = event.clientX - navLastPointerX
+  const deltaY = event.clientY - navLastPointerY
+  navLastPointerX = event.clientX
+  navLastPointerY = event.clientY
+  if (navPointCloudDragMode === 'pan') {
+    const canvas = navPointCloudCanvas.value
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    navPointCloudPanX.value += deltaX / rect.width
+    navPointCloudPanY.value += deltaY / rect.height
+  } else {
+    navPointCloudRotationY.value += deltaX * 0.005
+    const nextPitch = navPointCloudRotationX.value - deltaY * 0.005
+    const clampPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, nextPitch))
+    navPointCloudRotationX.value = clampPitch
+  }
+  scheduleNavPointCloudRender()
+}
+
+const stopNavPointCloudDragging = () => {
+  if (!isNavPointCloudDragging.value) return
+  isNavPointCloudDragging.value = false
+  navActivePointerId = null
+  navPointCloudDragMode = null
+  window.removeEventListener('pointermove', handleNavPointCloudPointerMove)
+  window.removeEventListener('pointerup', stopNavPointCloudDragging)
+  window.removeEventListener('pointercancel', stopNavPointCloudDragging)
+}
+
+const handleNavPointCloudPointerDown = (event: PointerEvent) => {
+  event.preventDefault()
+  if (isNavPointCloudDragging.value) return
+  navLastPointerX = event.clientX
+  navLastPointerY = event.clientY
+  isNavPointCloudDragging.value = true
+  navActivePointerId = event.pointerId
+  const shouldPan = event.button === 2 || (event.button === 0 && event.ctrlKey)
+  navPointCloudDragMode = shouldPan ? 'pan' : 'rotate'
+  window.addEventListener('pointermove', handleNavPointCloudPointerMove)
+  window.addEventListener('pointerup', stopNavPointCloudDragging)
+  window.addEventListener('pointercancel', stopNavPointCloudDragging)
+}
+
+const drawNavPointCloud = () => {
+  const canvas = navPointCloudCanvas.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return
+
+  const dpr = window.devicePixelRatio || 1
+  const w = Math.floor(rect.width * dpr)
+  const h = Math.floor(rect.height * dpr)
+  canvas.width = w
+  canvas.height = h
+
+  const imageData = ctx.createImageData(w, h)
+  const data = imageData.data
+
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 2
+    data[i + 1] = 9
+    data[i + 2] = 21
+    data[i + 3] = 255
+  }
+
+  const yaw = navPointCloudRotationY.value
+  const pitch = navPointCloudRotationX.value
+  const cosYaw = Math.cos(yaw)
+  const sinYaw = Math.sin(yaw)
+  const cosPitch = Math.cos(pitch)
+  const sinPitch = Math.sin(pitch)
+  const baseScale = Math.min(rect.width, rect.height) * 0.8 * navPointCloudScale.value
+  const panOffsetX = navPointCloudPanX.value * rect.width
+  const panOffsetY = navPointCloudPanY.value * rect.height
+  const cameraDistance = 2.2
+  const depthScale = 1.4
+  const halfW = rect.width / 2
+  const halfH = rect.height / 2
+  const ptSize = Math.max(1, Math.round(navPointCloudPointSize.value * dpr))
+
+  const writePixel = (px: number, py: number, r: number, g: number, b: number, a: number) => {
+    const ix = Math.round(px * dpr)
+    const iy = Math.round(py * dpr)
+    for (let dy = 0; dy < ptSize; dy++) {
+      for (let dx = 0; dx < ptSize; dx++) {
+        const nx = ix + dx
+        const ny = iy + dy
+        if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue
+        const idx = (ny * w + nx) * 4
+        const alpha = a / 255
+        data[idx] = Math.round(data[idx] * (1 - alpha) + r * alpha)
+        data[idx + 1] = Math.round(data[idx + 1] * (1 - alpha) + g * alpha)
+        data[idx + 2] = Math.round(data[idx + 2] * (1 - alpha) + b * alpha)
+        data[idx + 3] = 255
+      }
+    }
+  }
+
+  const taskPoints: Array<{x: number, y: number, name?: string}> = []
+
+  navPointCloudData.value.forEach(point => {
+    const centeredX = point.x
+    const centeredY = -point.z
+    const centeredZ = point.y
+
+    const xzRotatedX = centeredX * cosYaw + centeredZ * sinYaw
+    const xzRotatedZ = -centeredX * sinYaw + centeredZ * cosYaw
+
+    const yRotatedY = centeredY * cosPitch - xzRotatedZ * sinPitch
+    const yRotatedZ = centeredY * sinPitch + xzRotatedZ * cosPitch
+
+    const perspectiveZ = yRotatedZ * depthScale
+    const perspective = cameraDistance / (cameraDistance - perspectiveZ)
+    const projectedX = xzRotatedX * baseScale * perspective + halfW + panOffsetX
+    const projectedY = yRotatedY * baseScale * perspective + halfH + panOffsetY
+
+    if (projectedX < -10 || projectedX > rect.width + 10 || projectedY < -10 || projectedY > rect.height + 10) return
+
+    if (point.intensity >= 2.5 && point.intensity < 3.5) {
+      taskPoints.push({
+        x: projectedX,
+        y: projectedY,
+        name: (point as any).name
+      })
+    } else if (point.intensity >= 1.9) {
+      writePixel(projectedX, projectedY, 0, 255, 0, 230)
+    } else {
+      const t = point.intensity
+      const r = Math.floor(40 + t * 200)
+      const g = Math.floor(120 + t * 100)
+      const b = 255
+      const a = Math.floor((0.35 + t * 0.4) * 255)
+      writePixel(projectedX, projectedY, r, g, b, a)
+    }
+  })
+
+  ctx.putImageData(imageData, 0, 0)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+  // 任务点绘制在最上层，并展示名称
+  taskPoints.forEach(tp => {
+    ctx.beginPath()
+    ctx.arc(tp.x, tp.y, 4, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255, 216, 0, 0.92)'
+    ctx.fill()
+    ctx.strokeStyle = '#FFFFFF'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    if (tp.name) {
+      ctx.fillStyle = '#FFFFFF'
+      ctx.font = 'bold 10px Arial'
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
+      ctx.shadowBlur = 3
+      ctx.shadowOffsetX = 1
+      ctx.shadowOffsetY = 1
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(tp.name, tp.x, tp.y - 6)
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 0
+    }
+  })
+
+  const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
+  if (maxRange > 1e-6) {
+    const originNormX = (0 - centerX) / maxRange
+    const originNormY = (0 - centerY) / maxRange
+    const originNormZ = (0 - centerZ) / maxRange
+
+    const oCenteredX = originNormX
+    const oCenteredY = -originNormZ
+    const oCenteredZ = originNormY
+
+    const oXzRotatedX = oCenteredX * cosYaw + oCenteredZ * sinYaw
+    const oXzRotatedZ = -oCenteredX * sinYaw + oCenteredZ * cosYaw
+
+    const oYRotatedY = oCenteredY * cosPitch - oXzRotatedZ * sinPitch
+    const oYRotatedZ = oCenteredY * sinPitch + oXzRotatedZ * cosPitch
+
+    const oPerspectiveZ = oYRotatedZ * depthScale
+    const oPerspective = cameraDistance / (cameraDistance - oPerspectiveZ)
+    const oProjX = oXzRotatedX * baseScale * oPerspective + halfW + panOffsetX
+    const oProjY = oYRotatedY * baseScale * oPerspective + halfH + panOffsetY
+
+    ctx.beginPath()
+    ctx.arc(oProjX, oProjY, 3, 0, Math.PI * 2)
+    ctx.fillStyle = '#FF0000'
+    ctx.fill()
+    ctx.strokeStyle = '#FFFFFF'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    ctx.fillStyle = '#FF0000'
+    ctx.font = 'bold 12px Arial'
+    ctx.fillText('原点', oProjX + 6, oProjY - 6)
+  }
+
+  // ===== 绘制机器狗实时位置（和首页一致）=====
+  const pose = robotStore.pose
+  if (pose && maxRange > 1e-6) {
+    const robotNormX = (pose.x - centerX) / maxRange
+    const robotNormY = (pose.y - centerY) / maxRange
+    const robotNormZ = (pose.z - centerZ) / maxRange
+
+    const projectNorm = (nx: number, ny: number, nz: number) => {
+      const cx2 = nx, cy2 = -nz, cz2 = ny
+      const rx = cx2 * cosYaw + cz2 * sinYaw
+      const rz = -cx2 * sinYaw + cz2 * cosYaw
+      const ry = cy2 * cosPitch - rz * sinPitch
+      const rzF = cy2 * sinPitch + rz * cosPitch
+      const persp = cameraDistance / (cameraDistance - rzF * depthScale)
+      return {
+        px: rx * baseScale * persp + halfW + panOffsetX,
+        py: ry * baseScale * persp + halfH + panOffsetY,
+      }
+    }
+
+    const { px: rProjX, py: rProjY } = projectNorm(robotNormX, robotNormY, robotNormZ)
+    const mesh = arrowMesh.value
+    if (mesh) {
+      const baseArrowScale = 0.004
+      const minArrowPx = 8
+      const arrowScale = Math.max(
+        baseArrowScale * navPointCloudScale.value,
+        minArrowPx / (baseScale || 1)
+      )
+      const cosT = Math.cos(pose.theta)
+      const sinT = Math.sin(pose.theta)
+
+      const projVerts: Array<{ px: number; py: number }> = mesh.vertices.map(v => {
+        const sx = v.x * arrowScale
+        const sy = v.y * arrowScale
+        const sz = v.z * arrowScale
+        const rx = sx * cosT - sy * sinT
+        const ry = sx * sinT + sy * cosT
+        const rz = sz
+        return projectNorm(robotNormX + rx, robotNormY + ry, robotNormZ + rz)
+      })
+
+      const faces: Array<{ avgPy: number; i0: number; i1: number; i2: number }> = []
+      for (let i = 0; i < mesh.indices.length; i += 3) {
+        const i0 = mesh.indices[i], i1 = mesh.indices[i + 1], i2 = mesh.indices[i + 2]
+        faces.push({
+          avgPy: (projVerts[i0].py + projVerts[i1].py + projVerts[i2].py) / 3,
+          i0, i1, i2
+        })
+      }
+      faces.sort((a, b) => b.avgPy - a.avgPy)
+
+      ctx.save()
+      ctx.shadowColor = '#00ff88'
+      ctx.shadowBlur = 0
+      for (const face of faces) {
+        const p0 = projVerts[face.i0]
+        const p1 = projVerts[face.i1]
+        const p2 = projVerts[face.i2]
+        ctx.beginPath()
+        ctx.moveTo(p0.px, p0.py)
+        ctx.lineTo(p1.px, p1.py)
+        ctx.lineTo(p2.px, p2.py)
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(255, 0, 255, 0.85)'
+        ctx.fill()
+        ctx.strokeStyle = '#FFB6FF'
+        ctx.lineWidth = 0.5
+        ctx.stroke()
+      }
+      ctx.shadowBlur = 0
+      ctx.restore()
+    } else {
+      const tipDist = 0.06
+      const { px: tProjX, py: tProjY } = projectNorm(
+        robotNormX + Math.cos(pose.theta) * tipDist,
+        robotNormY + Math.sin(pose.theta) * tipDist,
+        robotNormZ
+      )
+      const screenAngle = Math.atan2(tProjY - rProjY, tProjX - rProjX)
+      const arrowSize = 14
+      ctx.save()
+      ctx.translate(rProjX, rProjY)
+      ctx.rotate(screenAngle + Math.PI / 2)
+      ctx.beginPath()
+      ctx.moveTo(0, -arrowSize)
+      ctx.lineTo(-arrowSize * 0.55, arrowSize * 0.65)
+      ctx.lineTo(arrowSize * 0.55, arrowSize * 0.65)
+      ctx.closePath()
+      ctx.shadowColor = '#00ff88'
+      ctx.shadowBlur = 12
+      ctx.fillStyle = 'rgba(255, 0, 255, 0.88)'
+      ctx.fill()
+      ctx.shadowBlur = 0
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 1.5
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    ctx.fillStyle = '#FF0000'
+    ctx.font = 'bold 11px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.shadowColor = 'rgba(0,0,0,0.85)'
+    ctx.shadowBlur = 4
+    ctx.fillText('机器狗', rProjX, rProjY + 18)
+    ctx.shadowBlur = 0
+  }
+}
+
+const overlayNavTrackTrajectory = async (trackName: string) => {
+  const normalizedTrackName = normalizeTrackName(trackName)
+  if (!normalizedTrackName || baseNavPointCloudData.value.length === 0) return
+
+  try {
+    const blob = await getTrajectoryFile(normalizedTrackName)
+    if (!blob) return
+
+    const text = await blob.text()
+    const lines = text.trim().split('\n')
+    const trajectoryPoints: Array<{ x: number; y: number; z: number }> = []
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
+      if (parts.length >= 4) {
+        const v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2]), v3 = parseFloat(parts[3])
+        if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
+          trajectoryPoints.push({ x: v1, y: v2, z: v3 })
+          continue
+        }
+      }
+      if (parts.length >= 3) {
+        const v0 = parseFloat(parts[0]), v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2])
+        if (!isNaN(v0) && !isNaN(v1) && !isNaN(v2)) {
+          trajectoryPoints.push({ x: v0, y: v1, z: v2 })
+        }
+      }
+    }
+
+    const taskPointsData: Array<{ x: number; y: number; z: number; name: string }> = []
+    const currentTaskPointName = normalizeTaskPointName(activeNavTrackInfo.value.taskpoint_name)
+    const cachedData = localStorage.getItem('all_track_task_list')
+    if (cachedData) {
+      const parsed = JSON.parse(cachedData)
+      const allTaskList = extractTrackTaskList(parsed)
+      let filteredTasks = allTaskList.filter((task: any) => {
+        const taskTrackName = normalizeTrackName(String(task.track_name || ''))
+        const taskPointName = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+        return taskTrackName === normalizedTrackName && taskPointName === currentTaskPointName
+      })
+
+      if (!currentTaskPointName || filteredTasks.length === 0) {
+        filteredTasks = allTaskList.filter((task: any) => {
+          const taskTrackName = normalizeTrackName(String(task.track_name || ''))
+          return taskTrackName === normalizedTrackName
+        })
+      }
+
+      filteredTasks.forEach((task: any, idx: number) => {
+        if (task.x !== undefined && task.y !== undefined && task.z !== undefined) {
+          taskPointsData.push({
+            x: task.x,
+            y: task.y,
+            z: task.z,
+            name: task.type_text || task.preset || `任务点${idx}`
+          })
+        }
+      })
+    }
+
+    const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
+    const normalizedTrajectory = trajectoryPoints.map(p => ({
+      x: (p.x - centerX) / maxRange,
+      y: (p.y - centerY) / maxRange,
+      z: (p.z - centerZ) / maxRange,
+      intensity: 2.0
+    }))
+    const normalizedTaskPoints = taskPointsData.map(p => ({
+      x: (p.x - centerX) / maxRange,
+      y: (p.y - centerY) / maxRange,
+      z: (p.z - centerZ) / maxRange,
+      intensity: 3.0,
+      name: p.name
+    }))
+
+    navPointCloudData.value = [
+      ...baseNavPointCloudData.value,
+      ...normalizedTrajectory,
+      ...normalizedTaskPoints
+    ]
+    await nextTick()
+    scheduleNavPointCloudRender()
+  } catch (err) {
+    console.error('[导航点云] 叠加轨迹失败:', err)
+  }
+}
+
+const normalizeTrackName = (rawTrackName: string) => {
+  const trimmed = (rawTrackName || '').trim()
+  if (!trimmed) return ''
+  const atIndex = trimmed.indexOf('@')
+  return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
+}
+
+const normalizeTaskPointName = (rawTaskPointName: string) => {
+  const trimmed = (rawTaskPointName || '').trim()
+  if (!trimmed) return ''
+  const atIndex = trimmed.indexOf('@')
+  return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
+}
+
+const extractTrackTaskList = (payload: any): any[] => {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.response?.data)) return payload.response.data
+  return []
+}
+
+const activeNavTrackInfo = ref({ track_name: '', taskpoint_name: '' })
+const activeNavOverlayTrackName = ref('')
 
 
 // 刷新点云数据
@@ -1787,10 +2313,11 @@ const refreshNavPointCloud = async (mapName?: string) => {
     }
     
     console.log('PCD文件已加载，大小:', buffer.byteLength, 'bytes')
-    const parsedPoints = navPc.parsePcdBuffer(buffer)
+    const { points: parsedPoints, normParams } = await parsePcdBufferInWorker(buffer)
     console.log('解析点云数据，点数:', parsedPoints.length)
     
     if (parsedPoints.length > 0) {
+      navPointCloudNormalizationParams.value = normParams
       navPointCloudData.value = parsedPoints
       // 保存原始地图数据，用于叠加轨迹
       baseNavPointCloudData.value = parsedPoints
@@ -1799,9 +2326,23 @@ const refreshNavPointCloud = async (mapName?: string) => {
       navPointCloudData.value = generateMockNavPointCloud()
     }
     
-    // 等待数据设置完成后渲染
-    await nextTick()
-    scheduleNavPointCloudRender()
+    const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
+    const shouldOverlayTrack = robotStore.cmdStatus?.track === 1 && !!trackNameFromStatus
+    if (shouldOverlayTrack) {
+      activeNavOverlayTrackName.value = trackNameFromStatus
+      activeNavTrackInfo.value = {
+        track_name: trackNameFromStatus,
+        taskpoint_name:
+          robotStore.cmdStatus?.track_info?.taskpoint_name ||
+          activeNavTrackInfo.value.taskpoint_name ||
+          ''
+      }
+      await overlayNavTrackTrajectory(trackNameFromStatus)
+    } else {
+      // 等待数据设置完成后渲染
+      await nextTick()
+      scheduleNavPointCloudRender()
+    }
   } catch (error) {
     console.error('点云数据加载失败:', error)
     navPointCloudError.value = '点云数据加载失败'
@@ -1826,7 +2367,20 @@ const initNavPointCloud = async () => {
     console.warn('导航点云图Canvas未找到')
     return
   }
-  
+
+  if (navCanvasEventController) {
+    navCanvasEventController.abort()
+  }
+  navCanvasEventController = new AbortController()
+  const signal = navCanvasEventController.signal
+  const onWheel = (event: WheelEvent) => {
+    event.preventDefault()
+    handleNavPointCloudWheel(event)
+  }
+  const wheelTarget = navPointCloudCanvas.value.parentElement || navPointCloudCanvas.value
+  navPointCloudCanvas.value.addEventListener('wheel', onWheel, { passive: false, capture: true, signal })
+  wheelTarget.addEventListener('wheel', onWheel, { passive: false, capture: true, signal })
+
   console.log('导航点云图Canvas已就绪，开始初始化')
   
   // 清理旧的 ResizeObserver
@@ -1893,7 +2447,63 @@ const forceInitialRender = () => {
   requestAnimationFrame(tryRender)
 }
 
+watch(navPointCloudData, () => {
+  scheduleNavPointCloudRender()
+})
+
+watch(navPointCloudCanvas, (canvas) => {
+  if (canvas && navPointCloudData.value.length > 0) {
+    scheduleNavPointCloudRender()
+  }
+})
+
+watch(() => robotStore.pose, () => {
+  if (navPointCloudData.value.length > 0) {
+    scheduleNavPointCloudRender()
+  }
+}, { deep: true })
+
+watch(() => robotStore.cmdStatus?.track, (val) => {
+  if (val === 1) {
+    const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
+    const trackName = trackNameFromStatus || activeNavOverlayTrackName.value
+    if (trackName) {
+      activeNavOverlayTrackName.value = trackName
+      overlayNavTrackTrajectory(trackName)
+    }
+  } else if (val === 0) {
+    activeNavOverlayTrackName.value = ''
+    if (baseNavPointCloudData.value.length > 0) {
+      navPointCloudData.value = baseNavPointCloudData.value
+      scheduleNavPointCloudRender()
+    }
+  }
+})
+
+watch(() => robotStore.cmdStatus?.track_info, (info) => {
+  if (!info) return
+  if (robotStore.cmdStatus?.track === 1 && info.track_name) {
+    const normalizedTrackName = normalizeTrackName(info.track_name)
+    activeNavTrackInfo.value = {
+      track_name: normalizedTrackName,
+      taskpoint_name:
+        info.taskpoint_name ||
+        activeNavTrackInfo.value.taskpoint_name ||
+        ''
+    }
+    activeNavOverlayTrackName.value = normalizedTrackName
+    overlayNavTrackTrajectory(normalizedTrackName)
+  }
+}, { deep: true })
+
 onMounted(async () => {
+  load3MF('/jiantou.3mf').then(mesh => {
+    if (mesh) {
+      arrowMesh.value = mesh
+      scheduleNavPointCloudRender()
+    }
+  })
+
   await nextTick()
   
   // 如果默认就是导航标签，则初始化
@@ -1906,7 +2516,7 @@ onMounted(async () => {
 })
 
 // 录包建图相关状态
-const isRecording = ref(false)
+const isRecording = computed(() => robotStore.cmdStatus?.data_record === 1)
 const mapProgress = ref(0)
 const recordingDialogVisible = ref(false)
 const recordingName = ref('')
@@ -1930,7 +2540,36 @@ const fusionMapName = ref('')
 const createFusionMapLoading = ref(false)
 
 // 录包建图相关方法
+const ensureNavigationClosedForMapping = () => {
+  if (!navigationEnabled.value) return true
+  showConfirmDialog({
+    title: '操作提示',
+    message: '请先关闭导航，再执行该操作。',
+    confirmText: '我知道了',
+    cancelText: '取消',
+    type: 'warning',
+    onConfirm: () => {},
+    onCancel: () => {}
+  })
+  return false
+}
+
+const ensureNotRecordingForMapActions = () => {
+  if (!isRecording.value) return true
+  showConfirmDialog({
+    title: '操作提示',
+    message: '正在录包中，请先完成录制，再执行该操作。',
+    confirmText: '我知道了',
+    cancelText: '取消',
+    type: 'warning',
+    onConfirm: () => {},
+    onCancel: () => {}
+  })
+  return false
+}
+
 const handleStartRecording = () => {
+  if (!ensureNavigationClosedForMapping()) return
   // 弹出输入对话框，输入数据包名称
   recordingName.value = ''
   recordingDialogVisible.value = true
@@ -1959,7 +2598,6 @@ const confirmStartRecording = async () => {
       data_name: name
     })
 
-    isRecording.value = true
     // 保存当前录制名称，以便停止时使用
     recordingName.value = name
     recordingDialogVisible.value = false
@@ -1996,7 +2634,6 @@ const handleStopRecording = async () => {
       data_name: nameToSend
     })
 
-    isRecording.value = false
     showSuccessMessage('停止录包指令已发送')
     // 可选：清空录制名称
     // recordingName.value = ''
@@ -2009,6 +2646,8 @@ const handleStopRecording = async () => {
 }
 
 const handleGenerateMap = async () => {
+  if (!ensureNotRecordingForMapActions()) return
+  if (!ensureNavigationClosedForMapping()) return
   // 弹出对话框，选择数据包和输入地图名称
   newMapName.value = ''
   generateMapDialogVisible.value = true
@@ -2025,6 +2664,8 @@ const handleGenerateMap = async () => {
 }
 
 const confirmGenerateMap = async () => {
+  if (!ensureNotRecordingForMapActions()) return
+  if (!ensureNavigationClosedForMapping()) return
   const dataName = selectedDataPackage.value.trim()
   const mapName = newMapName.value.trim()
   
@@ -2075,6 +2716,8 @@ const cancelGenerateMap = () => {
 }
 
 const handleGenerateGridMap = () => {
+  if (!ensureNotRecordingForMapActions()) return
+  if (!ensureNavigationClosedForMapping()) return
   // 弹出对话框，选择地图
   generateGridMapDialogVisible.value = true
   
@@ -2102,6 +2745,8 @@ const handleGenerateGridMap = () => {
 }
 
 const confirmGenerateGridMap = async () => {
+  if (!ensureNotRecordingForMapActions()) return
+  if (!ensureNavigationClosedForMapping()) return
   const mapName = selectedMapForGrid.value.trim()
   
   if (!mapName) {
@@ -2141,12 +2786,16 @@ const cancelGenerateGridMap = () => {
 }
 
 const handleCreateFusionMap = () => {
+  if (!ensureNotRecordingForMapActions()) return
+  if (!ensureNavigationClosedForMapping()) return
   // 弹出对话框，输入融合地图名称
   fusionMapName.value = ''
   createFusionMapDialogVisible.value = true
 }
 
 const confirmCreateFusionMap = async () => {
+  if (!ensureNotRecordingForMapActions()) return
+  if (!ensureNavigationClosedForMapping()) return
   const mapName = fusionMapName.value.trim()
   
   if (!mapName) {
@@ -3577,6 +4226,31 @@ const handleDelete = (item: any) => {
   font-weight: 500;
 }
 
+.map-btn.loading {
+  pointer-events: none;
+  color: transparent;
+  position: relative;
+  opacity: 0.85;
+}
+
+.map-btn.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(103, 213, 253, 0.25);
+  border-top-color: #67d5fd;
+  border-radius: 50%;
+  animation: map-btn-spin 0.7s linear infinite;
+}
+
+.map-btn.map-btn-danger.loading::after {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+}
+
 .map-btn-primary {
   background: #0c3c56;
   color: #67d5fd;
@@ -3690,6 +4364,12 @@ const handleDelete = (item: any) => {
 .map-btn-danger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@keyframes map-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .map-progress-header {
@@ -3808,6 +4488,27 @@ const handleDelete = (item: any) => {
 .nav-select option {
   background: #0c3c56;
   color: #67d5fd;
+}
+
+.nav-select:disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+  border-color: rgba(103, 213, 253, 0.3);
+  color: rgba(180, 205, 220, 0.62);
+  cursor: not-allowed;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
+}
+
+.nav-select:disabled:hover,
+.nav-select:disabled:focus {
+  border-color: rgba(103, 213, 253, 0.3);
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
 }
 
 .nav-speed-control {
@@ -3966,6 +4667,31 @@ const handleDelete = (item: any) => {
   border-color: rgba(38, 131, 182, 1);
 }
 
+.track-select:disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+  border-color: rgba(103, 213, 253, 0.3);
+  color: rgba(180, 205, 220, 0.62);
+  cursor: not-allowed;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
+}
+
+.track-select:disabled:hover,
+.track-select:disabled:focus {
+  border-color: rgba(103, 213, 253, 0.3);
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+}
+
+.track-select:disabled + .track-select-arrow svg polygon {
+  fill: rgba(168, 192, 210, 0.5);
+}
+
 .track-select-arrow {
   position: absolute;
   right: 8px;
@@ -4030,12 +4756,16 @@ const handleDelete = (item: any) => {
               #020915;
   overflow: hidden;
   box-sizing: border-box;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .pointcloud-canvas {
   width: 100%;
   height: 100%;
   display: block;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .pcd-overlay {
@@ -4124,6 +4854,18 @@ const handleDelete = (item: any) => {
 .map-edit-select:focus {
   border-color: #67d5fd;
   box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
+}
+
+.map-edit-select:disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+  border-color: rgba(103, 213, 253, 0.3);
+  color: rgba(180, 205, 220, 0.62);
+  cursor: not-allowed;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
 }
 
 .toolbar-btn {
@@ -4445,6 +5187,18 @@ select.recording-input option {
 .recording-input:focus {
   border-color: #67d5fd;
   box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
+}
+
+.recording-input:disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+  border-color: rgba(103, 213, 253, 0.3);
+  color: rgba(180, 205, 220, 0.62);
+  cursor: not-allowed;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08);
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
 }
 
 .recording-dialog-actions {

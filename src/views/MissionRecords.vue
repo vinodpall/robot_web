@@ -41,8 +41,17 @@
               
               <!-- 操作按钮组 -->
               <div style="display: flex; gap: 12px; margin-left: 8px;">
-                <button class="mission-btn mission-btn-primary" @click="handleStartTask">开始</button>
-                <button class="mission-btn mission-btn-secondary" @click="handleStopTask">暂停</button>
+                <button
+                  class="mission-btn"
+                  :class="isPointTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
+                  :disabled="!canStartPointTask && !isPointTaskRunning"
+                  @click="handleStartTask"
+                >
+                  {{ isPointTaskRunning ? '关闭' : '开始' }}
+                </button>
+                <button class="mission-btn mission-btn-secondary" :disabled="!isNavigationEnabled" @click="handleStopTask">
+                  {{ isNavPaused ? '恢复' : '暂停' }}
+                </button>
                 <button class="mission-btn mission-btn-primary" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
                 <button class="mission-btn mission-btn-stop" @click="handleDeleteTaskGroup">删除任务组</button>
                 <button class="mission-btn mission-btn-primary" @click="handleAddTask">添加任务</button>
@@ -557,9 +566,15 @@ import { mediaApi } from '../api/services'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { useTaskExecutionStore } from '@/stores/taskExecution'
 
 const router = useRouter()
 const route = useRoute()
+const taskExecutionStore = useTaskExecutionStore()
+const isPointTaskRunning = taskExecutionStore.isPointTaskRunning
+const canStartPointTask = taskExecutionStore.canStartPointTask
+const isNavigationEnabled = taskExecutionStore.isNavigationEnabled
+const isNavPaused = taskExecutionStore.navPaused
 
 // 使用任务记录API
 const { jobs, loading, error, pagination, fetchJobs, clearJobs } = useWaylineJobs()
@@ -1071,6 +1086,32 @@ const loadJobRecords = async () => {
 
 // 启动发布点任务
 const handleStartTask = async () => {
+  if (isPointTaskRunning.value) {
+    const robotId = localStorage.getItem('selected_robot_id')
+    if (!robotId) {
+      alert('未找到机器人ID')
+      return
+    }
+    if (!selectedPointTaskId.value) {
+      alert('请先选择任务组')
+      return
+    }
+    try {
+      await navigationApi.stopPointTask(robotId, {
+        id: selectedPointTaskId.value,
+        sn: robotId
+      })
+      alert('关闭指令已发送')
+    } catch (error: any) {
+      console.error('关闭任务失败:', error)
+      alert(`关闭任务失败: ${error.message || '未知错误'}`)
+    }
+    return
+  }
+  if (!canStartPointTask.value) {
+    alert('当前有其他任务正在运行')
+    return
+  }
   if (!selectedPointTaskId.value) {
     alert('请先选择任务组')
     return
@@ -1100,9 +1141,22 @@ const handleStartTask = async () => {
 }
 
 // 暂停发布点任务
-const handleStopTask = () => {
-  console.log('暂停发布点任务')
-  // TODO: 调用暂停发布点任务API
+const handleStopTask = async () => {
+  if (!isNavigationEnabled.value) return
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) {
+    alert('未找到机器人ID')
+    return
+  }
+  try {
+    const nextPaused = !isNavPaused.value
+    await navigationApi.pauseNavigation(robotId, { action: nextPaused ? 1 : 0 })
+    taskExecutionStore.setNavPaused(nextPaused)
+    alert(nextPaused ? '暂停指令已发送' : '恢复指令已发送')
+  } catch (err: any) {
+    console.error('暂停失败', err)
+    alert(`暂停失败: ${err?.message || '未知错误'}`)
+  }
 }
 
 // 添加任务弹窗

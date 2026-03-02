@@ -242,6 +242,31 @@
   box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.2);
 }
 
+.mission-select:disabled,
+.mission-toolbar-select:disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%) !important;
+  border-color: rgba(103, 213, 253, 0.3) !important;
+  color: rgba(180, 205, 220, 0.62) !important;
+  cursor: not-allowed !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08) !important;
+  text-shadow: none;
+  filter: saturate(0.72) grayscale(0.22);
+  opacity: 1;
+}
+
+.mission-select:disabled:hover,
+.mission-select:disabled:focus,
+.mission-toolbar-select:disabled:hover,
+.mission-toolbar-select:disabled:focus {
+  border-color: rgba(103, 213, 253, 0.3) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08) !important;
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%) !important;
+}
+
 .mission-folder-select option[disabled] {
   color: #888;
 }

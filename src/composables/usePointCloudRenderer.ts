@@ -10,6 +10,7 @@
  */
 
 import { ref, shallowRef } from 'vue'
+import type { MeshData } from '@/utils/threemfParser'
 
 // ==================== Types ====================
 
@@ -18,6 +19,14 @@ export interface PointCloudPoint {
   y: number
   z: number
   intensity: number
+  name?: string
+}
+
+export interface RobotPose {
+  x: number
+  y: number
+  z: number
+  theta: number
 }
 
 interface RawPointCloudPoint {
@@ -77,6 +86,10 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
   const baseData = shallowRef<PointCloudPoint[]>([])
   /** 归一化参数，由 normalizePointCloud 写入，drawFrame 读取用于原点投影 */
   const normalizationParams = ref<NormalizationParams>({ centerX: 0, centerY: 0, centerZ: 0, maxRange: 1 })
+  /** 外部可注入的机器人位姿，优先于全局变量 */
+  const robotPose = ref<RobotPose | null>(null)
+  /** 机器人3MF网格（可选，不提供时退化为三角箭头） */
+  const robotMesh = ref<MeshData | null>(null)
 
   // --- 渲染调度 ---
   let _frameRequested = false
@@ -338,11 +351,21 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         // 任务点 → 黄色
         ctx.fillStyle = 'rgba(255, 220, 0, 0.95)'
         ctx.beginPath()
-        ctx.arc(px, py, 2.2, 0, Math.PI * 2)
+        ctx.arc(px, py, 3.4, 0, Math.PI * 2)
         ctx.fill()
         ctx.strokeStyle = '#FFF6B6'
-        ctx.lineWidth = 1.1
+        ctx.lineWidth = 1.4
         ctx.stroke()
+        if (point.name) {
+          ctx.fillStyle = '#FFE770'
+          ctx.font = `bold ${8 * dpr}px Arial`
+          ctx.textAlign = 'left'
+          ctx.textBaseline = 'middle'
+          ctx.shadowColor = 'rgba(0,0,0,0.85)'
+          ctx.shadowBlur = 3
+          ctx.fillText(point.name, px + 5 * dpr, py - 7 * dpr)
+          ctx.shadowBlur = 0
+        }
       } else {
         // 普通点云 →蓝色渐变
         const r = (1.2 + point.intensity * 2) * persp * pointSize.value
@@ -377,8 +400,15 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
     }
 
       // ====== 绘制机器人实时位置（同步首页样式） ======
-      if (typeof robotPose !== 'undefined' && robotPose && maxRange > 1e-6) {
-        const pose = robotPose
+      const isValidPose = (p: any) =>
+        !!p &&
+        Number.isFinite(p.x) &&
+        Number.isFinite(p.y) &&
+        Number.isFinite(p.z) &&
+        Number.isFinite(p.theta)
+      const globalPose = typeof window !== 'undefined' ? (window as any).robotPose : null
+      const pose = isValidPose(robotPose.value) ? robotPose.value : (isValidPose(globalPose) ? globalPose : null)
+      if (pose && maxRange > 1e-6) {
         // 归一化到点云空间
         const robotNormX = (pose.x - centerX) / maxRange
         const robotNormY = (pose.y - centerY) / maxRange
@@ -398,39 +428,83 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         }
         // 机器人中心点
         const { px: rProjX, py: rProjY } = projectNorm(robotNormX, robotNormY, robotNormZ)
-        // 机器人箭头（3MF模型可扩展）
-        // 动态缩放：基础比例0.004，最小宽度8px
-        const baseArrowScale = 0.004
-        const minArrowPx = 8
-        const arrowScale = Math.max(baseArrowScale * scale.value, minArrowPx / (bs || 1))
-        const cosT = Math.cos(pose.theta)
-        const sinT = Math.sin(pose.theta)
-        // 简单三角箭头
-        const tipDist = 0.06
-        const { px: tProjX, py: tProjY } = projectNorm(
-          robotNormX + Math.cos(pose.theta) * tipDist,
-          robotNormY + Math.sin(pose.theta) * tipDist,
-          robotNormZ
-        )
-        const screenAngle = Math.atan2(tProjY - rProjY, tProjX - rProjX)
-        const arrowSize = 14 * dpr
-        ctx.save()
-        ctx.translate(rProjX, rProjY)
-        ctx.rotate(screenAngle + Math.PI / 2)
-        ctx.beginPath()
-        ctx.moveTo(0, -arrowSize)
-        ctx.lineTo(-arrowSize * 0.55, arrowSize * 0.65)
-        ctx.lineTo(arrowSize * 0.55, arrowSize * 0.65)
-        ctx.closePath()
-        ctx.shadowColor = '#00ff88'
-        ctx.shadowBlur = 0
-        ctx.fillStyle = 'rgba(255, 0, 255, 0.88)'
-        ctx.fill()
-        ctx.shadowBlur = 0
-        ctx.strokeStyle = '#FFB6FF'
-        ctx.lineWidth = 1.5 * dpr
-        ctx.stroke()
-        ctx.restore()
+        const mesh = robotMesh.value
+        if (mesh) {
+          // 3MF网格渲染（与首页一致）
+          const baseArrowScale = 0.004
+          const minArrowPx = 8
+          const arrowScale = Math.max(baseArrowScale * scale.value, minArrowPx / (bs || 1))
+          const cosT = Math.cos(pose.theta)
+          const sinT = Math.sin(pose.theta)
+
+          const projVerts: Array<{ px: number; py: number }> = mesh.vertices.map(v => {
+            const sx = v.x * arrowScale
+            const sy = v.y * arrowScale
+            const sz = v.z * arrowScale
+            const rx = sx * cosT - sy * sinT
+            const ry = sx * sinT + sy * cosT
+            const rz = sz
+            return projectNorm(robotNormX + rx, robotNormY + ry, robotNormZ + rz)
+          })
+
+          const faces: Array<{ avgPy: number; i0: number; i1: number; i2: number }> = []
+          for (let i = 0; i < mesh.indices.length; i += 3) {
+            const i0 = mesh.indices[i]
+            const i1 = mesh.indices[i + 1]
+            const i2 = mesh.indices[i + 2]
+            faces.push({
+              avgPy: (projVerts[i0].py + projVerts[i1].py + projVerts[i2].py) / 3,
+              i0, i1, i2
+            })
+          }
+          faces.sort((a, b) => b.avgPy - a.avgPy)
+
+          ctx.save()
+          ctx.shadowColor = '#00ff88'
+          ctx.shadowBlur = 0
+          for (const face of faces) {
+            const p0 = projVerts[face.i0]
+            const p1 = projVerts[face.i1]
+            const p2 = projVerts[face.i2]
+            ctx.beginPath()
+            ctx.moveTo(p0.px, p0.py)
+            ctx.lineTo(p1.px, p1.py)
+            ctx.lineTo(p2.px, p2.py)
+            ctx.closePath()
+            ctx.fillStyle = 'rgba(255, 0, 255, 0.85)'
+            ctx.fill()
+            ctx.strokeStyle = '#FFB6FF'
+            ctx.lineWidth = 0.5
+            ctx.stroke()
+          }
+          ctx.restore()
+        } else {
+          // 无3MF时退化为三角箭头
+          const tipDist = 0.06
+          const { px: tProjX, py: tProjY } = projectNorm(
+            robotNormX + Math.cos(pose.theta) * tipDist,
+            robotNormY + Math.sin(pose.theta) * tipDist,
+            robotNormZ
+          )
+          const screenAngle = Math.atan2(tProjY - rProjY, tProjX - rProjX)
+          const arrowSize = 14 * dpr
+          ctx.save()
+          ctx.translate(rProjX, rProjY)
+          ctx.rotate(screenAngle + Math.PI / 2)
+          ctx.beginPath()
+          ctx.moveTo(0, -arrowSize)
+          ctx.lineTo(-arrowSize * 0.55, arrowSize * 0.65)
+          ctx.lineTo(arrowSize * 0.55, arrowSize * 0.65)
+          ctx.closePath()
+          ctx.shadowColor = '#00ff88'
+          ctx.shadowBlur = 0
+          ctx.fillStyle = 'rgba(255, 0, 255, 0.88)'
+          ctx.fill()
+          ctx.strokeStyle = '#FFB6FF'
+          ctx.lineWidth = 1.5 * dpr
+          ctx.stroke()
+          ctx.restore()
+        }
         // 标注文字
         ctx.fillStyle = '#FF0000'
         ctx.font = `bold ${11 * dpr}px Arial`
@@ -539,7 +613,7 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
     // 视图状态
     scale, rotationX, rotationY, panX, panY, pointSize,
     // 数据
-    data, baseData, normalizationParams,
+    data, baseData, normalizationParams, robotPose, robotMesh,
     // 方法
     normalizePointCloud,
     parsePcdBuffer,
@@ -552,4 +626,17 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
     onPointerDown,
     onKeydown,
   }
+}
+
+let _sharedPointCloudRenderer: ReturnType<typeof usePointCloudRenderer> | null = null
+
+/**
+ * 全局共享点云实例（首页/导航/路线录制共用）
+ * 统一使用首页初始视角参数，避免跨页状态不一致。
+ */
+export function useSharedPointCloudRenderer() {
+  if (!_sharedPointCloudRenderer) {
+    _sharedPointCloudRenderer = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5 })
+  }
+  return _sharedPointCloudRenderer
 }
