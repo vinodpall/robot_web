@@ -1291,6 +1291,21 @@ const navData = ref({
   msfStatus: '未开启'
 })
 
+const syncNavPoseData = (pose: typeof robotStore.pose.value) => {
+  if (!pose) return
+  navData.value.x = Number(pose.x.toFixed(3))
+  navData.value.y = Number(pose.y.toFixed(3))
+  navData.value.theta = Number((pose.theta * 180 / Math.PI).toFixed(1))
+}
+
+watch(
+  () => robotStore.pose,
+  (pose) => {
+    syncNavPoseData(pose)
+  },
+  { immediate: true, deep: true }
+)
+
 const navigationEnabled = computed(() => robotStore.cmdStatus?.nav === 1)
 const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)

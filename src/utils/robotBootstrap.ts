@@ -19,7 +19,14 @@ const extractTrackTaskList = (payload: any): any[] => {
   return []
 }
 
-export const refreshRobotRelatedCache = async (robotId: string) => {
+interface RefreshRobotCacheOptions {
+  forceResetMapSelection?: boolean
+}
+
+export const refreshRobotRelatedCache = async (
+  robotId: string,
+  options: RefreshRobotCacheOptions = {}
+) => {
   if (!robotId) return
 
   try {
@@ -71,8 +78,15 @@ export const refreshRobotRelatedCache = async (robotId: string) => {
     localStorage.setItem('cached_map_list', JSON.stringify(mapList))
     localStorage.setItem('cached_map_update_time_map', JSON.stringify(mapUpdateTimeMap))
 
-    if (!localStorage.getItem('selected_map_name') && mapList.length > 0) {
-      localStorage.setItem('selected_map_name', mapList[0])
+    const currentSelectedMap = localStorage.getItem('selected_map_name') || ''
+    const isCurrentMapValid = currentSelectedMap && mapList.includes(currentSelectedMap)
+
+    if (mapList.length > 0) {
+      if (options.forceResetMapSelection || !isCurrentMapValid) {
+        localStorage.setItem('selected_map_name', mapList[0])
+      }
+    } else {
+      localStorage.removeItem('selected_map_name')
     }
   } catch (mapErr) {
     console.error('获取地图列表失败:', mapErr)
@@ -135,5 +149,21 @@ export const refreshRobotRelatedCache = async (robotId: string) => {
     localStorage.setItem('cached_taskpoint_group_map', JSON.stringify(taskGroupMap))
   } catch (taskGroupErr) {
     console.error('构建任务组缓存失败:', taskGroupErr)
+  }
+
+  try {
+    const pointTaskResponse = await navigationApi.getPointTaskList(robotId)
+    const pointTaskList = Array.isArray(pointTaskResponse?.data) ? pointTaskResponse.data : []
+    localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList))
+  } catch (pointTaskErr) {
+    console.error('获取发布点任务列表失败:', pointTaskErr)
+  }
+
+  try {
+    const multiTaskResponse = await navigationApi.getMultiTaskList(robotId)
+    const multiTaskList = Array.isArray(multiTaskResponse?.msg) ? multiTaskResponse.msg : []
+    localStorage.setItem('cached_multi_task_list', JSON.stringify(multiTaskList))
+  } catch (multiTaskErr) {
+    console.error('获取多任务组列表失败:', multiTaskErr)
   }
 }

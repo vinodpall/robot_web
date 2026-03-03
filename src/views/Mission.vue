@@ -23,10 +23,10 @@
               <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
               <span class="mission-top-title">循迹任务</span>
               <div class="mission-top-data">
-                <span class="mission-data-item">X坐标: <span class="mission-data-value">{{ currentPosition.x || '-' }}</span></span>
-                <span class="mission-data-item">Y坐标: <span class="mission-data-value">{{ currentPosition.y || '-' }}</span></span>
-                <span class="mission-data-item">Z坐标: <span class="mission-data-value">{{ currentPosition.z || '-' }}</span></span>
-                <span class="mission-data-item">角度: <span class="mission-data-value">{{ currentPosition.angle || '-' }}</span></span>
+                <span class="mission-data-item">X坐标: <span class="mission-data-value">{{ currentPosition.x ?? '-' }}</span></span>
+                <span class="mission-data-item">Y坐标: <span class="mission-data-value">{{ currentPosition.y ?? '-' }}</span></span>
+                <span class="mission-data-item">Z坐标: <span class="mission-data-value">{{ currentPosition.z ?? '-' }}</span></span>
+                <span class="mission-data-item">角度: <span class="mission-data-value">{{ currentPosition.angle ?? '-' }}</span></span>
                 <span class="mission-data-item">任务ID: <span class="mission-data-value">{{ currentTaskId || '-' }}</span></span>
               </div>
             </div>
@@ -107,7 +107,7 @@
                 </div>
               </template>
                 <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
-                <div class="file-table-row" v-for="i in (10 - waypointsData.length)" :key="'empty-' + i">
+                <div class="file-table-row" v-for="i in missionEmptyRowCount" :key="'empty-' + i">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
                   <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
                   <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
@@ -751,13 +751,36 @@ const selectedTrack = ref('')
 const trackFileLoading = ref(false)
 
 // 当前位置和任务信息
-const currentPosition = ref({
-  x: 0,
-  y: 0,
-  z: 0,
-  angle: 0
+const currentPosition = ref<{
+  x: number | null
+  y: number | null
+  z: number | null
+  angle: number | null
+}>({
+  x: null,
+  y: null,
+  z: null,
+  angle: null
 })
 const currentTaskId = ref('')
+
+const syncCurrentPositionFromPose = (pose: typeof robotStore.pose.value) => {
+  if (!pose) return
+  currentPosition.value = {
+    x: Number(pose.x.toFixed(3)),
+    y: Number(pose.y.toFixed(3)),
+    z: Number(pose.z.toFixed(3)),
+    angle: Number((pose.theta * 180 / Math.PI).toFixed(1))
+  }
+}
+
+watch(
+  () => robotStore.pose,
+  (pose) => {
+    syncCurrentPositionFromPose(pose)
+  },
+  { immediate: true, deep: true }
+)
 
 // 循迹任务 - 路线与任务组
 const routeList = ref<string[]>([])
@@ -1687,6 +1710,8 @@ const waypointsData = computed(() => {
     return []
   }
 })
+
+const missionEmptyRowCount = computed(() => Math.max(0, 10 - waypointsData.value.length))
 
 // 获取当前航线名称
 const getCurrentWaylineName = () => {

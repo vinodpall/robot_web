@@ -230,16 +230,27 @@ const toggleStop = async () => {
   }
 }
 
-// 监听选中的机器人变化，自动获取设备状态
-watch(selectedRobotId, async (newRobotId) => {
-  if (newRobotId) {
-    await fetchDeviceStatus(newRobotId)
-    await refreshRobotRelatedCache(newRobotId)
+const refreshRobotContext = async (robotId: string) => {
+  await fetchDeviceStatus(robotId)
+  await refreshRobotRelatedCache(robotId, { forceResetMapSelection: true })
+  window.dispatchEvent(new CustomEvent('robot-context-refreshed', {
+    detail: { robotId, timestamp: Date.now() }
+  }))
+}
+
+// 监听选中的机器人变化，切换后强制重拉接口
+watch(
+  () => deviceStore.selectedRobotId,
+  async (newRobotId, oldRobotId) => {
+    if (!newRobotId || newRobotId === oldRobotId) return
+    await refreshRobotContext(newRobotId)
   }
-})
+)
 
 // 页面加载时恢复设备列表和状态
 onMounted(async () => {
+  const hadSelectedRobotBeforeMount = !!deviceStore.selectedRobotId
+
   // 获取机器人列表
   try {
     const res = await robotApi.getRobots()
@@ -254,9 +265,10 @@ onMounted(async () => {
     console.error('获取机器人列表失败:', e)
   }
 
-  // 恢复并拉取选中机器人的状态
-  if (selectedRobotId.value) {
-    await fetchDeviceStatus(selectedRobotId.value)
+  // 仅在挂载前已存在选中机器人时主动刷新
+  // 若挂载时通过 setSelectedRobot 选中的机器人，watch 会负责触发刷新
+  if (hadSelectedRobotBeforeMount && deviceStore.selectedRobotId) {
+    await refreshRobotContext(deviceStore.selectedRobotId)
   }
 })
 </script>

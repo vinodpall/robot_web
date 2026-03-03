@@ -67,18 +67,18 @@ const internetConfig: EnvironmentConfig = {
     domain: '/v1' // 同域部署，使用相对路径
   },
   websocket: {
-    host: '10.10.1.3',
+    host: '39.185.83.71',
     port: 8000,
-    fullUrl: 'ws://10.10.1.3:8000'
+    fullUrl: 'ws://39.185.83.71:8000'
   },
   video: {
-    webrtcDomain: 'webrtc://10.10.1.3:8000',
-    rtmpDomain: 'rtmp://10.10.1.3:8000'
+    webrtcDomain: 'webrtc://39.185.83.71:8000',
+    rtmpDomain: 'rtmp://39.185.83.71:8000'
   },
   services: {
-    vision: 'http://10.10.1.3:8000',
-    livestream: 'http://10.10.1.3:8000',
-    mapFile: 'http://10.10.1.3:5000'  // 地图文件服务
+    vision: 'http://39.185.83.71:8000',
+    livestream: 'http://39.185.83.71:8000',
+    mapFile: 'http://39.185.83.71:5000'  // 地图文件服务
   }
 }
 
