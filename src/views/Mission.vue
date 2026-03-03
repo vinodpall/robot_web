@@ -697,6 +697,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
@@ -737,10 +738,12 @@ const { waylineFiles, waylineDetail, fetchWaylineFiles, fetchWaylineDetail, crea
 const { getCachedWorkspaceId, getCachedDeviceSns, getCachedDeviceBySn } = useDevices()
 const { droneStatus, fetchMainDeviceStatus, fetchDroneStatus } = useDeviceStatus()
 const taskExecutionStore = useTaskExecutionStore()
-const isTrackTaskRunning = taskExecutionStore.isTrackTaskRunning
-const canStartTrackTask = taskExecutionStore.canStartTrackTask
-const isNavigationEnabled = taskExecutionStore.isNavigationEnabled
-const isNavPaused = taskExecutionStore.navPaused
+const {
+  isTrackTaskRunning,
+  canStartTrackTask,
+  isNavigationEnabled,
+  navPaused: isNavPaused
+} = storeToRefs(taskExecutionStore)
 const robotStore = useRobotStore()
 
 // 航线文件相关

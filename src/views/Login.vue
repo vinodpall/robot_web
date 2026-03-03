@@ -171,10 +171,8 @@ const handleLogin = async () => {
     
     // 登录成功后立即初始化权限
     try {
-      console.log('开始初始化权限...')
       await initAllPermissions()
       await initUserPermissions()
-      console.log('权限初始化完成')
       
       // 权限初始化完成后，输出调试信息
       debugPermissions()
@@ -192,7 +190,6 @@ const handleLogin = async () => {
           if (cameraResponse && cameraResponse.data) {
             // 存储到本地
             localStorage.setItem('camera_list', JSON.stringify(cameraResponse.data))
-            console.log('摄像头列表已缓存:', cameraResponse.data)
             // 登录后立即启动前两个摄像头流
             const cameraList = cameraResponse.data || []
             for (let i = 0; i < 2; i++) {
@@ -209,7 +206,6 @@ const handleLogin = async () => {
             const trackTaskResponse = await navigationApi.getAllTrackTaskList(robotId)
             const allTrackTaskList = extractTrackTaskList(trackTaskResponse)
             localStorage.setItem('all_track_task_list', JSON.stringify(allTrackTaskList))
-            console.log('所有循迹任务点列表已缓存，共', allTrackTaskList.length, '条')
           } catch (trackErr) {
             console.error('获取循迹任务点列表失败:', trackErr)
             // 获取失败不影响登录流程
@@ -310,7 +306,6 @@ const handleLogin = async () => {
         // 摄像头获取失败不影响登录流程
       }
       
-      console.log('准备跳转到dashboard')
       // 权限初始化完成后再跳转
       router.push('/dashboard/home')
     } catch (err) {

@@ -1275,13 +1275,13 @@ const controlAuthorityStatus = ref({
 })
 
 // 控制相关的状态
-const controlInterval = ref<number | null>(null)
+const controlInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const currentControlType = ref<string | null>(null)
 const CONTROL_INTERVAL_MS = 100 // 每100ms发送一次控制指令
 const CONTROL_SPEED = 0.5 // 默认控制速度
 
 // 云台控制相关状态
-const gimbalControlInterval = ref<number | null>(null)
+const gimbalControlInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const currentGimbalDirection = ref<string | null>(null)
 const GIMBAL_CONTROL_INTERVAL_MS = 200 // 每200ms发送一次云台控制指令
 
@@ -3012,7 +3012,7 @@ const scheduleVisionDataDraw = (visionData: any) => {
 }
 
 // 监听视频尺寸变化，重新调整画布尺寸（防抖优化）
-let resizeTimeout: number | null = null
+let resizeTimeout: ReturnType<typeof setTimeout> | null = null
 const resizeCanvas = () => {
   if (resizeTimeout) {
     clearTimeout(resizeTimeout)

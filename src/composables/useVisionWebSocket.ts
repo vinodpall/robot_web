@@ -71,8 +71,8 @@ export function useVisionWebSocket(serverHost: string = visionConfig.serverHost)
   const latestVisionData = ref<VisionData | null>(null)
   const connectionError = ref<string>('')
   
-  let heartbeatInterval: number | null = null
-  let reconnectTimeout: number | null = null
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   let reconnectAttempts = 0
   const maxReconnectAttempts = visionConfig.maxReconnectAttempts
   const reconnectDelay = visionConfig.reconnectDelay

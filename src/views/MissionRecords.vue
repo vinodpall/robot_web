@@ -550,6 +550,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
@@ -571,10 +572,12 @@ import { useTaskExecutionStore } from '@/stores/taskExecution'
 const router = useRouter()
 const route = useRoute()
 const taskExecutionStore = useTaskExecutionStore()
-const isPointTaskRunning = taskExecutionStore.isPointTaskRunning
-const canStartPointTask = taskExecutionStore.canStartPointTask
-const isNavigationEnabled = taskExecutionStore.isNavigationEnabled
-const isNavPaused = taskExecutionStore.navPaused
+const {
+  isPointTaskRunning,
+  canStartPointTask,
+  isNavigationEnabled,
+  navPaused: isNavPaused
+} = storeToRefs(taskExecutionStore)
 
 // 使用任务记录API
 const { jobs, loading, error, pagination, fetchJobs, clearJobs } = useWaylineJobs()

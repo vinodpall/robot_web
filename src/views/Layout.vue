@@ -110,6 +110,7 @@ import { useUserStore } from '../stores/user'
 import { useDeviceStore } from '../stores/device'
 import { dockApi, robotApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
+import { refreshRobotRelatedCache } from '../utils/robotBootstrap'
 // 导入背景图片
 import titleBg from '/src/assets/source_data/bg_data/title.png'
 
@@ -158,15 +159,13 @@ const isSelectActive = ref(false)
 
 const toggleSelect = () => {
   isSelectActive.value = !isSelectActive.value
-  handleRobotChange()
-}
-
-const handleRobotChange = () => {
-  // 处理机器人选择逻辑
-  console.log('当前选中的机器人:', selectedRobot.value?.robot_id)
 }
 
 const selectRobot = (id: string) => {
+  if (selectedRobotId.value === id) {
+    isSelectActive.value = false
+    return
+  }
   selectedRobotId.value = id
   isSelectActive.value = false
 }
@@ -191,13 +190,11 @@ const toggleUserMenu = (e: Event) => {
 
 const handleChangePassword = () => {
   // 处理修改密码逻辑
-  console.log('修改密码')
   isUserMenuVisible.value = false
 }
 
 const handleLogout = () => {
   // 处理退出登录逻辑
-  console.log('退出登录')
   userStore.logout()
   router.push('/login')
   isUserMenuVisible.value = false
@@ -225,7 +222,6 @@ const toggleStop = async () => {
 
   try {
     await dockApi.emergencyStop(selectedRobotId.value)
-    console.log('急停操作成功')
     // 操作成功后刷新设备状态
     await fetchDeviceStatus(selectedRobotId.value)
   } catch (error) {
@@ -238,6 +234,7 @@ const toggleStop = async () => {
 watch(selectedRobotId, async (newRobotId) => {
   if (newRobotId) {
     await fetchDeviceStatus(newRobotId)
+    await refreshRobotRelatedCache(newRobotId)
   }
 })
 

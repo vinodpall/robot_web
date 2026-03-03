@@ -318,6 +318,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { navigationApi } from '@/api/services'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
@@ -337,10 +338,12 @@ import { useTaskExecutionStore } from '@/stores/taskExecution'
 const router = useRouter()
 const route = useRoute()
 const taskExecutionStore = useTaskExecutionStore()
-const isMultiTaskRunning = taskExecutionStore.isMultiTaskRunning
-const canStartMultiTask = taskExecutionStore.canStartMultiTask
-const isNavigationEnabled = taskExecutionStore.isNavigationEnabled
-const isNavPaused = taskExecutionStore.navPaused
+const {
+  isMultiTaskRunning,
+  canStartMultiTask,
+  isNavigationEnabled,
+  navPaused: isNavPaused
+} = storeToRefs(taskExecutionStore)
 
 const sidebarTabs = [
   { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission' },
