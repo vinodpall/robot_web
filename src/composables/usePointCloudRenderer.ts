@@ -357,14 +357,31 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         ctx.lineWidth = 1.4
         ctx.stroke()
         if (point.name) {
-          ctx.fillStyle = '#FFE770'
-          ctx.font = `bold ${8 * dpr}px Arial`
-          ctx.textAlign = 'left'
+          const lbl = point.name
+          ctx.font = `bold ${10 * dpr}px Arial`
+          ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
-          ctx.shadowColor = 'rgba(0,0,0,0.85)'
-          ctx.shadowBlur = 3
-          ctx.fillText(point.name, px + 5 * dpr, py - 7 * dpr)
+          const tw = ctx.measureText(lbl).width
+          const padX = 4 * dpr, tagH = 14 * dpr, rr = 3 * dpr, tagW = tw + padX * 2
+          const tx = px - tagW / 2, ty = py - 18 * dpr - tagH / 2
+          ctx.beginPath()
+          ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
+          ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
+          ctx.lineTo(tx + tagW, ty + tagH - rr)
+          ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
+          ctx.lineTo(tx + rr, ty + tagH)
+          ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
+          ctx.lineTo(tx, ty + rr)
+          ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
+          ctx.closePath()
+          ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+          ctx.fill()
+          ctx.strokeStyle = 'rgba(255, 216, 0, 0.55)'
+          ctx.lineWidth = 0.8 * dpr
+          ctx.stroke()
+          ctx.fillStyle = '#FFD800'
           ctx.shadowBlur = 0
+          ctx.fillText(lbl, px, ty + tagH / 2)
         }
       } else {
         // 普通点云 →蓝色渐变
@@ -394,9 +411,33 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
       ctx.strokeStyle = '#FFFFFF'
       ctx.lineWidth = 1.5 * dpr
       ctx.stroke()
-      ctx.fillStyle = '#FF0000'
-      ctx.font = `bold ${12 * dpr}px Arial`
-      ctx.fillText('原点', opx + 6 * dpr, opy - 6 * dpr)
+      ;{
+        const lbl = '原点'
+        ctx.font = `bold ${10 * dpr}px Arial`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        const tw = ctx.measureText(lbl).width
+        const padX = 4 * dpr, tagH = 14 * dpr, rr = 3 * dpr, tagW = tw + padX * 2
+        const tx = opx - tagW / 2, ty = opy - 10 * dpr - tagH
+        ctx.beginPath()
+        ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
+        ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
+        ctx.lineTo(tx + tagW, ty + tagH - rr)
+        ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
+        ctx.lineTo(tx + rr, ty + tagH)
+        ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
+        ctx.lineTo(tx, ty + rr)
+        ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(255, 68, 68, 0.55)'
+        ctx.lineWidth = 0.8 * dpr
+        ctx.stroke()
+        ctx.fillStyle = '#FF5555'
+        ctx.shadowBlur = 0
+        ctx.fillText(lbl, opx, ty + tagH / 2)
+      }
     }
 
       // ====== 绘制机器人实时位置（同步首页样式） ======
@@ -433,9 +474,14 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
           // 3MF网格渲染（与首页一致）
           const baseArrowScale = 0.004
           const minArrowPx = 8
-          const arrowScale = Math.max(baseArrowScale * scale.value, minArrowPx / (bs || 1))
-          const cosT = Math.cos(pose.theta)
-          const sinT = Math.sin(pose.theta)
+          const maxArrowPx = 24
+          const arrowScale = Math.min(
+            Math.max(baseArrowScale * scale.value, minArrowPx / (bs || 1)),
+            maxArrowPx / (bs || 1)
+          )
+          // 3MF 模型尖端朝向 +Y 轴，theta=0 时前进方向为 +X，需预减 π/2 对齐
+          const cosT = Math.cos(pose.theta - Math.PI / 2)
+          const sinT = Math.sin(pose.theta - Math.PI / 2)
 
           const projVerts: Array<{ px: number; py: number }> = mesh.vertices.map(v => {
             const sx = v.x * arrowScale
@@ -506,14 +552,33 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
           ctx.restore()
         }
         // 标注文字
-        ctx.fillStyle = '#FF0000'
-        ctx.font = `bold ${11 * dpr}px Arial`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'top'
-        ctx.shadowColor = 'rgba(0,0,0,0.85)'
-        ctx.shadowBlur = 4
-        ctx.fillText('机器狗', rProjX, rProjY + 18 * dpr)
-        ctx.shadowBlur = 0
+        ;{
+          const lbl = '机器狗'
+          ctx.font = `bold ${10 * dpr}px Arial`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          const tw = ctx.measureText(lbl).width
+          const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
+          const tx = rProjX - tagW / 2, ty = rProjY - 18 - tagH
+          ctx.beginPath()
+          ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
+          ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
+          ctx.lineTo(tx + tagW, ty + tagH - rr)
+          ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
+          ctx.lineTo(tx + rr, ty + tagH)
+          ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
+          ctx.lineTo(tx, ty + rr)
+          ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
+          ctx.closePath()
+          ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+          ctx.fill()
+          ctx.strokeStyle = 'rgba(255, 150, 255, 0.55)'
+          ctx.lineWidth = 0.8
+          ctx.stroke()
+          ctx.fillStyle = '#FF88FF'
+          ctx.shadowBlur = 0
+          ctx.fillText(lbl, rProjX, ty + tagH / 2)
+        }
       }
   }
 

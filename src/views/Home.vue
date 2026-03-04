@@ -1784,20 +1784,38 @@ const drawPointCloud = () => {
     ctx.lineWidth = 1.5
     ctx.stroke()
     
-    // 绘制任务点名称
+    // 绘制任务点名称（黄色文字 + 半透明深色背景标签）
     if (tp.name) {
-      ctx.fillStyle = '#FFFFFF'
       ctx.font = 'bold 10px Arial'
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
-      ctx.shadowBlur = 3
-      ctx.shadowOffsetX = 1
-      ctx.shadowOffsetY = 1
       ctx.textAlign = 'center'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(tp.name, tp.x, tp.y - 6)
+      ctx.textBaseline = 'middle'
+      const textW = ctx.measureText(tp.name).width
+      const padX = 4, padY = 2
+      const tagW = textW + padX * 2
+      const tagH = 12 + padY * 2
+      const tagX = tp.x - tagW / 2
+      const tagY = tp.y - 18 - tagH / 2
+      const r = 3
+      ctx.beginPath()
+      ctx.moveTo(tagX + r, tagY)
+      ctx.lineTo(tagX + tagW - r, tagY)
+      ctx.quadraticCurveTo(tagX + tagW, tagY, tagX + tagW, tagY + r)
+      ctx.lineTo(tagX + tagW, tagY + tagH - r)
+      ctx.quadraticCurveTo(tagX + tagW, tagY + tagH, tagX + tagW - r, tagY + tagH)
+      ctx.lineTo(tagX + r, tagY + tagH)
+      ctx.quadraticCurveTo(tagX, tagY + tagH, tagX, tagY + tagH - r)
+      ctx.lineTo(tagX, tagY + r)
+      ctx.quadraticCurveTo(tagX, tagY, tagX + r, tagY)
+      ctx.closePath()
+      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255, 216, 0, 0.55)'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+      ctx.fillStyle = '#FFD800'
+      ctx.shadowColor = 'transparent'
       ctx.shadowBlur = 0
-      ctx.shadowOffsetX = 0
-      ctx.shadowOffsetY = 0
+      ctx.fillText(tp.name, tp.x, tagY + tagH / 2)
     }
   })
 
@@ -1831,9 +1849,33 @@ const drawPointCloud = () => {
     ctx.lineWidth = 1.5
     ctx.stroke()
 
-    ctx.fillStyle = '#FF0000'
-    ctx.font = 'bold 12px Arial'
-    ctx.fillText('原点', oProjX + 6, oProjY - 6)
+    ;{
+      const lbl = '原点'
+      ctx.font = 'bold 10px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const tw = ctx.measureText(lbl).width
+      const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
+      const tx = oProjX - tagW / 2, ty = oProjY - 10 - tagH
+      ctx.beginPath()
+      ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
+      ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
+      ctx.lineTo(tx + tagW, ty + tagH - rr)
+      ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
+      ctx.lineTo(tx + rr, ty + tagH)
+      ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
+      ctx.lineTo(tx, ty + rr)
+      ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
+      ctx.closePath()
+      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255, 68, 68, 0.55)'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+      ctx.fillStyle = '#FF5555'
+      ctx.shadowBlur = 0
+      ctx.fillText(lbl, oProjX, ty + tagH / 2)
+    }
   }
 
   // ===== 绘制机器狗实时位置（3MF 箭头模型）=====
@@ -1867,13 +1909,17 @@ const drawPointCloud = () => {
       // 动态缩放：基础比例0.004，最小宽度8px
       const baseArrowScale = 0.004
       const minArrowPx = 8
-      // 点云实际缩放后，保证箭头宽度不小于8px
-      const arrowScale = Math.max(
-        baseArrowScale * pointCloudScale.value,
-        minArrowPx / (baseScale || 1)
+      const maxArrowPx = 24
+      const arrowScale = Math.min(
+        Math.max(
+          baseArrowScale * pointCloudScale.value,
+          minArrowPx / (baseScale || 1)
+        ),
+        maxArrowPx / (baseScale || 1)
       )
-      const cosT = Math.cos(pose.theta)
-      const sinT = Math.sin(pose.theta)
+      // 3MF 模型尖端朝向 +Y 轴，theta=0 时前进方向为 +X，需预减 π/2 对齐
+      const cosT = Math.cos(pose.theta - Math.PI / 2)
+      const sinT = Math.sin(pose.theta - Math.PI / 2)
 
       // 预先投影所有顶点
       const projVerts: Array<{ px: number; py: number }> = mesh.vertices.map(v => {
@@ -1951,14 +1997,33 @@ const drawPointCloud = () => {
     }
 
     // 标注文字
-    ctx.fillStyle = '#FF0000'
-    ctx.font = 'bold 11px Arial'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    ctx.shadowColor = 'rgba(0,0,0,0.85)'
-    ctx.shadowBlur = 4
-    ctx.fillText('机器狗', rProjX, rProjY + 18)
-    ctx.shadowBlur = 0
+    ;{
+      const lbl = '机器狗'
+      ctx.font = 'bold 10px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const tw = ctx.measureText(lbl).width
+      const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
+      const tx = rProjX - tagW / 2, ty = rProjY - 18 - tagH
+      ctx.beginPath()
+      ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
+      ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
+      ctx.lineTo(tx + tagW, ty + tagH - rr)
+      ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
+      ctx.lineTo(tx + rr, ty + tagH)
+      ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
+      ctx.lineTo(tx, ty + rr)
+      ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
+      ctx.closePath()
+      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255, 150, 255, 0.55)'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+      ctx.fillStyle = '#FF88FF'
+      ctx.shadowBlur = 0
+      ctx.fillText(lbl, rProjX, ty + tagH / 2)
+    }
   }
 }
 
@@ -1969,29 +2034,30 @@ const overlayTrackTrajectory = async (trackName: string) => {
   try {
     // 1. 读取轨迹路线数据
     const blob = await getTrajectoryFile(normalizedTrackName)
-    if (!blob) return
-
-    const text = await blob.text()
-    const lines = text.trim().split('\n')
     const trajectoryPoints: Array<{x: number, y: number, z: number}> = []
 
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-      const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
-      // 尝试 index, x, y, z 格式（4列+）
-      if (parts.length >= 4) {
-        const v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2]), v3 = parseFloat(parts[3])
-        if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
-          trajectoryPoints.push({ x: v1, y: v2, z: v3 })
-          continue
+    if (blob) {
+      const text = await blob.text()
+      const lines = text.trim().split('\n')
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
+        // 尝试 index, x, y, z 格式（4列+）
+        if (parts.length >= 4) {
+          const v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2]), v3 = parseFloat(parts[3])
+          if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
+            trajectoryPoints.push({ x: v1, y: v2, z: v3 })
+            continue
+          }
         }
-      }
-      // 尝试 x, y, z 格式（3列）
-      if (parts.length >= 3) {
-        const v0 = parseFloat(parts[0]), v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2])
-        if (!isNaN(v0) && !isNaN(v1) && !isNaN(v2)) {
-          trajectoryPoints.push({ x: v0, y: v1, z: v2 })
+        // 尝试 x, y, z 格式（3列）
+        if (parts.length >= 3) {
+          const v0 = parseFloat(parts[0]), v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2])
+          if (!isNaN(v0) && !isNaN(v1) && !isNaN(v2)) {
+            trajectoryPoints.push({ x: v0, y: v1, z: v2 })
+          }
         }
       }
     }
@@ -2037,13 +2103,14 @@ const overlayTrackTrajectory = async (trackName: string) => {
         }
         
         filteredTasks.forEach((task: any, idx: number) => {
-          if (task.x !== undefined && task.y !== undefined && task.z !== undefined) {
+          const tx = parseFloat(task.x), ty = parseFloat(task.y), tz = parseFloat(task.z ?? '0')
+          if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) {
             // 优先使用 type_text，其次 preset，最后使用序号
             const taskName = task.type_text || task.preset || `任务点${idx}`
             taskPointsData.push({
-              x: task.x,
-              y: task.y,
-              z: task.z,
+              x: tx,
+              y: ty,
+              z: tz,
               name: taskName
             })
           }
@@ -3782,10 +3849,10 @@ const mapList = ref<string[]>([])
 const selectedMap = ref('')
 const showWaylineDropdown = ref(false)
 
-// 导航、INS、MSF 状态
-const navigationEnabled = ref(false)
-const insEnabled = ref(false)
-const msfEnabled = ref(false)
+// 导航、INS、MSF 状态（初始值直接读取 store，避免 watch immediate 顺序问题）
+const navigationEnabled = ref(robotStore.cmdStatus?.nav === 1)
+const insEnabled = ref(robotStore.cmdStatus?.ins === 1)
+const msfEnabled = ref(robotStore.cmdStatus?.msf === 1)
 const navigationLoading = ref(false)
 const insLoading = ref(false)
 const msfLoading = ref(false)
@@ -6302,6 +6369,10 @@ onActivated(async () => {
     await initCameraStreams()
     initVideoPlayer()
     initInfraredVideo()
+    // URL 可能与离开前相同导致 watch 不触发，主动重启播放器
+    await nextTick()
+    if (videoStreamUrl.value) startVideoPlayback()
+    if (infraredStreamUrl.value) startInfraredPlayback()
 
     if (selectedMap.value) {
       await nextTick()

@@ -980,7 +980,7 @@ watch(trackRecordLine, async (newLine) => {
     
     // 从服务器下载轨迹文件
     // 注意：这里假设 mapFileApi.downloadTrajectoryFile 接受的是 trackName
-    const blob = await mapFileApi.downloadTrajectoryFile(newLine)
+    const blob = await mapFileApi.downloadTrajectoryFile(newLine, robotId)
     
     if (blob) {
       // DEBUG: 检查下载的内容
@@ -1291,7 +1291,7 @@ const navData = ref({
   msfStatus: '未开启'
 })
 
-const syncNavPoseData = (pose: typeof robotStore.pose.value) => {
+const syncNavPoseData = (pose: { x: number; y: number; z: number; theta: number } | null) => {
   if (!pose) return
   navData.value.x = Number(pose.x.toFixed(3))
   navData.value.y = Number(pose.y.toFixed(3))
@@ -2011,18 +2011,36 @@ const drawNavPointCloud = () => {
     ctx.stroke()
 
     if (tp.name) {
-      ctx.fillStyle = '#FFFFFF'
       ctx.font = 'bold 10px Arial'
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
-      ctx.shadowBlur = 3
-      ctx.shadowOffsetX = 1
-      ctx.shadowOffsetY = 1
       ctx.textAlign = 'center'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(tp.name, tp.x, tp.y - 6)
+      ctx.textBaseline = 'middle'
+      const textW = ctx.measureText(tp.name).width
+      const padX = 4, padY = 2
+      const tagW = textW + padX * 2
+      const tagH = 12 + padY * 2
+      const tagX = tp.x - tagW / 2
+      const tagY = tp.y - 18 - tagH / 2
+      const r = 3
+      ctx.beginPath()
+      ctx.moveTo(tagX + r, tagY)
+      ctx.lineTo(tagX + tagW - r, tagY)
+      ctx.quadraticCurveTo(tagX + tagW, tagY, tagX + tagW, tagY + r)
+      ctx.lineTo(tagX + tagW, tagY + tagH - r)
+      ctx.quadraticCurveTo(tagX + tagW, tagY + tagH, tagX + tagW - r, tagY + tagH)
+      ctx.lineTo(tagX + r, tagY + tagH)
+      ctx.quadraticCurveTo(tagX, tagY + tagH, tagX, tagY + tagH - r)
+      ctx.lineTo(tagX, tagY + r)
+      ctx.quadraticCurveTo(tagX, tagY, tagX + r, tagY)
+      ctx.closePath()
+      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255, 216, 0, 0.55)'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+      ctx.fillStyle = '#FFD800'
+      ctx.shadowColor = 'transparent'
       ctx.shadowBlur = 0
-      ctx.shadowOffsetX = 0
-      ctx.shadowOffsetY = 0
+      ctx.fillText(tp.name, tp.x, tagY + tagH / 2)
     }
   })
 
@@ -2055,9 +2073,33 @@ const drawNavPointCloud = () => {
     ctx.lineWidth = 1.5
     ctx.stroke()
 
-    ctx.fillStyle = '#FF0000'
-    ctx.font = 'bold 12px Arial'
-    ctx.fillText('原点', oProjX + 6, oProjY - 6)
+    ;{
+      const lbl = '原点'
+      ctx.font = 'bold 10px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const tw = ctx.measureText(lbl).width
+      const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
+      const tx = oProjX - tagW / 2, ty = oProjY - 10 - tagH
+      ctx.beginPath()
+      ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
+      ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
+      ctx.lineTo(tx + tagW, ty + tagH - rr)
+      ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
+      ctx.lineTo(tx + rr, ty + tagH)
+      ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
+      ctx.lineTo(tx, ty + rr)
+      ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
+      ctx.closePath()
+      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255, 68, 68, 0.55)'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+      ctx.fillStyle = '#FF5555'
+      ctx.shadowBlur = 0
+      ctx.fillText(lbl, oProjX, ty + tagH / 2)
+    }
   }
 
   // ===== 绘制机器狗实时位置（和首页一致）=====
@@ -2085,12 +2127,17 @@ const drawNavPointCloud = () => {
     if (mesh) {
       const baseArrowScale = 0.004
       const minArrowPx = 8
-      const arrowScale = Math.max(
-        baseArrowScale * navPointCloudScale.value,
-        minArrowPx / (baseScale || 1)
+      const maxArrowPx = 24
+      const arrowScale = Math.min(
+        Math.max(
+          baseArrowScale * navPointCloudScale.value,
+          minArrowPx / (baseScale || 1)
+        ),
+        maxArrowPx / (baseScale || 1)
       )
-      const cosT = Math.cos(pose.theta)
-      const sinT = Math.sin(pose.theta)
+      // 3MF 模型尖端朝向 +Y 轴，theta=0 时前进方向为 +X，需预减 π/2 对齐
+      const cosT = Math.cos(pose.theta - Math.PI / 2)
+      const sinT = Math.sin(pose.theta - Math.PI / 2)
 
       const projVerts: Array<{ px: number; py: number }> = mesh.vertices.map(v => {
         const sx = v.x * arrowScale
@@ -2160,14 +2207,33 @@ const drawNavPointCloud = () => {
       ctx.restore()
     }
 
-    ctx.fillStyle = '#FF0000'
-    ctx.font = 'bold 11px Arial'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    ctx.shadowColor = 'rgba(0,0,0,0.85)'
-    ctx.shadowBlur = 4
-    ctx.fillText('机器狗', rProjX, rProjY + 18)
-    ctx.shadowBlur = 0
+    ;{
+      const lbl = '机器狗'
+      ctx.font = 'bold 10px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const tw = ctx.measureText(lbl).width
+      const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
+      const tx = rProjX - tagW / 2, ty = rProjY - 18 - tagH
+      ctx.beginPath()
+      ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
+      ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
+      ctx.lineTo(tx + tagW, ty + tagH - rr)
+      ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
+      ctx.lineTo(tx + rr, ty + tagH)
+      ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
+      ctx.lineTo(tx, ty + rr)
+      ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
+      ctx.closePath()
+      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255, 150, 255, 0.55)'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+      ctx.fillStyle = '#FF88FF'
+      ctx.shadowBlur = 0
+      ctx.fillText(lbl, rProjX, ty + tagH / 2)
+    }
   }
 }
 
@@ -2177,27 +2243,28 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
 
   try {
     const blob = await getTrajectoryFile(normalizedTrackName)
-    if (!blob) return
-
-    const text = await blob.text()
-    const lines = text.trim().split('\n')
     const trajectoryPoints: Array<{ x: number; y: number; z: number }> = []
 
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-      const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
-      if (parts.length >= 4) {
-        const v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2]), v3 = parseFloat(parts[3])
-        if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
-          trajectoryPoints.push({ x: v1, y: v2, z: v3 })
-          continue
+    if (blob) {
+      const text = await blob.text()
+      const lines = text.trim().split('\n')
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
+        if (parts.length >= 4) {
+          const v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2]), v3 = parseFloat(parts[3])
+          if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
+            trajectoryPoints.push({ x: v1, y: v2, z: v3 })
+            continue
+          }
         }
-      }
-      if (parts.length >= 3) {
-        const v0 = parseFloat(parts[0]), v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2])
-        if (!isNaN(v0) && !isNaN(v1) && !isNaN(v2)) {
-          trajectoryPoints.push({ x: v0, y: v1, z: v2 })
+        if (parts.length >= 3) {
+          const v0 = parseFloat(parts[0]), v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2])
+          if (!isNaN(v0) && !isNaN(v1) && !isNaN(v2)) {
+            trajectoryPoints.push({ x: v0, y: v1, z: v2 })
+          }
         }
       }
     }
@@ -2222,11 +2289,12 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
       }
 
       filteredTasks.forEach((task: any, idx: number) => {
-        if (task.x !== undefined && task.y !== undefined && task.z !== undefined) {
+        const tx = parseFloat(task.x), ty = parseFloat(task.y), tz = parseFloat(task.z ?? '0')
+        if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) {
           taskPointsData.push({
-            x: task.x,
-            y: task.y,
-            z: task.z,
+            x: tx,
+            y: ty,
+            z: tz,
             name: task.type_text || task.preset || `任务点${idx}`
           })
         }

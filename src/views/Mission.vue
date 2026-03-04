@@ -764,7 +764,7 @@ const currentPosition = ref<{
 })
 const currentTaskId = ref('')
 
-const syncCurrentPositionFromPose = (pose: typeof robotStore.pose.value) => {
+const syncCurrentPositionFromPose = (pose: { x: number; y: number; z: number; theta: number } | null) => {
   if (!pose) return
   currentPosition.value = {
     x: Number(pose.x.toFixed(3)),

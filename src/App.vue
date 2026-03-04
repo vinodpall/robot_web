@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useTaskProgressStore } from './stores/taskProgress'
 import TaskCompletionDialog from './components/TaskCompletionDialog.vue'
 import AlertNotificationDialog from './components/AlertNotificationDialog.vue'
@@ -76,6 +76,16 @@ onMounted(async () => {
   
   // 监听权限不足事件
   document.addEventListener('permission-denied', handlePermissionDenied as EventListener)
+})
+
+// 监听 selectedRobotId 变化：登录后 Layout.vue 选好机器人时，用正确的 robot_id 重连 WebSocket
+watch(() => deviceStore.selectedRobotId, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    // 断开旧连接，用新的 robot_id 重新连接
+    disconnectRobotWs()
+    // 等一帧再重连，确保 disconnect 清理完成
+    setTimeout(() => connectRobotWs(newId), 100)
+  }
 })
 
 // 应用卸载时停止轮询并断开 WebSocket

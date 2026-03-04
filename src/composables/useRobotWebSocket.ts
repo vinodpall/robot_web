@@ -313,6 +313,7 @@ export function useRobotWebSocket() {
   const connect = (robotId?: string) => {
     if (isConnecting.value || isConnected.value) return
 
+    shouldReconnect = true  // 每次主动 connect 都允许自动重连
     isConnecting.value = true
     connectionError.value = ''
 

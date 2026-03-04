@@ -215,15 +215,17 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getCurrentEnvironment } from '@/config/environment'
+import { useDeviceStore } from '@/stores/device'
 import trackRecordIcon from '@/assets/source_data/svg_data/robot_source/track_record.svg'
 
 const router = useRouter()
 const route = useRoute()
+const deviceStore = useDeviceStore()
 
-const dxrBaseUrl = getCurrentEnvironment() === 'internet'
-  ? 'http://10.10.1.3:81'
-  : 'http://172.16.88.152:81'
+const getDxrBaseUrl = () => {
+  const ip = deviceStore.selectedRobot?.ip_address
+  return ip ? `http://${ip}:81` : ''
+}
 
 // ---- 侧边栏 ----
 const sidebarTabs = [
@@ -256,7 +258,9 @@ const filteredRouteList = computed(() => {
 
 const loadFilterOptions = async () => {
   try {
-    const res = await fetch('/api/dxr_api/get_lists')
+    const robotIp = deviceStore.selectedRobot?.ip_address
+    if (!robotIp) return
+    const res = await fetch(`/api/dxr_api/get_lists?robot_ip=${encodeURIComponent(robotIp)}`)
     if (!res.ok) return
     const data = await res.json()
     const clean = (arr: string[]) => (arr || []).filter((v: string) => v !== '全部')
@@ -333,6 +337,8 @@ const fetchRecords = async (page = 1) => {
     if (filterTaskGroup.value) params.append('task_group', filterTaskGroup.value)
     if (startTime.value) params.append('start_create_time', String(new Date(startTime.value).getTime() / 1000))
     if (endTime.value) params.append('end_create_time', String(new Date(endTime.value).getTime() / 1000))
+    const robotIp = deviceStore.selectedRobot?.ip_address
+    if (robotIp) params.append('robot_ip', robotIp)
 
     const res = await fetch(`/api/dxr_api/getLog?${params.toString()}`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -399,7 +405,8 @@ const getImage = (row: any): string | null => {
   if (!img) return null
   // 已是完整URL则直接返回
   if (img.startsWith('http://') || img.startsWith('https://')) return img
-  return dxrBaseUrl + (img.startsWith('/') ? img : '/' + img)
+  const base = getDxrBaseUrl()
+  return base ? base + (img.startsWith('/') ? img : '/' + img) : null
 }
 
 // ---- 图片预览 ----

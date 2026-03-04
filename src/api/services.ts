@@ -1631,22 +1631,16 @@ export const mapFileApi = {
 
   // 下载单个地图文件
   downloadMapFile: async (robotIp: string, mapName: string, fileName: string): Promise<Blob | null> => {
-    // 使用相对路径，由 nginx 代理到后端服务（开发环境由 Vite 代理）
-    const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}`
-    
-    console.log(`下载地图文件: ${fileName}, URL: ${url}`)
+    // 使用相对路径走代理，robot_ip 由代理 router 读取后动态转发，不直接跨域
+    const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}&robot_ip=${robotIp}`
     
     try {
       const response = await fetch(url, {
         method: 'GET'
       })
       
-      console.log(`下载响应: ${fileName}, 状态: ${response.status}, Content-Type: ${response.headers.get('content-type')}, 大小: ${response.headers.get('content-length')}`)
-      
       if (!response.ok) {
-        console.error(`下载文件失败: ${fileName}, 状态: ${response.status}`)
-        const text = await response.text()
-        console.error(`错误响应内容: ${text.substring(0, 500)}`)
+        console.error(`[地图下载] 失败: ${fileName}, 状态: ${response.status}`)
         return null
       }
       
@@ -1654,15 +1648,13 @@ export const mapFileApi = {
       
       // 检查是否下载到了 HTML 错误页面而不是真实文件
       if (blob.type.includes('text/html')) {
-        console.error(`❌ 下载的是 HTML 页面而不是文件: ${fileName}`)
-        const text = await blob.text()
-        console.error(`HTML 内容: ${text.substring(0, 500)}`)
+        console.error(`[地图下载] 收到 HTML 错误页面: ${fileName}`)
         return null
       }
       
       return blob
     } catch (error) {
-      console.error(`下载文件失败: ${fileName}`, error)
+      console.error(`[地图下载] 请求异常: ${fileName}`, error)
       return null
     }
   },
@@ -1685,7 +1677,8 @@ export const mapFileApi = {
   uploadMapFile: async (robotIp: string, mapName: string, fileName: string, file: Blob): Promise<boolean> => {
     // 使用相对路径，由 nginx 代理到后端服务（开发环境由 Vite 代理）
     const remotePath = `/root/dxr_data/map/${mapName}`
-    const url = `/upload_single_file`
+    // robot_ip 作为查询参数，由代理 router 读取后动态转发，不直接跨域
+    const url = `/upload_single_file?robot_ip=${robotIp}`
 
     const formData = new FormData()
     formData.append('file', file, fileName)
@@ -1719,14 +1712,11 @@ export const mapFileApi = {
   },
 
   // 下载轨迹文件
-  downloadTrajectoryFile: async (trajectoryName: string): Promise<Blob | null> => {
-    // 通过 Vite 代理，避免 CORS 问题
-    const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt`
+  downloadTrajectoryFile: async (trajectoryName: string, robotIp: string): Promise<Blob | null> => {
+    // 使用相对路径走代理，robot_ip 由代理 router 读取后动态转发，不直接跨域
+    const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt&robot_ip=${robotIp}`
     try {
-      const response = await fetch(url, {
-        method: 'GET',
-        mode: 'cors'
-      })
+      const response = await fetch(url, { method: 'GET' })
       if (!response.ok) {
         console.error(`下载轨迹文件失败: ${trajectoryName}, 状态: ${response.status}`)
         return null
