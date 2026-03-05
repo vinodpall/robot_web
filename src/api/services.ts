@@ -127,10 +127,6 @@ export const dockApi = {
   // 删除机巢
   deleteDock: (id: string) => {
     return apiClient.delete<ApiResponse>(`/docks/${id}`)
-  },
-  // 急停控制
-  emergencyStop: (deviceSn: string) => {
-    return apiClient.post<ApiResponse<any>>(`/control/devices/${deviceSn}/emergency-stop`)
   }
 }
 
@@ -459,189 +455,6 @@ export const permissionApi = {
   // 获取用户权限
   getUserPermissions: (userId: number) => {
     return apiClient.get<string[]>(`/users/${userId}/permissions/`)
-  }
-}
-
-// 控制权限接口
-export const controlApi = {
-  // 获取飞行控制权限
-  getFlightAuthority: (deviceSn: string) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/authority/flight`)
-  },
-
-  // 释放飞行控制权限
-  releaseFlightAuthority: (deviceSn: string) => {
-    return apiClient.delete<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/authority/flight`)
-  },
-
-  // 获取载荷控制权限
-  getPayloadAuthority: (deviceSn: string, payloadIndex: string) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/authority/payload`, {
-      payload_index: payloadIndex
-    })
-  },
-
-  // 释放载荷控制权限
-  releasePayloadAuthority: (deviceSn: string, payloadIndex: string) => {
-    return apiClient.delete<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/authority/payload/${payloadIndex}`)
-  },
-
-  // 获取权限状态
-  getAuthorityStatus: (deviceSn: string) => {
-    return apiClient.get<{
-      message: string
-      code: number
-      data: {
-        device_sn: string
-        flight_authority: {
-          device_sn: string
-          user_id: number
-          username: string
-          obtained_at: number
-          session_id: string
-          authority_type: string
-          previous_owner: any
-        } | null
-        payload_authorities: {
-          [payloadIndex: string]: {
-            device_sn: string
-            user_id: number
-            username: string
-            payload_index: string
-            obtained_at: number
-            bid: string
-            authority_type: string
-            previous_owner: any
-          }
-        }
-        timestamp: number
-      }
-    }>(`/control/devices/${deviceSn}/authority`)
-  },
-
-  // 云台方向控制
-  gimbalDirectionControl: (deviceSn: string, payloadIndex: string, direction: 'up' | 'down' | 'left' | 'right') => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/gimbal/direction-control`, {
-      payload_index: payloadIndex,
-      direction: direction,
-      speed: 10,
-      locked: false
-    })
-  },
-
-  // 云台复位控制
-  gimbalReset: (deviceSn: string, payloadIndex: string, resetMode: number) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/gimbal/reset`, {
-      payload_index: payloadIndex,
-      reset_mode: resetMode
-    })
-  },
-
-  // 拍照
-  cameraPhoto: (deviceSn: string, payloadIndex: string) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/camera/photo`, {
-      payload_index: payloadIndex
-    })
-  },
-
-  // 开始录像
-  cameraRecordingStart: (deviceSn: string, payloadIndex: string) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/camera/recording/start`, {
-      payload_index: payloadIndex
-    })
-  },
-
-  // 停止录像
-  cameraRecordingStop: (deviceSn: string, payloadIndex: string) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/camera/recording/stop`, {
-      payload_index: payloadIndex
-    })
-  },
-
-  // 一键返航
-  returnHome: (deviceSn: string) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/return-home`)
-  },
-
-  // 摄像头变焦控制
-  cameraZoom: (deviceSn: string, payloadIndex: string, zoomFactor: number) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/camera/zoom`, {
-      payload_index: payloadIndex,
-      camera_type: "zoom",
-      zoom_factor: zoomFactor
-    })
-  },
-
-  // 一键起飞到指定点
-  takeoffToPoint: (deviceSn: string, params: {
-    target_latitude: number
-    target_longitude: number
-    target_height: number
-    security_takeoff_height: number
-    rth_mode: number
-    rth_altitude: number
-    rc_lost_action: number
-    commander_mode_lost_action: number
-    commander_flight_mode: number
-    commander_flight_height: number
-    max_speed: number
-    vision_algorithms?: number[]
-    vision_threshold?: number
-    simulate_mission: {
-      is_enable: number
-      latitude?: number
-      longitude?: number
-    }
-  }) => {
-    return apiClient.post<{
-      code: number
-      message: string
-      data?: any
-    }>(`/control/devices/${deviceSn}/takeoff-to-point`, params)
-  },
-
-  // 分屏控制
-  setScreenSplit: (deviceSn: string, data: {
-    payload_index: string
-    enable: boolean
-  }) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/control/devices/${deviceSn}/camera/screen-split`, data)
   }
 }
 
@@ -1529,12 +1342,12 @@ export const navigationApi = {
     return apiClient.delete(`/navigation/${robotId}/data/${dataName}`)
   },
   // 获取文件列表
-  getNavigationList: (robotId: string, mapName: string, path?: string) => {
-    // 使用相对路径，由 nginx 代理处理
-    return apiClient.get<{ code: number; msg: string; data: any[] }>('/navigation_list', {
-      map_name: mapName,
-      path
-    }, {
+  getNavigationList: (robotId: string, mapName: string, path?: string, robotIp?: string) => {
+    // 使用相对路径，由 nginx 代理处理；传入 robot_ip 支持动态路由
+    const params: Record<string, any> = { map_name: mapName }
+    if (path) params.path = path
+    if (robotIp) params.robot_ip = robotIp
+    return apiClient.get<{ code: number; msg: string; data: any[] }>('/navigation_list', params, {
       baseURL: ''
     })
   },
@@ -1545,16 +1358,21 @@ export const navigationApi = {
     pwd?: string;
     is_file?: number;
     path?: string;
+    robot_ip?: string;
   }) => {
-    // 使用相对路径，由 nginx 代理处理
+    // robot_ip 放到 URL query string，供 nginx $arg_robot_ip 读取做动态路由
+    // 其余业务参数放 form-urlencoded body
+    const { robot_ip, ...bodyData } = data
+    const qs = robot_ip ? `?robot_ip=${encodeURIComponent(robot_ip)}` : ''
+
     const params = new URLSearchParams()
-    Object.entries(data).forEach(([key, value]) => {
+    Object.entries(bodyData).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
         params.append(key, String(value))
       }
     })
 
-    return apiClient.post<{ code: number; msg: string }>('/navigation_delete', params.toString(), {
+    return apiClient.post<{ code: number; msg: string }>(`/navigation_delete${qs}`, params.toString(), {
       headers: {
         'content-type': 'application/x-www-form-urlencoded'
       },
@@ -1631,7 +1449,7 @@ export const mapFileApi = {
 
   // 下载单个地图文件
   downloadMapFile: async (robotIp: string, mapName: string, fileName: string): Promise<Blob | null> => {
-    // 使用相对路径走代理，robot_ip 由代理 router 读取后动态转发，不直接跨域
+    // 使用相对路径走代理，robot_ip 由 Vite(开发) / Nginx(生产) 读取后动态转发到对应机器人
     const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}&robot_ip=${robotIp}`
     
     try {
@@ -1675,9 +1493,8 @@ export const mapFileApi = {
 
   // 上传单个地图文件
   uploadMapFile: async (robotIp: string, mapName: string, fileName: string, file: Blob): Promise<boolean> => {
-    // 使用相对路径，由 nginx 代理到后端服务（开发环境由 Vite 代理）
+    // 使用相对路径走代理，robot_ip 由 Vite(开发) / Nginx(生产) 读取后动态转发到对应机器人
     const remotePath = `/root/dxr_data/map/${mapName}`
-    // robot_ip 作为查询参数，由代理 router 读取后动态转发，不直接跨域
     const url = `/upload_single_file?robot_ip=${robotIp}`
 
     const formData = new FormData()
@@ -1713,7 +1530,7 @@ export const mapFileApi = {
 
   // 下载轨迹文件
   downloadTrajectoryFile: async (trajectoryName: string, robotIp: string): Promise<Blob | null> => {
-    // 使用相对路径走代理，robot_ip 由代理 router 读取后动态转发，不直接跨域
+    // 使用相对路径走代理，robot_ip 由 Vite(开发) / Nginx(生产) 读取后动态转发到对应机器人
     const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt&robot_ip=${robotIp}`
     try {
       const response = await fetch(url, { method: 'GET' })

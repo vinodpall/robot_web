@@ -97,10 +97,6 @@ export function useVisionWebSocket(serverHost: string = visionConfig.serverHost)
       return
     }
 
-    console.log(`🔗 Vision WebSocket: 尝试连接设备 ${targetDeviceSn}，服务器: ${serverHost}`)
-    console.log('🏠 使用服务器地址:', serverHost)
-    console.log('📡 构建的WebSocket URL 将是:', `ws://${serverHost}/api/v1/vision-stream/devices/${targetDeviceSn}/vision/stream`)
-
     isConnecting.value = true
     connectionError.value = ''
 
@@ -111,8 +107,6 @@ export function useVisionWebSocket(serverHost: string = visionConfig.serverHost)
       ws.value = new WebSocket(wsUrl)
 
       ws.value.onopen = () => {
-        console.log('Vision WebSocket connected')
-        
         // 发送认证消息
         sendMessage({
           type: 'auth',
@@ -130,7 +124,6 @@ export function useVisionWebSocket(serverHost: string = visionConfig.serverHost)
       }
 
       ws.value.onclose = (event) => {
-        console.log('Vision WebSocket disconnected', event)
         isConnected.value = false
         isConnecting.value = false
         
@@ -173,7 +166,6 @@ export function useVisionWebSocket(serverHost: string = visionConfig.serverHost)
   const handleMessage = (message: VisionMessage) => {
     switch (message.type) {
       case 'connected':
-        console.log('Vision WebSocket认证成功')
         isConnected.value = true
         isConnecting.value = false
         reconnectAttempts = 0
@@ -265,7 +257,6 @@ export function useVisionWebSocket(serverHost: string = visionConfig.serverHost)
     }
     
     reconnectAttempts++
-    console.log(`计划重连 (${reconnectAttempts}/${maxReconnectAttempts})`)
     
     reconnectTimeout = setTimeout(() => {
       connect(deviceSn)

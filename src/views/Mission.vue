@@ -2234,16 +2234,37 @@ function onDispatchTaskCancel() {
   dispatchTaskDialog.value.visible = false
 }
 
+// 切换机器人后刷新循迹路线列表
+const handleRobotContextRefreshed = async () => {
+  await loadRouteList()  // 刷新路线列表并更新 selectedRouteName
+  // 强制刷新任务组列表：即使 selectedRouteName 没有改变（watch 不会触发），
+  // 缓存中已经是新机器人的数据，需要主动读取
+  if (selectedRouteName.value) {
+    taskGroupList.value = getTaskGroupListFromCache(selectedRouteName.value)
+    if (taskGroupList.value.length > 0) {
+      selectedTaskGroupName.value = taskGroupList.value[0]
+    } else {
+      selectedTaskGroupName.value = ''
+    }
+  } else {
+    taskGroupList.value = []
+    selectedTaskGroupName.value = ''
+  }
+  refreshAllTrackTaskListCache()
+}
+
 // 页面加载时获取数据
 // 页面加载时获取数据
 onMounted(async () => {
   await loadWaylineFiles()
   await refreshAllTrackTaskListCache()
   window.addEventListener('click', closeDropdown)
+  window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 })
 
 onUnmounted(() => {
   window.removeEventListener('click', closeDropdown)
+  window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   destroyPreviewCanvasEvents()
 })
 

@@ -680,7 +680,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { controlApi, drcApi, livestreamApi, waylineApi, remoteDebugApi } from '../api/services'
+import { drcApi, livestreamApi, waylineApi, remoteDebugApi } from '../api/services'
+// controlApi 旧接口已移除，用 Proxy 占位避免运行时报错
+const controlApi = new Proxy({} as any, {
+  get: () => async () => ({ code: -1, message: '旧控制接口已停用' })
+})
 import { useDevicePolling } from '../composables/useDevicePolling'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
 import { useVisionWebSocket } from '../composables/useVisionWebSocket'

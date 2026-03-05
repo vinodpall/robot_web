@@ -213,7 +213,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useDeviceStore } from '@/stores/device'
 import trackRecordIcon from '@/assets/source_data/svg_data/robot_source/track_record.svg'
@@ -236,7 +236,9 @@ const handleTabClick = (path: string) => {
 }
 
 // ---- 地图列表（从 localStorage 缓存读取） ----
+const mapListTrigger = ref(0)
 const mapList = computed<string[]>(() => {
+  mapListTrigger.value // 依赖触发器，切换机器人后强制重计算
   try {
     const cached = localStorage.getItem('cached_map_list')
     return cached ? JSON.parse(cached) : []
@@ -418,9 +420,20 @@ const closeImagePreview = () => {
   imgModal.value.visible = false
 }
 
+const handleRobotContextRefreshed = () => {
+  mapListTrigger.value++
+  loadFilterOptions()
+  fetchRecords(1)
+}
+
 onMounted(() => {
   loadFilterOptions()
   fetchRecords(1)
+  window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 })
 </script>
 

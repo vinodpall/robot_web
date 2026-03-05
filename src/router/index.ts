@@ -115,11 +115,8 @@ const router = createRouter({
   ]
 })
 
-// 路由守卫
-router.beforeEach((to, _from, next) => {
-  // 已临时禁用路由守卫（认证/权限检查），允许未登录用户访问任何页面。
-  // 注意：这是开发环境的便捷改动，如需恢复请还原此函数为原始实现。
-  console.info('[router] 路由守卫已禁用（允许未登录访问）：', to.fullPath)
+// 路由守卫（权限校验已禁用，允许未登录访问任何页面）
+router.beforeEach((_to, _from, next) => {
   next()
 })
 

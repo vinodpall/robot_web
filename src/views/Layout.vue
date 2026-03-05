@@ -100,6 +100,16 @@
         </keep-alive>
       </router-view>
     </main>
+
+    <!-- 机器人切换中遮罩 -->
+    <transition name="robot-switching-fade">
+      <div v-if="robotSwitching" class="robot-switching-overlay">
+        <div class="robot-switching-box">
+          <div class="robot-switching-spinner"></div>
+          <span class="robot-switching-text">机器人切换中...</span>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -108,7 +118,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useDeviceStore } from '../stores/device'
-import { dockApi, robotApi } from '../api/services'
+import { robotApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { refreshRobotRelatedCache } from '../utils/robotBootstrap'
 // 导入背景图片
@@ -156,6 +166,7 @@ const isRobotItemOnline = (robot: any) => {
 }
 
 const isSelectActive = ref(false)
+const robotSwitching = ref(false)
 
 const toggleSelect = () => {
   isSelectActive.value = !isSelectActive.value
@@ -221,12 +232,9 @@ const toggleStop = async () => {
   }
 
   try {
-    await dockApi.emergencyStop(selectedRobotId.value)
-    // 操作成功后刷新设备状态
-    await fetchDeviceStatus(selectedRobotId.value)
+    // 急停接口已移除（旧系统已停用）
   } catch (error) {
     console.error('急停操作失败:', error)
-    // 可以在这里添加错误提示
   }
 }
 
@@ -243,7 +251,12 @@ watch(
   () => deviceStore.selectedRobotId,
   async (newRobotId, oldRobotId) => {
     if (!newRobotId || newRobotId === oldRobotId) return
-    await refreshRobotContext(newRobotId)
+    robotSwitching.value = true
+    try {
+      await refreshRobotContext(newRobotId)
+    } finally {
+      robotSwitching.value = false
+    }
   }
 )
 
@@ -280,6 +293,57 @@ onMounted(async () => {
   font-weight: normal;
   font-style: normal;
   font-display: swap;
+}
+
+/* 机器人切换遮罩 */
+.robot-switching-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.robot-switching-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  background: rgba(10, 20, 40, 0.92);
+  border: 1px solid rgba(103, 213, 253, 0.35);
+  border-radius: 12px;
+  padding: 32px 48px;
+  box-shadow: 0 0 30px rgba(103, 213, 253, 0.2);
+}
+
+.robot-switching-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(103, 213, 253, 0.2);
+  border-top-color: #67d5fd;
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+.robot-switching-text {
+  color: #67d5fd;
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+
+.robot-switching-fade-enter-active,
+.robot-switching-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.robot-switching-fade-enter-from,
+.robot-switching-fade-leave-to {
+  opacity: 0;
 }
 
 * {

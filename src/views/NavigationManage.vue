@@ -653,7 +653,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed, shallowRef } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch, computed, shallowRef } from 'vue'
 import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SuccessMessage from '@/components/SuccessMessage.vue'
@@ -2596,6 +2596,25 @@ onMounted(async () => {
     initNavPointCloud()
     fetchGpsStatus()
   }
+
+  // 监听机器人切换事件，刷新各 tab 的列表
+  window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+})
+
+const handleRobotContextRefreshed = () => {
+  fetchMapList()
+  fetchEditMapList()
+  fetchTrackMapList()
+  fetchFileMapList()
+  // 循迹列表从已更新的缓存中加载
+  const cached = localStorage.getItem('cached_track_list')
+  if (cached) {
+    allTrackList.value = JSON.parse(cached)
+  }
+}
+
+onUnmounted(() => {
+  window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 })
 
 // 录包建图相关状态
@@ -3845,7 +3864,12 @@ const fetchNavigationList = async () => {
   if (!robotId) return
 
   try {
-    let response = await navigationApi.getNavigationList(robotId, fileManageMap.value)
+    let response = await navigationApi.getNavigationList(
+      robotId,
+      fileManageMap.value,
+      undefined,
+      deviceStore.selectedRobot?.ip_address
+    )
     
     // 如果是字符串，尝试解析
     if (typeof response === 'string') {
@@ -3971,7 +3995,8 @@ const handleDelete = (item: any) => {
           type: item.type,
           pwd: item.pwd,
           is_file: item.is_file,
-          path: '/root/dxr_data/map'
+          path: '/root/dxr_data/map',
+          robot_ip: deviceStore.selectedRobot?.ip_address
         })
         showSuccessMessage('删除成功')
         fetchNavigationList()

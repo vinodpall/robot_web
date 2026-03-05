@@ -105,13 +105,6 @@ export const StatusMaps = {
   }
 }
 
-// 设备状态API
+// 设备状态API（旧 /v1/control 接口已移除）
 export const deviceStatusApi = {
-  // 获取设备状态
-  getDeviceStatus: (deviceSn: string) =>
-    apiClient.get(`/control/devices/${deviceSn}/status`),
-  
-  // 获取设备容量信息
-  getDeviceCapacity: (deviceSn: string) =>
-    apiClient.get(`/control/devices/${deviceSn}/capacity`)
 } 

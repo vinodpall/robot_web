@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
+import * as httpModule from 'node:http'
 
 // 读取环境配置文件
 function loadEnvConfig() {
@@ -40,6 +41,76 @@ function loadEnvConfig() {
   }
 }
 
+// 动态机器人代理中间件：拦截带 robot_ip 参数的请求，转发到对应机器人
+// 同时挂载到 dev server 和 preview server，确保开发与生产行为一致
+function dynamicRobotMiddleware(
+  req: import('http').IncomingMessage,
+  res: import('http').ServerResponse,
+  next: () => void
+) {
+  if (!req.url) return next()
+
+  const isDownload = req.url.startsWith('/download_file')
+  const isUpload = req.url.startsWith('/upload_single_file')
+  const isDxrApi = req.url.startsWith('/api/dxr_api/')
+  const isNavList = req.url.startsWith('/navigation_list')
+  const isNavDelete = req.url.startsWith('/navigation_delete')
+  if (!isDownload && !isUpload && !isDxrApi && !isNavList && !isNavDelete) return next()
+
+  const urlObj = new URL(req.url, 'http://localhost')
+  const robotIp = urlObj.searchParams.get('robot_ip')
+  if (!robotIp) return next()
+
+  urlObj.searchParams.delete('robot_ip')
+  const targetPath = urlObj.pathname + urlObj.search
+
+  const isDxrApiReq = urlObj.pathname.startsWith('/api/dxr_api/')
+  const targetPort = isDxrApiReq ? 81 : 5000
+
+  const headers: Record<string, string | string[] | undefined> = { ...req.headers }
+  headers['host'] = `${robotIp}:${targetPort}`
+
+  const proxyReq = httpModule.request(
+    { hostname: robotIp, port: targetPort, path: targetPath, method: req.method, headers },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode!, proxyRes.headers as any)
+      proxyRes.pipe(res)
+    }
+  )
+
+  proxyReq.on('error', (err) => {
+    console.error('[动态代理] 转发失败:', err.message, `-> ${robotIp}:${targetPort}${targetPath}`)
+    if (!res.headersSent) {
+      res.writeHead(502)
+      res.end('Bad Gateway')
+    }
+  })
+
+  proxyReq.setTimeout(30000, () => {
+    console.error('[动态代理] 请求超时:', `${robotIp}:${targetPort}${targetPath}`)
+    proxyReq.destroy()
+    if (!res.headersSent) {
+      res.writeHead(504)
+      res.end('Gateway Timeout')
+    }
+  })
+
+  // GET/HEAD 没有请求体，直接结束；其他方法将请求体流式转发
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === undefined) {
+    proxyReq.end()
+  } else {
+    req.pipe(proxyReq)
+    req.on('error', (err) => {
+      console.error('[动态代理] 请求流错误:', err.message)
+      proxyReq.destroy()
+      if (!res.headersSent) {
+        res.writeHead(500)
+        res.end('Internal Server Error')
+      }
+    })
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // 加载环境变量
@@ -54,8 +125,8 @@ export default defineConfig(({ mode }) => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     console.log('🔧 Vite配置 - 当前环境:', environment)
     if (environment === 'internet') {
-      console.log('🔧 Vite配置 - 使用外网代理:', 'http://10.10.1.3:8000')
-      return 'http://10.10.1.3:8000'
+      console.log('🔧 Vite配置 - 使用外网代理:', 'http://39.185.83.71:8000')
+      return 'http://39.185.83.71:8000'
     } else {
       console.log('🔧 Vite配置 - 使用内网代理:', 'http://172.16.88.152:8000')
       return 'http://172.16.88.152:8000'
@@ -65,7 +136,7 @@ export default defineConfig(({ mode }) => {
   const getDxrApiTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     if (environment === 'internet') {
-      return 'http://10.10.1.3:81'
+      return 'http://39.185.83.71:81'
     } else {
       return 'http://172.16.88.152:81'
     }
@@ -79,51 +150,10 @@ export default defineConfig(({ mode }) => {
       {
         name: 'dynamic-robot-proxy',
         configureServer(server) {
-          server.middlewares.use(async (req, res, next) => {
-            if (!req.url) return next()
-
-            const isDownload = req.url.startsWith('/download_file')
-            const isUpload = req.url.startsWith('/upload_single_file')
-            const isDxrApi = req.url.startsWith('/api/dxr_api/')
-            if (!isDownload && !isUpload && !isDxrApi) return next()
-
-            const urlObj = new URL(req.url, 'http://localhost')
-            const robotIp = urlObj.searchParams.get('robot_ip')
-            if (!robotIp) return next() // 没有 robot_ip 则走内置代理
-
-            urlObj.searchParams.delete('robot_ip')
-            const targetPath = urlObj.pathname + urlObj.search
-
-            // 根据请求类型决定目标端口
-            const isDxrApiReq = urlObj.pathname.startsWith('/api/dxr_api/')
-            const targetPort = isDxrApiReq ? 81 : 5000
-
-            const { request: httpRequest } = await import('http')
-
-            const chunks: Buffer[] = []
-            req.on('data', (chunk: Buffer) => chunks.push(chunk))
-            req.on('end', () => {
-              const body = Buffer.concat(chunks)
-              const headers: Record<string, string | string[] | undefined> = { ...req.headers }
-              headers['host'] = `${robotIp}:${targetPort}`
-              if (body.length > 0) headers['content-length'] = String(body.length)
-
-              const proxyReq = httpRequest(
-                { hostname: robotIp, port: targetPort, path: targetPath, method: req.method, headers },
-                (proxyRes) => {
-                  res.writeHead(proxyRes.statusCode!, proxyRes.headers as any)
-                  proxyRes.pipe(res)
-                }
-              )
-              proxyReq.on('error', (err) => {
-                console.error('[动态代理] 转发失败:', err.message)
-                res.writeHead(502)
-                res.end('Bad Gateway')
-              })
-              if (body.length > 0) proxyReq.write(body)
-              proxyReq.end()
-            })
-          })
+          server.middlewares.use(dynamicRobotMiddleware)
+        },
+        configurePreviewServer(server) {
+          server.middlewares.use(dynamicRobotMiddleware)
         }
       }
     ],
@@ -159,22 +189,22 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         '/navigation_list': {
-          target: 'http://10.10.1.3:5000',
+          target: 'http://39.185.83.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/navigation_delete': {
-          target: 'http://10.10.1.3:5000',
+          target: 'http://39.185.83.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/download_file': {
-          target: 'http://10.10.1.3:5000',
+          target: 'http://39.185.83.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/upload_single_file': {
-          target: 'http://10.10.1.3:5000',
+          target: 'http://39.185.83.71:5000',
           changeOrigin: true,
           secure: false,
         },

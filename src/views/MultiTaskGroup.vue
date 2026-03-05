@@ -316,7 +316,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { navigationApi } from '@/api/services'
@@ -1176,6 +1176,28 @@ const handleMoveTask = async (task: any, direction: 'up' | 'down') => {
   }
 }
 
+const handleRobotContextRefreshed = () => {
+  // 刷新多任务组列表
+  try {
+    const cachedData = localStorage.getItem('cached_multi_task_list')
+    if (cachedData) {
+      const parsedData = JSON.parse(cachedData)
+      if (Array.isArray(parsedData)) {
+        multiTaskList.value = parsedData
+        selectedMultiTaskName.value = parsedData.length > 0 ? parsedData[0].multitask_name : ''
+      }
+    } else {
+      multiTaskList.value = []
+      selectedMultiTaskName.value = ''
+    }
+  } catch (e) {
+    console.error('切换机器人后重载多任务组数据失败', e)
+  }
+  // 刷新地图、循迹列表
+  loadMapListFromCache()
+  loadTrackListFromCache()
+}
+
 onMounted(() => {
   // 初始化加载任务组数据
   loading.value = true
@@ -1197,6 +1219,12 @@ onMounted(() => {
   } finally {
     loading.value = false
   }
+
+  window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 })
 
 watch(selectedMultiTaskName, (newVal) => {

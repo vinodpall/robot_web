@@ -1,4 +1,4 @@
-
+﻿
 <template>
   <div class="home-container">
     <!-- 左侧状态栏 -->
@@ -953,7 +953,6 @@ import {
   mapFileApi,
   cameraApi,
   waylineApi,
-  controlApi,
   livestreamApi,
 } from '../api/services'
 import SuccessMessage from '../components/SuccessMessage.vue'
@@ -1146,7 +1145,6 @@ watch(() => robotStore.cmdStatus?.map_name, (mapName) => {
 // cmd_status.track_info 同步循迹任务下拉和 activeTrackInfo，并叠加轨迹到点云图
 watch(() => robotStore.cmdStatus?.track_info, (info) => {
   if (!info) return
-  console.log('[WebSocket] 收到 track_info:', info)
   if (robotStore.cmdStatus?.track === 1 && info.track_name) {
     const normalizedTrackName = normalizeTrackName(info.track_name)
     selectedTrack.value = normalizedTrackName
@@ -1156,7 +1154,6 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
       // 某些固件在运行中可能回传空 taskpoint_name，这里保留已有值避免任务点丢失
       taskpoint_name: info.taskpoint_name || activeTrackInfo.value.taskpoint_name || trackStartDialog.value.form.taskpoint_name || ''
     }
-    console.log('[WebSocket] 更新 activeTrackInfo:', activeTrackInfo.value)
     activeOverlayTrackName.value = normalizedTrackName
     // 叠加路线轨迹到点云图
     overlayTrackTrajectory(normalizedTrackName)
@@ -2406,7 +2403,9 @@ const droneDisplayPosition = computed<{ longitude: number; latitude: number; hei
 // 获取最新4条告警日志并显示在实时警情表格
 const fetchLatestAlarmLogs = async () => {
   try {
+    const robotIp = deviceStore.selectedRobot?.ip_address
     const params = new URLSearchParams({ page: '1', page_size: '4' })
+    if (robotIp) params.append('robot_ip', robotIp)
     const res = await fetch(`/api/dxr_api/getLog?${params.toString()}`)
     if (!res.ok) return
     const json = await res.json()
@@ -3212,6 +3211,97 @@ const infraredLoading = ref(false)
 const infraredError = ref('')
 let infraredPc: RTCPeerConnection | null = null
 
+// ===== WebRTC 自动重连配置 =====
+const WEBRTC_MAX_RECONNECT = 10
+const WEBRTC_RECONNECT_BASE_DELAY = 3000   // 基础重连间隔 3s，最大退避 15s
+const WEBRTC_FREEZE_CHECK_INTERVAL = 5000  // 每 5s 检测一次视频是否冻结
+
+// 主视频重连状态
+let webrtcReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let webrtcReconnectCount = 0
+let webrtcFreezeTimer: ReturnType<typeof setInterval> | null = null
+let webrtcLastVideoTime = -1
+
+// 红外视频重连状态
+let infraredReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let infraredReconnectCount = 0
+let infraredFreezeTimer: ReturnType<typeof setInterval> | null = null
+let infraredLastVideoTime = -1
+
+// ---------- 主视频重连辅助函数 ----------
+const clearWebRTCReconnectTimer = () => {
+  if (webrtcReconnectTimer) {
+    clearTimeout(webrtcReconnectTimer)
+    webrtcReconnectTimer = null
+  }
+}
+const clearWebRTCFreezeDetection = () => {
+  if (webrtcFreezeTimer) {
+    clearInterval(webrtcFreezeTimer)
+    webrtcFreezeTimer = null
+  }
+  webrtcLastVideoTime = -1
+}
+const scheduleWebRTCReconnect = () => {
+  if (webrtcReconnectTimer) return // 已有待执行的重连
+  if (webrtcReconnectCount >= WEBRTC_MAX_RECONNECT) return // 超过上限
+  webrtcReconnectCount++
+  const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * webrtcReconnectCount, 15000)
+  webrtcReconnectTimer = setTimeout(() => {
+    webrtcReconnectTimer = null
+    stopWebRTCPlayback()
+    startWebRTCPlayback()
+  }, delay)
+}
+const startWebRTCFreezeDetection = () => {
+  clearWebRTCFreezeDetection()
+  webrtcFreezeTimer = setInterval(() => {
+    if (!videoElement.value || !isPlaying) return
+    const t = videoElement.value.currentTime
+    if (webrtcLastVideoTime >= 0 && t === webrtcLastVideoTime && !videoElement.value.paused) {
+      scheduleWebRTCReconnect()
+    }
+    webrtcLastVideoTime = t
+  }, WEBRTC_FREEZE_CHECK_INTERVAL)
+}
+
+// ---------- 红外视频重连辅助函数 ----------
+const clearInfraredReconnectTimer = () => {
+  if (infraredReconnectTimer) {
+    clearTimeout(infraredReconnectTimer)
+    infraredReconnectTimer = null
+  }
+}
+const clearInfraredFreezeDetection = () => {
+  if (infraredFreezeTimer) {
+    clearInterval(infraredFreezeTimer)
+    infraredFreezeTimer = null
+  }
+  infraredLastVideoTime = -1
+}
+const scheduleInfraredReconnect = () => {
+  if (infraredReconnectTimer) return
+  if (infraredReconnectCount >= WEBRTC_MAX_RECONNECT) return
+  infraredReconnectCount++
+  const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * infraredReconnectCount, 15000)
+  infraredReconnectTimer = setTimeout(() => {
+    infraredReconnectTimer = null
+    stopInfraredPlayback()
+    startInfraredPlayback()
+  }, delay)
+}
+const startInfraredFreezeDetection = () => {
+  clearInfraredFreezeDetection()
+  infraredFreezeTimer = setInterval(() => {
+    if (!infraredVideoElement.value || !infraredPc) return
+    const t = infraredVideoElement.value.currentTime
+    if (infraredLastVideoTime >= 0 && t === infraredLastVideoTime && !infraredVideoElement.value.paused) {
+      scheduleInfraredReconnect()
+    }
+    infraredLastVideoTime = t
+  }, WEBRTC_FREEZE_CHECK_INTERVAL)
+}
+
 // 初始化视频播放器
 const initVideoPlayer = () => {
   const defaultVideoType = getDefaultVideoType()
@@ -3415,12 +3505,7 @@ const buildApiUrl = (webrtcUrl: string) => {
 
 // 开始WebRTC播放
 const startWebRTCPlayback = async () => {
-  console.log('[WebRTC播放] startWebRTCPlayback 被调用')
-  console.log('[WebRTC播放] isPlaying:', isPlaying)
-  console.log('[WebRTC播放] videoStreamUrl.value:', videoStreamUrl.value)
-  
   if (isPlaying) {
-    console.log('[WebRTC播放] 停止之前的播放')
     stopWebRTCPlayback()
   }
 
@@ -3429,8 +3514,6 @@ const startWebRTCPlayback = async () => {
     console.warn('[WebRTC播放] serverUrl 为空，跳过播放')
     return
   }
-  
-  console.log('[WebRTC播放] 开始建立 WebRTC 连接...')
 
   try {
     
@@ -3448,58 +3531,32 @@ const startWebRTCPlayback = async () => {
     })
 
     // 添加ICE candidate监听
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('[WebRTC播放] ICE candidate:', event.candidate)
-      } else {
-        console.log('[WebRTC播放] ICE candidate gathering 完成')
-      }
+    pc.onicecandidate = (_event) => {
+      // ICE candidate gathering
     }
 
     // 监听连接状态
     pc.onconnectionstatechange = () => {
-      console.log('[WebRTC播放] 连接状态变化:', pc?.connectionState)
+      // connection state changed
     }
 
     // 处理远程流
     pc.ontrack = (e) => {
-      console.log('[WebRTC播放] ontrack 事件触发，接收到远程流:', e.streams)
       if (videoElement.value) {
         // 只在第一次设置srcObject
         if (!videoElement.value.srcObject) {
           videoElement.value.srcObject = e.streams[0]
-          console.log('[WebRTC播放] 已设置 srcObject 到 video 元素')
-          
-          const tracks = e.streams[0].getTracks()
-          console.log('[WebRTC播放] 流信息:', tracks)
-          tracks.forEach(track => {
-            console.log(`[WebRTC播放] Track - kind: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}, readyState: ${track.readyState}`)
-          })
           
           // 强制设置WebRTC视频播放器样式
           videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
           
-          // 添加所有video事件监听以诊断问题
           const videoEl = videoElement.value
           
-          videoEl.addEventListener('loadstart', () => console.log('[WebRTC播放] 事件: loadstart'))
-          videoEl.addEventListener('loadeddata', () => console.log('[WebRTC播放] 事件: loadeddata'))
-          videoEl.addEventListener('canplay', () => console.log('[WebRTC播放] 事件: canplay'))
-          videoEl.addEventListener('canplaythrough', () => console.log('[WebRTC播放] 事件: canplaythrough'))
-          videoEl.addEventListener('playing', () => console.log('[WebRTC播放] 事件: playing'))
-          videoEl.addEventListener('waiting', () => console.log('[WebRTC播放] 事件: waiting'))
-          videoEl.addEventListener('stalled', () => console.log('[WebRTC播放] 事件: stalled'))
-          videoEl.addEventListener('suspend', () => console.log('[WebRTC播放] 事件: suspend'))
           videoEl.addEventListener('error', (e) => console.error('[WebRTC播放] 事件: error', e))
           
           // 等待视频流准备好后再播放
           videoEl.onloadedmetadata = () => {
-            console.log('[WebRTC播放] 事件: loadedmetadata')
-            console.log('[WebRTC播放] 视频尺寸:', videoEl.videoWidth, 'x', videoEl.videoHeight)
-            console.log('[WebRTC播放] 准备播放...')
-            videoEl.play().then(() => {
-              console.log('[WebRTC播放] ✅ 可见光视频开始播放')
-            }).catch(err => {
+            videoEl.play().catch(err => {
               console.error('[WebRTC播放] ❌ 视频播放失败:', err)
             })
           }
@@ -3507,19 +3564,11 @@ const startWebRTCPlayback = async () => {
           // 添加超时机制：如果2秒后metadata还没加载，尝试强制播放
           setTimeout(() => {
             if (videoEl.readyState === 0) {
-              console.warn('[WebRTC播放] ⚠️ metadata未加载，readyState:', videoEl.readyState)
-              console.warn('[WebRTC播放] ⚠️ 尝试强制播放...')
-              videoEl.play().then(() => {
-                console.log('[WebRTC播放] ✅ 强制播放成功')
-              }).catch(err => {
+              videoEl.play().catch(err => {
                 console.error('[WebRTC播放] ❌ 强制播放失败:', err)
               })
-            } else {
-              console.log('[WebRTC播放] readyState正常:', videoEl.readyState)
             }
           }, 2000)
-        } else {
-          console.log('[WebRTC播放] srcObject 已存在，跳过设置')
         }
       } else {
         console.error('[WebRTC播放] ❌ videoElement.value 为空')
@@ -3528,33 +3577,26 @@ const startWebRTCPlayback = async () => {
 
     // ICE连接状态监听
     pc.oniceconnectionstatechange = () => {
-      console.log('[WebRTC播放] ICE 连接状态变化:', pc?.iceConnectionState)
       if (pc?.iceConnectionState === 'connected') {
-        console.log('[WebRTC播放] ✅ ICE 连接已建立')
         isPlaying = true
+        webrtcReconnectCount = 0       // 连接成功，重置重连计数
+        startWebRTCFreezeDetection()   // 启动画面冻结检测
+      } else if (pc?.iceConnectionState === 'disconnected') {
+        scheduleWebRTCReconnect()      // 网络抖动，调度重连
       } else if (pc?.iceConnectionState === 'failed') {
-        console.error('[WebRTC播放] ❌ ICE 连接失败')
-        stopWebRTCPlayback()
+        scheduleWebRTCReconnect()      // 连接彻底失败，调度重连
       }
     }
 
     // 创建offer
-    console.log('[WebRTC播放] 创建 offer...')
     const offer = await pc.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true
     })
-    console.log('[WebRTC播放] offer 创建成功')
-    console.log('[WebRTC播放] offer SDP:', offer.sdp?.substring(0, 200) + '...')  // 只显示前200个字符
-    
     await pc.setLocalDescription(offer)
-    console.log('[WebRTC播放] 已设置本地描述')
 
     // 构建SRS API地址
     const apiUrl = buildApiUrl(serverUrl)
-    console.log('[WebRTC播放] SRS API 地址:', apiUrl)
-
-    console.log('[WebRTC播放] 发送 SDP 到 SRS 服务器...')
     const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
       method: 'POST',
       headers: {
@@ -3570,23 +3612,18 @@ const startWebRTCPlayback = async () => {
       console.error('[WebRTC播放] ❌ SRS 服务器响应错误:', response.status)
       throw new Error(`服务器响应错误: ${response.status}`)
     }
-    console.log('[WebRTC播放] SRS 服务器响应成功')
 
     const data = await response.json()
-    console.log('[WebRTC播放] SRS 服务器响应数据:', data)
     
     if (data.code !== 0) {
       throw new Error(`SRS错误: ${data.msg}`)
     }
 
     // 设置远程描述
-    console.log('[WebRTC播放] 设置远程描述 (answer SDP)...')
-    console.log('[WebRTC播放] answer SDP:', data.sdp?.substring(0, 200) + '...')
     await pc.setRemoteDescription({
       type: 'answer',
       sdp: data.sdp
     })
-    console.log('[WebRTC播放] ✅ 远程描述设置成功')
 
   } catch (error) {
     stopWebRTCPlayback()
@@ -3595,6 +3632,9 @@ const startWebRTCPlayback = async () => {
 
 // 停止WebRTC播放
 const stopWebRTCPlayback = () => {
+  clearWebRTCReconnectTimer()
+  clearWebRTCFreezeDetection()
+
   if (pc) {
     pc.close()
     pc = null
@@ -3603,7 +3643,7 @@ const stopWebRTCPlayback = () => {
   if (videoElement.value) {
     videoElement.value.srcObject = null
   }
-  
+
   isPlaying = false
 }
 
@@ -3629,6 +3669,7 @@ const stopVideoPlayback = () => {
 
 // 重新加载视频
 const reloadVideo = () => {
+  webrtcReconnectCount = 0  // 手动重载，重置重连计数
   stopVideoPlayback()
   // 增加延迟确保资源完全清理
   setTimeout(() => {
@@ -3648,10 +3689,6 @@ const initInfraredVideo = () => {
 }
 
 const startInfraredPlayback = () => {
-  console.log('[红外视频播放] startInfraredPlayback 被调用')
-  console.log('[红外视频播放] infraredVideoElement.value:', infraredVideoElement.value)
-  console.log('[红外视频播放] infraredStreamUrl.value:', infraredStreamUrl.value)
-  
   if (!infraredVideoElement.value || !infraredStreamUrl.value) {
     console.warn('[红外视频播放] infraredVideoElement 或 infraredStreamUrl 为空，跳过播放')
     return
@@ -3671,9 +3708,7 @@ const startInfraredPlayback = () => {
   const videoEl = infraredVideoElement.value
   videoEl.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
 
-  console.log('[红外视频播放] 检查视频URL类型:', infraredStreamUrl.value)
   if (infraredStreamUrl.value.startsWith('webrtc://')) {
-    console.log('[红外视频播放] 检测到 WebRTC 流，调用 startInfraredWebRTCPlayback')
     startInfraredWebRTCPlayback()
     return
   }
@@ -3732,39 +3767,49 @@ const startInfraredWebRTCPlayback = async () => {
     })
 
     infraredPc.ontrack = (e) => {
-      console.log('[红外视频播放] ontrack 事件触发，接收到远程流:', e.streams)
       if (!infraredVideoElement.value) {
         console.error('[红外视频播放] ❌ infraredVideoElement.value 为空')
         return
       }
       
-      // 只在第一次设置srcObject
-      if (!infraredVideoElement.value.srcObject) {
-        infraredVideoElement.value.srcObject = e.streams[0]
-        console.log('[红外视频播放] 已设置 srcObject 到 video 元素')
-        infraredVideoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-        
-        // 等待视频流准备好后再播放
-        infraredVideoElement.value.onloadedmetadata = () => {
-          infraredVideoElement.value?.play().then(() => {
-            console.log('[红外视频播放] ✅ 红外视频开始播放')
-            infraredLoading.value = false
-          }).catch((err) => {
-            console.error('[红外视频播放] ❌ 视频播放失败:', err)
-            infraredError.value = '红外视频播放失败'
-            infraredLoading.value = false
+      // 每次 ontrack 都重新挂载流（stop 时已清除 srcObject）
+      infraredVideoElement.value.srcObject = e.streams[0]
+      infraredVideoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+      
+      const videoEl = infraredVideoElement.value
+      
+      // 等待 loadedmetadata 后播放
+      videoEl.onloadedmetadata = () => {
+        videoEl.play().then(() => {
+          infraredLoading.value = false
+        }).catch((err) => {
+          console.error('[红外视频播放] ❌ 视频播放失败:', err)
+          infraredError.value = '红外视频播放失败'
+          infraredLoading.value = false
+        })
+      }
+      
+      // 2 秒兜底：若 loadedmetadata 未触发，强制尝试播放
+      setTimeout(() => {
+        if (!videoEl.srcObject) return
+        if (videoEl.readyState === 0) {
+          videoEl.play().catch(err => {
+            console.error('[红外视频播放] ❌ 兜底播放失败:', err)
           })
         }
-      } else {
-        console.log('[红外视频播放] srcObject 已存在，跳过设置')
+        // 无论如何都结束 loading
         infraredLoading.value = false
-      }
+      }, 2000)
     }
 
     infraredPc.oniceconnectionstatechange = () => {
-      if (infraredPc?.iceConnectionState === 'failed') {
-        infraredError.value = '红外连接失败'
-        stopInfraredWebRTCPlayback()
+      if (infraredPc?.iceConnectionState === 'connected') {
+        infraredReconnectCount = 0       // 连接成功，重置重连计数
+        startInfraredFreezeDetection()   // 启动画面冻结检测
+      } else if (infraredPc?.iceConnectionState === 'disconnected') {
+        scheduleInfraredReconnect()      // 网络抖动，调度重连
+      } else if (infraredPc?.iceConnectionState === 'failed') {
+        scheduleInfraredReconnect()      // 连接彻底失败，调度重连
       }
     }
 
@@ -3798,7 +3843,7 @@ const startInfraredWebRTCPlayback = async () => {
       type: 'answer',
       sdp: data.sdp
     })
-    infraredLoading.value = false
+    // loading 由 ontrack 回调负责关闭
   } catch (error) {
     infraredError.value = '红外视频播放失败'
     infraredLoading.value = false
@@ -3807,9 +3852,16 @@ const startInfraredWebRTCPlayback = async () => {
 }
 
 const stopInfraredWebRTCPlayback = () => {
+  clearInfraredReconnectTimer()
+  clearInfraredFreezeDetection()
+
   if (infraredPc) {
     infraredPc.close()
     infraredPc = null
+  }
+  // 清除 srcObject，确保下次重新挂载新流
+  if (infraredVideoElement.value) {
+    infraredVideoElement.value.srcObject = null
   }
 }
 
@@ -3835,6 +3887,7 @@ const reloadInfraredStream = () => {
     infraredError.value = '未找到红外视频流'
     return
   }
+  infraredReconnectCount = 0  // 手动重载，重置重连计数
   stopInfraredPlayback()
   infraredStreamUrl.value = ''
   nextTick(() => {
@@ -4085,7 +4138,6 @@ const getMapFile = async (mapName: string, fileName: string): Promise<Blob | nul
       const request = tx.objectStore(MAP_STORE_NAME).get(key)
       request.onsuccess = () => {
         const blob = request.result?.blob || null
-        console.log(`[地图缓存] 读取文件: ${key}, 结果: ${blob ? `${blob.size} 字节` : '不存在'}`)
         resolve(blob)
       }
       request.onerror = () => {
@@ -5234,15 +5286,8 @@ const handleReturnHome = async () => {
       return
     }
     
-    // 调用一键返航API
-    const result = await controlApi.returnHome(dockSn)
-    
-    // 检查结果并提示用户
-    if (result.code === 0) {
-      alert('一键返航指令发送成功！')
-    } else {
-      alert(`一键返航失败: ${result.message}`)
-    }
+    alert('一键返航功能暂不可用（旧控制接口已停用）')
+    return
     
   } catch (error: any) {
     console.error('一键返航失败:', error)
@@ -5803,6 +5848,9 @@ onMounted(async () => {
   document.addEventListener('click', handleGlobalClick)
   window.addEventListener('keydown', handlePointCloudKeydown)
 
+  // 监听机器人切换事件，切换后刷新下拉列表数据
+  window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+
   window.addEventListener('resize', () => {
     alarmTrendChart?.resize()
     taskPieChart1?.resize()
@@ -5877,11 +5925,40 @@ onMounted(async () => {
   // 航线任务进度现在由全局store管理，无需本地轮询
 })
 
+// 切换机器人后刷新所有下拉列表（localStorage 此时已被 Layout.vue 更新为新机器人的数据）
+const handleRobotContextRefreshed = async () => {
+  // 先清空旧机器人的地图/循迹选择，避免 fetchMapList 的 !selectedMap 条件阻止更新
+  selectedMap.value = ''
+  selectedTrack.value = ''
+  selectedPointTask.value = ''
+  selectedMultiTask.value = ''
+  mapList.value = []
+  trackList.value = []
+  pointTaskList.value = []
+  multiTaskList.value = []
+  await fetchMapList()
+  await fetchTrackList()
+  await fetchPointTaskList()
+  await fetchMultiTaskList()
+  // 重新初始化新机器人的视频流
+  await initCameraStreams()
+  initVideoPlayer()
+  initInfraredVideo()
+  // 若已选中地图则刷新点云
+  if (selectedMap.value) {
+    await nextTick()
+    const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
+    await downloadMapFiles(selectedMap.value, updateTime)
+    await refreshPointCloud()
+  }
+}
+
 // 组件卸载时清理
 onUnmounted(() => {
   // 移除全局事件监听
   document.removeEventListener('click', handleGlobalClick)
   window.removeEventListener('keydown', handlePointCloudKeydown)
+  window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   stopPointCloudDragging()
 
   // robotInfoTimer 已废弃，无需清理

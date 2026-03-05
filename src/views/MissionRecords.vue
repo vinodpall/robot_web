@@ -1804,6 +1804,11 @@ const updateCache = async () => {
 }
 
 // 页面加载时获取数据
+// 切换机器人后刷新发布点任务列表
+const handleRobotContextRefreshed = () => {
+  fetchPointTaskList()
+}
+
 onMounted(async () => {
   fetchPointTaskList()
   // 初始化分页输入框
@@ -1816,12 +1821,14 @@ onMounted(async () => {
   // 点击页面空白关闭
   window.addEventListener('click', closeErrorTooltip)
   window.addEventListener('click', closeDropdown)
+  window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 })
 
 // 离开时移除监听
 onUnmounted(() => {
   window.removeEventListener('click', closeErrorTooltip)
   window.removeEventListener('click', closeDropdown)
+  window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   cleanupBlobUrls() // 清理所有blob URL
 })
 

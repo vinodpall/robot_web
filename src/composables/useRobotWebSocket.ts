@@ -323,8 +323,6 @@ export function useRobotWebSocket() {
     const robotParam = robotId ? `?robot_id=${encodeURIComponent(robotId)}` : ''
     const url = `ws://${wsHost}:${wsPort}/v1/ws${robotParam}`
 
-    console.log(`[RobotWS] 连接: ${url}`)
-
     const socket = new WebSocket(url)
     ws.value = socket
 
@@ -333,7 +331,6 @@ export function useRobotWebSocket() {
       isConnecting.value = false
       reconnectDelay = RECONNECT_INIT_DELAY
       connectionError.value = ''
-      console.log('[RobotWS] 已连接')
       // 连接建立时重置心跳计时器，等待第一条 0x1008
       resetHeartbeatTimer()
     }
@@ -352,7 +349,6 @@ export function useRobotWebSocket() {
       isConnecting.value = false
       robotStore.setOnlineStatus(false)
       ws.value = null
-      console.log('[RobotWS] 连接关闭')
 
       if (heartbeatTimer) {
         clearTimeout(heartbeatTimer)
@@ -368,7 +364,6 @@ export function useRobotWebSocket() {
   // ===== 重连（指数退避） =====
   const scheduleReconnect = (robotId?: string) => {
     if (reconnectTimer) clearTimeout(reconnectTimer)
-    console.log(`[RobotWS] ${reconnectDelay}ms 后重连...`)
     reconnectTimer = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_DELAY)
       connect(robotId)

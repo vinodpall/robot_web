@@ -1,6 +1,5 @@
 import { ref, computed } from 'vue'
-import { deviceStatusApi, type DeviceStatus, StatusMaps } from '@/api/deviceStatus'
-import { useDevices } from './useApi'
+import { type DeviceStatus, StatusMaps } from '@/api/deviceStatus'
 
 /**
  * 设备状态管理
@@ -12,81 +11,19 @@ export function useDeviceStatus() {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // 获取缓存的设备SN
-  const { getCachedDeviceSns } = useDevices()
-
-  // 获取设备状态
-  const fetchDeviceStatus = async (deviceSn: string) => {
-    if (!deviceSn) {
-      error.value = '设备SN不能为空'
-      return null
-    }
-
-    loading.value = true
-    error.value = null
-
-    try {
-      const response: any = await deviceStatusApi.getDeviceStatus(deviceSn)
-      deviceStatus.value = (response && (response.data || response)) as DeviceStatus
-      return deviceStatus.value
-    } catch (err: any) {
-      error.value = err.message || '获取设备状态失败'
-      // 只在非网络错误时显示错误信息
-      if (!(err instanceof TypeError && err.message.includes('Failed to fetch'))) {
-        console.error('获取设备状态失败:', err)
-      }
-      return null
-    } finally {
-      loading.value = false
-    }
+  // 获取设备状态（旧 /v1/control 接口已移除）
+  const fetchDeviceStatus = async (_deviceSn?: string) => {
+    return null
   }
 
-  // 获取主要设备状态（使用第一个机场）
+  // 获取主要设备状态（旧 /v1/control 接口已移除）
   const fetchMainDeviceStatus = async () => {
-    const { dockSns } = getCachedDeviceSns()
-
-    if (dockSns.length === 0) {
-
-      return null
-    }
-
-    // 使用第一个机场作为主要设备
-    const mainDeviceSn = dockSns[0]
-
-    const result = await fetchDeviceStatus(mainDeviceSn)
-    return result
+    return null
   }
 
-  // 获取无人机状态
+  // 获取无人机状态（旧 /v1/control 接口已移除）
   const fetchDroneStatus = async () => {
-    const { droneSns } = getCachedDeviceSns()
-
-    if (droneSns.length === 0) {
-
-      return null
-    }
-
-    // 使用第一个无人机作为主要设备
-    const mainDroneSn = droneSns[0]
-    // console.log('获取无人机状态:', mainDroneSn)
-
-    loading.value = true
-    error.value = null
-
-    try {
-      const response: any = await deviceStatusApi.getDeviceStatus(mainDroneSn)
-      droneDeviceStatus.value = (response && (response.data || response)) as DeviceStatus
-      return droneDeviceStatus.value
-    } catch (err: any) {
-      error.value = err.message || '获取无人机状态失败'
-      // 只在非网络错误时显示错误信息
-      if (!(err instanceof TypeError && err.message.includes('Failed to fetch'))) {
-        console.error('获取无人机状态失败:', err)
-      }
-      return null
-    } finally {
-      loading.value = false
-    }
+    return null
   }
 
   // 获取OSD数据（优先从osd.data获取，备用从根级别获取）
