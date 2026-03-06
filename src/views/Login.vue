@@ -85,7 +85,6 @@ import { useUserStore } from '../stores/user'
 import { useAuth } from '../composables/useApi'
 import { initUserPermissions, initAllPermissions } from '../utils/initPermissions'
 import { debugPermissions } from '../utils/permissionDebug'
-import { robotApi, cameraApi, navigationApi } from '../api/services'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -172,136 +171,14 @@ const handleLogin = async () => {
     // 立即跳转，后台异步完成所有初始化（不阻塞界面）
     router.push('/dashboard/home')
 
-    // 后台静默初始化：权限 + 数据预缓存
+    // 后台静默初始化权限
     ;(async () => {
-      // 1. 初始化权限
       try {
         await initAllPermissions()
         await initUserPermissions()
         debugPermissions()
       } catch (err) {
         console.error('权限初始化失败:', err)
-      }
-
-      // 2. 获取机器人列表，并行拉取各类缓存数据
-      try {
-        const robotsResponse = await robotApi.getRobots()
-        if (!robotsResponse?.items?.length) return
-
-        const cachedRobotId = localStorage.getItem('selected_robot_id')
-        const robotId = cachedRobotId || robotsResponse.items[0].robot_id
-
-        // 并行发起：摄像头列表、任务点列表、地图列表、循迹列表
-        const [cameraResponse, trackTaskResponse, mapListResponse, trackListResponse] = await Promise.allSettled([
-          cameraApi.getCameraList(robotId),
-          navigationApi.getAllTrackTaskList(robotId),
-          navigationApi.getMapList(robotId),
-          navigationApi.getTrackList(robotId),
-        ])
-
-        // 处理摄像头列表
-        if (cameraResponse.status === 'fulfilled' && cameraResponse.value?.data) {
-          const cameraList = cameraResponse.value.data
-          localStorage.setItem('camera_list', JSON.stringify(cameraList))
-          // 并行启动前两个摄像头流
-          await Promise.allSettled(
-            cameraList.slice(0, 2).map((cam: any) =>
-              cameraApi.startCameraStream(robotId, cam.CamKey, false)
-            )
-          )
-        }
-
-        // 处理任务点列表
-        if (trackTaskResponse.status === 'fulfilled') {
-          const allTrackTaskList = extractTrackTaskList(trackTaskResponse.value)
-          localStorage.setItem('all_track_task_list', JSON.stringify(allTrackTaskList))
-        } else {
-          console.error('获取循迹任务点列表失败:', trackTaskResponse.reason)
-        }
-
-        // 处理地图列表
-        if (mapListResponse.status === 'fulfilled') {
-          const mapList: string[] = []
-          const mapUpdateTimeMap: Record<string, string> = {}
-          const rawList = mapListResponse.value?.msg?.result || []
-          rawList.forEach((item: string) => {
-            const atIndex = item.indexOf('@')
-            if (atIndex !== -1) {
-              mapList.push(item.substring(0, atIndex))
-              mapUpdateTimeMap[item.substring(0, atIndex)] = item.substring(atIndex + 1)
-            } else {
-              mapList.push(item)
-              mapUpdateTimeMap[item] = ''
-            }
-          })
-          localStorage.setItem('cached_map_list', JSON.stringify(mapList))
-          localStorage.setItem('cached_map_update_time_map', JSON.stringify(mapUpdateTimeMap))
-          if (!localStorage.getItem('selected_map_name') && mapList.length > 0) {
-            localStorage.setItem('selected_map_name', mapList[0])
-          }
-        } else {
-          console.error('获取地图列表失败:', mapListResponse.reason)
-        }
-
-        // 处理循迹列表
-        let rawTrackList: string[] = []
-        if (trackListResponse.status === 'fulfilled') {
-          rawTrackList = trackListResponse.value?.msg?.result || []
-          localStorage.setItem('cached_track_list', JSON.stringify(rawTrackList))
-        } else {
-          console.error('获取循迹列表失败:', trackListResponse.reason)
-        }
-
-        // 兜底：若循迹列表为空，从 all_track_task_list 推导
-        if (!rawTrackList.length) {
-          try {
-            const cachedAllTaskListRaw = localStorage.getItem('all_track_task_list')
-            const allTaskList = cachedAllTaskListRaw ? extractTrackTaskList(JSON.parse(cachedAllTaskListRaw)) : []
-            const derivedTracks = Array.from(
-              new Set(allTaskList.map((task: any) => String(task.track_name || '').trim()).filter(Boolean))
-            )
-            if (derivedTracks.length) {
-              rawTrackList = derivedTracks as string[]
-              localStorage.setItem('cached_track_list', JSON.stringify(derivedTracks))
-            }
-          } catch (e) {
-            console.error('从任务点缓存推导循迹列表失败:', e)
-          }
-        }
-
-        // 并行获取各路线的任务组列表
-        try {
-          const trackSet = Array.from(new Set(rawTrackList.map(item => normalizeTrackName(item)).filter(Boolean)))
-          const taskGroupMap: Record<string, string[]> = {}
-
-          const groupResults = await Promise.allSettled(
-            trackSet.map(trackName => navigationApi.getTaskpointList(robotId, trackName))
-          )
-          trackSet.forEach((trackName, i) => {
-            const r = groupResults[i]
-            const groups = r.status === 'fulfilled' && Array.isArray(r.value?.msg?.result) ? r.value.msg.result : []
-            taskGroupMap[trackName] = Array.from(new Set(groups.map((g: string) => normalizeTaskGroupName(g)).filter(Boolean)))
-            if (r.status === 'rejected') console.error(`获取任务组列表失败: ${trackName}`, r.reason)
-          })
-
-          // 用 all_track_task_list 补齐
-          const cachedAllTaskListRaw = localStorage.getItem('all_track_task_list')
-          if (cachedAllTaskListRaw) {
-            const allTaskList = extractTrackTaskList(JSON.parse(cachedAllTaskListRaw))
-            allTaskList.forEach((task: any) => {
-              const tn = normalizeTrackName(String(task.track_name || ''))
-              const gn = normalizeTaskGroupName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
-              if (!tn || !gn) return
-              if (!taskGroupMap[tn]) taskGroupMap[tn] = []
-              if (!taskGroupMap[tn].includes(gn)) taskGroupMap[tn].push(gn)
-            })
-          }
-          localStorage.setItem('cached_taskpoint_group_map', JSON.stringify(taskGroupMap))
-        } catch (taskGroupErr) {
-          console.error('构建任务组缓存失败:', taskGroupErr)
-        }
-      } catch (err) {
-        console.error('后台数据预缓存失败:', err)
       }
     })()
   } catch (error) {

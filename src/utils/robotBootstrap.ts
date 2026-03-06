@@ -23,41 +23,46 @@ interface RefreshRobotCacheOptions {
   forceResetMapSelection?: boolean
 }
 
+// 判断是否为主动取消的请求错误，是则静默志略
+const isAbortError = (e: any) => e?.name === 'AbortError' || e?.message === 'canceled'
+
+// 第一阶段：仅获取摄像头列表并写入缓存，供主界面尽快启动视频流
+export const refreshCameraCache = async (robotId: string, signal?: AbortSignal) => {
+  if (!robotId) return
+  try {
+    const cameraResponse = await cameraApi.getCameraList(robotId, signal)
+    if (signal?.aborted) return
+    if (cameraResponse && cameraResponse.data) {
+      localStorage.setItem('camera_list', JSON.stringify(cameraResponse.data))
+    }
+  } catch (cameraErr) {
+    if (isAbortError(cameraErr)) return
+    console.error('获取摄像头列表失败:', cameraErr)
+  }
+}
+
 export const refreshRobotRelatedCache = async (
   robotId: string,
-  options: RefreshRobotCacheOptions = {}
+  options: RefreshRobotCacheOptions = {},
+  signal?: AbortSignal
 ) => {
   if (!robotId) return
 
-  try {
-    const cameraResponse = await cameraApi.getCameraList(robotId)
-    if (cameraResponse && cameraResponse.data) {
-      localStorage.setItem('camera_list', JSON.stringify(cameraResponse.data))
-      const cameraList = cameraResponse.data || []
-      for (let i = 0; i < 2; i++) {
-        if (cameraList[i]) {
-          try {
-            await cameraApi.startCameraStream(robotId, cameraList[i].CamKey, false)
-          } catch (_e) {
-            // ignore per-camera failures
-          }
-        }
-      }
-    }
-  } catch (cameraErr) {
-    console.error('获取摄像头列表失败:', cameraErr)
-  }
+  // 摄像头列表已由 refreshCameraCache 单独处理，此处不重复请求
 
   try {
-    const trackTaskResponse = await navigationApi.getAllTrackTaskList(robotId)
+    const trackTaskResponse = await navigationApi.getAllTrackTaskList(robotId, signal)
+    if (signal?.aborted) return
     const allTrackTaskList = extractTrackTaskList(trackTaskResponse)
     localStorage.setItem('all_track_task_list', JSON.stringify(allTrackTaskList))
   } catch (trackErr) {
+    if (isAbortError(trackErr)) return
     console.error('获取循迹任务点列表失败:', trackErr)
   }
 
   try {
-    const mapListResponse = await navigationApi.getMapList(robotId)
+    const mapListResponse = await navigationApi.getMapList(robotId, signal)
+    if (signal?.aborted) return
     const mapList: string[] = []
     const mapUpdateTimeMap: Record<string, string> = {}
     const rawList = mapListResponse?.msg?.result || []
@@ -80,23 +85,31 @@ export const refreshRobotRelatedCache = async (
 
     const currentSelectedMap = localStorage.getItem('selected_map_name') || ''
     const isCurrentMapValid = currentSelectedMap && mapList.includes(currentSelectedMap)
+    // nav_confirmed_map 由 syncMapFromNavigation 写入，表示 WebSocket 已确认的地图，优先级最高
+    const navConfirmedMap = localStorage.getItem('nav_confirmed_map') || ''
 
     if (mapList.length > 0) {
-      if (options.forceResetMapSelection || !isCurrentMapValid) {
+      if (navConfirmedMap && mapList.includes(navConfirmedMap)) {
+        // WebSocket 已确认了导航地图，保留它，不覆盖
+        localStorage.setItem('selected_map_name', navConfirmedMap)
+      } else if (options.forceResetMapSelection || !isCurrentMapValid) {
         localStorage.setItem('selected_map_name', mapList[0])
       }
     } else {
       localStorage.removeItem('selected_map_name')
     }
   } catch (mapErr) {
+    if (isAbortError(mapErr)) return
     console.error('获取地图列表失败:', mapErr)
   }
 
   try {
-    const trackListResponse = await navigationApi.getTrackList(robotId)
+    const trackListResponse = await navigationApi.getTrackList(robotId, signal)
+    if (signal?.aborted) return
     const rawTrackList = trackListResponse?.msg?.result || []
     localStorage.setItem('cached_track_list', JSON.stringify(rawTrackList))
   } catch (trackListErr) {
+    if (isAbortError(trackListErr)) return
     console.error('获取循迹列表失败:', trackListErr)
   }
 
@@ -122,11 +135,14 @@ export const refreshRobotRelatedCache = async (
     const taskGroupMap: Record<string, string[]> = {}
 
     for (const trackName of trackSet) {
+      if (signal?.aborted) return
       try {
-        const resp = await navigationApi.getTaskpointList(robotId, trackName)
+        const resp = await navigationApi.getTaskpointList(robotId, trackName, signal)
+        if (signal?.aborted) return
         const groups = Array.isArray(resp?.msg?.result) ? resp.msg.result : []
         taskGroupMap[trackName] = Array.from(new Set(groups.map((g: string) => normalizeTaskGroupName(g)).filter(Boolean)))
       } catch (err) {
+        if (isAbortError(err)) return
         console.error(`获取任务组列表失败: ${trackName}`, err)
         taskGroupMap[trackName] = []
       }
@@ -148,22 +164,27 @@ export const refreshRobotRelatedCache = async (
 
     localStorage.setItem('cached_taskpoint_group_map', JSON.stringify(taskGroupMap))
   } catch (taskGroupErr) {
+    if (isAbortError(taskGroupErr)) return
     console.error('构建任务组缓存失败:', taskGroupErr)
   }
 
   try {
-    const pointTaskResponse = await navigationApi.getPointTaskList(robotId)
+    const pointTaskResponse = await navigationApi.getPointTaskList(robotId, signal)
+    if (signal?.aborted) return
     const pointTaskList = Array.isArray(pointTaskResponse?.data) ? pointTaskResponse.data : []
     localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList))
   } catch (pointTaskErr) {
+    if (isAbortError(pointTaskErr)) return
     console.error('获取发布点任务列表失败:', pointTaskErr)
   }
 
   try {
-    const multiTaskResponse = await navigationApi.getMultiTaskList(robotId)
+    const multiTaskResponse = await navigationApi.getMultiTaskList(robotId, signal)
+    if (signal?.aborted) return
     const multiTaskList = Array.isArray(multiTaskResponse?.msg) ? multiTaskResponse.msg : []
     localStorage.setItem('cached_multi_task_list', JSON.stringify(multiTaskList))
   } catch (multiTaskErr) {
+    if (isAbortError(multiTaskErr)) return
     console.error('获取多任务组列表失败:', multiTaskErr)
   }
 }

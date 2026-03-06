@@ -234,7 +234,7 @@
     <div class="center-column">
       <!-- 视频播放区域 -->
       <div class="content-on1" @click="closeMenus">
-        <div class="pointcloud-wrapper">
+        <div class="pointcloud-wrapper" :class="{ 'pointcloud-fullscreen': isPointCloudFullscreen }">
           <div class="pointcloud-view">
             <canvas
               ref="pointCloudCanvas"
@@ -247,6 +247,29 @@
             ></canvas>
             <div v-if="pointCloudLoading" class="pcd-overlay loading">点云加载中...</div>
             <div v-else-if="pointCloudError" class="pcd-overlay error">{{ pointCloudError }}</div>
+          </div>
+          <!-- 工具按鈕组 -->
+          <div class="pcd-btn-group">
+            <button class="pcd-tool-btn" @click.stop="centerToRobot" title="定位机器人">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="pcd-tool-btn" @click.stop="togglePointCloudFullscreen" :title="isPointCloudFullscreen ? '退出全屏' : '全屏显示'">
+              <svg v-if="!isPointCloudFullscreen" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 8V3H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M21 8V3H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 16V21H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M21 16V21H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3V8H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 3V8H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 21V16H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 21V16H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -1135,10 +1158,38 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
   }
 })
 
-// cmd_status.map_name 同步地图下拉：导航开启时将地图改为当前运行中的地图
+// 导航开启时，以 WebSocket 返回的地图为准覆盖缓存与下拉选中
+const syncMapFromNavigation = (mapName: string) => {
+  if (!mapName) return
+  const cached = localStorage.getItem('selected_map_name')
+  if (cached !== mapName) {
+    console.log(`[地图同步] 导航实际地图 "${mapName}" 与缓存 "${cached}" 不一致，已覆盖`)
+  }
+  // 若列表中没有该地图，动态插入首位，避免 select 出现空选项
+  if (!mapList.value.includes(mapName)) {
+    mapList.value = [mapName, ...mapList.value]
+  }
+  selectedMap.value = mapName
+  localStorage.setItem('selected_map_name', mapName)
+  // 打标记供 robotBootstrap 判断，防止它在 forceResetMapSelection 时覆盖掉这个值
+  localStorage.setItem('nav_confirmed_map', mapName)
+}
+
+// cmd_status.map_name 变化时同步（导航进行中地图切换）
 watch(() => robotStore.cmdStatus?.map_name, (mapName) => {
   if (mapName && robotStore.cmdStatus?.nav === 1) {
-    selectedMap.value = mapName
+    syncMapFromNavigation(mapName)
+  }
+})
+
+// nav 由 0→1 时立即用当前 map_name 对比并同步
+watch(() => robotStore.cmdStatus?.nav, (nav) => {
+  if (nav === 1) {
+    const mapName = robotStore.cmdStatus?.map_name
+    if (mapName) syncMapFromNavigation(mapName)
+  } else if (nav === 0) {
+    // 导航关闭后清除标记，下次切换机器人时不再受约束
+    localStorage.removeItem('nav_confirmed_map')
   }
 })
 
@@ -1309,6 +1360,7 @@ const pointCloudPanX = sharedPointCloud.panX
 const pointCloudPanY = sharedPointCloud.panY
 const pointCloudPointSize = sharedPointCloud.pointSize
 const isPointCloudDragging = ref(false)
+const isPointCloudFullscreen = ref(false)
 let lastPointerX = 0
 let lastPointerY = 0
 let activePointerId: number | null = null
@@ -1606,6 +1658,13 @@ const handlePointCloudKeydown = (event: KeyboardEvent) => {
     return
   }
 
+  if (event.key === 'Escape' && isPointCloudFullscreen.value) {
+    isPointCloudFullscreen.value = false
+    nextTick(() => drawPointCloud())
+    event.preventDefault()
+    return
+  }
+
   if (event.key === '+' || event.key === '=') {
     pointCloudPointSize.value = clampPointCloudPointSize(pointCloudPointSize.value + 0.1)
     schedulePointCloudRender()
@@ -1635,6 +1694,51 @@ const handlePointCloudPointerMove = (event: PointerEvent) => {
     const clampPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, nextPitch))
     pointCloudRotationX.value = clampPitch
   }
+  schedulePointCloudRender()
+}
+
+const togglePointCloudFullscreen = () => {
+  isPointCloudFullscreen.value = !isPointCloudFullscreen.value
+  nextTick(() => { drawPointCloud() })
+}
+
+// 将视图居中到机器人当前位置
+const centerToRobot = () => {
+  const pose = robotStore.pose
+  const params = pointCloudNormalizationParams.value
+  const canvas = pointCloudCanvas.value
+  if (!pose || !params || !canvas) return
+
+  const { centerX, centerY, centerZ, maxRange } = params
+  if (maxRange < 1e-6) return
+
+  const rect = canvas.getBoundingClientRect()
+  const yaw = pointCloudRotationY.value
+  const pitch = pointCloudRotationX.value
+  const cosYaw = Math.cos(yaw)
+  const sinYaw = Math.sin(yaw)
+  const cosPitch = Math.cos(pitch)
+  const sinPitch = Math.sin(pitch)
+  const baseScale = Math.min(rect.width, rect.height) * 0.8 * pointCloudScale.value
+  const cameraDistance = 2.2
+  const depthScale = 1.4
+
+  // 将机器人坐标归一化
+  const nx = (pose.x - centerX) / maxRange
+  const ny = (pose.y - centerY) / maxRange
+  const nz = (pose.z - centerZ) / maxRange
+
+  // 与 drawPointCloud 相同的坐标变换 + 投影（pan=0 时）
+  const cx2 = nx, cy2 = -nz, cz2 = ny
+  const rx = cx2 * cosYaw + cz2 * sinYaw
+  const rz = -cx2 * sinYaw + cz2 * cosYaw
+  const ry = cy2 * cosPitch - rz * sinPitch
+  const rzF = cy2 * sinPitch + rz * cosPitch
+  const persp = cameraDistance / (cameraDistance - rzF * depthScale)
+
+  // 让机器人投影点居中：panOffset = -(proj 无 pan 时的位移量)
+  pointCloudPanX.value = -(rx * baseScale * persp) / rect.width
+  pointCloudPanY.value = -(ry * baseScale * persp) / rect.height
   schedulePointCloudRender()
 }
 
@@ -3331,48 +3435,51 @@ const initVideoPlayer = () => {
   // 由watch(videoStreamUrl)统一触发播放，避免重复拉流
 }
 
+// 摄像头初始化的当前 AbortController，新一轮开始时取消上一轮
+let cameraInitAbortController: AbortController | null = null
+
 // 初始化摄像头流
-const initCameraStreams = async () => {
-  // 获取机器人ID - 优先从 deviceStore，其次从 localStorage
+const initCameraStreams = async (signal?: AbortSignal) => {
   let robotId = deviceStore.selectedRobotId
-  
   if (!robotId) {
     robotId = localStorage.getItem('selected_robot_id') || ''
   }
-  
-  if (!robotId) {
-    return
+  if (!robotId) return
+
+  // 优先读缓存（robotBootstrap 切换机器人后已预填充）
+  const cachedCameraList = localStorage.getItem('camera_list')
+  let cameraData: any[] | null = null
+  if (cachedCameraList) {
+    try {
+      cameraData = JSON.parse(cachedCameraList)
+    } catch (_) {}
   }
-  
+
+  // 缓存为空时才直接请求接口
+  if (!cameraData || !Array.isArray(cameraData) || cameraData.length === 0) {
+    try {
+      const cameraListResponse = await cameraApi.getCameraList(robotId, signal)
+      if (signal?.aborted) return
+      if (!cameraListResponse?.data || !Array.isArray(cameraListResponse.data) || cameraListResponse.data.length === 0) return
+      cameraData = cameraListResponse.data
+    } catch (_) {
+      return
+    }
+  }
+
   try {
-    const cameraListResponse = await cameraApi.getCameraList(robotId)
-    
-    // 检查响应是否有效
-    if (!cameraListResponse) {
-      return
-    }
-    
-    if (!cameraListResponse.data || !Array.isArray(cameraListResponse.data)) {
-      return
-    }
-    
-    if (cameraListResponse.data.length === 0) {
-      return
-    }
-    
     const videoStreams: any[] = []
-    
     // 只使用前两个摄像头：第一个作为可见光，第二个作为红外
-    const camerasToUse = cameraListResponse.data.slice(0, 2)
-    
+    const camerasToUse = cameraData.slice(0, 2)
+
     for (let i = 0; i < camerasToUse.length; i++) {
+      if (signal?.aborted) return  // 已切换机器人，尽早退出
       const camera = camerasToUse[i]
       try {
-        const streamResponse = await cameraApi.startCameraStream(robotId, camera.CamKey, false)
-        
+        const streamResponse = await cameraApi.startCameraStream(robotId, camera.CamKey, false, signal)
+        if (signal?.aborted) return  // startCameraStream 返回后再检查一次
         // 第一个摄像头作为可见光，第二个摄像头作为红外
         const type: 'drone_visible' | 'drone_infrared' = i === 0 ? 'drone_visible' : 'drone_infrared'
-        
         videoStreams.push({
           type: type,
           url: streamResponse.stream_url,
@@ -3382,7 +3489,8 @@ const initCameraStreams = async () => {
           video_index: i.toString()
         })
       } catch (error) {
-        // 静默处理错误
+        if ((error as any)?.name === 'AbortError' || (error as any)?.message === 'canceled') return
+        // 其他错误静默志略，继续尝试下一个
       }
     }
     
@@ -3491,15 +3599,16 @@ const startVideoPlayback = () => {
 let pc: RTCPeerConnection | null = null
 let isPlaying = false
 
-// 构建SRS API地址
+// 构建SRS API地址（通过 nginx 代理，解决 CORS 问题）
 const buildApiUrl = (webrtcUrl: string) => {
   try {
-    // webrtc://server:8000/app/stream -> http://server:1985
+    // webrtc://server:8000/app/stream -> /rtc-proxy/server
     const url = new URL(webrtcUrl)
-    return `http://${url.hostname}:1985`
+    return `/rtc-proxy/${url.hostname}`
   } catch (error) {
-    // 后备方案
-    return webrtcUrl.replace('webrtc://', 'http://').replace(':8000', ':1985').split('/')[0]
+    // 后备方案：提取主机名
+    const match = webrtcUrl.replace('webrtc://', '').split('/')[0].split(':')[0]
+    return `/rtc-proxy/${match}`
   }
 }
 
@@ -3537,7 +3646,9 @@ const startWebRTCPlayback = async () => {
 
     // 监听连接状态
     pc.onconnectionstatechange = () => {
-      // connection state changed
+      if (pc?.connectionState === 'failed' || pc?.connectionState === 'disconnected') {
+        scheduleWebRTCReconnect()
+      }
     }
 
     // 处理远程流
@@ -3649,6 +3760,8 @@ const stopWebRTCPlayback = () => {
 
 // 停止视频播放
 const stopVideoPlayback = () => {
+  // 清空响应式 URL，确保下次设置相同 URL 时 watch 也能触发
+  videoStreamUrl.value = ''
   // 停止WebRTC播放
   stopWebRTCPlayback()
   
@@ -3802,6 +3915,12 @@ const startInfraredWebRTCPlayback = async () => {
       }, 2000)
     }
 
+    infraredPc.onconnectionstatechange = () => {
+      if (infraredPc?.connectionState === 'failed' || infraredPc?.connectionState === 'disconnected') {
+        scheduleInfraredReconnect()
+      }
+    }
+
     infraredPc.oniceconnectionstatechange = () => {
       if (infraredPc?.iceConnectionState === 'connected') {
         infraredReconnectCount = 0       // 连接成功，重置重连计数
@@ -3866,6 +3985,8 @@ const stopInfraredWebRTCPlayback = () => {
 }
 
 const stopInfraredPlayback = () => {
+  // 清空响应式 URL，确保下次赋相同 URL 时 watch 也能触发
+  infraredStreamUrl.value = ''
   stopInfraredWebRTCPlayback()
   if (infraredVideoPlayer.value) {
     infraredVideoPlayer.value.pause()
@@ -4377,26 +4498,33 @@ const pointTaskList = ref<PointTask[]>([])
 const selectedPointTask = ref('')
 
 const fetchPointTaskList = async () => {
+  // 优先读缓存（robotBootstrap 切换机器人后已预填充）
+  const cached = localStorage.getItem('cached_point_task_list')
+  if (cached) {
+    try {
+      const list = JSON.parse(cached)
+      pointTaskList.value = list.map((task: any) => ({
+        ...task,
+        task_id: String(task.task_id)
+      }))
+      return
+    } catch (_) {}
+  }
+
+  // 缓存为空时才直接请求接口
   const robotId = deviceStore.selectedRobotId
   if (!robotId) return
-  
   try {
     const response = await navigationApi.getPointTaskList(robotId)
     if (response && response.data) {
-      pointTaskList.value = response.data.map(task => ({
+      pointTaskList.value = response.data.map((task: any) => ({
         ...task,
-        task_id: String(task.task_id) // 统一转为字符串存储，方便比较
+        task_id: String(task.task_id)
       }))
-      // 缓存发布点任务列表
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
     }
   } catch (error) {
-  // ...
-    // 尝试从缓存加载
-    const cached = localStorage.getItem('cached_point_task_list')
-    if (cached) {
-      pointTaskList.value = JSON.parse(cached)
-    }
+    pointTaskList.value = []
   }
 }
 
@@ -4436,23 +4564,26 @@ interface MultiTask {
 const multiTaskList = ref<MultiTask[]>([])
 
 const fetchMultiTaskList = async () => {
+  // 优先读缓存（robotBootstrap 切换机器人后已预填充）
+  const cached = localStorage.getItem('cached_multi_task_list')
+  if (cached) {
+    try {
+      multiTaskList.value = JSON.parse(cached)
+      return
+    } catch (_) {}
+  }
+
+  // 缓存为空时才直接请求接口
   const robotId = deviceStore.selectedRobotId
   if (!robotId) return
-  
   try {
     const response = await navigationApi.getMultiTaskList(robotId)
     if (response && response.msg) {
       multiTaskList.value = response.msg
-      // 缓存多任务组列表
       localStorage.setItem('cached_multi_task_list', JSON.stringify(multiTaskList.value))
     }
   } catch (error) {
-  // ...
-    // 尝试从缓存加载
-    const cached = localStorage.getItem('cached_multi_task_list')
-    if (cached) {
-      multiTaskList.value = JSON.parse(cached)
-    }
+    multiTaskList.value = []
   }
 }
 
@@ -5849,6 +5980,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handlePointCloudKeydown)
 
   // 监听机器人切换事件，切换后刷新下拉列表数据
+  window.addEventListener('robot-camera-ready', handleRobotCameraReady)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 
   window.addEventListener('resize', () => {
@@ -5925,8 +6057,34 @@ onMounted(async () => {
   // 航线任务进度现在由全局store管理，无需本地轮询
 })
 
-// 切换机器人后刷新所有下拉列表（localStorage 此时已被 Layout.vue 更新为新机器人的数据）
-const handleRobotContextRefreshed = async () => {
+// 切换机器人第一阶段：camera_list 就绪，立即启动视频流
+const handleRobotCameraReady = async (event: Event) => {
+  const { robotId } = (event as CustomEvent).detail || {}
+  // 若事件携带的 robotId 与当前选中不符，说明是过期回调，直接忽略
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    console.log(`[robot-camera-ready] 过期事件来自 ${robotId}，当前 ${deviceStore.selectedRobotId}，已忽略`)
+    return
+  }
+  // 取消上一轮摄像头初始化（如 A 的 startCameraStream 还在飞行）
+  if (cameraInitAbortController) cameraInitAbortController.abort()
+  cameraInitAbortController = new AbortController()
+  const { signal } = cameraInitAbortController
+
+  stopVideoPlayback()
+  stopInfraredPlayback()
+  await initCameraStreams(signal)
+  if (signal.aborted) return  // 已被新一轮取代
+  initVideoPlayer()
+  initInfraredVideo()
+}
+
+// 切换机器人第二阶段：其余数据就绪，刷新下拉框和点云
+const handleRobotContextRefreshed = async (event: Event) => {
+  const { robotId } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    console.log(`[robot-context-refreshed] 过期事件来自 ${robotId}，当前 ${deviceStore.selectedRobotId}，已忽略`)
+    return
+  }
   // 先清空旧机器人的地图/循迹选择，避免 fetchMapList 的 !selectedMap 条件阻止更新
   selectedMap.value = ''
   selectedTrack.value = ''
@@ -5940,10 +6098,11 @@ const handleRobotContextRefreshed = async () => {
   await fetchTrackList()
   await fetchPointTaskList()
   await fetchMultiTaskList()
-  // 重新初始化新机器人的视频流
-  await initCameraStreams()
-  initVideoPlayer()
-  initInfraredVideo()
+  // fetchMapList 拿到的是缓存值；若导航当前正在运行，以 WebSocket 的地图为最终值
+  const navMapName = robotStore.cmdStatus?.map_name
+  if (robotStore.cmdStatus?.nav === 1 && navMapName) {
+    syncMapFromNavigation(navMapName)
+  }
   // 若已选中地图则刷新点云
   if (selectedMap.value) {
     await nextTick()
@@ -5958,6 +6117,7 @@ onUnmounted(() => {
   // 移除全局事件监听
   document.removeEventListener('click', handleGlobalClick)
   window.removeEventListener('keydown', handlePointCloudKeydown)
+  window.removeEventListener('robot-camera-ready', handleRobotCameraReady)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   stopPointCloudDragging()
 
@@ -7834,6 +7994,54 @@ onActivated(async () => {
 .pcd-overlay.error {
   background: rgba(255, 77, 79, 0.2);
   color: #ff6b6b;
+}
+
+/* 点云工具按鈕组：排列在两框线之间的右下角 */
+.pcd-btn-group {
+  position: absolute;
+  bottom: -20px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+}
+.pcd-tool-btn {
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: rgba(89, 192, 252, 0.9);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+.pcd-tool-btn:hover {
+  color: #fff;
+}
+.pcd-tool-btn svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* 点云全屏模式 */
+.pointcloud-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+/* 全屏时把按钮组收回到可视区域内右下角 */
+.pointcloud-fullscreen .pcd-btn-group {
+  bottom: 16px;
+  right: 16px;
+  z-index: 10000;
 }
 
 .boxGrid-box {

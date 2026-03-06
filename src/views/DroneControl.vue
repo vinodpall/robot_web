@@ -2493,12 +2493,13 @@ let isPlaying = false
 // 构建SRS API地址
 const buildApiUrl = (webrtcUrl: string) => {
   try {
-    // webrtc://server:8000/app/stream -> http://server:1985
+    // 通过 nginx 代理，解决 CORS 问题
     const url = new URL(webrtcUrl)
-    return `http://${url.hostname}:1985`
+    return `/rtc-proxy/${url.hostname}`
   } catch (error: any) {
-    // 后备方案
-    return webrtcUrl.replace('webrtc://', 'http://').replace(':8000', ':1985').split('/')[0]
+    // 后备方案：提取主机名
+    const match = webrtcUrl.replace('webrtc://', '').split('/')[0].split(':')[0]
+    return `/rtc-proxy/${match}`
   }
 }
 

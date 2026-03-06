@@ -111,6 +111,75 @@ function dynamicRobotMiddleware(
   }
 }
 
+// SRS WebRTC 信令代理中间件：处理 /rtc-proxy/{host}/rtc/v1/play/ -> http://{host}:1985/rtc/v1/play/
+// 与 nginx location ~ ^/rtc-proxy/([^/]+)/rtc/v1/play/ 行为一致，解决本地开发 CORS 问题
+function rtcProxyMiddleware(
+  req: import('http').IncomingMessage,
+  res: import('http').ServerResponse,
+  next: () => void
+) {
+  if (!req.url) return next()
+
+  const match = req.url.match(/^\/rtc-proxy\/([^/]+)(\/.*)$/)
+  if (!match) return next()
+
+  const targetHost = match[1]
+  const targetPath = match[2]  // /rtc/v1/play/ ...
+
+  const headers: Record<string, string | string[] | undefined> = { ...req.headers }
+  headers['host'] = `${targetHost}:1985`
+
+  const proxyReq = httpModule.request(
+    { hostname: targetHost, port: 1985, path: targetPath, method: req.method, headers },
+    (proxyRes) => {
+      const responseHeaders: Record<string, string | string[]> = {
+        ...(proxyRes.headers as Record<string, string | string[]>),
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, responseHeaders)
+        res.end()
+        return
+      }
+      res.writeHead(proxyRes.statusCode!, responseHeaders)
+      proxyRes.pipe(res)
+    }
+  )
+
+  proxyReq.on('error', (err) => {
+    console.error('[RTC代理] 转发失败:', err.message, `-> ${targetHost}:1985${targetPath}`)
+    if (!res.headersSent) {
+      res.writeHead(502)
+      res.end('Bad Gateway')
+    }
+  })
+
+  proxyReq.setTimeout(10000, () => {
+    console.error('[RTC代理] 请求超时:', `${targetHost}:1985${targetPath}`)
+    proxyReq.destroy()
+    if (!res.headersSent) {
+      res.writeHead(504)
+      res.end('Gateway Timeout')
+    }
+  })
+
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS' || req.method === undefined) {
+    proxyReq.end()
+  } else {
+    req.pipe(proxyReq)
+    req.on('error', (err) => {
+      console.error('[RTC代理] 请求流错误:', err.message)
+      proxyReq.destroy()
+      if (!res.headersSent) {
+        res.writeHead(500)
+        res.end('Internal Server Error')
+      }
+    })
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // 加载环境变量
@@ -151,9 +220,11 @@ export default defineConfig(({ mode }) => {
         name: 'dynamic-robot-proxy',
         configureServer(server) {
           server.middlewares.use(dynamicRobotMiddleware)
+          server.middlewares.use(rtcProxyMiddleware)
         },
         configurePreviewServer(server) {
           server.middlewares.use(dynamicRobotMiddleware)
+          server.middlewares.use(rtcProxyMiddleware)
         }
       }
     ],

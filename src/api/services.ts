@@ -996,8 +996,8 @@ export const robotApi = {
 // 导航管理接口
 export const navigationApi = {
   // 获取地图列表
-  getMapList: (robotId: string) => {
-    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/map_list`)
+  getMapList: (robotId: string, signal?: AbortSignal) => {
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/map_list`, undefined, { signal })
   },
   // 删除地图
   deleteMap: (robotId: string, mapName: string) => {
@@ -1008,15 +1008,15 @@ export const navigationApi = {
     return apiClient.post(`/navigation/${robotId}/ctrl_nav`, data)
   },
   // 获取循迹任务列表
-  getTrackList: (robotId: string) => {
-    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/track_list`)
+  getTrackList: (robotId: string, signal?: AbortSignal) => {
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/track_list`, undefined, { signal })
   },
   // 获取关键点文件列表
-  getTaskpointList: (robotId: string, trackName: string) => {
-    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/taskpoint_list`, { track_name: trackName })
+  getTaskpointList: (robotId: string, trackName: string, signal?: AbortSignal) => {
+    return apiClient.get<{ msg: { error_code: number; error_msg: string; result: string[] }; request_id: string }>(`/navigation/${robotId}/taskpoint_list`, { track_name: trackName }, { signal })
   },
   // 获取所有循迹任务点列表
-  getAllTrackTaskList: (robotId: string) => {
+  getAllTrackTaskList: (robotId: string, signal?: AbortSignal) => {
     return apiClient.get<{
       data: Array<{
         createtime: string;
@@ -1042,11 +1042,11 @@ export const navigationApi = {
         type_id?: string;
       }>;
       request_id: string;
-    }>(`/tracks/${robotId}/alltask_list`)
+    }>(`/tracks/${robotId}/alltask_list`, undefined, { signal })
   },
   // 获取发布点任务列表
-  getPointTaskList: (robotId: string) => {
-    return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/task_list`)
+  getPointTaskList: (robotId: string, signal?: AbortSignal) => {
+    return apiClient.get<{ data: { isStart: boolean; task_id: string; task_name: string; taskcontent: any[] }[]; request_id: string }>(`/taskpoints/${robotId}/task_list`, undefined, { signal })
   },
   // 更新发布点任务列表
   updatePointTaskList: (robotId: string, data: { data: { task_id: string; task_name: string; taskcontent: any[] }[] }) => {
@@ -1074,8 +1074,8 @@ export const navigationApi = {
     return apiClient.post(`/taskpoints/${robotId}/stop_task`, data)
   },
   // 获取多任务组列表
-  getMultiTaskList: (robotId: string) => {
-    return apiClient.get<{ msg: { multitask_id: string; multitask_name: string; multitask_list: any[] }[]; request_id: string }>(`/multitasks/${robotId}/multitask_list`)
+  getMultiTaskList: (robotId: string, signal?: AbortSignal) => {
+    return apiClient.get<{ msg: { multitask_id: string; multitask_name: string; multitask_list: any[] }[]; request_id: string }>(`/multitasks/${robotId}/multitask_list`, undefined, { signal })
   },
   // 获取任务类型列表
   getTaskTypeList: (robotId: string) => {
@@ -1423,14 +1423,15 @@ export interface CameraInfo {
 
 export const cameraApi = {
   // 获取摄像头列表
-  getCameraList: (robotId: string) => {
-    return apiClient.get<{ data: CameraInfo[]; request_id: string }>(`/cameras/${robotId}/list`)
+  getCameraList: (robotId: string, signal?: AbortSignal) => {
+    return apiClient.get<{ data: CameraInfo[]; request_id: string }>(`/cameras/${robotId}/list`, undefined, { signal })
   },
   // 启动摄像头流（webrtc）
-  startCameraStream: (robotId: string, camKey: string, useSubStream = false) => {
+  startCameraStream: (robotId: string, camKey: string, useSubStream = false, signal?: AbortSignal) => {
     return apiClient.post<{ message: string; cam_key: string; stream_url: string; rtmp_push_url: string }>(
       `/cameras/${robotId}/stream/start`,
-      { cam_key: camKey, use_sub_stream: useSubStream }
+      { cam_key: camKey, use_sub_stream: useSubStream },
+      { signal }
     )
   },
   // 停止摄像头流

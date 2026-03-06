@@ -120,7 +120,7 @@ import { useUserStore } from '../stores/user'
 import { useDeviceStore } from '../stores/device'
 import { robotApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
-import { refreshRobotRelatedCache } from '../utils/robotBootstrap'
+import { refreshRobotRelatedCache, refreshCameraCache } from '../utils/robotBootstrap'
 // 导入背景图片
 import titleBg from '/src/assets/source_data/bg_data/title.png'
 
@@ -238,12 +238,37 @@ const toggleStop = async () => {
   }
 }
 
+// 每次切换机器人时递增，用于丢弃已过期的异步回调
+let switchToken = 0
+// 用于取消屚小请求的 AbortController
+let currentAbortController: AbortController | null = null
+
 const refreshRobotContext = async (robotId: string) => {
+  // 中止上一个机器人的所有正在飞行的请求
+  if (currentAbortController) currentAbortController.abort()
+  currentAbortController = new AbortController()
+  const { signal } = currentAbortController
+
+  const myToken = ++switchToken
+
   await fetchDeviceStatus(robotId)
-  await refreshRobotRelatedCache(robotId, { forceResetMapSelection: true })
-  window.dispatchEvent(new CustomEvent('robot-context-refreshed', {
+  if (switchToken !== myToken) return // 已切换到其他机器人，丢弃
+
+  // 第一阶段：仅拉取摄像头列表，立即通知主界面启动视频
+  await refreshCameraCache(robotId, signal)
+  if (switchToken !== myToken) return // 丢弃
+
+  window.dispatchEvent(new CustomEvent('robot-camera-ready', {
     detail: { robotId, timestamp: Date.now() }
   }))
+
+  // 第二阶段：后台加载其余数据（地图、循迹、任务组等），完成后再通知下拉框刷新
+  refreshRobotRelatedCache(robotId, { forceResetMapSelection: true }, signal).then(() => {
+    if (switchToken !== myToken) return // 已过期，丢弃
+    window.dispatchEvent(new CustomEvent('robot-context-refreshed', {
+      detail: { robotId, timestamp: Date.now() }
+    }))
+  })
 }
 
 // 监听选中的机器人变化，切换后强制重拉接口
