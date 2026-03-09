@@ -10,7 +10,7 @@
           可见光视频
         </div>
         <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
-          <div class="video-only-wrapper" style="border-radius: 0; overflow: hidden;">
+          <div class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
             <video 
               ref="videoElement"
               class="video-only-element"
@@ -22,6 +22,11 @@
             >
               您的浏览器不支持视频播放
             </video>
+            <!-- 重连 overlay：保留最后一帧，叠加半透明提示 -->
+            <div v-if="webrtcReconnecting" class="video-reconnect-overlay">
+              <div class="video-reconnect-spinner"></div>
+              <span class="video-reconnect-text">信号重连中...</span>
+            </div>
           </div>
         </div>
       </div>
@@ -33,7 +38,7 @@
           红外视频
         </div>
         <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
-          <div class="video-only-wrapper" style="border-radius: 0; overflow: hidden;">
+          <div class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
             <video 
               ref="infraredVideoElement"
               class="video-only-element"
@@ -46,6 +51,11 @@
             >
               您的浏览器不支持视频播放
             </video>
+            <!-- 红外重连 overlay -->
+            <div v-if="infraredReconnecting" class="video-reconnect-overlay">
+              <div class="video-reconnect-spinner"></div>
+              <span class="video-reconnect-text">信号重连中...</span>
+            </div>
           </div>
         </div>
       </div>
@@ -342,21 +352,21 @@
                   <div class="b-top-rightDiv">
                     <img src="@/assets/source_data/speed.png" alt="" />
                   <div>
-                    <p>{{ robotStore.currentSpeed !== null ? robotStore.currentSpeed.toFixed(2) + ' m/s' : '--' }}</p>
+                    <p>{{ robotStore.currentSpeed !== null ? robotStore.currentSpeed.toFixed(2) + ' m/s' : '0.00 m/s' }}</p>
                       <p>当前速度</p>
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
                   <img src="@/assets/source_data/today_time.png" alt="" />
                   <div>
-                    <p>{{ robotStore.currentMileage !== null ? robotStore.currentMileage.toFixed(1) + ' m' : '--' }}</p>
-                      <p>本次行走里程</p>
+                    <p>{{ formatBattery(robotBatteryLevel) }}</p>
+                      <p>当前剩余电量</p>
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
                   <img src="@/assets/source_data/total_miles.png" alt="" />
                   <div>
-                    <p>{{ robotStore.totalMileage !== null ? robotStore.totalMileage.toFixed(1) + ' m' : '--' }}</p>
+                    <p>{{ robotStore.totalMileage !== null ? (robotStore.totalMileage / 1000).toFixed(3) + ' km' : '0 km' }}</p>
                       <p>累计行走里程</p>
                   </div>
                 </div>
@@ -382,20 +392,20 @@
                 </div>
                 <div class="status-item">
                   <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/altitude.svg" alt="角度" />
-                    <span class="label">角度</span>
+                    <img src="@/assets/source_data/svg_data/altitude.svg" alt="高度" />
+                    <span class="label">高度</span>
                   </div>
-                  <span class="value">{{ robotStore.pose ? (robotStore.pose.theta * 180 / Math.PI).toFixed(1) + '°' : '--' }}</span>
+                  <span class="value">{{ robotStore.pose ? robotStore.pose.z.toFixed(3) + ' m' : '--' }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img 
-                      :src="robotStore.isCharging ? droneBatteryChargeIcon : droneBatteryIcon" 
-                      alt="电量" 
+                      src="@/assets/source_data/svg_data/robot_source/angle.svg"
+                      alt="角度" 
                     />
-                    <span class="label">电量</span>
+                    <span class="label">角度</span>
                   </div>
-                  <span class="value">{{ formatBattery(robotBatteryLevel) }}</span>
+                  <span class="value">{{ robotStore.pose ? (robotStore.pose.theta * 180 / Math.PI).toFixed(1) + '°' : '--' }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
@@ -941,9 +951,9 @@ const shouldDownloadTrajectory = (trackName: string, serverUpdateTime: string): 
 }
 
 // 下载单个轨迹文件
-const downloadTrajectoryFile = async (trackName: string): Promise<Blob | null> => {
+const downloadTrajectoryFile = async (trackName: string, robotIp: string): Promise<Blob | null> => {
   // 轨迹文件名和文件夹同名
-  const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trackName}/${trackName}.txt`
+  const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trackName}/${trackName}.txt&robot_ip=${robotIp}`
   try {
     const response = await fetch(url, { method: 'GET' })
     if (!response.ok) return null
@@ -954,7 +964,7 @@ const downloadTrajectoryFile = async (trackName: string): Promise<Blob | null> =
 }
 
 // 下载所有轨迹文件（切换地图时调用）
-const downloadAllTrajectoryFiles = async (trackList: string[]) => {
+const downloadAllTrajectoryFiles = async (trackList: string[], robotIp: string) => {
   // trackList 形如 [map1_track1@20260121, map1_track2@20260120]
   for (const trackRaw of trackList) {
     const atIndex = trackRaw.indexOf('@')
@@ -962,7 +972,7 @@ const downloadAllTrajectoryFiles = async (trackList: string[]) => {
     const updateTime = atIndex > -1 ? trackRaw.substring(atIndex + 1) : ''
     if (!trackName) continue
     if (!shouldDownloadTrajectory(trackName, updateTime)) continue
-    const blob = await downloadTrajectoryFile(trackName)
+    const blob = await downloadTrajectoryFile(trackName, robotIp)
     if (blob) {
       await saveTrajectoryFile(trackName, blob)
       updateTrajectoryConfig(trackName, updateTime)
@@ -1161,7 +1171,7 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
 // 导航开启时，以 WebSocket 返回的地图为准覆盖缓存与下拉选中
 const syncMapFromNavigation = (mapName: string) => {
   if (!mapName) return
-  const cached = localStorage.getItem('selected_map_name')
+  const cached = taskExecutionStore.selectedMapName
   if (cached !== mapName) {
     console.log(`[地图同步] 导航实际地图 "${mapName}" 与缓存 "${cached}" 不一致，已覆盖`)
   }
@@ -1170,7 +1180,6 @@ const syncMapFromNavigation = (mapName: string) => {
     mapList.value = [mapName, ...mapList.value]
   }
   selectedMap.value = mapName
-  localStorage.setItem('selected_map_name', mapName)
   // 打标记供 robotBootstrap 判断，防止它在 forceResetMapSelection 时覆盖掉这个值
   localStorage.setItem('nav_confirmed_map', mapName)
 }
@@ -1198,6 +1207,17 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
   if (!info) return
   if (robotStore.cmdStatus?.track === 1 && info.track_name) {
     const normalizedTrackName = normalizeTrackName(info.track_name)
+
+    // 若下拉列表中没有该轨迹（缓存为空或机器人正在运行新任务），动态插入并写入缓存
+    if (!filteredTrackList.value.includes(normalizedTrackName)) {
+      if (!trackList.value.includes(normalizedTrackName)) {
+        trackList.value = [normalizedTrackName, ...trackList.value]
+        try {
+          localStorage.setItem('cached_track_list', JSON.stringify(trackList.value))
+        } catch { /* 存储失败静默忽略 */ }
+      }
+    }
+
     selectedTrack.value = normalizedTrackName
     // 同时更新取消时需要的任务参数
     activeTrackInfo.value = {
@@ -2145,19 +2165,36 @@ const overlayTrackTrajectory = async (trackName: string) => {
         const trimmed = line.trim()
         if (!trimmed || trimmed.startsWith('#')) continue
         const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
-        // 尝试 index, x, y, z 格式（4列+）
-        if (parts.length >= 4) {
-          const v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2]), v3 = parseFloat(parts[3])
-          if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
-            trajectoryPoints.push({ x: v1, y: v2, z: v3 })
+        const len = parts.length
+        // 6列：index, x, y, z, ... 使用实际 z
+        if (len >= 6) {
+          const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+            trajectoryPoints.push({ x, y, z })
             continue
           }
         }
-        // 尝试 x, y, z 格式（3列）
-        if (parts.length >= 3) {
-          const v0 = parseFloat(parts[0]), v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2])
-          if (!isNaN(v0) && !isNaN(v1) && !isNaN(v2)) {
-            trajectoryPoints.push({ x: v0, y: v1, z: v2 })
+        // 5列：index, x, y, ... z 置为 0
+        if (len === 5) {
+          const x = parseFloat(parts[1]), y = parseFloat(parts[2])
+          if (!isNaN(x) && !isNaN(y)) {
+            trajectoryPoints.push({ x, y, z: 0 })
+            continue
+          }
+        }
+        // 4列：index, x, y, z 使用实际 z
+        if (len === 4) {
+          const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+            trajectoryPoints.push({ x, y, z })
+            continue
+          }
+        }
+        // 3列：x, y, z 使用实际 z
+        if (len === 3) {
+          const x = parseFloat(parts[0]), y = parseFloat(parts[1]), z = parseFloat(parts[2])
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+            trajectoryPoints.push({ x, y, z })
           }
         }
       }
@@ -2514,9 +2551,9 @@ const fetchLatestAlarmLogs = async () => {
     if (!res.ok) return
     const json = await res.json()
     const rows: any[] = json.data?.data || []
-    const dxrBase = getCurrentEnvironment() === 'internet'
+    const dxrBase = robotIp ? `http://${robotIp}:81` : (getCurrentEnvironment() === 'internet'
       ? 'http://10.10.1.3:81'
-      : 'http://172.16.88.152:81'
+      : 'http://172.16.88.152:81')
     const formatTs = (ts: number | null) => {
       if (!ts) return '--'
       const ms = ts > 1e10 ? ts : ts * 1000
@@ -3306,6 +3343,8 @@ const updateMapMarkers = (shouldCenter = false) => {
 
 // 视频播放控制相关
 const isVideoPlaying = ref(false)
+const webrtcReconnecting = ref(false)   // 可见光重连中（保留最后一帧）
+const infraredReconnecting = ref(false) // 红外重连中（保留最后一帧）
 const currentTime = ref('00:00')
 const totalTime = ref('00:00')
 const infraredVideoElement = ref<HTMLVideoElement | null>(null)
@@ -3348,12 +3387,16 @@ const clearWebRTCFreezeDetection = () => {
 }
 const scheduleWebRTCReconnect = () => {
   if (webrtcReconnectTimer) return // 已有待执行的重连
-  if (webrtcReconnectCount >= WEBRTC_MAX_RECONNECT) return // 超过上限
+  if (webrtcReconnectCount >= WEBRTC_MAX_RECONNECT) {
+    webrtcReconnecting.value = false
+    return
+  }
   webrtcReconnectCount++
+  webrtcReconnecting.value = true  // 显示 overlay，保留最后一帧
   const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * webrtcReconnectCount, 15000)
   webrtcReconnectTimer = setTimeout(() => {
     webrtcReconnectTimer = null
-    stopWebRTCPlayback()
+    stopWebRTCPlaybackForReconnect()  // 只关连接，不清 srcObject
     startWebRTCPlayback()
   }, delay)
 }
@@ -3385,13 +3428,17 @@ const clearInfraredFreezeDetection = () => {
 }
 const scheduleInfraredReconnect = () => {
   if (infraredReconnectTimer) return
-  if (infraredReconnectCount >= WEBRTC_MAX_RECONNECT) return
+  if (infraredReconnectCount >= WEBRTC_MAX_RECONNECT) {
+    infraredReconnecting.value = false
+    return
+  }
   infraredReconnectCount++
+  infraredReconnecting.value = true  // 显示 overlay，保留最后一帧
   const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * infraredReconnectCount, 15000)
   infraredReconnectTimer = setTimeout(() => {
     infraredReconnectTimer = null
-    stopInfraredPlayback()
-    startInfraredPlayback()
+    stopInfraredWebRTCPlaybackForReconnect()  // 只关连接，不清 srcObject
+    startInfraredPlayback(true)  // keepFrame=true，跳过内部 stop
   }, delay)
 }
 const startInfraredFreezeDetection = () => {
@@ -3654,33 +3701,32 @@ const startWebRTCPlayback = async () => {
     // 处理远程流
     pc.ontrack = (e) => {
       if (videoElement.value) {
-        // 只在第一次设置srcObject
-        if (!videoElement.value.srcObject) {
-          videoElement.value.srcObject = e.streams[0]
-          
-          // 强制设置WebRTC视频播放器样式
-          videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-          
-          const videoEl = videoElement.value
-          
-          videoEl.addEventListener('error', (e) => console.error('[WebRTC播放] 事件: error', e))
-          
-          // 等待视频流准备好后再播放
-          videoEl.onloadedmetadata = () => {
+        // 新流到来时直接替换 srcObject（重连时旧流已保留最后一帧）
+        videoElement.value.srcObject = e.streams[0]
+        webrtcReconnecting.value = false  // 隐藏 overlay
+        
+        // 强制设置WebRTC视频播放器样式
+        videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+        
+        const videoEl = videoElement.value
+        
+        videoEl.addEventListener('error', (e) => console.error('[WebRTC播放] 事件: error', e))
+        
+        // 等待视频流准备好后再播放
+        videoEl.onloadedmetadata = () => {
+          videoEl.play().catch(err => {
+            console.error('[WebRTC播放] ❌ 视频播放失败:', err)
+          })
+        }
+        
+        // 添加超时机制：如果2秒后metadata还没加载，尝试强制播放
+        setTimeout(() => {
+          if (videoEl.readyState === 0) {
             videoEl.play().catch(err => {
-              console.error('[WebRTC播放] ❌ 视频播放失败:', err)
+              console.error('[WebRTC播放] ❌ 强制播放失败:', err)
             })
           }
-          
-          // 添加超时机制：如果2秒后metadata还没加载，尝试强制播放
-          setTimeout(() => {
-            if (videoEl.readyState === 0) {
-              videoEl.play().catch(err => {
-                console.error('[WebRTC播放] ❌ 强制播放失败:', err)
-              })
-            }
-          }, 2000)
-        }
+        }, 2000)
       } else {
         console.error('[WebRTC播放] ❌ videoElement.value 为空')
       }
@@ -3690,7 +3736,8 @@ const startWebRTCPlayback = async () => {
     pc.oniceconnectionstatechange = () => {
       if (pc?.iceConnectionState === 'connected') {
         isPlaying = true
-        webrtcReconnectCount = 0       // 连接成功，重置重连计数
+        webrtcReconnectCount = 0        // 连接成功，重置重连计数
+        webrtcReconnecting.value = false // 隐藏 overlay
         startWebRTCFreezeDetection()   // 启动画面冻结检测
       } else if (pc?.iceConnectionState === 'disconnected') {
         scheduleWebRTCReconnect()      // 网络抖动，调度重连
@@ -3741,10 +3788,18 @@ const startWebRTCPlayback = async () => {
   }
 }
 
-// 停止WebRTC播放
+// 仅关闭连接，不清空 srcObject（重连时调用，保留最后一帧）
+const stopWebRTCPlaybackForReconnect = () => {
+  clearWebRTCFreezeDetection()
+  if (pc) { pc.close(); pc = null }
+  isPlaying = false
+}
+
+// 停止WebRTC播放（完全停止，清空画面）
 const stopWebRTCPlayback = () => {
   clearWebRTCReconnectTimer()
   clearWebRTCFreezeDetection()
+  webrtcReconnecting.value = false
 
   if (pc) {
     pc.close()
@@ -3801,7 +3856,7 @@ const initInfraredVideo = () => {
   }
 }
 
-const startInfraredPlayback = () => {
+const startInfraredPlayback = (keepFrame = false) => {
   if (!infraredVideoElement.value || !infraredStreamUrl.value) {
     console.warn('[红外视频播放] infraredVideoElement 或 infraredStreamUrl 为空，跳过播放')
     return
@@ -3822,7 +3877,7 @@ const startInfraredPlayback = () => {
   videoEl.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
 
   if (infraredStreamUrl.value.startsWith('webrtc://')) {
-    startInfraredWebRTCPlayback()
+    startInfraredWebRTCPlayback(keepFrame)
     return
   }
 
@@ -3864,7 +3919,7 @@ const startInfraredPlayback = () => {
   })
 }
 
-const startInfraredWebRTCPlayback = async () => {
+const startInfraredWebRTCPlayback = async (keepFrame = false) => {
   const serverUrl = infraredStreamUrl.value
   if (!serverUrl || !infraredVideoElement.value) {
     infraredLoading.value = false
@@ -3872,7 +3927,11 @@ const startInfraredWebRTCPlayback = async () => {
   }
 
   try {
-    stopInfraredWebRTCPlayback()
+    // 重连时（keepFrame=true）已由 scheduleInfraredReconnect 内调用 stopInfraredWebRTCPlaybackForReconnect
+    // 直接开始即可，不需要再次 stop
+    if (!keepFrame) {
+      stopInfraredWebRTCPlayback()
+    }
     infraredPc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' }
@@ -3885,8 +3944,9 @@ const startInfraredWebRTCPlayback = async () => {
         return
       }
       
-      // 每次 ontrack 都重新挂载流（stop 时已清除 srcObject）
+      // 新流到来，直接替换 srcObject（重连时旧流已保留最后一帧）
       infraredVideoElement.value.srcObject = e.streams[0]
+      infraredReconnecting.value = false  // 隐藏 overlay
       infraredVideoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
       
       const videoEl = infraredVideoElement.value
@@ -3924,6 +3984,7 @@ const startInfraredWebRTCPlayback = async () => {
     infraredPc.oniceconnectionstatechange = () => {
       if (infraredPc?.iceConnectionState === 'connected') {
         infraredReconnectCount = 0       // 连接成功，重置重连计数
+        infraredReconnecting.value = false // 隐藏 overlay
         startInfraredFreezeDetection()   // 启动画面冻结检测
       } else if (infraredPc?.iceConnectionState === 'disconnected') {
         scheduleInfraredReconnect()      // 网络抖动，调度重连
@@ -3970,9 +4031,16 @@ const startInfraredWebRTCPlayback = async () => {
   }
 }
 
+// 仅关闭连接，不清空 srcObject（重连时调用，保留最后一帧）
+const stopInfraredWebRTCPlaybackForReconnect = () => {
+  clearInfraredFreezeDetection()
+  if (infraredPc) { infraredPc.close(); infraredPc = null }
+}
+
 const stopInfraredWebRTCPlayback = () => {
   clearInfraredReconnectTimer()
   clearInfraredFreezeDetection()
+  infraredReconnecting.value = false
 
   if (infraredPc) {
     infraredPc.close()
@@ -4020,7 +4088,11 @@ const reloadInfraredStream = () => {
 const selectedWayline = ref('')
 const selectedMultiTask = ref('')
 const mapList = ref<string[]>([])
-const selectedMap = ref('')
+// selectedMap 由 taskExecutionStore 全局驱动，实现多页面同步
+const selectedMap = computed({
+  get: () => taskExecutionStore.selectedMapName,
+  set: (v: string) => taskExecutionStore.setSelectedMapName(v)
+})
 const showWaylineDropdown = ref(false)
 
 // 导航、INS、MSF 状态（初始值直接读取 store，避免 watch immediate 顺序问题）
@@ -4391,11 +4463,11 @@ const fetchMapList = async () => {
   mapList.value = cached ? JSON.parse(cached) : []
   mapUpdateTimeMap.value = cachedTimeMap ? JSON.parse(cachedTimeMap) : {}
 
-  const cachedMapName = localStorage.getItem('selected_map_name')
+  const cachedMapName = taskExecutionStore.selectedMapName
   if (cachedMapName && mapList.value.includes(cachedMapName)) {
-    selectedMap.value = cachedMapName
-  } else if (mapList.value.length > 0 && !selectedMap.value) {
-    selectedMap.value = mapList.value[0]
+    taskExecutionStore.setSelectedMapName(cachedMapName)
+  } else if (mapList.value.length > 0 && !taskExecutionStore.selectedMapName) {
+    taskExecutionStore.setSelectedMapName(mapList.value[0])
   }
 }
 
@@ -4443,11 +4515,7 @@ const filteredTrackList = computed(() => {
 
 // 监听地图变化，重置选中的循迹任务并下载地图文件
 watch(selectedMap, async (newMapName) => {
-  // 缓存当前选中的地图名称，供其他页面（如Mission.vue, MissionRecords.vue）使用
-  if (newMapName) {
-    localStorage.setItem('selected_map_name', newMapName)
-  }
-  
+  // store setter 已写入 localStorage，无需再重复写入
   selectedTrack.value = ''
   // 自动选择第一个
   if (filteredTrackList.value.length > 0) {
@@ -4465,7 +4533,8 @@ watch(selectedMap, async (newMapName) => {
       if (trackList.value.length > 0) {
         // 只处理属于当前地图的轨迹
         const relatedTracks = trackList.value.filter(track => track.startsWith(newMapName + '_'))
-        await downloadAllTrajectoryFiles(relatedTracks)
+        const robotIp = deviceStore.selectedRobot?.ip_address || ''
+        await downloadAllTrajectoryFiles(relatedTracks, robotIp)
       }
 
       // 地图文件和轨迹文件下载/验证完成后，刷新点云图
@@ -8566,6 +8635,36 @@ onActivated(async () => {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* 视频重连 overlay：保留最后一帧，叠加半透明提示 */
+.video-reconnect-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 10;
+  pointer-events: none;
+}
+.video-reconnect-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: video-spin 0.8s linear infinite;
+}
+.video-reconnect-text {
+  color: #fff;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+@keyframes video-spin {
+  to { transform: rotate(360deg); }
 }
 
 .right-controls {

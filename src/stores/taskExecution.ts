@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { useRobotStore } from './robot'
 
 const MULTI_RUNNING_KEY = 'multi_task_running'
+const SELECTED_MAP_KEY = 'selected_map_name'
 
 export const useTaskExecutionStore = defineStore('taskExecution', () => {
   const robotStore = useRobotStore()
@@ -10,6 +11,24 @@ export const useTaskExecutionStore = defineStore('taskExecution', () => {
   const initialMultiRunning =
     typeof window !== 'undefined' ? localStorage.getItem(MULTI_RUNNING_KEY) === '1' : false
   const multiTaskRunning = ref(initialMultiRunning)
+
+  // ===== 全局选中地图（供首页、导航页、路线录制页共享） =====
+  const selectedMapName = ref(
+    typeof window !== 'undefined' ? (localStorage.getItem(SELECTED_MAP_KEY) || '') : ''
+  )
+
+  const setSelectedMapName = (name: string) => {
+    selectedMapName.value = name
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(SELECTED_MAP_KEY, name)
+    }
+  }
+
+  /** 地图是否锁定（导航/INS/MSF 任一开启时不允许切换） */
+  const isMapSelectionLocked = computed(() => {
+    const cmd = robotStore.cmdStatus
+    return cmd?.nav === 1 || cmd?.ins === 1 || cmd?.msf === 1
+  })
 
   const persistMultiRunning = (running: boolean) => {
     multiTaskRunning.value = running
@@ -76,5 +95,8 @@ export const useTaskExecutionStore = defineStore('taskExecution', () => {
     markMultiTaskStarted,
     markMultiTaskStopped,
     setNavPaused,
+    selectedMapName,
+    setSelectedMapName,
+    isMapSelectionLocked,
   }
 })

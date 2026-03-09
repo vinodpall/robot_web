@@ -22,6 +22,7 @@ export interface CmdStatusTrackInfo {
 
 export interface CmdStatusData {
   ins: number
+  ins_origin: number   // INS 初始化状态（0:未初始化, 1:初始化中/已初始化）
   track: number
   charge: number
   track_record: number

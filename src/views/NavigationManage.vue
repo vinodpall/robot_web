@@ -204,6 +204,11 @@
                     <span class="nav-info-label">MSF状态:</span>
                     <span class="nav-info-value">{{ navData.msfStatus }}</span>
                   </div>
+
+                  <div class="nav-info-item">
+                    <span class="nav-info-label">INS初始化:</span>
+                    <span class="nav-info-value">{{ navData.insOrigin }}</span>
+                  </div>
                 </div>
 
                 <!-- 右侧地图可视化区域 -->
@@ -679,9 +684,11 @@ import type { MeshData } from '../utils/threemfParser'
 import { useRobotStore } from '../stores/robot'
 import { navigationApi, mapFileApi } from '../api/services'
 import { useDeviceStore } from '../stores/device'
+import { useTaskExecutionStore } from '../stores/taskExecution'
 
 const deviceStore = useDeviceStore()
 const robotStore = useRobotStore()
+const taskExecutionStore = useTaskExecutionStore()
 
 // 导航点云图相关变量（需要在前面声明，因为在cleanupNavPointCloud中使用）
 let navPointCloudInitialized = false
@@ -839,7 +846,11 @@ const cleanupNavPointCloud = () => {
 }
 
 // 路线录制相关状态
-const trackRecordMap = ref('')
+// trackRecordMap 与导航/地图编辑共用 taskExecutionStore.selectedMapName，实现多页面同步
+const trackRecordMap = computed({
+  get: () => taskExecutionStore.selectedMapName,
+  set: (v: string) => taskExecutionStore.setSelectedMapName(v)
+})
 const trackMapList = ref<string[]>([]) // 路线录制页面的地图列表
 const trackRecordLine = ref('')
 const trackRecordTask = ref('')
@@ -1166,37 +1177,37 @@ const handleTrackPreview = async () => {
       }
       
       // 检查数据格式
-      // 格式可能是: index, x, y, z, ...
-      // 或者: x, y, z ...
-      
-      let x: number, y: number, z: number
-      
-      // 尝试解析为 index, x, y, z 格式 (5列或更多)
-      if (parts.length >= 4) {
-        // 假设第2,3,4列是x,y,z (忽略第1列索引)
-        const val1 = parseFloat(parts[1])
-        const val2 = parseFloat(parts[2])
-        const val3 = parseFloat(parts[3])
-        
-        if (!isNaN(val1) && !isNaN(val2) && !isNaN(val3)) {
-          x = val1
-          y = val2
-          z = val3
+      // 格式可能是: index, x, y, z, ...  列数决定 z 轴是否有效
+      const len = parts.length
+
+      // 6列+：index, x, y, z, ... 使用实际 z
+      if (len >= 6) {
+        const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
+        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
           trajectoryPoints.push({ x, y, z })
           continue
         }
       }
-      
-      // 如果上面的解析失败，尝试解析为 x, y, z 格式 (3列)
-      if (parts.length >= 3) {
-        const val0 = parseFloat(parts[0])
-        const val1 = parseFloat(parts[1])
-        const val2 = parseFloat(parts[2])
-        
-        if (!isNaN(val0) && !isNaN(val1) && !isNaN(val2)) {
-          x = val0
-          y = val1
-          z = val2
+      // 5列：index, x, y, ... z 置为 0
+      if (len === 5) {
+        const x = parseFloat(parts[1]), y = parseFloat(parts[2])
+        if (!isNaN(x) && !isNaN(y)) {
+          trajectoryPoints.push({ x, y, z: 0 })
+          continue
+        }
+      }
+      // 4列：index, x, y, z 使用实际 z
+      if (len === 4) {
+        const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
+        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+          trajectoryPoints.push({ x, y, z })
+          continue
+        }
+      }
+      // 3列：x, y, z 使用实际 z
+      if (len === 3) {
+        const x = parseFloat(parts[0]), y = parseFloat(parts[1]), z = parseFloat(parts[2])
+        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
           trajectoryPoints.push({ x, y, z })
         }
       }
@@ -1267,11 +1278,15 @@ const handleTrackSmooth = async () => {
 }
 
 // 导航相关状态
-const selectedNavMap = ref('')
+// selectedNavMap 与路线录制/地图编辑共用 taskExecutionStore.selectedMapName
+const selectedNavMap = computed({
+  get: () => taskExecutionStore.selectedMapName,
+  set: (v: string) => taskExecutionStore.setSelectedMapName(v)
+})
 const navMapList = ref<string[]>([]) // 地图列表
 
 // 监听导航地图选择变化
-watch(selectedNavMap, (newMap) => {
+watch(() => taskExecutionStore.selectedMapName, (newMap) => {
   if (newMap) {
     refreshNavPointCloud(newMap)
   }
@@ -1288,7 +1303,8 @@ const navData = ref({
   lidar: '未收到',
   imu: '未收到',
   satellite: '未收到',
-  msfStatus: '未开启'
+  msfStatus: '未开启',
+  insOrigin: '未初始化'
 })
 
 const syncNavPoseData = (pose: { x: number; y: number; z: number; theta: number } | null) => {
@@ -1309,8 +1325,21 @@ watch(
 const navigationEnabled = computed(() => robotStore.cmdStatus?.nav === 1)
 const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
+/** INS 初始化状态（1=已初始化） */
+const insOriginEnabled = computed(() => robotStore.cmdStatus?.ins_origin === 1)
+
+// 对接 WebSocket 实时 MSF 状态（msf_status 消息）
+watch(() => robotStore.msfStatus, (msfData) => {
+  navData.value.msfStatus = msfData?.status_text ?? '未开启'
+}, { immediate: true })
+
+// 对接 ins_origin 实时状态
+watch(() => robotStore.cmdStatus?.ins_origin, (val) => {
+  navData.value.insOrigin = val === 1 ? '已初始化' : '未初始化'
+}, { immediate: true })
 const navigationLoading = ref(false)
-const isMapSelectionLocked = computed(() => navigationEnabled.value || insEnabled.value || msfEnabled.value)
+// isMapSelectionLocked 改为使用 taskExecutionStore 统一计算（nav/ins/msf 任一开启则锁定）
+const isMapSelectionLocked = computed(() => taskExecutionStore.isMapSelectionLocked)
 
 watch(navigationEnabled, (newVal, oldVal) => {
   if (newVal !== oldVal && navigationLoading.value) {
@@ -1556,13 +1585,12 @@ const fetchMapList = () => {
     if (cached) {
       navMapList.value = JSON.parse(cached)
       
-      // 尝试恢复选中的地图
-      const cachedMapName = localStorage.getItem('selected_map_name')
-      if (cachedMapName && navMapList.value.includes(cachedMapName)) {
-        selectedNavMap.value = cachedMapName
-      } else if (navMapList.value.length > 0 && !selectedNavMap.value) {
-        // 如果有地图列表且当前未选择地图，默认选择第一个
-        selectedNavMap.value = navMapList.value[0]
+      // 尝试恢复选中的地图（store 已持久化，直接读取）
+      const storedMapName = taskExecutionStore.selectedMapName
+      if (storedMapName && navMapList.value.includes(storedMapName)) {
+        taskExecutionStore.setSelectedMapName(storedMapName)
+      } else if (navMapList.value.length > 0 && !taskExecutionStore.selectedMapName) {
+        taskExecutionStore.setSelectedMapName(navMapList.value[0])
       }
     } else {
       console.warn('缓存中没有地图列表数据')
@@ -1571,13 +1599,6 @@ const fetchMapList = () => {
     console.error('读取地图列表缓存失败:', err)
   }
 }
-
-// 监听导航地图选择变化，同步到全局缓存
-watch(selectedNavMap, (newMapName) => {
-  if (newMapName) {
-    localStorage.setItem('selected_map_name', newMapName)
-  }
-})
 
 // 从API刷新地图列表缓存
 const refreshMapListCache = async () => {
@@ -1602,13 +1623,11 @@ const fetchEditMapList = () => {
     if (cached) {
       editMapList.value = JSON.parse(cached)
       
-      // 尝试恢复选中的地图
-      const cachedMapName = localStorage.getItem('selected_map_name')
-      if (cachedMapName && editMapList.value.includes(cachedMapName)) {
-        selectedEditMap.value = cachedMapName
-      } else if (editMapList.value.length > 0 && !selectedEditMap.value) {
-        // 如果有地图列表且当前未选择地图，默认选择第一个
-        selectedEditMap.value = editMapList.value[0]
+      const storedMapName = taskExecutionStore.selectedMapName
+      if (storedMapName && editMapList.value.includes(storedMapName)) {
+        taskExecutionStore.setSelectedMapName(storedMapName)
+      } else if (editMapList.value.length > 0 && !taskExecutionStore.selectedMapName) {
+        taskExecutionStore.setSelectedMapName(editMapList.value[0])
       }
     } else {
       console.warn('缓存中没有地图列表数据')
@@ -1625,12 +1644,11 @@ const fetchTrackMapList = () => {
     if (cached) {
       trackMapList.value = JSON.parse(cached)
       
-      // 尝试恢复选中的地图
-      const cachedMapName = localStorage.getItem('selected_map_name')
-      if (cachedMapName && trackMapList.value.includes(cachedMapName)) {
-        trackRecordMap.value = cachedMapName
-      } else if (trackMapList.value.length > 0 && !trackRecordMap.value) {
-        trackRecordMap.value = trackMapList.value[0]
+      const storedMapName = taskExecutionStore.selectedMapName
+      if (storedMapName && trackMapList.value.includes(storedMapName)) {
+        taskExecutionStore.setSelectedMapName(storedMapName)
+      } else if (trackMapList.value.length > 0 && !taskExecutionStore.selectedMapName) {
+        taskExecutionStore.setSelectedMapName(trackMapList.value[0])
       }
     } else {
       console.warn('缓存中没有地图列表数据')
@@ -1653,7 +1671,7 @@ const fetchFileMapList = () => {
       })
       
       // 尝试恢复选中的地图
-      const cachedMapName = localStorage.getItem('selected_map_name')
+      const cachedMapName = taskExecutionStore.selectedMapName
       // 对于文件管理，如果处理后的列表中包含缓存的名字
       if (cachedMapName && fileMapList.value.includes(cachedMapName)) {
         fileManageMap.value = cachedMapName
@@ -2253,18 +2271,26 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
         const trimmed = line.trim()
         if (!trimmed || trimmed.startsWith('#')) continue
         const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
-        if (parts.length >= 4) {
-          const v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2]), v3 = parseFloat(parts[3])
-          if (!isNaN(v1) && !isNaN(v2) && !isNaN(v3)) {
-            trajectoryPoints.push({ x: v1, y: v2, z: v3 })
-            continue
-          }
+        const len = parts.length
+        // 6列+：index, x, y, z, ... 使用实际 z
+        if (len >= 6) {
+          const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) { trajectoryPoints.push({ x, y, z }); continue }
         }
-        if (parts.length >= 3) {
-          const v0 = parseFloat(parts[0]), v1 = parseFloat(parts[1]), v2 = parseFloat(parts[2])
-          if (!isNaN(v0) && !isNaN(v1) && !isNaN(v2)) {
-            trajectoryPoints.push({ x: v0, y: v1, z: v2 })
-          }
+        // 5列：index, x, y, ... z 置为 0
+        if (len === 5) {
+          const x = parseFloat(parts[1]), y = parseFloat(parts[2])
+          if (!isNaN(x) && !isNaN(y)) { trajectoryPoints.push({ x, y, z: 0 }); continue }
+        }
+        // 4列：index, x, y, z 使用实际 z
+        if (len === 4) {
+          const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) { trajectoryPoints.push({ x, y, z }); continue }
+        }
+        // 3列：x, y, z 使用实际 z
+        if (len === 3) {
+          const x = parseFloat(parts[0]), y = parseFloat(parts[1]), z = parseFloat(parts[2])
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) { trajectoryPoints.push({ x, y, z }) }
         }
       }
     }
@@ -2620,6 +2646,13 @@ onUnmounted(() => {
 // 录包建图相关状态
 const isRecording = computed(() => robotStore.cmdStatus?.data_record === 1)
 const mapProgress = ref(0)
+
+// 对接 WebSocket 实时建图进度（mapping_progress 消息）
+watch(() => robotStore.mappingProgress?.progress, (progress) => {
+  if (progress != null && progress > 0) {
+    mapProgress.value = progress
+  }
+})
 const recordingDialogVisible = ref(false)
 const recordingName = ref('')
 const recordingLoading = ref(false)
@@ -2966,7 +2999,11 @@ const handleStopMapping = async () => {
 
 // 地图编辑相关状态
 const gridmapContainerEl = ref<HTMLElement | null>(null)
-const selectedEditMap = ref('')
+// selectedEditMap 与导航/路线录制共用 taskExecutionStore.selectedMapName，实现跨页面同步
+const selectedEditMap = computed({
+  get: () => taskExecutionStore.selectedMapName,
+  set: (v: string) => taskExecutionStore.setSelectedMapName(v)
+})
 const editMapList = ref<string[]>([]) // 地图编辑页面的地图列表
 const gridMapCanvas = ref<HTMLCanvasElement | null>(null)
 const gridMapLoading = ref(false)
@@ -3219,29 +3256,11 @@ const loadGridMap = async (mapName: string) => {
   }
 }
 
-// 监听地图选择变化
-// 监听地图选择变化，同步到全局缓存
-watch(selectedEditMap, (newMap) => {
-  if (newMap) {
-    localStorage.setItem('selected_map_name', newMap)
-    loadGridMap(newMap)
-  }
-})
-
-// 监听地图编辑选择变化
+// 监听地图编辑选择变化（store setter 已持久化，无需手动写 localStorage）
 watch(selectedEditMap, (newMap) => {
   if (newMap) {
     loadGridMap(newMap)
   }
-})
-
-// [新增] 同步地图选择到全局缓存
-watch(selectedEditMap, (newMap) => {
-  if (newMap) localStorage.setItem('selected_map_name', newMap)
-})
-
-watch(trackRecordMap, (newMap) => {
-  if (newMap) localStorage.setItem('selected_map_name', newMap)
 })
 
 

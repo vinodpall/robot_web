@@ -640,10 +640,8 @@ const fetchPointTaskList = async () => {
   }
 }
 
-// 从缓存读取选中的地图名称
-const selectedMap = computed(() => {
-  return localStorage.getItem('selected_map_name') || ''
-})
+// selectedMap 从 store 读取，实现多页面同步
+const selectedMap = computed(() => taskExecutionStore.selectedMapName)
 
 // 过滤后的发布点任务列表（根据缓存的地图筛选）
 const filteredPointTaskList = computed(() => {
@@ -663,6 +661,13 @@ watch(filteredPointTaskList, (newList) => {
     selectedPointTaskId.value = ''
   }
 })
+
+// 监听 WebSocket task_status，运行中时自动选中对应任务
+watch(() => robotStore.taskStatus, (ts) => {
+  if (!ts?.is_running || !ts.task_name) return
+  const matched = pointTaskList.value.find(t => t.task_name === ts.task_name)
+  if (matched) selectedPointTaskId.value = matched.task_id
+}, { deep: true })
 
 // 根据选中的任务组ID获取任务详情
 const selectedTaskDetail = computed(() => {
@@ -1140,6 +1145,13 @@ const handleStartTask = async () => {
   }
   if (!canStartPointTask.value) {
     alert('当前有其他任务正在运行')
+    return
+  }
+  // 必须开启导航、INS或MSF中的至少一个
+  const cmdStatus = robotStore.cmdStatus
+  const hasNavEnabled = cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
+  if (!hasNavEnabled) {
+    alert('请先开启导航、INS或MSF')
     return
   }
   if (!selectedPointTaskId.value) {

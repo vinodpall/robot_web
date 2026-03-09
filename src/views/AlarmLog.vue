@@ -107,15 +107,15 @@
                 <div v-else-if="errorMsg" class="mission-error">{{ errorMsg }}</div>
                 <template v-else>
                   <div class="file-table-row" v-for="row in recordList" :key="row.id">
-                    <div class="file-table-cell trc-id">{{ row.id }}</div>
-                    <div class="file-table-cell trc-time">{{ formatTime(row.create_time) }}</div>
-                    <div class="file-table-cell trc-map">{{ row.map_name || '-' }}</div>
-                    <div class="file-table-cell trc-task">{{ row.task_id || '-' }}</div>
-                    <div class="file-table-cell trc-point">{{ row.task_point || '-' }}</div>
-                    <div class="file-table-cell trc-coord">{{ formatCoord(row.x, row.y) }}</div>
-                    <div class="file-table-cell trc-item">{{ row.content || '-' }}</div>
-                    <div class="file-table-cell trc-result">{{ row.results || '-' }}</div>
-                    <div class="file-table-cell trc-desc">{{ row.description || '-' }}</div>
+                    <div class="file-table-cell trc-id" :title="String(row.id)">{{ row.id }}</div>
+                    <div class="file-table-cell trc-time" :title="formatTime(row.create_time)">{{ formatTime(row.create_time) }}</div>
+                    <div class="file-table-cell trc-map" :title="row.map_name || '-'">{{ row.map_name || '-' }}</div>
+                    <div class="file-table-cell trc-task" :title="row.task_id || '-'">{{ row.task_id || '-' }}</div>
+                    <div class="file-table-cell trc-point" :title="row.task_point || '-'">{{ row.task_point || '-' }}</div>
+                    <div class="file-table-cell trc-coord" :title="formatCoord(row.x, row.y)">{{ formatCoord(row.x, row.y) }}</div>
+                    <div class="file-table-cell trc-item" :title="row.content || '-'">{{ row.content || '-' }}</div>
+                    <div class="file-table-cell trc-result" :title="row.results || '-'">{{ row.results || '-' }}</div>
+                    <div class="file-table-cell trc-desc" :title="row.description || '-'">{{ row.description || '-' }}</div>
                     <div class="file-table-cell trc-pic">
                       <button
                         v-if="getImage(row)"
@@ -399,7 +399,7 @@ const formatTime = (timestamp: number | null): string => {
 
 const formatCoord = (x: number | null, y: number | null): string => {
   if (x == null && y == null) return '-'
-  return `(${x ?? '-'}, ${y ?? '-'})`
+  return `${x ?? '-'}, ${y ?? '-'}`
 }
 
 const getImage = (row: any): string | null => {

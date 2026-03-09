@@ -994,10 +994,8 @@ const handleCreateTaskGroup = async () => {
   }
 }
 
-// 从缓存读取选中的地图名称
-const selectedMap = computed(() => {
-  return localStorage.getItem('selected_map_name') || ''
-})
+// selectedMap 从 store 读取，实现多页面同步
+const selectedMap = computed(() => taskExecutionStore.selectedMapName)
 
 // 过滤后的路线列表（根据缓存的地图筛选）
 const filteredRouteList = computed(() => {
@@ -1133,6 +1131,13 @@ const handleStartTrack = async () => {
   }
   if (!canStartTrackTask.value) {
     alert('当前有其他任务正在运行')
+    return
+  }
+  // 必须开启导航、INS或MSF中的至少一个
+  const cmdStatus = robotStore.cmdStatus
+  const hasNavEnabled = cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
+  if (!hasNavEnabled) {
+    alert('请先开启导航、INS或MSF')
     return
   }
   if (!selectedRouteName.value) {
@@ -1373,7 +1378,7 @@ const resolvePreviewTrackName = () => normalizeTrackName(selectedRouteName.value
 const resolvePreviewTaskGroupName = () => normalizeTaskPointName(selectedTaskGroupName.value || '')
 
 const resolvePreviewMapName = (trackName: string): string => {
-  const selectedMapName = localStorage.getItem('selected_map_name') || ''
+  const selectedMapName = taskExecutionStore.selectedMapName
   if (selectedMapName) return selectedMapName
   if (!trackName.includes('_')) return ''
   return trackName.split('_')[0] || ''

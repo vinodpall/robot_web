@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
+import { createRequire } from 'node:module'
 import * as httpModule from 'node:http'
 
 // 读取环境配置文件
@@ -18,6 +19,19 @@ function loadEnvConfig() {
     ]
     const existing = candidates.find(p => existsSync(p))
     if (!existing) {
+      // 尝试回退读取 env.config.js（CommonJS 格式）
+      const configDir = fileURLToPath(new URL('.', import.meta.url))
+      const envConfigJs = resolve(configDir, 'env.config.js')
+      if (existsSync(envConfigJs)) {
+        try {
+          const _require = createRequire(import.meta.url)
+          const jsConfig = _require(envConfigJs) as Record<string, string>
+          console.log('已从 env.config.js 加载环境变量:', jsConfig.VITE_APP_ENVIRONMENT)
+          return jsConfig
+        } catch (e) {
+          console.log('读取 env.config.js 失败:', e)
+        }
+      }
       console.log('未找到 env.local 文件，使用默认环境变量 (intranet)')
       return {}
     }
