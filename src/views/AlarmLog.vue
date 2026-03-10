@@ -108,21 +108,47 @@
                 <template v-else>
                   <div class="file-table-row" v-for="row in recordList" :key="row.id">
                     <div class="file-table-cell trc-id" :title="String(row.id)">{{ row.id }}</div>
-                    <div class="file-table-cell trc-time" :title="formatTime(row.create_time)">{{ formatTime(row.create_time) }}</div>
-                    <div class="file-table-cell trc-map" :title="row.map_name || '-'">{{ row.map_name || '-' }}</div>
-                    <div class="file-table-cell trc-task" :title="row.task_id || '-'">{{ row.task_id || '-' }}</div>
-                    <div class="file-table-cell trc-point" :title="row.task_point || '-'">{{ row.task_point || '-' }}</div>
-                    <div class="file-table-cell trc-coord" :title="formatCoord(row.x, row.y)">{{ formatCoord(row.x, row.y) }}</div>
-                    <div class="file-table-cell trc-item" :title="row.content || '-'">{{ row.content || '-' }}</div>
-                    <div class="file-table-cell trc-result" :title="row.results || '-'">{{ row.results || '-' }}</div>
+                    <div class="file-table-cell trc-time" :title="formatTime(row.create_time)">
+                      <span class="trc-date-part">{{ formatDatePart(row.create_time) }}</span>
+                      <span class="trc-clock-part">{{ formatClockPart(row.create_time) }}</span>
+                    </div>
+                    <div class="file-table-cell trc-map" :title="row.map_name || '-'">
+                      <span class="trc-map-text">{{ row.map_name || '-' }}</span>
+                    </div>
+                    <div class="file-table-cell trc-task" :title="[row.tracking_route, row.task_group].filter(Boolean).join('-') || '-'">
+                      <div class="trc-task-inner">
+                        <span v-if="row.tracking_route" class="trc-route-tag">{{ row.tracking_route }}</span>
+                        <span v-if="row.task_group" class="trc-group-tag">{{ row.task_group }}</span>
+                        <span v-if="!row.tracking_route && !row.task_group">-</span>
+                      </div>
+                    </div>
+                    <div class="file-table-cell trc-point" :title="row.task_point || '-'">
+                      <span v-if="row.task_point" class="trc-point-tag">{{ row.task_point }}</span>
+                      <span v-else>-</span>
+                    </div>
+                    <div class="file-table-cell trc-coord" :title="formatCoord(row.x, row.y)">
+                      <span class="trc-coord-val">{{ formatCoord(row.x, row.y) }}</span>
+                    </div>
+                    <div class="file-table-cell trc-item" :title="row.content || '-'">
+                      <span v-if="row.content" class="trc-item-tag">{{ row.content }}</span>
+                      <span v-else>-</span>
+                    </div>
+                    <div class="file-table-cell trc-result" :title="row.results || '-'">
+                      <span v-if="row.results" class="trc-result-badge">{{ row.results }}</span>
+                      <span v-else class="trc-empty">-</span>
+                    </div>
                     <div class="file-table-cell trc-desc" :title="row.description || '-'">{{ row.description || '-' }}</div>
                     <div class="file-table-cell trc-pic">
-                      <button
-                        v-if="getImage(row)"
-                        class="mission-btn mission-btn-secondary trc-pic-btn"
+                      <span v-if="!getImage(row)" class="no-image">-</span>
+                      <img
+                        v-else
+                        :src="getThumbImage(row)!"
+                        alt="识别图片"
+                        class="trc-thumb-img"
                         @click="openImagePreview(getImage(row)!, row.id)"
-                      >查看</button>
-                      <span v-else>-</span>
+                        @error="($event.target as HTMLImageElement).src = getImage(row)!"
+                        style="cursor:pointer;"
+                      />
                     </div>
                   </div>
                   <div v-if="recordList.length === 0" class="mission-empty">暂无记录</div>
@@ -397,20 +423,52 @@ const formatTime = (timestamp: number | null): string => {
   })
 }
 
+const formatDatePart = (timestamp: number | null): string => {
+  if (!timestamp) return '-'
+  const ms = timestamp > 1e10 ? timestamp : timestamp * 1000
+  const d = new Date(ms)
+  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+const formatClockPart = (timestamp: number | null): string => {
+  if (!timestamp) return ''
+  const ms = timestamp > 1e10 ? timestamp : timestamp * 1000
+  const d = new Date(ms)
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
 const formatCoord = (x: number | null, y: number | null): string => {
   if (x == null && y == null) return '-'
-  return `${x ?? '-'}, ${y ?? '-'}`
+  const fx = x != null ? Number(x).toFixed(2) : '-'
+  const fy = y != null ? Number(y).toFixed(2) : '-'
+  return `${fx}, ${fy}`
 }
 
 const getImage = (row: any): string | null => {
   const img = row?.outmessage?.out_image
   if (!img) return null
-  // 已是完整URL则直接返回
-  if (img.startsWith('http://') || img.startsWith('https://')) return img
-  const base = getDxrBaseUrl()
-  return base ? base + (img.startsWith('/') ? img : '/' + img) : null
+  // 已是完整 URL：通过 /robot81/ 代理转发（去掉前缀后直接转到 robot_ip:81/path）
+  if (img.startsWith('http://') || img.startsWith('https://')) {
+    try {
+      const url = new URL(img)
+      const robotIp = url.hostname
+      const qs = url.search ? url.search + '&robot_ip=' + robotIp : '?robot_ip=' + robotIp
+      return `/robot81${url.pathname}${qs}`
+    } catch {
+      return img
+    }
+  }
+  // 相对路径
+  const ip = deviceStore.selectedRobot?.ip_address
+  if (!ip) return null
+  const path = img.startsWith('/') ? img : '/' + img
+  return `/robot81${path}?robot_ip=${ip}`
 }
-
+// 缩略图 URL：将 .jpg/.jpeg/.png 替换为 _thumb.jpg
+const getThumbImage = (row: any): string | null => {
+  const original = getImage(row)
+  if (!original) return null
+  return original.replace(/\.(jpg|jpeg|png)(\?|$)/i, '_thumb.jpg$2')
+}
 // ---- 图片预览 ----
 const imgModal = ref({ visible: false, url: '', recordId: 0, error: false })
 const openImagePreview = (url: string, id: number) => {
@@ -743,13 +801,13 @@ onUnmounted(() => {
 
 /* id列固定窄宽，其余列均等 flex:1 */
 .trc-id        { flex: 0 0 55px;  min-width: 55px;  text-align: center; }
-.trc-time      { flex: 1 1 0;     min-width: 120px; text-align: center; }
+.trc-time      { flex: 1 1 0;     min-width: 120px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
 .trc-map       { flex: 1 1 0;     min-width: 80px;  text-align: center; }
-.trc-task      { flex: 1.2 1 0;   min-width: 100px; text-align: center; }
+.trc-task      { flex: 2 1 0;     min-width: 130px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
 .trc-point     { flex: 1 1 0;     min-width: 80px;  text-align: center; }
 .trc-coord     { flex: 1 1 0;     min-width: 90px;  text-align: center; }
 .trc-item      { flex: 1 1 0;     min-width: 80px;  text-align: center; }
-.trc-result    { flex: 1 1 0;     min-width: 80px;  text-align: center; }
+.trc-result    { flex: 0.5 1 0;   min-width: 55px;  text-align: center; }
 .trc-desc      { flex: 2 1 0;     min-width: 100px; text-align: center; }
 .trc-pic       { flex: 0 0 80px;  min-width: 80px;  padding: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; overflow: visible; }
 /* 数据行的图片列：居中对齐 */
@@ -757,25 +815,131 @@ onUnmounted(() => {
   justify-content: center !important;
   padding: 0 !important;
 }
-/* 查看按钮向左偏移 */
-.trc-pic-btn {
-  margin-right: 18px !important;
+/* 图片列缩略图 */
+.trc-thumb-img {
+  max-width: 48px;
+  max-height: 34px;
+  border-radius: 4px;
+  object-fit: cover;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  border: 1px solid #164159;
+  display: block;
+  margin: 0 auto;
+}
+.trc-thumb-img:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(103, 213, 253, 0.3);
 }
 
-
-
-/* 图片查看按钮 */
-.trc-pic-btn {
-  min-width: 52px !important;
-  width: 52px !important;
-  padding: 0 !important;
-  height: 26px !important;
-  font-size: 12px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  line-height: 1 !important;
-  flex-shrink: 0;
+/* ---- 表格单元格内容样式 ---- */
+/* 时间分色 */
+.trc-date-part {
+  color: #7fa8c2;
+  font-size: 11px;
+  display: block;
+  line-height: 1.4;
+}
+.trc-clock-part {
+  color: #67d5fd;
+  font-size: 13px;
+  font-weight: 500;
+  display: block;
+  line-height: 1.4;
+}
+/* 地图名 */
+.trc-map-text {
+  color: #9ec8e0;
+  font-size: 12px;
+}
+/* 任务表双标签 */
+.trc-task-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+}
+.trc-route-tag {
+  display: inline-block;
+  max-width: 95%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(103, 213, 253, 0.08);
+  color: #67d5fd;
+  border: 1px solid rgba(103, 213, 253, 0.22);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.trc-group-tag {
+  display: inline-block;
+  max-width: 95%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(86, 211, 148, 0.08);
+  color: #56d394;
+  border: 1px solid rgba(86, 211, 148, 0.22);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+/* 任务点徽章 */
+.trc-point-tag {
+  display: inline-block;
+  background: rgba(250, 173, 20, 0.1);
+  color: #faad14;
+  border: 1px solid rgba(250, 173, 20, 0.28);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 坐标值 */
+.trc-coord-val {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #8cd6a8;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+/* 识别项目 */
+.trc-item-tag {
+  display: inline-block;
+  color: #9ec3f0;
+  font-size: 12px;
+  background: rgba(100, 160, 240, 0.08);
+  border: 1px solid rgba(100, 160, 240, 0.2);
+  border-radius: 3px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 识别结果徽章 */
+.trc-result-badge {
+  display: inline-block;
+  background: rgba(255, 143, 100, 0.12);
+  color: #ff9f6b;
+  border: 1px solid rgba(255, 143, 100, 0.28);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 空值占位 */
+.trc-empty {
+  color: rgba(255,255,255,0.2);
 }
 
 /* 筛选输入框 */

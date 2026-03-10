@@ -951,6 +951,7 @@ watch(trackRecordLine, async (newLine) => {
   }
   
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  const robotIp = deviceStore.selectedRobot?.ip_address || ''
   if (!robotId) {
     console.warn('未选择机器人，无法获取任务组')
     return
@@ -982,34 +983,43 @@ watch(trackRecordLine, async (newLine) => {
   try {
     console.log('准备下载轨迹文件:', newLine)
     
+    if (!robotIp) {
+      console.warn('未获取到机器人 IP，无法下载轨迹文件')
+      return
+    }
+
     // 检查缓存中是否已有轨迹文件
     const cachedBlob = await getTrajectoryFile(newLine)
     if (cachedBlob) {
       console.log('✓ 轨迹文件已在缓存中:', newLine)
+      // 缓存命中：若当前正在循迹且地图已加载，立即叠加渲染
+      if (robotStore.cmdStatus?.track === 1 && baseNavPointCloudData.value.length > 0) {
+        overlayNavTrackTrajectory(newLine)
+      }
       return
     }
     
     // 从服务器下载轨迹文件
-    // 注意：这里假设 mapFileApi.downloadTrajectoryFile 接受的是 trackName
-    const blob = await mapFileApi.downloadTrajectoryFile(newLine, robotId)
+    const blob = await mapFileApi.downloadTrajectoryFile(newLine, robotIp)
     
     if (blob) {
-      // DEBUG: 检查下载的内容
       const text = await blob.text()
       console.log('DEBUG: 下载的轨迹文件内容预览:', text.substring(0, 200))
       console.log('DEBUG: 下载的轨迹文件大小:', blob.size)
       
       if (text.trim().startsWith('<') || text.includes('error_code')) {
         console.error('DEBUG: 下载的内容看起来像是HTML错误页面或JSON错误信息')
+        return
       }
 
       // 保存到IndexedDB
       await saveTrajectoryFile(newLine, blob)
       console.log('✓ 轨迹文件下载并保存成功:', newLine)
       
-      // DEBUG: 立即验证保存是否成功
-      const savedBlob = await getTrajectoryFile(newLine)
-      console.log('DEBUG: 验证保存结果:', savedBlob ? `成功, 大小: ${savedBlob.size}` : '失败, 未找到文件')
+      // 下载完成：若当前正在循迹且地图已加载，立即叠加渲染（解决竞态问题）
+      if (robotStore.cmdStatus?.track === 1 && baseNavPointCloudData.value.length > 0) {
+        overlayNavTrackTrajectory(newLine)
+      }
     } else {
       console.warn('⚠ 轨迹文件下载失败:', newLine)
     }
@@ -1980,7 +1990,7 @@ const drawNavPointCloud = () => {
   const taskPoints: Array<{x: number, y: number, name?: string}> = []
 
   navPointCloudData.value.forEach(point => {
-    const centeredX = point.x
+    const centeredX = -point.x
     const centeredY = -point.z
     const centeredZ = point.y
 
@@ -2068,7 +2078,7 @@ const drawNavPointCloud = () => {
     const originNormY = (0 - centerY) / maxRange
     const originNormZ = (0 - centerZ) / maxRange
 
-    const oCenteredX = originNormX
+    const oCenteredX = -originNormX
     const oCenteredY = -originNormZ
     const oCenteredZ = originNormY
 
@@ -2128,7 +2138,7 @@ const drawNavPointCloud = () => {
     const robotNormZ = (pose.z - centerZ) / maxRange
 
     const projectNorm = (nx: number, ny: number, nz: number) => {
-      const cx2 = nx, cy2 = -nz, cz2 = ny
+      const cx2 = -nx, cy2 = -nz, cz2 = ny
       const rx = cx2 * cosYaw + cz2 * sinYaw
       const rz = -cx2 * sinYaw + cz2 * cosYaw
       const ry = cy2 * cosPitch - rz * sinPitch
@@ -2260,7 +2270,27 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
   if (!normalizedTrackName || baseNavPointCloudData.value.length === 0) return
 
   try {
-    const blob = await getTrajectoryFile(normalizedTrackName)
+    let blob = await getTrajectoryFile(normalizedTrackName)
+
+    // 缓存未命中：尝试即时下载
+    if (!blob) {
+      const ip = deviceStore.selectedRobot?.ip_address
+      if (ip) {
+        console.log('[轨迹叠加] 缓存未命中，尝试下载:', normalizedTrackName)
+        const downloaded = await mapFileApi.downloadTrajectoryFile(normalizedTrackName, ip)
+        if (downloaded) {
+          const text = await downloaded.text()
+          if (!text.trim().startsWith('<') && !text.includes('error_code')) {
+            await saveTrajectoryFile(normalizedTrackName, downloaded)
+            blob = downloaded
+            console.log('[轨迹叠加] 下载并缓存成功:', normalizedTrackName)
+          } else {
+            console.warn('[轨迹叠加] 下载内容无效，跳过:', normalizedTrackName)
+          }
+        }
+      }
+    }
+
     const trajectoryPoints: Array<{ x: number; y: number; z: number }> = []
 
     if (blob) {

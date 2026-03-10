@@ -292,7 +292,7 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
     baseScale: number, panOX: number, panOY: number,
     rectW: number, rectH: number
   ) => {
-    const cx = nx, cy = -nz, cz = ny
+    const cx = -nx, cy = -nz, cz = ny
     const xzRX = cx * cosYaw + cz * sinYaw
     const xzRZ = -cx * sinYaw + cz * cosYaw
     const yRY = cy * cosPitch - xzRZ * sinPitch
@@ -456,7 +456,7 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         const robotNormZ = (pose.z - centerZ) / maxRange
         // 投影
         const projectNorm = (nx: number, ny: number, nz: number) => {
-          const cx2 = nx, cy2 = -nz, cz2 = ny
+          const cx2 = -nx, cy2 = -nz, cz2 = ny
           const rx = cx2 * cosYaw + cz2 * sinYaw
           const rz = -cx2 * sinYaw + cz2 * cosYaw
           const ry = cy2 * cosPitch - rz * sinPitch

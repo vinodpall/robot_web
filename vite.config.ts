@@ -69,23 +69,31 @@ function dynamicRobotMiddleware(
   const isDxrApi = req.url.startsWith('/api/dxr_api/')
   const isNavList = req.url.startsWith('/navigation_list')
   const isNavDelete = req.url.startsWith('/navigation_delete')
-  if (!isDownload && !isUpload && !isDxrApi && !isNavList && !isNavDelete) return next()
+  const isRobot81 = req.url.startsWith('/robot81/')
+  if (!isDownload && !isUpload && !isDxrApi && !isNavList && !isNavDelete && !isRobot81) return next()
 
   const urlObj = new URL(req.url, 'http://localhost')
   const robotIp = urlObj.searchParams.get('robot_ip')
   if (!robotIp) return next()
 
   urlObj.searchParams.delete('robot_ip')
-  const targetPath = urlObj.pathname + urlObj.search
 
   const isDxrApiReq = urlObj.pathname.startsWith('/api/dxr_api/')
-  const targetPort = isDxrApiReq ? 81 : 5000
+  const isRobot81Req = urlObj.pathname.startsWith('/robot81/')
+  const targetPort = (isDxrApiReq || isRobot81Req) ? 81 : 5000
+
+  // /robot81/ 是机器人 :81 静态文件代理，需剥掉该前缀后转发
+  if (isRobot81Req) {
+    urlObj.pathname = urlObj.pathname.replace(/^\/robot81/, '')
+  }
 
   const headers: Record<string, string | string[] | undefined> = { ...req.headers }
   headers['host'] = `${robotIp}:${targetPort}`
 
+  const finalPath = urlObj.pathname + urlObj.search
+
   const proxyReq = httpModule.request(
-    { hostname: robotIp, port: targetPort, path: targetPath, method: req.method, headers },
+    { hostname: robotIp, port: targetPort, path: finalPath, method: req.method, headers },
     (proxyRes) => {
       res.writeHead(proxyRes.statusCode!, proxyRes.headers as any)
       proxyRes.pipe(res)
@@ -93,7 +101,7 @@ function dynamicRobotMiddleware(
   )
 
   proxyReq.on('error', (err) => {
-    console.error('[动态代理] 转发失败:', err.message, `-> ${robotIp}:${targetPort}${targetPath}`)
+    console.error('[动态代理] 转发失败:', err.message, `-> ${robotIp}:${targetPort}${finalPath}`)
     if (!res.headersSent) {
       res.writeHead(502)
       res.end('Bad Gateway')
@@ -101,7 +109,7 @@ function dynamicRobotMiddleware(
   })
 
   proxyReq.setTimeout(30000, () => {
-    console.error('[动态代理] 请求超时:', `${robotIp}:${targetPort}${targetPath}`)
+    console.error('[动态代理] 请求超时:', `${robotIp}:${targetPort}${finalPath}`)
     proxyReq.destroy()
     if (!res.headersSent) {
       res.writeHead(504)

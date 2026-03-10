@@ -304,23 +304,37 @@
             <tbody>
               <!-- 实时警情行 -->
               <tr v-for="(item, index) in deviceAlarmData" :key="`alert-${index}`">
-                <td :title="item.deviceName || '--'">{{ item.deviceName || '--' }}</td>
-                <td :title="item.type || '--'">{{ item.type || '--' }}</td>
-                <td :title="item.imageUrl ? '点击查看大图' : '暂无图片'">
-                  <span v-if="!item.imageUrl" class="no-image">--</span>
+                <td :title="item.camera || item.deviceName || '--'">
+                  <span class="alarm-camera-tag">{{ item.camera || item.deviceName || '--' }}</span>
+                </td>
+                <td :title="item.type || '--'">
+                  <span v-if="item.type && item.type !== '--'" class="alarm-type-tag">{{ item.type }}</span>
+                  <span v-else class="alarm-empty">--</span>
+                </td>
+                <td :title="item.imageOriginalUrl ? '点击查看大图' : '暂无图片'">
+                  <span v-if="!item.imageOriginalUrl" class="no-image">--</span>
                   <img 
                     v-else
                     :src="item.imageUrl"
                     alt="警情图片"
                     class="target-image-small"
-                    @click="handleAlertImageClick(item.imageUrl)"
+                    @click="handleAlertImageClick(item)"
                     @error="item.imageUrl = ''"
                     style="cursor:pointer;"
                   />
                 </td>
-                <td :title="item.content || '--'">{{ item.content || '--' }}</td>
+                <td :title="item.content || '--'">
+                  <span v-if="item.content && item.content !== '--'" class="alarm-content-tag">{{ item.content }}</span>
+                  <span v-else class="alarm-empty">--</span>
+                </td>
                 <td :title="item.description || '--'">{{ item.description || '--' }}</td>
-                <td :title="item.time || '--'">{{ item.time || '--' }}</td>
+                <td :title="item.time || '--'">
+                  <template v-if="item.time && item.time !== '--'">
+                    <span class="alarm-date-part">{{ item.time.split(' ')[0] }}</span>
+                    <span class="alarm-clock-part">{{ item.time.split(' ')[1] }}</span>
+                  </template>
+                  <span v-else class="alarm-empty">--</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -381,21 +395,21 @@
                     <img src="@/assets/source_data/svg_data/longitude.svg" alt="X坐标" />
                     <span class="label">X坐标</span>
                   </div>
-                  <span class="value">{{ robotStore.pose ? robotStore.pose.x.toFixed(3) + ' m' : '--' }}</span>
+                  <span class="value">{{ robotStore.pose ? robotStore.pose.x.toFixed(3) : '--' }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/latitude.svg" alt="Y坐标" />
                     <span class="label">Y坐标</span>
                   </div>
-                  <span class="value">{{ robotStore.pose ? robotStore.pose.y.toFixed(3) + ' m' : '--' }}</span>
+                  <span class="value">{{ robotStore.pose ? robotStore.pose.y.toFixed(3) : '--' }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/altitude.svg" alt="高度" />
                     <span class="label">高度</span>
                   </div>
-                  <span class="value">{{ robotStore.pose ? robotStore.pose.z.toFixed(3) + ' m' : '--' }}</span>
+                  <span class="value">{{ robotStore.pose ? robotStore.pose.z.toFixed(3) : '--' }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
@@ -911,9 +925,45 @@
     </div>
     
     <!-- 大图显示模态框 -->
-    <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
-      <img :src="bigImageUrl" class="big-image" @click.stop />
-    </div>
+    <div v-if="showBigImage" class="alert-img-mask" @click="closeBigImage">
+        <div class="alert-img-modal" @click.stop>
+          <div class="alert-img-modal-header">
+            <div class="alert-img-modal-title">
+              <div class="alert-img-info" v-if="bigImageItem.camera || bigImageItem.type || bigImageItem.content">
+                <span v-if="bigImageItem.camera" class="alert-img-tag">
+                  <em>相机名称</em><i>{{ bigImageItem.camera }}</i>
+                </span>
+                <span v-if="bigImageItem.type" class="alert-img-tag">
+                  <em>识别项目</em><i>{{ bigImageItem.type }}</i>
+                </span>
+                <span v-if="bigImageItem.content && bigImageItem.content !== '--'" class="alert-img-tag">
+                  <em>内容</em><i>{{ bigImageItem.content }}</i>
+                </span>
+              </div>
+              <div v-else class="alert-img-info-empty">暂无信息</div>
+            </div>
+            <button class="alert-img-close-btn" @click="closeBigImage">×</button>
+          </div>
+          <div class="alert-img-modal-body">
+            <img
+              v-if="!bigImageError"
+              :src="bigImageItem.imageOriginalUrl"
+              alt="图片预览"
+              class="alert-img-preview"
+              @error="bigImageError = true"
+            />
+            <div v-if="bigImageError" class="alert-img-error">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="48" height="48" rx="8" fill="rgba(255,107,107,0.08)"/>
+                <path d="M14 34l8-10 5 6 3-4 8 8H14z" fill="rgba(255,107,107,0.25)" stroke="#ff6b6b" stroke-width="1.5" stroke-linejoin="round"/>
+                <circle cx="32" cy="18" r="3" fill="rgba(255,107,107,0.4)" stroke="#ff6b6b" stroke-width="1.5"/>
+                <rect x="8" y="8" width="32" height="32" rx="4" stroke="#ff6b6b" stroke-width="1.5" stroke-dasharray="4 2"/>
+              </svg>
+              <span>图片加载失败</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
     <!-- 自定义成功/错误提示 -->
     <SuccessMessage :show="successToast.show" :message="successToast.message" @close="successToast.show = false" />
@@ -1268,18 +1318,20 @@ const toggleMic = () => {
 }
 
 // 大图显示相关状态
-const bigImageUrl = ref('')
 const showBigImage = ref(false)
+const bigImageItem = ref<{ imageOriginalUrl: string; camera: string; type: string; content: string }>({ imageOriginalUrl: '', camera: '', type: '', content: '' })
+const bigImageError = ref(false)
 
 const closeBigImage = () => {
   showBigImage.value = false
-  bigImageUrl.value = ''
+  bigImageError.value = false
 }
 
 // 处理警情图片点击
-const handleAlertImageClick = (imageUrl: string) => {
-  if (!imageUrl) return
-  bigImageUrl.value = imageUrl
+const handleAlertImageClick = (item: any) => {
+  if (!item?.imageOriginalUrl) return
+  bigImageItem.value = item
+  bigImageError.value = false
   showBigImage.value = true
 }
 
@@ -1749,7 +1801,7 @@ const centerToRobot = () => {
   const nz = (pose.z - centerZ) / maxRange
 
   // 与 drawPointCloud 相同的坐标变换 + 投影（pan=0 时）
-  const cx2 = nx, cy2 = -nz, cz2 = ny
+  const cx2 = -nx, cy2 = -nz, cz2 = ny
   const rx = cx2 * cosYaw + cz2 * sinYaw
   const rz = -cx2 * sinYaw + cz2 * cosYaw
   const ry = cy2 * cosPitch - rz * sinPitch
@@ -1847,7 +1899,7 @@ const drawPointCloud = () => {
   let taskPointCount = 0
   
   pointCloudData.value.forEach(point => {
-    const centeredX = point.x
+    const centeredX = -point.x
     const centeredY = -point.z
     const centeredZ = point.y
 
@@ -1947,7 +1999,7 @@ const drawPointCloud = () => {
     const originNormY = (0 - centerY) / maxRange
     const originNormZ = (0 - centerZ) / maxRange
 
-    const oCenteredX = originNormX
+    const oCenteredX = -originNormX
     const oCenteredY = -originNormZ
     const oCenteredZ = originNormY
 
@@ -2009,7 +2061,7 @@ const drawPointCloud = () => {
 
     // 用于投影的辅助函数（复用外层投影参数）
     const projectNorm = (nx: number, ny: number, nz: number) => {
-      const cx2 = nx, cy2 = -nz, cz2 = ny
+      const cx2 = -nx, cy2 = -nz, cz2 = ny
       const rx = cx2 * cosYaw + cz2 * sinYaw
       const rz = -cx2 * sinYaw + cz2 * cosYaw
       const ry = cy2 * cosPitch - rz * sinPitch
@@ -2541,6 +2593,30 @@ const droneDisplayPosition = computed<{ longitude: number; latitude: number; hei
   }
 })
 
+// 相机名称英文 → 中文映射
+const formatCameraName = (raw: string): string => {
+  if (!raw) return ''
+  const map: Record<string, string> = {
+    cam_rtsp_left:     '左侧相机',
+    cam_rtsp_right:    '右侧相机',
+    cam_rtsp_front:    '前置相机',
+    cam_rtsp_back:     '后置相机',
+    cam_rtsp_rear:     '后置相机',
+    cam_rtsp_infrared: '红外相机',
+    cam_rtsp_thermal:  '热成像相机',
+    cam_rtsp_depth:    '深度相机',
+    cam_rtsp_wide:     '广角相机',
+    cam_rtsp_zoom:     '变焦相机',
+    cam_rtsp_top:      '顶部相机',
+    cam_rtsp_bottom:   '底部相机',
+    cam_rtsp_0:        '相机·1',
+    cam_rtsp_1:        '相机·2',
+    cam_rtsp_2:        '相机·3',
+    cam_rtsp_3:        '相机·4',
+  }
+  return map[raw] || raw
+}
+
 // 获取最新4条告警日志并显示在实时警情表格
 const fetchLatestAlarmLogs = async () => {
   try {
@@ -2551,9 +2627,6 @@ const fetchLatestAlarmLogs = async () => {
     if (!res.ok) return
     const json = await res.json()
     const rows: any[] = json.data?.data || []
-    const dxrBase = robotIp ? `http://${robotIp}:81` : (getCurrentEnvironment() === 'internet'
-      ? 'http://10.10.1.3:81'
-      : 'http://172.16.88.152:81')
     const formatTs = (ts: number | null) => {
       if (!ts) return '--'
       const ms = ts > 1e10 ? ts : ts * 1000
@@ -2562,20 +2635,50 @@ const fetchLatestAlarmLogs = async () => {
         hour: '2-digit', minute: '2-digit', second: '2-digit'
       })
     }
+    // 将图片路径转换为 /robot81/ 代理 URL，与循迹记录页保持一致，解决 CORS
+    const toProxyImageUrl = (imgPath: string): string => {
+      if (!imgPath) return ''
+      if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
+        try {
+          const url = new URL(imgPath)
+          const ip = url.hostname
+          const qs = url.search ? url.search + '&robot_ip=' + ip : '?robot_ip=' + ip
+          return `/robot81${url.pathname}${qs}`
+        } catch {
+          return imgPath
+        }
+      }
+      const ip = robotIp || ''
+      if (!ip) return ''
+      const path = imgPath.startsWith('/') ? imgPath : '/' + imgPath
+      return `/robot81${path}?robot_ip=${ip}`
+    }
+    // 生成缩略图 URL：将 .jpg/.jpeg/.png 替换为 _thumb.jpg
+    const toThumbImageUrl = (proxyUrl: string): string => {
+      if (!proxyUrl) return ''
+      return proxyUrl.replace(/\.(jpg|jpeg|png)(\?|$)/i, '_thumb.jpg$2')
+    }
     deviceAlarmData.value = rows.slice(0, 4).map(row => {
       const outmsg = typeof row?.outmessage === 'string'
         ? (() => { try { return JSON.parse(row.outmessage) } catch { return {} } })()
         : (row?.outmessage || {})
       const imgPath = outmsg?.out_image
-      const imageUrl = imgPath
-        ? (imgPath.startsWith('http://') || imgPath.startsWith('https://')
-            ? imgPath
-            : dxrBase + (imgPath.startsWith('/') ? imgPath : '/' + imgPath))
-        : ''
+      const imageOriginalUrl = toProxyImageUrl(imgPath || '')
+      const imageUrl = toThumbImageUrl(imageOriginalUrl)
+      // 从图片路径提取相机名称，如 /uploads/rec/20260310/cam_rtsp_left/3/xxx.jpg → cam_rtsp_left
+      let cameraRaw = outmsg?.camera_name || outmsg?.camera || ''
+      if (!cameraRaw && imgPath) {
+        const parts = imgPath.replace(/\\/g, '/').split('/')
+        const recIdx = parts.findIndex((p: string) => p === 'rec')
+        if (recIdx !== -1 && parts[recIdx + 2]) cameraRaw = parts[recIdx + 2]
+      }
+      const camera = formatCameraName(cameraRaw)
       return {
         deviceName: row.sn || '--',
         type: row.content || '--',
         imageUrl,
+        imageOriginalUrl,
+        camera,
         content: outmsg?.message || '--',
         description: row.task_point_description || '--',
         time: formatTs(row.create_time)
@@ -6154,6 +6257,8 @@ const handleRobotContextRefreshed = async (event: Event) => {
     console.log(`[robot-context-refreshed] 过期事件来自 ${robotId}，当前 ${deviceStore.selectedRobotId}，已忽略`)
     return
   }
+  // 切换机器人时清空实时警情列表
+  deviceAlarmData.value = []
   // 先清空旧机器人的地图/循迹选择，避免 fetchMapList 的 !selectedMap 条件阻止更新
   selectedMap.value = ''
   selectedTrack.value = ''
@@ -6672,13 +6777,32 @@ onActivated(async () => {
     // 重新拉取循迹列表，确保数据最新（接口失败时自动回退到缓存）
     await fetchTrackList()
 
-    await initCameraStreams()
-    initVideoPlayer()
-    initInfraredVideo()
-    // URL 可能与离开前相同导致 watch 不触发，主动重启播放器
-    await nextTick()
-    if (videoStreamUrl.value) startVideoPlayback()
-    if (infraredStreamUrl.value) startInfraredPlayback()
+    // 判断主视频是否仍在正常播放（keep-alive 缓存下连接可能依然存活）
+    const mainVideoAlive = pc !== null
+      && (pc.connectionState === 'connected' || pc.connectionState === 'connecting')
+      && videoElement.value
+      && !videoElement.value.paused
+
+    // 判断红外视频是否仍在正常播放
+    const infraredVideoAlive = infraredPc !== null
+      && (infraredPc.connectionState === 'connected' || infraredPc.connectionState === 'connecting')
+
+    if (!mainVideoAlive || !infraredVideoAlive) {
+      // 至少有一路断开，重新拉取摄像头流地址
+      await initCameraStreams()
+    }
+
+    if (!mainVideoAlive) {
+      initVideoPlayer()
+      await nextTick()
+      if (videoStreamUrl.value) startVideoPlayback()
+    }
+
+    if (!infraredVideoAlive) {
+      initInfraredVideo()
+      await nextTick()
+      if (infraredStreamUrl.value) startInfraredPlayback()
+    }
 
     if (selectedMap.value) {
       await nextTick()
@@ -6990,6 +7114,73 @@ onActivated(async () => {
   box-shadow: 0 2px 8px rgba(103, 213, 253, 0.3);
 }
 
+/* ---- 首页告警表格单元格样式 ---- */
+/* 相机名称标签 */
+.alarm-camera-tag {
+  display: inline-block;
+  max-width: 95%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(103, 213, 253, 0.08);
+  color: #67d5fd;
+  border: 1px solid rgba(103, 213, 253, 0.22);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  vertical-align: middle;
+}
+/* 警情类型标签 */
+.alarm-type-tag {
+  display: inline-block;
+  max-width: 95%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(100, 160, 240, 0.08);
+  color: #9ec3f0;
+  border: 1px solid rgba(100, 160, 240, 0.2);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  vertical-align: middle;
+}
+/* 内容标签 */
+.alarm-content-tag {
+  display: inline-block;
+  max-width: 95%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 143, 100, 0.1);
+  color: #ff9f6b;
+  border: 1px solid rgba(255, 143, 100, 0.25);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  vertical-align: middle;
+}
+/* 时间双行 */
+.alarm-date-part {
+  display: block;
+  color: #7fa8c2;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.alarm-clock-part {
+  display: block;
+  color: #67d5fd;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+/* 空值占位 */
+.alarm-empty {
+  color: rgba(255,255,255,0.2);
+}
+
 .loading-image-small {
   width: 40px;
   height: 30px;
@@ -7014,12 +7205,12 @@ onActivated(async () => {
 /* 巡检告警列宽 - 使用百分比布局 */
 .tableOne th:nth-child(1),
 .tableOne td:nth-child(1) {
-  width: 18%;
+  width: 13%;
 }
 
 .tableOne th:nth-child(2),
 .tableOne td:nth-child(2) {
-  width: 14%;
+  width: 19%;
 }
 
 .tableOne th:nth-child(3),
@@ -8391,6 +8582,7 @@ onActivated(async () => {
   width: 100%;
   padding: 8px 15px;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .tableOne {
@@ -8412,15 +8604,12 @@ onActivated(async () => {
 
 .tableOne tbody {
   width: 100%;
-  display: block;
-  height: 172px; /* 固定高度为4行的高度 43px * 4 */
-  overflow-y: hidden;
+  display: table-row-group;
 }
 
 .tableOne tr {
-  display: table;
+  display: table-row;
   width: 100%;
-  table-layout: fixed;
 }
 
 .tableOne th,
@@ -8438,11 +8627,13 @@ onActivated(async () => {
 }
 
 .tableOne td {
-  line-height: 43px;
-  height: 43px;
+  line-height: 1.3;
+  height: 41px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
+  padding: 4px 4px;
 }
 
 /* 删除列分隔线的样式，改为行分隔线 */
@@ -9785,25 +9976,112 @@ onActivated(async () => {
 }
 
 /* 大图显示模态框样式 */
-.big-image-mask {
+.alert-img-mask {
   position: fixed;
-  left: 0;
-  top: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0,0,0,0.7);
+  inset: 0;
+  background: rgba(0,0,0,0.78);
+  backdrop-filter: blur(2px);
   z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
-.big-image {
+.alert-img-modal {
+  background: linear-gradient(160deg, #0f1f30 0%, #132030 100%);
+  border: 1px solid rgba(103,213,253,0.18);
+  border-radius: 10px;
+  min-width: 420px;
+  max-width: 92vw;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(103,213,253,0.06);
+}
+.alert-img-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(103,213,253,0.12);
+  gap: 12px;
+  min-height: 52px;
+}
+.alert-img-modal-title {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+.alert-img-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.alert-img-tag {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 5px;
+  overflow: hidden;
+  font-size: 12px;
+  border: 1px solid rgba(103,213,253,0.22);
+  background: rgba(8,22,36,0.7);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+.alert-img-tag em {
+  font-style: normal;
+  background: rgba(103,213,253,0.13);
+  color: #67d5fd;
+  padding: 4px 8px;
+  border-right: 1px solid rgba(103,213,253,0.18);
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+}
+.alert-img-tag i {
+  font-style: normal;
+  color: #e2f3ff;
+  padding: 4px 10px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+}
+.alert-img-info-empty {
+  color: rgba(180,200,220,0.35);
+  font-size: 12px;
+  font-style: italic;
+}
+.alert-img-close-btn {
+  background: none;
+  border: none;
+  color: #b8c7d9;
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.alert-img-close-btn:hover { color: #fff; }
+.alert-img-modal-body {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+.alert-img-preview {
   max-width: 80vw;
-  max-height: 80vh;
-  border-radius: 8px;
-  box-shadow: 0 4px 24px #000a;
-  background: #fff;
+  max-height: 70vh;
+  border-radius: 4px;
+}
+.alert-img-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: #ff6b6b;
+  font-size: 14px;
+  padding: 24px;
 }
 
 /* 表格tooltip样式优化 */
