@@ -70,26 +70,45 @@
               <div class="file-table-header">
                 <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">任务类型</div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">X坐标</div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">Y坐标</div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">Z坐标</div>
+                <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">X坐标</div>
+                <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">Y坐标</div>
+                <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">Z坐标</div>
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">角度</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">预置点</div>
-                <div class="file-table-cell" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
+                <div class="file-table-cell" style="min-width: 200px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
                 <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
               <div class="file-table-body">
                 <!-- 显示实际数据行 -->
                 <template v-if="waypointsData.length > 0">
                 <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
-                  <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">{{ waypoint.index + 1 }}</div>
-                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.x }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.y }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.z }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.angle }}</div>
-                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.preset }}</div>
-                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">{{ waypoint.description }}</div>
+                  <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">
+                    <span class="ms-seq-num">{{ waypoint.index + 1 }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">
+                    <span v-if="waypoint.type" class="ms-type-tag">{{ waypoint.type }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">
+                    <span class="ms-coord-val">{{ waypoint.coordinates?.x ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">
+                    <span class="ms-coord-val">{{ waypoint.coordinates?.y ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">
+                    <span class="ms-coord-val">{{ waypoint.coordinates?.z ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">
+                    <span class="ms-coord-val">{{ waypoint.angle ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">
+                    <span v-if="waypoint.preset" class="ms-preset-tag">{{ waypoint.preset }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
+                  <div class="file-table-cell file-table-name" style="min-width: 200px; flex: 1; text-align: center;">
+                    <span v-if="waypoint.description" class="ms-desc-text">{{ waypoint.description }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
                   <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
                     <button class="action-btn action-btn-edit" @click="handleEditTask(waypoint)">
                       <img :src="editIcon" alt="编辑" />
@@ -110,12 +129,12 @@
                 <div class="file-table-row" v-for="i in missionEmptyRowCount" :key="'empty-' + i">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
                   <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;"></div>
                   <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
                   <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
-                  <div class="file-table-cell" style="flex: 1; text-align: center;"></div>
+                  <div class="file-table-cell" style="min-width: 200px; flex: 1; text-align: center;"></div>
                   <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center;"></div>
                 </div>
               </div>
@@ -3528,6 +3547,71 @@ const confirmExtraConfig = () => {
 
 .action-btn-arrive img {
   filter: drop-shadow(0 0 4px rgba(103, 213, 253, 0.4));
+}
+
+/* ---- 任务列表单元格样式 ---- */
+/* 行 hover 效果 */
+.file-table-row:hover {
+  background: rgba(103, 213, 253, 0.05);
+}
+/* 序号圆圈 */
+.ms-seq-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(103, 213, 253, 0.08);
+  border: 1px solid rgba(103, 213, 253, 0.2);
+  color: #8cd6f5;
+  font-size: 12px;
+  font-weight: 600;
+}
+/* 任务类型标签 */
+.ms-type-tag {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(103, 213, 253, 0.08);
+  color: #67d5fd;
+  border: 1px solid rgba(103, 213, 253, 0.22);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+/* 坐标/角度值 */
+.ms-coord-val {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #8cd6a8;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+/* 预置点标签 */
+.ms-preset-tag {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9ec3f0;
+  font-size: 12px;
+  background: rgba(100, 160, 240, 0.08);
+  border: 1px solid rgba(100, 160, 240, 0.2);
+  border-radius: 3px;
+  padding: 2px 8px;
+}
+/* 描述文字 */
+.ms-desc-text {
+  color: #b8c7d9;
+  font-size: 12px;
+}
+/* 空值占位 */
+.ms-empty {
+  color: rgba(255, 255, 255, 0.2);
 }
 
 /* 添加任务组弹窗样式 */

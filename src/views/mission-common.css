@@ -187,6 +187,8 @@
   color: #67d5fd;
   font-weight: 600;
   margin-left: 6px;
+  display: inline-block;
+  min-width: 60px;
 }
 
 .mission-top-row {
@@ -1205,7 +1207,7 @@
 .file-table-header,
 .file-table-row {
   display: grid;
-  grid-template-columns: 80px 180px 200px 200px 200px 200px 180px 1fr 280px;
+  grid-template-columns: 80px 180px 120px 120px 120px 200px 180px minmax(200px, 1fr) 280px;
   align-items: center;
   min-width: 100%;
 }

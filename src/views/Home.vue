@@ -1222,9 +1222,6 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
 const syncMapFromNavigation = (mapName: string) => {
   if (!mapName) return
   const cached = taskExecutionStore.selectedMapName
-  if (cached !== mapName) {
-    console.log(`[地图同步] 导航实际地图 "${mapName}" 与缓存 "${cached}" 不一致，已覆盖`)
-  }
   // 若列表中没有该地图，动态插入首位，避免 select 出现空选项
   if (!mapList.value.includes(mapName)) {
     mapList.value = [mapName, ...mapList.value]
@@ -1944,9 +1941,6 @@ const drawPointCloud = () => {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
   // 绘制任务点（绿色圆圈+名称）
-  if (taskPoints.length > 0 && taskPointCount > 0) {
-    console.log(`[绘制] 正在绘制 ${taskPoints.length} 个任务点`)
-  }
   
   taskPoints.forEach(tp => {
     ctx.beginPath()
@@ -2256,19 +2250,11 @@ const overlayTrackTrajectory = async (trackName: string) => {
     const taskPointsData: Array<{x: number, y: number, z: number, name: string}> = []
     const currentTaskPointName = normalizeTaskPointName(activeTrackInfo.value.taskpoint_name)
     
-    console.log('[任务点] 尝试加载任务点:', { 
-      trackName: normalizedTrackName, 
-      taskPointName: currentTaskPointName,
-      hasActiveInfo: !!activeTrackInfo.value
-    })
-    
     try {
       const cachedData = localStorage.getItem('all_track_task_list')
       if (cachedData) {
         const parsed = JSON.parse(cachedData)
         const allTaskList = extractTrackTaskList(parsed)
-        console.log('[任务点] localStorage 中共有', allTaskList.length, '条任务点记录')
-        
         let filteredTasks = allTaskList.filter((task: any) => {
           const taskTrackName = normalizeTrackName(String(task.track_name || ''))
           const taskPointName = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
@@ -2287,11 +2273,6 @@ const overlayTrackTrajectory = async (trackName: string) => {
           }
         }
         
-        console.log('[任务点] 过滤后匹配到', filteredTasks.length, '个任务点')
-        if (filteredTasks.length > 0) {
-          console.log('[任务点] 第一个任务点示例:', filteredTasks[0])
-        }
-        
         filteredTasks.forEach((task: any, idx: number) => {
           const tx = parseFloat(task.x), ty = parseFloat(task.y), tz = parseFloat(task.z ?? '0')
           if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) {
@@ -2306,9 +2287,7 @@ const overlayTrackTrajectory = async (trackName: string) => {
           }
         })
         
-        if (taskPointsData.length > 0) {
-          console.log(`✓ 成功加载 ${taskPointsData.length} 个任务点到点云图`)
-        } else {
+        if (taskPointsData.length === 0) {
           console.warn('[任务点] 未找到有效的任务点坐标数据')
         }
       } else {
@@ -2335,8 +2314,6 @@ const overlayTrackTrajectory = async (trackName: string) => {
       intensity: 3.0,  // 特殊值，渲染时识别为任务点（绿色）
       name: p.name      // 保留名称用于显示
     }))
-
-    console.log('[点云叠加] 基础点云:', basePointCloudData.value.length, '轨迹点:', normalizedTrajectory.length, '任务点:', normalizedTaskPoints.length)
 
     pointCloudData.value = [
       ...basePointCloudData.value, 
@@ -3887,7 +3864,10 @@ const startWebRTCPlayback = async () => {
     })
 
   } catch (error) {
-    stopWebRTCPlayback()
+    // 连接建立过程中失败，关闭当前 pc 后调度重连（保留最后一帧）
+    if (pc) { pc.close(); pc = null }
+    isPlaying = false
+    scheduleWebRTCReconnect()
   }
 }
 
@@ -4128,9 +4108,10 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
     })
     // loading 由 ontrack 回调负责关闭
   } catch (error) {
-    infraredError.value = '红外视频播放失败'
+    // 连接建立过程中失败，关闭当前 pc 后调度重连（保留最后一帧）
+    if (infraredPc) { infraredPc.close(); infraredPc = null }
     infraredLoading.value = false
-    stopInfraredWebRTCPlayback()
+    scheduleInfraredReconnect()
   }
 }
 
@@ -4406,7 +4387,6 @@ const openMapDB = (): Promise<IDBDatabase> => {
 
 // 保存地图文件
 const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promise<void> => {
-  console.log(`[地图缓存] 开始保存文件: ${mapName}/${fileName}, 大小: ${blob.size} 字节`)
   const db = await openMapDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction([MAP_STORE_NAME], 'readwrite')
@@ -4414,7 +4394,6 @@ const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promi
     const key = `${mapName}/${fileName}`
     store.put({ id: key, blob })
     tx.oncomplete = () => {
-      console.log(`[地图缓存] ✅ 文件保存成功: ${key}`)
       resolve()
     }
     tx.onerror = () => {
@@ -4494,7 +4473,6 @@ const shouldDownloadMap = async (mapName: string, serverUpdateTime: string): Pro
   try {
     const blob = await getMapFile(mapName, 'tinyMap.pcd')
     if (!blob) {
-      console.log(`地图 ${mapName} 配置存在但文件缺失，需要重新下载`)
       return true
     }
   } catch (err) {
@@ -4507,11 +4485,7 @@ const shouldDownloadMap = async (mapName: string, serverUpdateTime: string): Pro
 
 // 下载地图文件
 const downloadMapFiles = async (mapName: string, updateTime: string) => {
-  console.log(`[地图缓存] 开始处理地图: ${mapName}, 更新时间: ${updateTime}`)
-  
-  // 验证配置文件，检查是否需要下载
   if (!(await shouldDownloadMap(mapName, updateTime))) {
-    console.log(`[地图缓存] 地图已是最新，跳过下载: ${mapName}`)
     return
   }
   
@@ -4523,12 +4497,8 @@ const downloadMapFiles = async (mapName: string, updateTime: string) => {
   }
   
   const robotIp = robotInfo.ip_address
-  console.log(`[地图缓存] 机器人 IP: ${robotIp}`)
   
-  // 下载文件
-  console.log(`[地图缓存] 开始下载文件...`)
   const files = await mapFileApi.downloadAllMapFiles(robotIp, mapName)
-  console.log(`[地图缓存] 下载完成，共 ${files.size} 个文件`)
   
   // 保存文件到 IndexedDB
   let savedCount = 0
@@ -4540,12 +4510,8 @@ const downloadMapFiles = async (mapName: string, updateTime: string) => {
       console.error(`[地图缓存] 保存文件失败: ${fileName}`, err)
     }
   }
-  console.log(`[地图缓存] 保存完成，成功 ${savedCount}/${files.size} 个文件`)
-  
-  // 下载成功后更新配置文件
   if (files.size === mapFileApi.MAP_FILES.length) {
     updateMapConfig(mapName, updateTime)
-    console.log(`[地图缓存] 配置已更新: ${mapName} -> ${updateTime}`)
   }
 }
 
@@ -5348,8 +5314,6 @@ const onTrackStartConfirm = async () => {
       taskpoint_name: form.taskpoint_name
     })
     
-    console.log('启动循迹任务响应:', response)
-    
     // 根据返回结果判断是否成功
     if (response && (response as any).response && (response as any).response.msg) {
       const { error_code, error_msg } = (response as any).response.msg
@@ -5416,8 +5380,6 @@ const onMultiTaskStartConfirm = async () => {
       action: 1
     })
     
-    console.log('启动多任务组响应:', response)
-    
     // 根据返回结果判断是否成功
     if (response && (response as any).response && (response as any).response.msg) {
       const { error_code, error_msg } = (response as any).response.msg
@@ -5469,8 +5431,6 @@ const onPointTaskStartConfirm = async () => {
       id: form.task_id, // 传递字符串ID
       sn: robotId
     })
-    
-    console.log('启动发布点任务响应:', response)
     
     // 根据返回结果判断是否成功
     if (response && (response as any).msg) {
@@ -6118,7 +6078,6 @@ onMounted(async () => {
   load3MF('/jiantou.3mf').then(mesh => {
     if (mesh) {
       arrowMesh.value = mesh
-      console.log(`[3MF] 箭头模型加载成功：${mesh.vertices.length} 顶点 / ${mesh.indices.length / 3} 三角面`)
     } else {
       console.warn('[3MF] 箭头模型加载失败，将使用内置三角形替代')
     }
@@ -6200,19 +6159,10 @@ onMounted(async () => {
       
       // 地图加载完成后更新机场标记
       amapInstance.on('complete', () => {
-        console.log('地图加载完成，开始定位')
-        console.log('当前定位数据:', position.value)
-        console.log('当前机场状态:', dockStatus.value)
-        
-        // 地图加载完成后立即尝试定位
         updateMapMarkers(isInitialLoad.value)
-        // 标记初始加载完成
         isInitialLoad.value = false
         
-        // 如果第一次定位失败，延迟后再次尝试
         setTimeout(() => {
-          console.log('延迟后再次尝试定位')
-          // console.log('当前定位数据:', position.value)
           if (isInitialLoad.value) {
             updateMapMarkers(true)
             isInitialLoad.value = false
@@ -6234,7 +6184,6 @@ const handleRobotCameraReady = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
   // 若事件携带的 robotId 与当前选中不符，说明是过期回调，直接忽略
   if (robotId && robotId !== deviceStore.selectedRobotId) {
-    console.log(`[robot-camera-ready] 过期事件来自 ${robotId}，当前 ${deviceStore.selectedRobotId}，已忽略`)
     return
   }
   // 取消上一轮摄像头初始化（如 A 的 startCameraStream 还在飞行）
@@ -6254,7 +6203,6 @@ const handleRobotCameraReady = async (event: Event) => {
 const handleRobotContextRefreshed = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
   if (robotId && robotId !== deviceStore.selectedRobotId) {
-    console.log(`[robot-context-refreshed] 过期事件来自 ${robotId}，当前 ${deviceStore.selectedRobotId}，已忽略`)
     return
   }
   // 切换机器人时清空实时警情列表
@@ -6509,13 +6457,7 @@ const clearWaylineDisplay = () => {
 
     // 显示航点和航线（仅在需要时重绘，避免每次都清空重画）
     const displayWayline = async () => {
-  console.log('displayWayline 开始执行')
-  console.log('amapInstance:', !!amapInstance)
-  console.log('amapApiRef:', !!amapApiRef)
-  console.log('waylineJobDetail:', waylineJobDetail.value)
-  
   if (!amapInstance || !amapApiRef || !waylineJobDetail.value) {
-    console.log('displayWayline 条件不满足，退出')
     return
   }
   
@@ -6535,46 +6477,33 @@ const clearWaylineDisplay = () => {
       clearWaylineDisplay()
   
   try {
-    console.log('waylineJobDetail完整数据:', waylineJobDetail.value)
-    
-    // 检查是否有waylines数据
     let waylines = waylineJobDetail.value.waylines
-    console.log('waylines:', waylines)
     
-    // 如果没有waylines数据，尝试通过file_id获取航线文件详情
     if (!waylines || waylines.length === 0) {
-      console.log('没有找到waylines数据，尝试通过file_id获取航线文件详情')
       const workspaceId = getCachedWorkspaceId()
       const fileId = waylineJobDetail.value.file_id
       
       if (workspaceId && fileId) {
-        console.log('获取航线文件详情 - workspaceId:', workspaceId, 'fileId:', fileId)
         try {
           const waylineDetail = await fetchWaylineDetail(workspaceId, fileId)
-          console.log('航线文件详情:', waylineDetail)
           waylines = waylineDetail.waylines
-          console.log('从文件详情获取的waylines:', waylines)
         } catch (error) {
           console.error('获取航线文件详情失败:', error)
           return
         }
       } else {
-        console.log('缺少workspaceId或fileId，无法获取航线文件详情')
         return
       }
     }
     
     if (!waylines || waylines.length === 0) {
-      console.log('仍然没有找到waylines数据')
       return
     }
     
-    const wayline = waylines[0] // 取第一个航线
+    const wayline = waylines[0]
     const waypoints = wayline.waypoints || []
-    console.log('waypoints:', waypoints)
     
     if (waypoints.length === 0) {
-      console.log('没有找到waypoints数据')
       return
     }
     
@@ -6582,16 +6511,11 @@ const clearWaylineDisplay = () => {
     const markers: any[] = []
     const path: [number, number][] = []
     
-    console.log('开始创建航点标记，共', waypoints.length, '个航点')
-    
     waypoints.forEach((waypoint: any, index: number) => {
       const [wgsLng, wgsLat] = waypoint.coordinates || [0, 0]
-      console.log(`航点 ${index + 1}:`, { wgsLng, wgsLat })
       
       if (wgsLng && wgsLat) {
-        // 将WGS84坐标转换为GCJ-02坐标
         const gcjCoords = transformWGS84ToGCJ02(wgsLng, wgsLat)
-        console.log(`航点 ${index + 1} 转换后坐标:`, gcjCoords)
         
         // 创建航点标记
         const marker = new amapApiRef.Marker({
@@ -6612,17 +6536,13 @@ const clearWaylineDisplay = () => {
         markers.push(marker)
         amapInstance.add(marker)
         path.push([gcjCoords.longitude, gcjCoords.latitude])
-        console.log(`航点 ${index + 1} 已添加到地图`)
       } else {
-        console.log(`航点 ${index + 1} 坐标无效，跳过`)
+        // invalid coords, skip
       }
     })
     
     waylineMarkers.value = markers
-    console.log('航点标记创建完成，共', markers.length, '个标记')
     
-    // 创建航线
-    console.log('准备创建航线，路径点数:', path.length)
     if (path.length > 1) {
       waylinePolyline.value = new amapApiRef.Polyline({
         path: path,
@@ -6632,9 +6552,8 @@ const clearWaylineDisplay = () => {
         strokeStyle: 'solid'
       })
       amapInstance.add(waylinePolyline.value)
-      console.log('航线已添加到地图')
       } else {
-        console.log('路径点数不足，无法创建航线')
+        // 路径点不足无法创建航线
       }
       // 记录本次渲染对应的任务ID与状态
       lastWaylineJobId.value = currentJobId
@@ -6694,7 +6613,6 @@ const updateCurrentWaypoint = () => {
       })
       
       amapInstance.add(currentWaypointMarker.value)
-      console.log(`当前航点 ${currentWaypointIndex + 1} 已添加到地图`)
     }
   }
 }
@@ -6709,7 +6627,6 @@ const centerToDroneMarker = () => {
 
 // 机器人控制按钮点击处理
 const handleControlClick = (controlName: string) => {
-  console.log(`机器人控制指令: ${controlName}`)
   // TODO: 实现具体的控制逻辑
 }
 
@@ -6726,7 +6643,6 @@ watch(() => deviceStore.selectedRobotId, async (newId) => {
 watch(() => deviceStore.selectedRobot, async (newRobot, oldRobot) => {
   // 从无到有，说明机器人列表刚加载完成，此时触发首次数据加载
   if (newRobot && !oldRobot) {
-    console.log('[首次加载] 机器人信息已就绪，开始加载数据')
     
     // 加载所有列表数据
     await fetchMapList()
@@ -6777,31 +6693,49 @@ onActivated(async () => {
     // 重新拉取循迹列表，确保数据最新（接口失败时自动回退到缓存）
     await fetchTrackList()
 
-    // 判断主视频是否仍在正常播放（keep-alive 缓存下连接可能依然存活）
-    const mainVideoAlive = pc !== null
-      && (pc.connectionState === 'connected' || pc.connectionState === 'connecting')
-      && videoElement.value
-      && !videoElement.value.paused
+    // 先清理旧的待执行重连 timer，避免和新的播放流程并发冲突
+    clearWebRTCReconnectTimer()
+    clearInfraredReconnectTimer()
+    clearWebRTCFreezeDetection()
+    clearInfraredFreezeDetection()
+    // 重置重连计数，切回首页视为一次新的播放会话，不应继承上次的失败计数
+    webrtcReconnectCount = 0
+    infraredReconnectCount = 0
+    webrtcReconnecting.value = false
+    infraredReconnecting.value = false
 
-    // 判断红外视频是否仍在正常播放
-    const infraredVideoAlive = infraredPc !== null
+    // 仅根据 WebRTC 连接状态判断是否需要重连
+    // 注意：不检查 video.paused，因为浏览器在页面隐藏时会自动暂停视频，这不代表连接断开
+    const mainConnAlive = pc !== null
+      && (pc.connectionState === 'connected' || pc.connectionState === 'connecting')
+      && videoElement.value !== null
+
+    const infraredConnAlive = infraredPc !== null
       && (infraredPc.connectionState === 'connected' || infraredPc.connectionState === 'connecting')
 
-    if (!mainVideoAlive || !infraredVideoAlive) {
+    if (!mainConnAlive || !infraredConnAlive) {
       // 至少有一路断开，重新拉取摄像头流地址
       await initCameraStreams()
     }
 
-    if (!mainVideoAlive) {
+    if (!mainConnAlive) {
+      // 连接已断开，重新初始化并建立连接
       initVideoPlayer()
       await nextTick()
       if (videoStreamUrl.value) startVideoPlayback()
+    } else if (videoElement.value && videoElement.value.paused) {
+      // 连接正常，但视频被浏览器切页时暂停了，直接恢复播放
+      videoElement.value.play().catch(() => {})
     }
 
-    if (!infraredVideoAlive) {
+    if (!infraredConnAlive) {
+      // 红外连接已断开，重新初始化并建立连接
       initInfraredVideo()
       await nextTick()
       if (infraredStreamUrl.value) startInfraredPlayback()
+    } else if (infraredVideoElement.value && infraredVideoElement.value.paused) {
+      // 红外连接正常，但视频被暂停，直接恢复播放
+      infraredVideoElement.value.play().catch(() => {})
     }
 
     if (selectedMap.value) {

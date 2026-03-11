@@ -51,16 +51,18 @@
                 <template v-if="alerts.length > 0">
                 <div class="file-table-row" v-for="(alert, idx) in alerts" :key="alert.id">
                   <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">
-                    {{ idx + 1 }}
+                    <span class="ms-seq-num">{{ idx + 1 }}</span>
                   </div>
                   <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">
-                    {{ alert.track_name || '-' }}
+                    <span v-if="alert.track_name" class="ms-type-tag">{{ alert.track_name }}</span>
+                    <span v-else class="ms-empty">-</span>
                   </div>
                   <div class="file-table-cell" style="min-width: 160px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">
-                    {{ alert.track_point_name || '-' }}
+                    <span v-if="alert.track_point_name" class="ms-group-tag">{{ alert.track_point_name }}</span>
+                    <span v-else class="ms-empty">-</span>
                   </div>
                   <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center; display: flex; align-items: center; justify-content: center;">
-                    {{ alert.start_time || '-' }}
+                    <span class="ms-time-val">{{ alert.start_time || '-' }}</span>
                   </div>
                   <div class="file-table-cell file-table-action" style="min-width: 160px; width: 160px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
                     <button class="action-btn action-btn-delete" @click="handleDeleteScheduledTask(alert)">
@@ -1949,6 +1951,59 @@ const transformLng = (lng: number, lat: number) => {
 
 .action-btn-delete img {
   filter: drop-shadow(0 0 4px rgba(255, 77, 79, 0.4));
+}
+
+/* ---- 列表单元格样式 ---- */
+.file-table-row:hover {
+  background: rgba(103, 213, 253, 0.05);
+}
+.ms-seq-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(103, 213, 253, 0.08);
+  border: 1px solid rgba(103, 213, 253, 0.2);
+  color: #8cd6f5;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ms-type-tag {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(103, 213, 253, 0.08);
+  color: #67d5fd;
+  border: 1px solid rgba(103, 213, 253, 0.22);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.ms-group-tag {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(86, 211, 148, 0.08);
+  color: #56d394;
+  border: 1px solid rgba(86, 211, 148, 0.22);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.ms-time-val {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #67d5fd;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+.ms-empty {
+  color: rgba(255, 255, 255, 0.2);
 }
 
 /* 新增定时任务弹窗样式 */

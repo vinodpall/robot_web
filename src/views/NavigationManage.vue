@@ -175,9 +175,15 @@
                   </div>
 
                   <!-- 其他状态信息 -->
-                  <div class="nav-info-item">
-                    <span class="nav-info-label">theta:</span>
-                    <span class="nav-info-value">{{ navData.theta }}</span>
+                  <div class="nav-info-row">
+                    <div class="nav-info-col">
+                      <span class="nav-info-label">Z:</span>
+                      <span class="nav-info-value">{{ navData.z }}</span>
+                    </div>
+                    <div class="nav-info-col">
+                      <span class="nav-info-label">theta:</span>
+                      <span class="nav-info-value">{{ navData.theta }}</span>
+                    </div>
                   </div>
 
                   <div class="nav-info-item">
@@ -805,10 +811,16 @@ const handleTabClick = (key: string) => {
       fetchGpsStatus() // 获取GPS状态
     })
   } else if (key === 'track_record') {
-    nextTick(() => {
+    nextTick(async () => {
       initNavPointCloud()
       fetchTrackMapList() // 获取路线录制页面的地图列表
-      fetchAllTrackList() // 获取所有循迹任务列表
+      await fetchAllTrackList() // 获取所有循迹任务列表
+
+      // 地图已选中但路线未选中时，自动选第一条路线（watcher 不会重新触发）
+      if (trackRecordMap.value && !trackRecordLine.value && trackLineList.value.length > 0) {
+        trackRecordLine.value = trackLineList.value[0]
+        // trackRecordLine 的 watcher 会自动加载任务组并选第一个
+      }
     })
   } else if (key === 'map_edit') {
     // 切换到地图编辑标签时获取地图列表
@@ -942,6 +954,8 @@ watch(trackRecordMap, async (newMap) => {
 
 // 监听路线选择变化 - 获取该路线的任务组列表（关键点文件列表）
 watch(trackRecordLine, async (newLine) => {
+  // 路线切换时退出预览模式，恢复 WebSocket 任务状态的正常更新
+  isNavPreviewMode.value = false
   // 清空任务组选择
   trackRecordTask.value = ''
   trackTaskList.value = []
@@ -1247,19 +1261,46 @@ const handleTrackPreview = async () => {
       z: (p.z - centerZ) / maxRange,
       intensity: 2.0 // 使用特殊强度值区分轨迹 (2.0)
     }))
-    
-    // 合并地图数据和轨迹数据
-    if (baseNavPointCloudData.value.length > 0) {
-      navPointCloudData.value = [...baseNavPointCloudData.value, ...normalizedTrajectoryPoints]
-    } else {
-      navPointCloudData.value = normalizedTrajectoryPoints
+
+    // 从缓存加载该路线的所有任务点
+    const previewTaskPoints: Array<{ x: number; y: number; z: number; name: string; intensity: number }> = []
+    try {
+      const cachedData = localStorage.getItem('all_track_task_list')
+      if (cachedData) {
+        const allTaskList = extractTrackTaskList(JSON.parse(cachedData))
+        const previewTrackName = normalizeTrackName(trackRecordLine.value)
+        allTaskList
+          .filter((task: any) => normalizeTrackName(String(task.track_name || '')) === previewTrackName)
+          .forEach((task: any, idx: number) => {
+            const tx = parseFloat(task.x), ty = parseFloat(task.y), tz = parseFloat(task.z ?? '0')
+            if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) {
+              previewTaskPoints.push({
+                x: (tx - centerX) / maxRange,
+                y: (ty - centerY) / maxRange,
+                z: (tz - centerZ) / maxRange,
+                intensity: 3.0,
+                name: task.type_text || task.preset || `任务点${idx + 1}`
+              })
+            }
+          })
+        console.log(`✓ 预览任务点加载成功 (${previewTaskPoints.length} 个)`)
+      }
+    } catch (e) {
+      console.warn('加载预览任务点失败:', e)
     }
+    
+    // 合并地图、轨迹、任务点数据
+    const base = baseNavPointCloudData.value.length > 0 ? baseNavPointCloudData.value : []
+    navPointCloudData.value = [...base, ...normalizedTrajectoryPoints, ...previewTaskPoints]
+    
+    // 锁定预览模式，阻止 WebSocket 任务更新覆盖预览画面
+    isNavPreviewMode.value = true
     
     // 渲染点云图
     await nextTick()
     scheduleNavPointCloudRender()
     
-    showSuccessMessage(`轨迹预览加载成功 (${trajectoryPoints.length} 个点)`)
+    showSuccessMessage(`轨迹预览加载成功 (${trajectoryPoints.length} 个点，${previewTaskPoints.length} 个任务点)`)
     console.log('✓ 轨迹预览渲染完成')
   } catch (error) {
     console.error('预览路线失败:', error)
@@ -1308,6 +1349,7 @@ const navData = ref({
   v: '0, 0',
   x: 0,
   y: 0,
+  z: 0,
   theta: 0,
   brake: 0,
   lidar: '未收到',
@@ -1321,6 +1363,7 @@ const syncNavPoseData = (pose: { x: number; y: number; z: number; theta: number 
   if (!pose) return
   navData.value.x = Number(pose.x.toFixed(3))
   navData.value.y = Number(pose.y.toFixed(3))
+  navData.value.z = Number(pose.z.toFixed(3))
   navData.value.theta = Number((pose.theta * 180 / Math.PI).toFixed(1))
 }
 
@@ -2407,6 +2450,8 @@ const extractTrackTaskList = (payload: any): any[] => {
 
 const activeNavTrackInfo = ref({ track_name: '', taskpoint_name: '' })
 const activeNavOverlayTrackName = ref('')
+// 预览锁：用户点击预览路线时为 true，阻止 WebSocket 任务状态更新覆盖预览画面
+const isNavPreviewMode = ref(false)
 
 
 // 刷新点云数据
@@ -2603,6 +2648,8 @@ watch(() => robotStore.pose, () => {
 }, { deep: true })
 
 watch(() => robotStore.cmdStatus?.track, (val) => {
+  // 预览模式下不响应任务状态变化，保持用户预览的轨迹
+  if (isNavPreviewMode.value) return
   if (val === 1) {
     const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
     const trackName = trackNameFromStatus || activeNavOverlayTrackName.value
@@ -2621,6 +2668,8 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
 
 watch(() => robotStore.cmdStatus?.track_info, (info) => {
   if (!info) return
+  // 预览模式下不响应任务信息变化，保持用户预览的轨迹
+  if (isNavPreviewMode.value) return
   if (robotStore.cmdStatus?.track === 1 && info.track_name) {
     const normalizedTrackName = normalizeTrackName(info.track_name)
     activeNavTrackInfo.value = {

@@ -75,13 +75,30 @@
                 </div>
                 <template v-else>
                 <div class="file-table-row" v-for="(task, index) in currentTaskGroupList" :key="index">
-                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ index + 1 }}</div>
-                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.map_name }}</div>
-                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.task_type === 'task' ? '发布点任务' : task.task_name }}</div>
-                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.task_pointname }}</div>
-                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.circle }}</div>
-                  <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.obs_mode }}</div>
-                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">{{ task.is_origin_publish === 1 ? '是' : '否' }}</div>
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    <span class="ms-seq-num">{{ index + 1 }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    <span v-if="task.map_name" class="ms-map-text">{{ task.map_name }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    <span class="ms-type-tag">{{ task.task_type === 'task' ? '发布点任务' : task.task_name }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    <span v-if="task.task_pointname" class="ms-group-tag">{{ task.task_pointname }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    <span class="ms-num-badge">{{ task.circle ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    <span v-if="task.obs_mode" class="ms-mode-tag">{{ task.obs_mode }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">
+                    <span :class="task.is_origin_publish === 1 ? 'ms-bool-yes' : 'ms-bool-no'">{{ task.is_origin_publish === 1 ? '是' : '否' }}</span>
+                  </div>
                   <div class="file-table-cell file-table-action" style="min-width: 360px; width: 360px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
                     <button class="action-btn action-btn-edit" @click="handleEditTaskGroup(task)">
                       <img :src="editIcon" alt="编辑" />
@@ -1339,6 +1356,99 @@ watch(selectedMultiTaskName, (newVal) => {
 
 .action-btn-delete img {
   filter: drop-shadow(0 0 4px rgba(255, 77, 79, 0.4));
+}
+
+/* ---- 列表单元格样式 ---- */
+.file-table-row:hover {
+  background: rgba(103, 213, 253, 0.05);
+}
+.ms-seq-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(103, 213, 253, 0.08);
+  border: 1px solid rgba(103, 213, 253, 0.2);
+  color: #8cd6f5;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ms-map-text {
+  color: #9ec8e0;
+  font-size: 12px;
+}
+.ms-type-tag {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(103, 213, 253, 0.08);
+  color: #67d5fd;
+  border: 1px solid rgba(103, 213, 253, 0.22);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.ms-group-tag {
+  display: inline-block;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(86, 211, 148, 0.08);
+  color: #56d394;
+  border: 1px solid rgba(86, 211, 148, 0.22);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.ms-num-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 8px;
+  background: rgba(250, 173, 20, 0.1);
+  color: #faad14;
+  border: 1px solid rgba(250, 173, 20, 0.28);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ms-mode-tag {
+  display: inline-block;
+  white-space: nowrap;
+  background: rgba(100, 160, 240, 0.08);
+  color: #9ec3f0;
+  border: 1px solid rgba(100, 160, 240, 0.2);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.ms-bool-yes {
+  display: inline-block;
+  background: rgba(86, 211, 148, 0.1);
+  color: #56d394;
+  border: 1px solid rgba(86, 211, 148, 0.3);
+  border-radius: 10px;
+  padding: 1px 10px;
+  font-size: 12px;
+}
+.ms-bool-no {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(184, 199, 217, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 1px 10px;
+  font-size: 12px;
+}
+.ms-empty {
+  color: rgba(255, 255, 255, 0.2);
 }
 
 /* Override grid layout from mission-common.css */

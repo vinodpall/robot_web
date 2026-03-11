@@ -61,9 +61,9 @@
               <div class="file-table-header">
                 <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center; display: flex; align-items: center; justify-content: center;">序号</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">任务类型</div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">X坐标</div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">Y坐标</div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">Z坐标</div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">X坐标</div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">Y坐标</div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center; display: flex; align-items: center; justify-content: center;">Z坐标</div>
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">角度</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">预置点</div>
                 <div class="file-table-cell" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
@@ -73,14 +73,33 @@
               <div class="file-table-body">
               <template v-if="waypointsData.length > 0">
                 <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
-                  <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">{{ waypoint.index + 1 }}</div>
-                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.type }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.x }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.y }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.coordinates?.z }}</div>
-                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">{{ waypoint.angle }}</div>
-                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">{{ waypoint.preset }}</div>
-                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">{{ waypoint.description }}</div>
+                  <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">
+                    <span class="ms-seq-num">{{ waypoint.index + 1 }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">
+                    <span v-if="waypoint.type" class="ms-type-tag">{{ waypoint.type }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;">
+                    <span class="ms-coord-val">{{ waypoint.coordinates?.x ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;">
+                    <span class="ms-coord-val">{{ waypoint.coordinates?.y ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;">
+                    <span class="ms-coord-val">{{ waypoint.coordinates?.z ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;">
+                    <span class="ms-coord-val">{{ waypoint.angle ?? '-' }}</span>
+                  </div>
+                  <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;">
+                    <span v-if="waypoint.preset" class="ms-preset-tag">{{ waypoint.preset }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
+                  <div class="file-table-cell file-table-name" style="flex: 1; text-align: center;">
+                    <span v-if="waypoint.description" class="ms-desc-text">{{ waypoint.description }}</span>
+                    <span v-else class="ms-empty">-</span>
+                  </div>
                   <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center; display: flex; gap: 25px; justify-content: center; align-items: center;">
                     <button class="action-btn action-btn-edit" @click="handleEditTask(waypoint)">
                       <img :src="editIcon" alt="编辑" />
@@ -97,9 +116,9 @@
               <div class="file-table-row" v-for="i in missionRecordsEmptyRowCount" :key="'empty-' + i">
                 <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;"></div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
-                <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;"></div>
+                <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;"></div>
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
                 <div class="file-table-cell" style="flex: 1; text-align: center;"></div>

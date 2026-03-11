@@ -94,8 +94,8 @@
                 <div class="file-table-cell trc-id">id</div>
                 <div class="file-table-cell trc-time">时间</div>
                 <div class="file-table-cell trc-map">地图</div>
-                <div class="file-table-cell trc-task">任务表</div>
-                <div class="file-table-cell trc-point">任务点</div>
+                <div class="file-table-cell trc-task">任务名称</div>
+                <div class="file-table-cell trc-point">任务组</div>
                 <div class="file-table-cell trc-coord">实时坐标</div>
                 <div class="file-table-cell trc-item">识别项目</div>
                 <div class="file-table-cell trc-result">识别结果</div>
@@ -115,16 +115,17 @@
                     <div class="file-table-cell trc-map" :title="row.map_name || '-'">
                       <span class="trc-map-text">{{ row.map_name || '-' }}</span>
                     </div>
-                    <div class="file-table-cell trc-task" :title="[row.tracking_route, row.task_group].filter(Boolean).join('-') || '-'">
+                    <div class="file-table-cell trc-task" :title="row.tracking_route || '-'">
                       <div class="trc-task-inner">
                         <span v-if="row.tracking_route" class="trc-route-tag">{{ row.tracking_route }}</span>
-                        <span v-if="row.task_group" class="trc-group-tag">{{ row.task_group }}</span>
-                        <span v-if="!row.tracking_route && !row.task_group">-</span>
+                        <span v-else>-</span>
                       </div>
                     </div>
-                    <div class="file-table-cell trc-point" :title="row.task_point || '-'">
-                      <span v-if="row.task_point" class="trc-point-tag">{{ row.task_point }}</span>
-                      <span v-else>-</span>
+                    <div class="file-table-cell trc-point" :title="row.task_group || '-'">
+                      <div class="trc-task-inner">
+                        <span v-if="row.task_group" class="trc-group-tag">{{ row.task_group }}</span>
+                        <span v-else>-</span>
+                      </div>
                     </div>
                     <div class="file-table-cell trc-coord" :title="formatCoord(row.x, row.y)">
                       <span class="trc-coord-val">{{ formatCoord(row.x, row.y) }}</span>
@@ -133,8 +134,9 @@
                       <span v-if="row.content" class="trc-item-tag">{{ row.content }}</span>
                       <span v-else>-</span>
                     </div>
-                    <div class="file-table-cell trc-result" :title="row.results || '-'">
-                      <span v-if="row.results" class="trc-result-badge">{{ row.results }}</span>
+                    <div class="file-table-cell trc-result" :title="getOutMessage(row).message || row.results || '-'">
+                      <span v-if="getOutMessage(row).message" class="trc-result-badge">{{ getOutMessage(row).message }}</span>
+                      <span v-else-if="row.results" class="trc-result-badge">{{ row.results }}</span>
                       <span v-else class="trc-empty">-</span>
                     </div>
                     <div class="file-table-cell trc-desc" :title="row.description || '-'">{{ row.description || '-' }}</div>
@@ -288,13 +290,14 @@ const loadFilterOptions = async () => {
   try {
     const robotIp = deviceStore.selectedRobot?.ip_address
     if (!robotIp) return
-    const res = await fetch(`/api/dxr_api/get_lists?robot_ip=${encodeURIComponent(robotIp)}`)
+    const res = await fetch(`/api/dxr_api/get_lists?robot_ip=${encodeURIComponent(robotIp)}&field_array=content,task_group,tracking_route`)
     if (!res.ok) return
-    const data = await res.json()
+    const json = await res.json()
+    const payload = json.data || {}
     const clean = (arr: string[]) => (arr || []).filter((v: string) => v !== '全部')
-    contentList.value = clean(data.content || [])
-    routeList.value = clean(data.tracking_route || [])
-    taskGroupList.value = clean(data.task_group || [])
+    contentList.value = clean(payload.content || [])
+    routeList.value = clean(payload.tracking_route || [])
+    taskGroupList.value = clean(payload.task_group || [])
   } catch (err) {
     console.error('获取筛选项失败:', err)
   }
@@ -443,8 +446,17 @@ const formatCoord = (x: number | null, y: number | null): string => {
   return `${fx}, ${fy}`
 }
 
+const getOutMessage = (row: any): Record<string, any> => {
+  const om = row?.outmessage
+  if (!om) return {}
+  if (typeof om === 'string') {
+    try { return JSON.parse(om) } catch { return {} }
+  }
+  return om
+}
+
 const getImage = (row: any): string | null => {
-  const img = row?.outmessage?.out_image
+  const img = getOutMessage(row)?.out_image
   if (!img) return null
   // 已是完整 URL：通过 /robot81/ 代理转发（去掉前缀后直接转到 robot_ip:81/path）
   if (img.startsWith('http://') || img.startsWith('https://')) {
@@ -801,13 +813,13 @@ onUnmounted(() => {
 
 /* id列固定窄宽，其余列均等 flex:1 */
 .trc-id        { flex: 0 0 55px;  min-width: 55px;  text-align: center; }
-.trc-time      { flex: 1 1 0;     min-width: 120px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.trc-time      { flex: 0.7 1 0;   min-width: 110px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
 .trc-map       { flex: 1 1 0;     min-width: 80px;  text-align: center; }
 .trc-task      { flex: 2 1 0;     min-width: 130px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
 .trc-point     { flex: 1 1 0;     min-width: 80px;  text-align: center; }
 .trc-coord     { flex: 1 1 0;     min-width: 90px;  text-align: center; }
 .trc-item      { flex: 1 1 0;     min-width: 80px;  text-align: center; }
-.trc-result    { flex: 0.5 1 0;   min-width: 55px;  text-align: center; }
+.trc-result    { flex: 0.8 1 0;   min-width: 70px;  text-align: center; }
 .trc-desc      { flex: 2 1 0;     min-width: 100px; text-align: center; }
 .trc-pic       { flex: 0 0 80px;  min-width: 80px;  padding: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; overflow: visible; }
 /* 数据行的图片列：居中对齐 */
