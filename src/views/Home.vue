@@ -419,7 +419,13 @@
                     />
                     <span class="label">角度</span>
                   </div>
-                  <span class="value">{{ robotStore.pose ? (robotStore.pose.theta * 180 / Math.PI).toFixed(1) + '°' : '--' }}</span>
+                  <span class="value">{{
+                    robotStore.pose
+                      ? (robotStore.pose.theta * 180 / Math.PI).toFixed(1) + '°'
+                      : robotStore.imuYaw !== null
+                        ? robotStore.imuYaw.toFixed(1) + '°'
+                        : '--'
+                  }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">

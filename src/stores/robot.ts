@@ -12,6 +12,7 @@ import type {
   RcsData,
   MotionStateData,
   BatteryData,
+  SensorData,
   TerrainModeData,
   BodyHeightStateData,
 } from '../composables/useRobotWebSocket'
@@ -55,6 +56,9 @@ export const useRobotStore = defineStore('robot', () => {
 
   // ===== 0x11050f08 机身高度/姿态 =====
   const bodyHeightState = ref<BodyHeightStateData | null>(null)
+
+  // ===== 0x100a 传感器帧（IMU + 关节） =====
+  const sensorData = ref<SensorData | null>(null)
 
   // ===== task_status 发布点任务运行状态 =====
   const taskStatus = ref<TaskStatusData | null>(null)
@@ -101,6 +105,7 @@ export const useRobotStore = defineStore('robot', () => {
   }
 
   const setMotionState = (data: MotionStateData) => {
+    if (!data) return
     motionState.value = data
   }
 
@@ -116,11 +121,41 @@ export const useRobotStore = defineStore('robot', () => {
     bodyHeightState.value = data
   }
 
+  const setSensorData = (data: SensorData) => {
+    if (!data?.imu_data) return
+    sensorData.value = data
+  }
+
   const setTaskStatus = (data: TaskStatusData) => {
     taskStatus.value = data
   }
 
   // ===== computed =====
+
+  /** IMU Roll 角（度） */
+  const imuRoll = computed(() => {
+    const r = sensorData.value?.imu_data?.roll
+    return r != null ? (r * 180 / Math.PI) : null
+  })
+
+  /** IMU Pitch 角（度） */
+  const imuPitch = computed(() => {
+    const p = sensorData.value?.imu_data?.pitch
+    return p != null ? (p * 180 / Math.PI) : null
+  })
+
+  /** IMU Yaw 角（度），当 pose 不可用时作为角度回退来源 */
+  const imuYaw = computed(() => {
+    const y = sensorData.value?.imu_data?.yaw
+    return y != null ? (y * 180 / Math.PI) : null
+  })
+
+  /** 地面加速度模长（去重力），可用于诊断时 */
+  const imuHorizAccel = computed(() => {
+    const d = sensorData.value?.imu_data
+    if (!d) return null
+    return Math.sqrt(d.acc_x ** 2 + d.acc_y ** 2)
+  })
 
   /** 地形模式文本（来自 0x3100EE01 terrain_mode 字段） */
   const terrainModeText = computed(() => terrainMode.value?.terrain_mode ?? '--')
@@ -154,10 +189,7 @@ export const useRobotStore = defineStore('robot', () => {
   const batteryLevel = computed(() => batteryData.value?.battery_level ?? null)
 
   /** 电压（单位 V，原始值为 10mV 单位，需 /100） */
-  const voltage = computed(() => {
-    if (batteryData.value?.voltage == null) return null
-    return batteryData.value.voltage / 100
-  })
+  const voltage = computed(() => batteryData.value?.voltage ?? null)
 
   /** 电流（单位 A，原始值为 10mA 单位，需 /100） */
   const current = computed(() => {
@@ -190,17 +222,18 @@ export const useRobotStore = defineStore('robot', () => {
     const g = motionState.value?.gait_state
     if (g == null) return '--'
     const map: Record<number, string> = {
-      1: '行走步态',
+      0: '行走步态',
+      1: '越障步态',
       2: '斜坡步态',
-      3: '越障步态',
-      4: '楼梯步态',
-      5: '帧楼梯步态',
-      6: '帧45°步态',
-      7: 'L行走步态',
-      8: '山地步态',
-      9: '静音步态',
+      3: '跑步步态',
+      6: '楼梯步态',
+      7: '帧楼梯步态',
+      8: '45°楼梯步态',
+      32: 'L行走步态',
+      33: '山地步态',
+      34: '静音步态',
     }
-    return map[g] ?? '--'
+    return map[g] ?? `步态${g}`
   })
 
   /** 姿态文本（来自 0x1008 rcs_state，暂无具体含义，展示站立/匍匐需依赖其他字段） */
@@ -267,6 +300,7 @@ export const useRobotStore = defineStore('robot', () => {
     batteryData,
     terrainMode,
     bodyHeightState,
+    sensorData,
     taskStatus,
     // mutations
     setOnlineStatus,
@@ -282,6 +316,7 @@ export const useRobotStore = defineStore('robot', () => {
     setBatteryData,
     setTerrainMode,
     setBodyHeightState,
+    setSensorData,
     setTaskStatus,
     // computed
     batteryLevel,
@@ -295,6 +330,10 @@ export const useRobotStore = defineStore('robot', () => {
     currentSpeed,
     currentMileage,
     totalMileage,
+    imuRoll,
+    imuPitch,
+    imuYaw,
+    imuHorizAccel,
     wifiError,
     imuError,
     driverHeatWarn,

@@ -138,6 +138,28 @@ export interface BatteryData {
   battery_temperature: number[]
 }
 
+/** 0x100a IMU 数据 */
+export interface ImuData {
+  timestamp: number
+  roll: number
+  pitch: number
+  yaw: number
+  omega_x: number
+  omega_y: number
+  omega_z: number
+  acc_x: number
+  acc_y: number
+  acc_z: number
+}
+
+/** 0x100a 传感器帧（IMU + 关节） */
+export interface SensorData {
+  imu_data: ImuData
+  joint_pos: Record<string, number>
+  joint_vel: Record<string, number>
+  joint_tau: Record<string, number>
+}
+
 /** 0x3100EE01 地形模式 */
 export interface TerrainModeData {
   instruction_code: string
@@ -158,7 +180,7 @@ export interface BodyHeightStateData {
 export interface DogUdpData {
   code: number
   code_hex: string
-  parsed?: RcsData | MotionStateData | BatteryData | TerrainModeData | BodyHeightStateData | Record<string, any>
+  parsed?: RcsData | MotionStateData | BatteryData | SensorData | TerrainModeData | BodyHeightStateData | Record<string, any>
   timestamp: string
 }
 
@@ -281,6 +303,11 @@ export function useRobotWebSocket() {
         // 0x21050f0a：电池数据
         if (hexCode === '0x21050f0a') {
           robotStore.setBatteryData(udpData.parsed as BatteryData)
+        }
+
+        // 0x100a：传感器帧（IMU + 关节）
+        if (hexCode === '0x100a') {
+          robotStore.setSensorData(udpData.parsed as SensorData)
         }
 
         // 0x3100ee01：地形模式

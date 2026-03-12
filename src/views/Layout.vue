@@ -523,11 +523,12 @@ onMounted(async () => {
   --el-border-color: rgba(255, 255, 255, 0.2);
   --el-fill-color-blank: rgba(255, 255, 255, 0.1);
   
-  width: clamp(140px, 15vw, 180px); /* 增加宽度范围 */
+  width: clamp(140px, 15vw, 180px);
   margin-right: clamp(10px, 1.5vw, 15px);
   display: inline-block;
   position: relative;
   vertical-align: middle;
+  min-height: 32px;
 }
 
 .el-select__wrapper {
@@ -543,10 +544,13 @@ onMounted(async () => {
   line-height: 24px;
   min-height: 32px;
   padding: 4px 12px;
-  position: relative;
+  position: absolute;
+  right: 0;
+  width: 170px; /* 视觉宽度，向左溢出容器，不影响外部布局 */
   text-align: left;
   transform: translateZ(0);
   transition: var(--el-transition-duration);
+  overflow: hidden;
 }
 
 .el-select__wrapper:hover {
@@ -622,8 +626,8 @@ onMounted(async () => {
 .el-select__dropdown {
   position: absolute;
   top: 100%;
-  left: 0;
-  width: 100%;
+  right: 0;
+  width: 170px;
   background-color: rgba(15, 25, 45, 0.95);
   border: 1px solid rgba(0, 188, 212, 0.3);
   border-radius: 4px;
@@ -646,6 +650,10 @@ onMounted(async () => {
   font-size: 14px;
   cursor: pointer;
   transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .el-select__dropdown-item:hover {
