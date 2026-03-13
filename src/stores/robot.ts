@@ -191,10 +191,10 @@ export const useRobotStore = defineStore('robot', () => {
   /** 电压（单位 V，原始值为 10mV 单位，需 /100） */
   const voltage = computed(() => batteryData.value?.voltage ?? null)
 
-  /** 电流（单位 A，原始值为 10mA 单位，需 /100） */
+  /** 电流（返回原始数值，直接显示，单位A。即返回什么显示什么） */
   const current = computed(() => {
     if (batteryData.value?.current == null) return null
-    return batteryData.value.current / 100
+    return batteryData.value.current
   })
 
   /**

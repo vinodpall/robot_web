@@ -364,21 +364,26 @@
               <div class="b-top-right">
                 <div class="b-top-rightCard">
                   <div class="b-top-rightDiv">
-                    <img src="@/assets/source_data/speed.png" alt="" />
+                    <img class="metric-icon metric-icon-speed" src="@/assets/source_data/svg_data/robot_speed_card.svg" alt="速度" />
                   <div>
-                    <p>{{ robotStore.currentSpeed !== null ? robotStore.currentSpeed.toFixed(2) + ' m/s' : '0.00 m/s' }}</p>
+                      <p>{{ formatRobotSpeed() }}</p>
                       <p>当前速度</p>
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
-                  <img src="@/assets/source_data/today_time.png" alt="" />
+                  <span class="metric-icon-wrap metric-icon-battery-wrap">
+                    <img class="metric-icon metric-icon-battery" src="@/assets/source_data/svg_data/robot_battery_card.svg" alt="电量" />
+                    <img v-if="isRobotCharging" class="charging-lightning-badge" src="@/assets/source_data/svg_data/charging_bolt.svg" alt="充电中" />
+                  </span>
                   <div>
-                    <p>{{ formatBattery(robotBatteryLevel) }}</p>
+                    <p class="battery-value-line">
+                      <span :class="{ 'battery-percent-charging': isRobotCharging }">{{ formatBattery(robotBatteryLevel) }}</span>
+                    </p>
                       <p>当前剩余电量</p>
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
-                  <img src="@/assets/source_data/total_miles.png" alt="" />
+                  <img class="metric-icon metric-icon-mileage" src="@/assets/source_data/svg_data/robot_mileage_card.svg" alt="里程" />
                   <div>
                     <p>{{ robotStore.totalMileage !== null ? (robotStore.totalMileage / 1000).toFixed(3) + ' km' : '0 km' }}</p>
                       <p>累计行走里程</p>
@@ -395,21 +400,21 @@
                     <img src="@/assets/source_data/svg_data/longitude.svg" alt="X坐标" />
                     <span class="label">X坐标</span>
                   </div>
-                  <span class="value">{{ robotStore.pose ? robotStore.pose.x.toFixed(3) : '--' }}</span>
+                  <span class="value">{{ formatRobotPositionAxis(0) }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/latitude.svg" alt="Y坐标" />
                     <span class="label">Y坐标</span>
                   </div>
-                  <span class="value">{{ robotStore.pose ? robotStore.pose.y.toFixed(3) : '--' }}</span>
+                  <span class="value">{{ formatRobotPositionAxis(1) }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
                     <img src="@/assets/source_data/svg_data/altitude.svg" alt="高度" />
                     <span class="label">高度</span>
                   </div>
-                  <span class="value">{{ robotStore.pose ? robotStore.pose.z.toFixed(3) : '--' }}</span>
+                  <span class="value">{{ formatRobotPositionAxis(2) }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
@@ -419,13 +424,7 @@
                     />
                     <span class="label">角度</span>
                   </div>
-                  <span class="value">{{
-                    robotStore.pose
-                      ? (robotStore.pose.theta * 180 / Math.PI).toFixed(1) + '°'
-                      : robotStore.imuYaw !== null
-                        ? robotStore.imuYaw.toFixed(1) + '°'
-                        : '--'
-                  }}</span>
+                  <span class="value">{{ formatRobotYaw() }}</span>
                 </div>
                 <div class="status-item">
                   <div class="top-row">
@@ -495,34 +494,34 @@
         <div class="robot-control-container">
           <div class="robot-control-grid">
             <!-- 第一行 -->
-            <button class="control-button active" @click="handleControlClick('stand')">起立</button>
-            <button class="control-button active" @click="handleControlClick('forceControlMode')">力控模式</button>
-            <button class="control-button active emergency" @click="handleControlClick('emergencyStop')">急停</button>
+            <button :class="getControlButtonClass('stand')" :disabled="isControlDisabled('stand')" @click="handleControlClick('stand')">{{ standControlLabel }}</button>
+            <button :class="getControlButtonClass('forceControlMode')" :disabled="isControlDisabled('forceControlMode')" @click="handleControlClick('forceControlMode')">力控模式</button>
+            <button :class="getControlButtonClass('emergencyStop', true)" :disabled="isControlDisabled('emergencyStop')" @click="handleControlClick('emergencyStop')">急停</button>
             
             <!-- 第二行 -->
-            <button class="control-button active" @click="handleControlClick('startMove')">开始运动</button>
-            <button class="control-button active" @click="handleControlClick('crawl')">匍匐姿态</button>
-            <button class="control-button active" @click="handleControlClick('autoMode')">非手动模式</button>
+            <button :class="getControlButtonClass('startMove')" :disabled="isControlDisabled('startMove')" @click="handleControlClick('startMove')">{{ moveControlLabel }}</button>
+            <button :class="getControlButtonClass('crawl')" :disabled="isControlDisabled('crawl')" @click="handleControlClick('crawl')">匍匐姿态</button>
+            <button :class="getControlButtonClass('autoMode')" :disabled="isControlDisabled('autoMode')" @click="handleControlClick('autoMode')">非手动模式</button>
             
             <!-- 第三行 -->
-            <button class="control-button active" @click="handleControlClick('walkGait')">行走步态</button>
-            <button class="control-button active" @click="handleControlClick('obstacleGait')">超障步态</button>
-            <button class="control-button active" @click="handleControlClick('slopeGait')">斜坡步态</button>
+            <button :class="getControlButtonClass('walkGait')" :disabled="isControlDisabled('walkGait')" @click="handleControlClick('walkGait')">行走步态</button>
+            <button :class="getControlButtonClass('obstacleGait')" :disabled="isControlDisabled('obstacleGait')" @click="handleControlClick('obstacleGait')">超障步态</button>
+            <button :class="getControlButtonClass('slopeGait')" :disabled="isControlDisabled('slopeGait')" @click="handleControlClick('slopeGait')">斜坡步态</button>
             
             <!-- 第四行 -->
-            <button class="control-button active" @click="handleControlClick('stairGait')">楼梯步态</button>
-            <button class="control-button active" @click="handleControlClick('stairFollowGait')">顺楼梯步态</button>
-            <button class="control-button active" @click="handleControlClick('stair45Gait')">45°楼梯步态</button>
+            <button :class="getControlButtonClass('stairGait')" :disabled="isControlDisabled('stairGait')" @click="handleControlClick('stairGait')">楼梯步态</button>
+            <button :class="getControlButtonClass('stairFollowGait')" :disabled="isControlDisabled('stairFollowGait')" @click="handleControlClick('stairFollowGait')">顺楼梯步态</button>
+            <button :class="getControlButtonClass('stair45Gait')" :disabled="isControlDisabled('stair45Gait')" @click="handleControlClick('stair45Gait')">45°楼梯步态</button>
             
             <!-- 第五行 -->
-            <button class="control-button active" @click="handleControlClick('lGait')">L步态</button>
-            <button class="control-button active" @click="handleControlClick('mountainGait')">山地步态</button>
-            <button class="control-button active" @click="handleControlClick('quietGait')">静音步态</button>
+            <button :class="getControlButtonClass('lGait')" :disabled="isControlDisabled('lGait')" @click="handleControlClick('lGait')">L步态</button>
+            <button :class="getControlButtonClass('mountainGait')" :disabled="isControlDisabled('mountainGait')" @click="handleControlClick('mountainGait')">山地步态</button>
+            <button :class="getControlButtonClass('quietGait')" :disabled="isControlDisabled('quietGait')" @click="handleControlClick('quietGait')">静音步态</button>
             
             <!-- 第六行 -->
-            <button class="control-button active" @click="handleControlClick('startCharge')">开始充电</button>
-            <button class="control-button active" @click="handleControlClick('endCharge')">结束充电</button>
-            <button class="control-button active" @click="handleControlClick('resetCharge')">重置充电</button>
+            <button :class="getControlButtonClass('startCharge')" :disabled="isControlDisabled('startCharge')" @click="handleControlClick('startCharge')">开始充电</button>
+            <button :class="getControlButtonClass('endCharge')" :disabled="isControlDisabled('endCharge')" @click="handleControlClick('endCharge')">结束充电</button>
+            <button :class="getControlButtonClass('resetCharge')" :disabled="isControlDisabled('resetCharge')" @click="handleControlClick('resetCharge')">重置充电</button>
           </div>
         </div>
       </div>
@@ -1043,6 +1042,7 @@ import {
   cameraApi,
   waylineApi,
   livestreamApi,
+  dogApi,
 } from '../api/services'
 import SuccessMessage from '../components/SuccessMessage.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
@@ -1159,6 +1159,13 @@ const isRobotOnline = computed(() => robotStore.isOnline)
 
 // 计算属性：机器人电量（来自 0x21050f0a battery_level）
 const robotBatteryLevel = computed(() => robotStore.batteryLevel)
+
+// 计算属性：机器人是否处于充电中（来自 0x21050f0a current 正负值）
+const isRobotCharging = computed(() => {
+  const current = robotStore.batteryData?.current
+  if (typeof current !== 'number' || !Number.isFinite(current)) return false
+  return current > 0
+})
 
 // cmd_status 同步到本地按钮状态
 watch(() => robotStore.cmdStatus, (status) => {
@@ -1393,8 +1400,8 @@ const formatRobotVoltage = (_value?: number) => {
 // 格式化机器人电流（来自 robotStore.current，单位 A）
 const formatRobotCurrent = (_value?: number) => {
   const c = robotStore.current
-  if (c === null) return '0.0A'
-  return `${c.toFixed(1)}A`
+  if (c === null) return '0A'
+  return `${c}A`
 }
 
 // 格式化地面类型（来自 robotStore.terrainModeText）
@@ -1402,6 +1409,36 @@ const formatGroundType = () => robotStore.terrainModeText
 
 // 格式化步态（来自 robotStore.gaitText）
 const formatGaitType = () => robotStore.gaitText
+
+// 格式化当前速度（来自 0x1009 leg_odom_vel）
+const formatRobotSpeed = () => {
+  const velocity = robotStore.motionState?.leg_odom_vel
+  const vx = Array.isArray(velocity) ? velocity[0] : undefined
+  if (typeof vx !== 'number' || !Number.isFinite(vx)) return '--'
+  const normalizedVx = Math.abs(vx) < 0.005 ? 0 : vx
+  return `${normalizedVx.toFixed(2)} m/s`
+}
+
+// 格式化坐标（来自 pose_update）
+const formatRobotPositionAxis = (axis: 0 | 1 | 2) => {
+  const pose = robotStore.pose
+  if (!pose) return '--'
+
+  const map = [pose.x, pose.y, pose.z]
+  const value = map[axis]
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return value.toFixed(3)
+}
+
+// 格式化角度（来自 pose_update.theta，原始值显示）
+const formatRobotYaw = () => {
+  const theta = robotStore.pose?.theta
+  if (typeof theta === 'number' && Number.isFinite(theta)) {
+    return theta.toFixed(3)
+  }
+
+  return '--'
+}
 
 // 格式化姿态（来自 robotStore.postureText: 0x11050f08 body_height_state.state）
 const formatPosture = () => robotStore.postureText
@@ -2672,10 +2709,18 @@ const fetchLatestAlarmLogs = async () => {
   }
 }
 
-// WebSocket 收到 alert 消息时，重新拉取最新告警日志
-watch(() => robotStore.alerts[0], (newAlert) => {
-  if (newAlert) fetchLatestAlarmLogs()
-})
+// 仅在 WebSocket 推入新的 alert 时，才重新拉取最新告警日志
+watch(
+  () => {
+    const latestAlert = robotStore.alerts[0]
+    return latestAlert ? `${latestAlert.alert_id}:${latestAlert.detected_at}` : ''
+  },
+  (latestAlertKey, previousAlertKey) => {
+    if (!latestAlertKey || latestAlertKey === previousAlertKey) return
+    if (!deviceStore.selectedRobot?.ip_address) return
+    fetchLatestAlarmLogs()
+  }
+)
 
 // 云台切换函数
 const switchGimbal = async (videoType: 'dock' | 'drone_visible' | 'drone_infrared') => {
@@ -3472,6 +3517,11 @@ const clearWebRTCFreezeDetection = () => {
   webrtcLastVideoTime = -1
 }
 const scheduleWebRTCReconnect = () => {
+  if (!videoStreamUrl.value) {
+    clearWebRTCReconnectTimer()
+    webrtcReconnecting.value = false
+    return
+  }
   if (webrtcReconnectTimer) return // 已有待执行的重连
   if (webrtcReconnectCount >= WEBRTC_MAX_RECONNECT) {
     webrtcReconnecting.value = false
@@ -3482,6 +3532,10 @@ const scheduleWebRTCReconnect = () => {
   const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * webrtcReconnectCount, 15000)
   webrtcReconnectTimer = setTimeout(() => {
     webrtcReconnectTimer = null
+    if (!videoStreamUrl.value) {
+      webrtcReconnecting.value = false
+      return
+    }
     stopWebRTCPlaybackForReconnect()  // 只关连接，不清 srcObject
     startWebRTCPlayback()
   }, delay)
@@ -3513,6 +3567,11 @@ const clearInfraredFreezeDetection = () => {
   infraredLastVideoTime = -1
 }
 const scheduleInfraredReconnect = () => {
+  if (!infraredStreamUrl.value) {
+    clearInfraredReconnectTimer()
+    infraredReconnecting.value = false
+    return
+  }
   if (infraredReconnectTimer) return
   if (infraredReconnectCount >= WEBRTC_MAX_RECONNECT) {
     infraredReconnecting.value = false
@@ -3523,6 +3582,10 @@ const scheduleInfraredReconnect = () => {
   const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * infraredReconnectCount, 15000)
   infraredReconnectTimer = setTimeout(() => {
     infraredReconnectTimer = null
+    if (!infraredStreamUrl.value) {
+      infraredReconnecting.value = false
+      return
+    }
     stopInfraredWebRTCPlaybackForReconnect()  // 只关连接，不清 srcObject
     startInfraredPlayback(true)  // keepFrame=true，跳过内部 stop
   }, delay)
@@ -3542,6 +3605,8 @@ const startInfraredFreezeDetection = () => {
 // 初始化视频播放器
 const initVideoPlayer = () => {
   const defaultVideoType = getDefaultVideoType()
+  // 每次初始化先清空，避免沿用旧机器人 URL 触发重连
+  videoStreamUrl.value = ''
   
   if (defaultVideoType) {
     const defaultStream = getVideoStream(defaultVideoType)
@@ -3564,6 +3629,10 @@ const initVideoPlayer = () => {
       currentVideoType.value = allStreams[0].type
     }
   }
+
+  if (!videoStreamUrl.value) {
+    stopVideoPlayback()
+  }
   
   // 由watch(videoStreamUrl)统一触发播放，避免重复拉流
 }
@@ -3577,7 +3646,10 @@ const initCameraStreams = async (signal?: AbortSignal) => {
   if (!robotId) {
     robotId = localStorage.getItem('selected_robot_id') || ''
   }
-  if (!robotId) return
+  if (!robotId) {
+    setVideoStreams([])
+    return
+  }
 
   // 优先读缓存（robotBootstrap 切换机器人后已预填充）
   const cachedCameraList = localStorage.getItem('camera_list')
@@ -3593,9 +3665,13 @@ const initCameraStreams = async (signal?: AbortSignal) => {
     try {
       const cameraListResponse = await cameraApi.getCameraList(robotId, signal)
       if (signal?.aborted) return
-      if (!cameraListResponse?.data || !Array.isArray(cameraListResponse.data) || cameraListResponse.data.length === 0) return
+      if (!cameraListResponse?.data || !Array.isArray(cameraListResponse.data) || cameraListResponse.data.length === 0) {
+        setVideoStreams([])
+        return
+      }
       cameraData = cameraListResponse.data
     } catch (_) {
+      setVideoStreams([])
       return
     }
   }
@@ -3627,13 +3703,14 @@ const initCameraStreams = async (signal?: AbortSignal) => {
       }
     }
     
-    // 保存视频流到localStorage
+    // 保存视频流到 localStorage（无流时也覆盖，避免沿用上一个机器人的旧流）
+    setVideoStreams(videoStreams)
     if (videoStreams.length > 0) {
-      setVideoStreams(videoStreams)
       localStorage.setItem('default_video_type', 'drone_visible')
     }
   } catch (error) {
     // 静默处理错误
+    setVideoStreams([])
   }
 }
 
@@ -3941,6 +4018,7 @@ const initInfraredVideo = () => {
     infraredStreamUrl.value = stream.url
     infraredError.value = ''
   } else {
+    stopInfraredPlayback()
     infraredError.value = '未找到红外视频流'
   }
 }
@@ -6089,9 +6167,6 @@ onMounted(async () => {
     }
   })
 
-  // 获取最新告警日志（底部实时警情表格）
-  await fetchLatestAlarmLogs()
-  
   // 航线任务进度数据现在由全局store管理，无需本地加载
   
   // 如果机器人已就绪，初始化视频和点云
@@ -6631,9 +6706,203 @@ const centerToDroneMarker = () => {
   }
 }
 
+type RobotControlName =
+  | 'stand'
+  | 'forceControlMode'
+  | 'emergencyStop'
+  | 'startMove'
+  | 'crawl'
+  | 'autoMode'
+  | 'walkGait'
+  | 'obstacleGait'
+  | 'slopeGait'
+  | 'stairGait'
+  | 'stairFollowGait'
+  | 'stair45Gait'
+  | 'lGait'
+  | 'mountainGait'
+  | 'quietGait'
+  | 'startCharge'
+  | 'endCharge'
+  | 'resetCharge'
+
+const controlCommandNameMap: Partial<Record<RobotControlName, string>> = {
+  stand: 'stand_down',
+  forceControlMode: 'power',
+  emergencyStop: 'stop',
+  startMove: 'action',
+  crawl: 'height_down',
+  autoMode: 'mode_auto',
+  walkGait: 'foot_walk',
+  obstacleGait: 'foot_obs',
+  slopeGait: 'foot_climb',
+  stairGait: 'foot_stair',
+  stairFollowGait: 'foot_stair2',
+  stair45Gait: 'foot_stair3',
+  startCharge: 'charge_start',
+  endCharge: 'charge_stop',
+  resetCharge: 'charge_clean',
+}
+
+const unsupportedControlHint: Partial<Record<RobotControlName, string>> = {
+  lGait: 'L步态接口未在当前后端指令清单中开放',
+  mountainGait: '山地步态接口未在当前后端指令清单中开放',
+  quietGait: '静音步态接口未在当前后端指令清单中开放',
+}
+
+const controlButtonLabelMap: Record<RobotControlName, string> = {
+  stand: '起立',
+  forceControlMode: '力控模式',
+  emergencyStop: '急停',
+  startMove: '开始运动',
+  crawl: '匍匐姿态',
+  autoMode: '非手动模式',
+  walkGait: '行走步态',
+  obstacleGait: '超障步态',
+  slopeGait: '斜坡步态',
+  stairGait: '楼梯步态',
+  stairFollowGait: '顺楼梯步态',
+  stair45Gait: '45°楼梯步态',
+  lGait: 'L步态',
+  mountainGait: '山地步态',
+  quietGait: '静音步态',
+  startCharge: '开始充电',
+  endCharge: '结束充电',
+  resetCharge: '重置充电',
+}
+
+const isControlRequesting = ref(false)
+const standControlLabel = computed(() => {
+  const basicState = robotStore.motionState?.basic_state
+  return basicState === 2 || basicState === 3 || basicState === 4 || basicState === 16 ? '趴下' : '起立'
+})
+const moveControlLabel = computed(() => {
+  const basicState = robotStore.motionState?.basic_state
+  return basicState === 4 ? '停止运动' : '开始运动'
+})
+
+const getControlActionLabel = (controlName: RobotControlName) => {
+  if (controlName === 'stand') return standControlLabel.value
+  if (controlName === 'startMove') return moveControlLabel.value
+  return controlButtonLabelMap[controlName]
+}
+
+const gaitControlSet = new Set<RobotControlName>([
+  'walkGait',
+  'obstacleGait',
+  'slopeGait',
+  'stairGait',
+  'stairFollowGait',
+  'stair45Gait',
+  'lGait',
+  'mountainGait',
+  'quietGait',
+])
+
+const allowedGaitsWhenCrouch = new Set<RobotControlName>(['walkGait', 'slopeGait'])
+const bodyHeightControlSet = new Set<RobotControlName>(['crawl'])
+
+const canUseStandingControls = (state: number | null) => {
+  if (state == null) return false
+  return state === 2 || state === 3 || state === 4 || state === 16
+}
+
+const isControlEnabled = (controlName: RobotControlName) => {
+  if (isControlRequesting.value) return false
+  if (!robotStore.isOnline) return false
+  if (!controlCommandNameMap[controlName]) return false
+
+  const basicState = robotStore.motionState?.basic_state ?? null
+
+  if (controlName === 'stand') {
+    return basicState === 0 || basicState === 2 || basicState === 3 || basicState === 4 || basicState === 6 || basicState === 16
+  }
+
+  if (controlName === 'crawl') {
+    return canUseStandingControls(basicState)
+  }
+
+  if (controlName === 'startMove') {
+    return basicState === 2 || basicState === 3 || basicState === 4 || basicState === 16
+  }
+
+  if (controlName === 'forceControlMode' || controlName === 'autoMode') {
+    return canUseStandingControls(basicState)
+  }
+
+  if (gaitControlSet.has(controlName)) {
+    return canUseStandingControls(basicState)
+  }
+
+  if (controlName === 'startCharge' || controlName === 'endCharge' || controlName === 'resetCharge') {
+    return basicState !== 1 && basicState !== 5
+  }
+
+  if (controlName === 'emergencyStop') {
+    return basicState !== 6
+  }
+
+  return false
+}
+
+const isControlDisabled = (controlName: RobotControlName) => !isControlEnabled(controlName)
+
+const getControlButtonClass = (controlName: RobotControlName, isEmergency = false) => {
+  const enabled = isControlEnabled(controlName)
+  return ['control-button', enabled ? 'active' : 'disabled', isEmergency && enabled ? 'emergency' : '']
+}
+
+const getControlRuleViolationMessage = (controlName: RobotControlName): string | null => {
+  const postureText = robotStore.postureText || ''
+  const isCrouchHeight = postureText.includes('匍匐')
+  if (isCrouchHeight && gaitControlSet.has(controlName) && !allowedGaitsWhenCrouch.has(controlName)) {
+    return '当前为匍匐高度，仅支持行走步态和斜坡步态'
+  }
+
+  const gaitText = robotStore.gaitText || ''
+  const isLimitedGait = gaitText.includes('L行走') || gaitText.includes('山地') || gaitText.includes('静音')
+  if (isLimitedGait && bodyHeightControlSet.has(controlName)) {
+    return '当前步态不支持更改机器人身体高度与地形模式'
+  }
+
+  return null
+}
+
 // 机器人控制按钮点击处理
-const handleControlClick = (controlName: string) => {
-  // TODO: 实现具体的控制逻辑
+const handleControlClick = async (controlName: RobotControlName) => {
+  const commandName = controlCommandNameMap[controlName]
+  if (!commandName) {
+    showError(unsupportedControlHint[controlName] || '该控制项暂未接入后端指令')
+    return
+  }
+
+  if (!isControlEnabled(controlName)) {
+    const currentStateText = robotStore.robotStatusText || '--'
+    showError(`当前状态（${currentStateText}）下该操作不可用`)
+    return
+  }
+
+  const ruleViolationMessage = getControlRuleViolationMessage(controlName)
+  if (ruleViolationMessage) {
+    showError(ruleViolationMessage)
+    return
+  }
+
+  const robotId = deviceStore.selectedRobotId
+  if (!robotId) {
+    showError('未选择机器人，无法发送控制指令')
+    return
+  }
+
+  isControlRequesting.value = true
+  try {
+    await dogApi.sendCommand(robotId, { command_name: commandName })
+    showSuccess(`${getControlActionLabel(controlName)}指令已发送`)
+  } catch (error) {
+    showError(`指令发送失败: ${parseErrorMessage(error)}`)
+  } finally {
+    isControlRequesting.value = false
+  }
 }
 
 
@@ -7465,9 +7734,80 @@ onActivated(async () => {
 }
 
 .b-top-rightDiv img {
-  width: clamp(28px, 3.5vw, 36px);
-  height: clamp(22px, 2.5vw, 28px);
+  width: clamp(34px, 2.6vw, 40px);
+  height: clamp(34px, 2.6vw, 40px);
   margin-right: 8px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.b-top-rightDiv .metric-icon {
+  display: block;
+  transform-origin: center center;
+}
+
+.b-top-rightDiv .metric-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.b-top-rightDiv .metric-icon-battery-wrap .metric-icon-battery {
+  margin-right: 0;
+}
+
+.b-top-rightDiv .metric-icon-speed {
+  transform: scale(1.02);
+}
+
+.b-top-rightDiv .metric-icon-battery {
+  transform: scale(1.02) translateY(1px);
+}
+
+.b-top-rightDiv .metric-icon-mileage {
+  transform: scale(1.18) translateY(-2px);
+}
+
+.b-top-rightDiv .charging-text {
+  display: none;
+}
+
+.b-top-rightDiv p.battery-value-line {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  gap: 2px;
+  line-height: 1;
+}
+
+.b-top-rightDiv .battery-percent-charging {
+  color: #5FEA94;
+}
+
+.b-top-rightDiv .charging-lightning-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: clamp(12px, 1.05vw, 14px);
+  height: clamp(12px, 1.05vw, 14px);
+  z-index: 2;
+  filter: drop-shadow(0 0 3px rgba(0, 255, 102, 0.95)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+  animation: chargingLightningBlink 0.9s steps(1, end) infinite;
+  pointer-events: none;
+}
+
+@keyframes chargingLightningBlink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
 }
 
 .b-top-rightDiv p:first-child {
@@ -7476,6 +7816,11 @@ onActivated(async () => {
   font-weight: 600;
   margin-bottom: 2px;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  display: inline-block;
+  min-width: 9ch;
+  white-space: nowrap;
 }
 
 .b-top-rightDiv p:last-child {

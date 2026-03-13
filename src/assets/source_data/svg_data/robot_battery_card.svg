@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="batteryLine" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B8F4FF"/>
+      <stop offset="1" stop-color="#3CCBEE"/>
+    </linearGradient>
+  </defs>
+  <rect x="16.8" y="21" width="29.6" height="22" rx="4.2" stroke="url(#batteryLine)" stroke-width="3"/>
+  <rect x="46.4" y="28" width="4.8" height="8" rx="1.8" fill="url(#batteryLine)"/>
+  <rect x="21" y="25.2" width="6.2" height="13.6" rx="1.6" fill="url(#batteryLine)"/>
+  <rect x="29.1" y="25.2" width="6.2" height="13.6" rx="1.6" fill="url(#batteryLine)" opacity="0.82"/>
+  <rect x="37.2" y="25.2" width="6.2" height="13.6" rx="1.6" fill="url(#batteryLine)" opacity="0.62"/>
+</svg>

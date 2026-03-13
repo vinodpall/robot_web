@@ -993,6 +993,14 @@ export const robotApi = {
   }
 }
 
+// 机器狗控制接口
+export const dogApi = {
+  // 发送机器狗控制指令
+  sendCommand: (robotId: string, data: { command_name: string }) => {
+    return apiClient.post(`/dog/${robotId}/dog_command`, data)
+  }
+}
+
 // 导航管理接口
 export const navigationApi = {
   // 获取地图列表

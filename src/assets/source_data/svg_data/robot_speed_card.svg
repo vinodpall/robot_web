@@ -1,0 +1,12 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="speedLine" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B8F4FF"/>
+      <stop offset="1" stop-color="#3CCBEE"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="17" stroke="url(#speedLine)" stroke-width="2.8" opacity="0.95"/>
+  <path d="M21 36.5C22.7 41.8 27.1 45.2 32 45.2C36.9 45.2 41.3 41.8 43 36.5" stroke="url(#speedLine)" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M33 31L41.5 24.7" stroke="url(#speedLine)" stroke-width="3.2" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="3.1" fill="url(#speedLine)"/>
+</svg>
