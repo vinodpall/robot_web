@@ -222,17 +222,14 @@
                   <div class="nav-map-canvas">
                     <div class="pointcloud-wrapper">
                       <div class="pointcloud-view">
-                        <canvas
-                          ref="navPointCloudCanvas"
-                          class="pointcloud-canvas"
-                          tabindex="0"
-                          @wheel.capture.prevent.stop="handleNavPointCloudWheel"
-                          @pointerdown="handleNavPointCloudPointerDown"
-                          @keydown="handleNavPointCloudKeydown"
-                          @contextmenu.prevent
-                        ></canvas>
-                        <div v-if="navPointCloudLoading" class="pcd-overlay loading">点云加载中...</div>
-                        <div v-else-if="navPointCloudError" class="pcd-overlay error">{{ navPointCloudError }}</div>
+                        <ThreePointCloudPreview
+                          :points="navPointCloudData"
+                          :loading="navPointCloudLoading"
+                          :error="navPointCloudError"
+                          :normalization-params="navPointCloudNormalizationParams"
+                          :robot-pose="robotStore.pose"
+                          :robot-mesh="arrowMesh"
+                        />
                       </div>
                     </div>
                   </div>
@@ -385,17 +382,14 @@
                 <div class="nav-map-canvas">
                   <div class="pointcloud-wrapper">
                     <div class="pointcloud-view">
-                      <canvas
-                        ref="navPointCloudCanvas"
-                        class="pointcloud-canvas"
-                        tabindex="0"
-                        @wheel.capture.prevent.stop="handleNavPointCloudWheel"
-                        @pointerdown="handleNavPointCloudPointerDown"
-                        @keydown="handleNavPointCloudKeydown"
-                        @contextmenu.prevent
-                      ></canvas>
-                      <div v-if="navPointCloudLoading" class="pcd-overlay loading">点云加载中...</div>
-                      <div v-else-if="navPointCloudError" class="pcd-overlay error">{{ navPointCloudError }}</div>
+                      <ThreePointCloudPreview
+                        :points="navPointCloudData"
+                        :loading="navPointCloudLoading"
+                        :error="navPointCloudError"
+                        :normalization-params="navPointCloudNormalizationParams"
+                        :robot-pose="robotStore.pose"
+                        :robot-mesh="arrowMesh"
+                      />
                     </div>
                   </div>
                 </div>
@@ -666,6 +660,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch, computed, shallowRef } from 'vue'
 import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
+import ThreePointCloudPreview from '../components/ThreePointCloudPreview.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
@@ -1335,13 +1330,6 @@ const selectedNavMap = computed({
   set: (v: string) => taskExecutionStore.setSelectedMapName(v)
 })
 const navMapList = ref<string[]>([]) // 地图列表
-
-// 监听导航地图选择变化
-watch(() => taskExecutionStore.selectedMapName, (newMap) => {
-  if (newMap) {
-    refreshNavPointCloud(newMap)
-  }
-})
 
 const taskSpeed = ref(1.0)
 const navData = ref({
@@ -2538,97 +2526,20 @@ const refreshNavPointCloud = async (mapName?: string) => {
   }
 }
 
+// 监听导航地图选择变化
+watch(() => taskExecutionStore.selectedMapName, (newMap) => {
+  if (newMap) {
+    refreshNavPointCloud(newMap)
+  }
+}, { immediate: true })
+
 // 初始化导航点云图
 const initNavPointCloud = async () => {
-  // 如果已经初始化且 Canvas 仍然存在，只需要重新渲染
-  if (navPointCloudInitialized && navPointCloudCanvas.value && navResizeObserver) {
-    console.log('点云图已初始化，重新渲染')
-    forceInitialRender()
-    return
-  }
-  
-  if (!navPointCloudCanvas.value) {
-    console.warn('导航点云图Canvas未找到')
-    return
-  }
-
-  if (navCanvasEventController) {
-    navCanvasEventController.abort()
-  }
-  navCanvasEventController = new AbortController()
-  const signal = navCanvasEventController.signal
-  const onWheel = (event: WheelEvent) => {
-    event.preventDefault()
-    handleNavPointCloudWheel(event)
-  }
-  const wheelTarget = navPointCloudCanvas.value.parentElement || navPointCloudCanvas.value
-  navPointCloudCanvas.value.addEventListener('wheel', onWheel, { passive: false, capture: true, signal })
-  wheelTarget.addEventListener('wheel', onWheel, { passive: false, capture: true, signal })
-
-  console.log('导航点云图Canvas已就绪，开始初始化')
-  
-  // 清理旧的 ResizeObserver
-  if (navResizeObserver) {
-    (navResizeObserver as ResizeObserver | null)?.disconnect()
-    navResizeObserver = null
-  }
-  
   navPointCloudInitialized = true
-  
-  // 先加载数据（如果还没有数据）
-  if (navPointCloudData.value.length === 0) {
-    await refreshNavPointCloud()
+  const targetMap = selectedNavMap.value
+  if (targetMap) {
+    await refreshNavPointCloud(targetMap)
   }
-  
-  // 使用 ResizeObserver 监听容器尺寸变化，确保在容器尺寸稳定后渲染
-  // 这样可以解决初始加载时容器尺寸为0或很小的问题
-  if (navResizeObserver) {
-    (navResizeObserver as ResizeObserver | null)?.disconnect()
-  }
-  
-  navResizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      const { width, height } = entry.contentRect
-      // 只有当容器有足够大的尺寸时才进行渲染
-      if (width > 100 && height > 100) {
-        console.log('容器尺寸变化，触发渲染:', width, height)
-        scheduleNavPointCloudRender()
-      }
-    }
-  })
-  
-  navResizeObserver.observe(navPointCloudCanvas.value)
-  
-  // 强制触发一次布局检查和渲染
-  forceInitialRender()
-}
-
-// 强制初始渲染，等待容器尺寸稳定
-const forceInitialRender = () => {
-  let attempts = 0
-  const maxAttempts = 10
-  
-  const tryRender = () => {
-    const canvas = navPointCloudCanvas.value
-    if (!canvas) return
-    
-    const parent = canvas.parentElement
-    const rect = parent ? parent.getBoundingClientRect() : canvas.getBoundingClientRect()
-    attempts++
-    
-    if (rect.width > 100 && rect.height > 100) {
-      console.log('初始渲染成功，容器尺寸:', rect.width, rect.height)
-      scheduleNavPointCloudRender()
-    } else if (attempts < maxAttempts) {
-      // 容器尺寸还不够，继续等待
-      requestAnimationFrame(tryRender)
-    } else {
-      console.warn('初始渲染尝试次数已达上限，强制渲染')
-      scheduleNavPointCloudRender()
-    }
-  }
-  
-  requestAnimationFrame(tryRender)
 }
 
 watch(navPointCloudData, () => {
@@ -4242,6 +4153,7 @@ const handleDelete = (item: any) => {
 
 .nav-page-content {
   padding-right: 20px;
+  align-items: stretch;
 }
 
 .nav-card-list {
@@ -4640,6 +4552,8 @@ const handleDelete = (item: any) => {
   display: flex;
   gap: 16px;
   margin-top: 0;
+  width: 100%;
+  min-width: 0;
   height: calc(100vh - 260px);
   min-height: 500px;
 }
@@ -4792,6 +4706,7 @@ const handleDelete = (item: any) => {
 
 .nav-map-container {
   flex: 1;
+  min-width: 0;
   background: rgba(10, 42, 58, 0.6);
   border: 1px solid rgba(103, 213, 253, 0.2);
   border-radius: 8px;
@@ -4804,9 +4719,11 @@ const handleDelete = (item: any) => {
 }
 
 .nav-map-canvas {
+  flex: 1;
   width: 100%;
   height: 100%;
   position: relative;
+  min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -4955,6 +4872,7 @@ const handleDelete = (item: any) => {
 .pointcloud-view {
   width: 100%;
   height: 100%;
+  display: flex;
   position: relative;
   background: radial-gradient(circle at 20% 20%, rgba(89, 192, 252, 0.2), transparent 45%),
               radial-gradient(circle at 80% 10%, rgba(255, 128, 0, 0.12), transparent 40%),
@@ -4964,6 +4882,12 @@ const handleDelete = (item: any) => {
   box-sizing: border-box;
   touch-action: none;
   overscroll-behavior: contain;
+}
+
+.pointcloud-view > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .pointcloud-canvas {

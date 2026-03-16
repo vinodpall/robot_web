@@ -162,14 +162,14 @@
         </div>
         <div class="preview-modal-body">
           <div class="preview-map-wrap">
-            <canvas
-              ref="previewPointCloudCanvas"
-              class="pointcloud-canvas"
-              tabindex="0"
-              @contextmenu.prevent
-            ></canvas>
-            <div v-if="previewDialog.loading" class="pcd-overlay loading">点云加载中...</div>
-            <div v-else-if="previewDialog.error" class="pcd-overlay error">{{ previewDialog.error }}</div>
+            <ThreePointCloudPreview
+              :points="previewPointCloudData"
+              :loading="previewDialog.loading"
+              :error="previewDialog.error"
+              :normalization-params="previewPointCloudNormalization"
+              :robot-pose="robotStore.pose"
+              :robot-mesh="previewPc.robotMesh.value"
+            />
           </div>
         </div>
       </div>
@@ -746,6 +746,7 @@ import arriveIcon from '@/assets/source_data/svg_data/robot_source/arrive.png'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
 import { useRobotStore } from '@/stores/robot'
 import { usePointCloudRenderer } from '@/composables/usePointCloudRenderer'
+import ThreePointCloudPreview from '@/components/ThreePointCloudPreview.vue'
 import { getTrajectoryFile } from '@/utils/trajectoryDB'
 import { load3MF } from '@/utils/threemfParser'
 
@@ -1461,8 +1462,6 @@ const applyPreviewOverlay = async () => {
     name: point.name
   }))
 
-  previewPc.robotPose.value = robotStore.pose
-
   previewPointCloudData.value = [
     ...previewBasePointCloudData.value,
     ...normalizedTrajectory,
@@ -1591,20 +1590,8 @@ const openPreviewDialog = async () => {
 
 const closePreviewDialog = () => {
   previewDialog.value.visible = false
-  previewPc.robotPose.value = null
   destroyPreviewCanvasEvents()
 }
-
-watch(
-  () => robotStore.pose,
-  async () => {
-    if (!previewDialog.value.visible || previewDialog.value.loading) return
-    const trackName = resolvePreviewTrackName()
-    if (!trackName || !previewBasePointCloudData.value.length) return
-    await applyPreviewOverlay()
-  },
-  { deep: true }
-)
 
 watch(
   [selectedRouteName, selectedTaskGroupName, isNavigationEnabled],

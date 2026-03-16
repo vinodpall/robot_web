@@ -4,11 +4,6 @@
     <div v-if="loading" class="three-pointcloud-overlay">点云加载中...</div>
     <div v-else-if="error" class="three-pointcloud-overlay error">{{ error }}</div>
     <div v-else-if="!points.length" class="three-pointcloud-overlay">暂无点云数据</div>
-    <div class="three-pointcloud-hud">
-      <span>Three.js 预览</span>
-      <span>{{ points.length.toLocaleString() }} points</span>
-      <span>左键旋转 / 右键平移 / 滚轮缩放</span>
-    </div>
   </div>
 </template>
 
@@ -16,12 +11,20 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { PointCloudPoint } from '@/composables/usePointCloudRenderer'
+import type {
+  NormalizationParams,
+  PointCloudPoint,
+  RobotPose,
+} from '@/composables/usePointCloudRenderer'
+import type { MeshData } from '@/utils/threemfParser'
 
 const props = defineProps<{
   points: PointCloudPoint[]
   loading?: boolean
   error?: string
+  normalizationParams: NormalizationParams
+  robotPose?: RobotPose | null
+  robotMesh?: MeshData | null
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -30,53 +33,126 @@ const rendererRef = shallowRef<THREE.WebGLRenderer | null>(null)
 const sceneRef = shallowRef<THREE.Scene | null>(null)
 const cameraRef = shallowRef<THREE.PerspectiveCamera | null>(null)
 const controlsRef = shallowRef<OrbitControls | null>(null)
-const pointsObjectRef = shallowRef<THREE.Points | null>(null)
+const dynamicGroupRef = shallowRef<THREE.Group | null>(null)
 let resizeObserver: ResizeObserver | null = null
 let animationFrameId = 0
+const SCREEN_POINT_SIZE = 1
+const labelSprites: THREE.Sprite[] = []
 
-const getPointSize = (count: number) => {
-  if (count <= 40000) return 0.016
-  if (count <= 80000) return 0.013
-  if (count <= 140000) return 0.01
-  return 0.008
+const WORLD_UP = new THREE.Vector3(0, 1, 0)
+const LABEL_TEXTURE_SCALE = Math.min(4, Math.max(2, window.devicePixelRatio || 1))
+const UNIFIED_LABEL_HEIGHT_PX = 18
+const UNIFIED_LABEL_FONT_PX = 13
+const UNIFIED_LABEL_PADDING_X = 4
+const UNIFIED_LABEL_PADDING_Y = 2
+
+const toWorldPosition = (x: number, y: number, z: number) => new THREE.Vector3(x, z, -y)
+
+const createLabelSprite = (text: string, options: {
+  textColor: string
+  borderColor: string
+  backgroundColor: string
+  heightPx?: number
+  fontPx?: number
+  paddingX?: number
+  paddingY?: number
+  strokeColor?: string
+  strokeWidth?: number
+}) => {
+  const canvas = document.createElement('canvas')
+  const measureCanvas = document.createElement('canvas')
+  const measureCtx = measureCanvas.getContext('2d')
+  const fontPx = options.fontPx ?? 18
+  const paddingX = options.paddingX ?? 6
+  const paddingY = options.paddingY ?? 3
+  if (!measureCtx) return null
+  measureCtx.font = `bold ${fontPx}px Arial`
+  const textWidth = measureCtx.measureText(text).width
+  const logicalWidth = Math.max(48, Math.ceil(textWidth + paddingX * 2 + 6))
+  const logicalHeight = Math.max(24, Math.ceil(fontPx + paddingY * 2 + 6))
+  canvas.width = Math.ceil(logicalWidth * LABEL_TEXTURE_SCALE)
+  canvas.height = Math.ceil(logicalHeight * LABEL_TEXTURE_SCALE)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.scale(LABEL_TEXTURE_SCALE, LABEL_TEXTURE_SCALE)
+
+  const radius = 6
+  const width = logicalWidth - 6
+  const height = logicalHeight - 6
+  const x = 3
+  const y = 3
+
+  ctx.clearRect(0, 0, logicalWidth, logicalHeight)
+  ctx.beginPath()
+  ctx.moveTo(x + radius, y)
+  ctx.lineTo(x + width - radius, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius)
+  ctx.lineTo(x + width, y + height - radius)
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
+  ctx.lineTo(x + radius, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius)
+  ctx.lineTo(x, y + radius)
+  ctx.quadraticCurveTo(x, y, x + radius, y)
+  ctx.closePath()
+  ctx.fillStyle = options.backgroundColor
+  ctx.fill()
+  ctx.strokeStyle = options.borderColor
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  ctx.fillStyle = options.textColor
+  ctx.font = `bold ${fontPx}px Arial`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = options.strokeColor ?? 'rgba(8, 12, 20, 0.9)'
+  ctx.lineWidth = options.strokeWidth ?? Math.max(1.2, Math.floor(fontPx * 0.12))
+  ctx.strokeText(text, logicalWidth / 2, logicalHeight / 2)
+  ctx.fillText(text, logicalWidth / 2, logicalHeight / 2)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.needsUpdate = true
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.generateMipmaps = false
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  })
+  const sprite = new THREE.Sprite(material)
+  sprite.userData.aspect = logicalWidth / logicalHeight
+  sprite.userData.heightPx = options.heightPx ?? 18
+  sprite.userData.minHeightPx = options.heightPx ?? 18
+  sprite.scale.set(0.16, 0.045, 1)
+  labelSprites.push(sprite)
+  return sprite
 }
 
-const disposePointsObject = () => {
-  const scene = sceneRef.value
-  const pointObject = pointsObjectRef.value
-  if (!scene || !pointObject) return
+const createPointsObject = (points: PointCloudPoint[], filter: (point: PointCloudPoint) => boolean, size: number) => {
+  const selected = points.filter(filter)
+  if (!selected.length) return null
 
-  scene.remove(pointObject)
-  pointObject.geometry.dispose()
-  ;(pointObject.material as THREE.Material).dispose()
-  pointsObjectRef.value = null
-}
+  const positions = new Float32Array(selected.length * 3)
+  const colors = new Float32Array(selected.length * 3)
 
-const rebuildPointCloud = () => {
-  const scene = sceneRef.value
-  if (!scene) return
-
-  disposePointsObject()
-
-  if (!props.points.length) return
-
-  const positions = new Float32Array(props.points.length * 3)
-  const colors = new Float32Array(props.points.length * 3)
-
-  for (let index = 0; index < props.points.length; index++) {
-    const point = props.points[index]
+  for (let index = 0; index < selected.length; index++) {
+    const point = selected[index]
     const base = index * 3
-    positions[base] = point.x
-    positions[base + 1] = point.z
-    positions[base + 2] = -point.y
+    const world = toWorldPosition(point.x, point.y, point.z)
+    positions[base] = world.x
+    positions[base + 1] = world.y
+    positions[base + 2] = world.z
 
     const color = new THREE.Color()
     if (point.intensity >= 1.9) {
-      color.setRGB(0.15, 1, 0.35)
+      color.setRGB(0.08, 1, 0.28)
     } else if (point.intensity >= 1.7) {
       color.setRGB(1, 0.86, 0.15)
     } else {
-      color.setHSL(0.58 - point.intensity * 0.1, 0.9, 0.48 + point.intensity * 0.18)
+      color.setHSL(0.59 - point.intensity * 0.1, 0.9, 0.48 + point.intensity * 0.18)
     }
     colors[base] = color.r
     colors[base + 1] = color.g
@@ -89,28 +165,331 @@ const rebuildPointCloud = () => {
   geometry.computeBoundingSphere()
 
   const material = new THREE.PointsMaterial({
-    size: getPointSize(props.points.length),
-    sizeAttenuation: true,
+    size,
+    sizeAttenuation: false,
     vertexColors: true,
     transparent: true,
-    opacity: 0.95
+    opacity: 0.95,
   })
 
-  const pointCloud = new THREE.Points(geometry, material)
-  scene.add(pointCloud)
-  pointsObjectRef.value = pointCloud
+  return new THREE.Points(geometry, material)
+}
 
-  const bounds = geometry.boundingSphere
-  const camera = cameraRef.value
-  const controls = controlsRef.value
-  if (bounds && camera && controls) {
-    controls.target.set(bounds.center.x, bounds.center.y, bounds.center.z)
-    camera.position.set(bounds.center.x + bounds.radius * 1.6, bounds.center.y + bounds.radius * 1.1, bounds.center.z + bounds.radius * 1.8)
-    camera.near = Math.max(bounds.radius / 100, 0.01)
-    camera.far = Math.max(bounds.radius * 20, 10)
-    camera.updateProjectionMatrix()
-    controls.update()
+const createTrajectoryLineObject = (points: PointCloudPoint[]) => {
+  if (points.length < 2) return null
+
+  const positions = new Float32Array(points.length * 3)
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index]
+    const base = index * 3
+    const world = toWorldPosition(point.x, point.y, point.z)
+    positions[base] = world.x
+    positions[base + 1] = world.y
+    positions[base + 2] = world.z
   }
+
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+
+  const material = new THREE.LineBasicMaterial({
+    color: '#2bff6d',
+    transparent: true,
+    opacity: 0.85,
+  })
+
+  return new THREE.Line(geometry, material)
+}
+
+const createOriginMarker = () => {
+  const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
+  if (maxRange <= 1e-6) return null
+
+  const origin = toWorldPosition(
+    (0 - centerX) / maxRange,
+    (0 - centerY) / maxRange,
+    (0 - centerZ) / maxRange
+  )
+
+  const group = new THREE.Group()
+  const marker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.01, 18, 18),
+    new THREE.MeshBasicMaterial({ color: '#ff3b3b' })
+  )
+  marker.position.copy(origin)
+  group.add(marker)
+
+  const label = createLabelSprite('原点', {
+    textColor: '#ff6767',
+    borderColor: 'rgba(255, 84, 84, 0.7)',
+    backgroundColor: 'rgba(5, 15, 35, 0.5)',
+    heightPx: UNIFIED_LABEL_HEIGHT_PX,
+    fontPx: UNIFIED_LABEL_FONT_PX,
+    paddingX: UNIFIED_LABEL_PADDING_X,
+    paddingY: UNIFIED_LABEL_PADDING_Y,
+    strokeColor: 'rgba(5, 15, 35, 0.7)',
+    strokeWidth: 1.2,
+  })
+  if (label) {
+    label.position.copy(origin.clone().add(new THREE.Vector3(0, 0.045, 0)))
+    group.add(label)
+  }
+
+  return group
+}
+
+const createTaskMarkers = () => {
+  const taskPoints = props.points.filter(point => point.intensity >= 1.7 && point.name)
+  if (!taskPoints.length) return null
+
+  const group = new THREE.Group()
+  for (const point of taskPoints) {
+    const world = toWorldPosition(point.x, point.y, point.z)
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.008, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: '#ffd21f',
+        emissive: '#8a6200',
+        emissiveIntensity: 0.9,
+      })
+    )
+    marker.position.copy(world)
+    group.add(marker)
+
+    const label = createLabelSprite(point.name!, {
+      textColor: '#FFD800',
+      borderColor: 'rgba(255, 216, 0, 0.55)',
+      backgroundColor: 'rgba(5, 15, 35, 0.5)',
+      heightPx: UNIFIED_LABEL_HEIGHT_PX,
+      fontPx: UNIFIED_LABEL_FONT_PX,
+      paddingX: UNIFIED_LABEL_PADDING_X,
+      paddingY: UNIFIED_LABEL_PADDING_Y,
+      strokeColor: 'rgba(5, 15, 35, 0.7)',
+      strokeWidth: 1.2,
+    })
+    if (label) {
+      label.position.copy(world.clone().add(new THREE.Vector3(0, 0.05, 0)))
+      group.add(label)
+    }
+  }
+
+  return group
+}
+
+const createRobotObject = () => {
+  const pose = props.robotPose
+  const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
+  if (!pose || maxRange <= 1e-6) return null
+
+  const normalized = {
+    x: (pose.x - centerX) / maxRange,
+    y: (pose.y - centerY) / maxRange,
+    z: (pose.z - centerZ) / maxRange,
+  }
+  const world = toWorldPosition(normalized.x, normalized.y, normalized.z)
+
+  const group = new THREE.Group()
+  group.position.copy(world)
+
+  if (props.robotMesh?.vertices?.length && props.robotMesh.indices?.length) {
+    const positions = new Float32Array(props.robotMesh.vertices.length * 3)
+    for (let index = 0; index < props.robotMesh.vertices.length; index++) {
+      const vertex = props.robotMesh.vertices[index]
+      const base = index * 3
+      positions[base] = vertex.x
+      positions[base + 1] = vertex.z
+      positions[base + 2] = -vertex.y
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setIndex(props.robotMesh.indices)
+    geometry.computeVertexNormals()
+
+    const material = new THREE.MeshStandardMaterial({
+      color: '#ff00ff',
+      emissive: '#ff00ff',
+      emissiveIntensity: 0.22,
+      metalness: 0.04,
+      roughness: 0.4,
+    })
+
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.scale.setScalar(0.026)
+    mesh.rotation.y = -pose.theta
+    group.add(mesh)
+
+    const edgeGeometry = new THREE.EdgesGeometry(geometry)
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: '#FFB6FF',
+      transparent: true,
+      opacity: 0.95,
+    })
+    const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
+    edges.scale.copy(mesh.scale)
+    edges.rotation.copy(mesh.rotation)
+    group.add(edges)
+  } else {
+    const geometry = new THREE.ConeGeometry(0.026, 0.078, 3)
+    const material = new THREE.MeshStandardMaterial({
+      color: '#ff00ff',
+      emissive: '#ff00ff',
+      emissiveIntensity: 0.22,
+    })
+    const cone = new THREE.Mesh(geometry, material)
+    cone.rotation.x = Math.PI / 2
+    cone.rotation.z = -pose.theta
+    group.add(cone)
+
+    const edgeGeometry = new THREE.EdgesGeometry(geometry)
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: '#FFB6FF',
+      transparent: true,
+      opacity: 0.95,
+    })
+    const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
+    edges.rotation.copy(cone.rotation)
+    group.add(edges)
+  }
+
+  const label = createLabelSprite('机器狗', {
+    textColor: '#FF88FF',
+    borderColor: 'rgba(255, 150, 255, 0.55)',
+    backgroundColor: 'rgba(5, 15, 35, 0.5)',
+    heightPx: UNIFIED_LABEL_HEIGHT_PX,
+    fontPx: UNIFIED_LABEL_FONT_PX,
+    paddingX: UNIFIED_LABEL_PADDING_X,
+    paddingY: UNIFIED_LABEL_PADDING_Y,
+    strokeColor: 'rgba(5, 15, 35, 0.7)',
+    strokeWidth: 1.2,
+  })
+  if (label) {
+    label.position.set(0, 0.06, 0)
+    group.add(label)
+  }
+
+  return group
+}
+
+const clearDynamicGroup = () => {
+  const scene = sceneRef.value
+  const dynamicGroup = dynamicGroupRef.value
+  if (!scene || !dynamicGroup) return
+
+  scene.remove(dynamicGroup)
+  dynamicGroup.traverse(object => {
+    const mesh = object as THREE.Mesh
+    const sprite = object as THREE.Sprite
+    const points = object as THREE.Points
+
+    if (points.geometry) points.geometry.dispose()
+    if (mesh.geometry) mesh.geometry.dispose()
+
+    const material = (points.material || mesh.material || sprite.material) as THREE.Material | THREE.Material[] | undefined
+    if (Array.isArray(material)) {
+      material.forEach(item => item.dispose())
+    } else {
+      material?.dispose()
+    }
+
+    const spriteMaterial = sprite.material as THREE.SpriteMaterial | undefined
+    spriteMaterial?.map?.dispose()
+  })
+  dynamicGroupRef.value = null
+  labelSprites.length = 0
+}
+
+const updateLabelScale = () => {
+  const camera = cameraRef.value
+  const renderer = rendererRef.value
+  if (!camera || !labelSprites.length) return
+
+  const viewportHeight = renderer?.domElement.clientHeight || containerRef.value?.clientHeight || 1
+  const fov = THREE.MathUtils.degToRad(camera.fov)
+
+  for (const sprite of labelSprites) {
+    const worldPosition = new THREE.Vector3()
+    sprite.getWorldPosition(worldPosition)
+    const distance = camera.position.distanceTo(worldPosition)
+    const desiredHeightPx = sprite.userData.heightPx || 18
+    const minHeightPx = sprite.userData.minHeightPx || desiredHeightPx
+    const aspect = sprite.userData.aspect || 3
+    const effectiveHeightPx = Math.max(minHeightPx, desiredHeightPx)
+    const worldHeight = 2 * distance * Math.tan(fov / 2) * (effectiveHeightPx / viewportHeight)
+    const minWorldHeight = 2 * distance * Math.tan(fov / 2) * (minHeightPx / viewportHeight)
+    const clampedHeight = Math.min(0.09, Math.max(minWorldHeight, worldHeight))
+    sprite.scale.set(clampedHeight * aspect, clampedHeight, 1)
+  }
+}
+
+const rebuildSceneContent = () => {
+  const scene = sceneRef.value
+  if (!scene) return
+
+  clearDynamicGroup()
+
+  const group = new THREE.Group()
+  const pointSize = SCREEN_POINT_SIZE
+
+  const cloud = createPointsObject(props.points, point => point.intensity < 1.7, pointSize)
+  if (cloud) group.add(cloud)
+
+  const trajectoryPoints = props.points.filter(point => point.intensity >= 1.9 && point.intensity < 3)
+  const trajectoryLine = createTrajectoryLineObject(trajectoryPoints)
+  if (trajectoryLine) group.add(trajectoryLine)
+
+  const trajectory = createPointsObject(trajectoryPoints, () => true, 0.8)
+  if (trajectory) group.add(trajectory)
+
+  const taskPoints = createTaskMarkers()
+  if (taskPoints) group.add(taskPoints)
+
+  const origin = createOriginMarker()
+  if (origin) group.add(origin)
+
+  const robot = createRobotObject()
+  if (robot) group.add(robot)
+
+  scene.add(group)
+  dynamicGroupRef.value = group
+}
+
+const fitCameraToScene = () => {
+  const controls = controlsRef.value
+  const camera = cameraRef.value
+  const group = dynamicGroupRef.value
+  if (!controls || !camera || !group) return
+
+  const box = new THREE.Box3().setFromObject(group)
+  if (box.isEmpty()) return
+
+  const size = box.getSize(new THREE.Vector3())
+  const center = box.getCenter(new THREE.Vector3())
+  const radius = Math.max(size.length() * 0.35, 0.35)
+
+  controls.target.copy(center)
+  camera.position.copy(center.clone().add(new THREE.Vector3(radius * 1.25, radius * 0.95, radius * 1.45)))
+  camera.near = Math.max(radius / 100, 0.01)
+  camera.far = Math.max(radius * 30, 12)
+  camera.updateProjectionMatrix()
+  controls.update()
+}
+
+const centerToRobot = () => {
+  const controls = controlsRef.value
+  const camera = cameraRef.value
+  const pose = props.robotPose
+  const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
+  if (!controls || !camera || !pose || maxRange <= 1e-6) return
+
+  const target = toWorldPosition(
+    (pose.x - centerX) / maxRange,
+    (pose.y - centerY) / maxRange,
+    (pose.z - centerZ) / maxRange
+  )
+  const offset = camera.position.clone().sub(controls.target)
+  controls.target.copy(target)
+  camera.position.copy(target.clone().add(offset))
+  controls.update()
 }
 
 const resizeRenderer = () => {
@@ -138,6 +517,7 @@ const startRenderLoop = () => {
 
   const render = () => {
     controls.update()
+    updateLabelScale()
     renderer.render(scene, camera)
     animationFrameId = window.requestAnimationFrame(render)
   }
@@ -145,37 +525,52 @@ const startRenderLoop = () => {
   render()
 }
 
+watch(
+  () => [props.points, props.robotMesh, props.normalizationParams] as const,
+  () => {
+    rebuildSceneContent()
+    fitCameraToScene()
+  },
+  { deep: true }
+)
+
+watch(
+  () => props.robotPose,
+  () => {
+    rebuildSceneContent()
+  },
+  { deep: true }
+)
+
 onMounted(() => {
   const container = containerRef.value
   if (!container) return
 
   const scene = new THREE.Scene()
   scene.background = new THREE.Color('#020915')
-  scene.fog = new THREE.Fog('#020915', 1.8, 4.5)
+  scene.fog = new THREE.Fog('#020915', 1.8, 5.2)
 
   const camera = new THREE.PerspectiveCamera(48, 1, 0.01, 100)
-  camera.position.set(1.3, 1.1, 1.6)
+  camera.position.set(1.2, 1, 1.55)
+  camera.up.copy(WORLD_UP)
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.setClearColor('#020915', 1)
+  renderer.sortObjects = true
   container.appendChild(renderer.domElement)
 
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
   controls.dampingFactor = 0.06
   controls.screenSpacePanning = true
-  controls.minDistance = 0.15
-  controls.maxDistance = 8
+  controls.minDistance = 0.12
+  controls.maxDistance = 10
 
-  scene.add(new THREE.GridHelper(1.6, 12, '#3aa4e6', '#153247'))
-  scene.add(new THREE.AxesHelper(0.35))
+  scene.add(new THREE.AmbientLight('#bddcff', 1.15))
 
-  const ambient = new THREE.AmbientLight('#b7d7ff', 1.1)
-  scene.add(ambient)
-
-  const directional = new THREE.DirectionalLight('#ffffff', 1.4)
-  directional.position.set(1.5, 2, 1)
+  const directional = new THREE.DirectionalLight('#ffffff', 1.45)
+  directional.position.set(1.5, 2, 1.2)
   scene.add(directional)
 
   sceneRef.value = scene
@@ -184,7 +579,8 @@ onMounted(() => {
   controlsRef.value = controls
 
   resizeRenderer()
-  rebuildPointCloud()
+  rebuildSceneContent()
+  fitCameraToScene()
   startRenderLoop()
 
   resizeObserver = new ResizeObserver(() => {
@@ -193,18 +589,15 @@ onMounted(() => {
   resizeObserver.observe(container)
 })
 
-watch(() => props.points, () => {
-  rebuildPointCloud()
-}, { deep: false })
-
 onBeforeUnmount(() => {
   if (animationFrameId) {
     window.cancelAnimationFrame(animationFrameId)
   }
+
   resizeObserver?.disconnect()
   resizeObserver = null
 
-  disposePointsObject()
+  clearDynamicGroup()
   controlsRef.value?.dispose()
   rendererRef.value?.dispose()
 
@@ -214,6 +607,11 @@ onBeforeUnmount(() => {
     container.removeChild(canvas)
   }
 })
+
+defineExpose({
+  centerToRobot,
+  fitCameraToScene,
+})
 </script>
 
 <style scoped>
@@ -221,7 +619,6 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 14px;
   overflow: hidden;
   background:
     radial-gradient(circle at 18% 18%, rgba(68, 174, 255, 0.2), transparent 42%),
@@ -253,20 +650,4 @@ onBeforeUnmount(() => {
   background: rgba(94, 17, 17, 0.45);
 }
 
-.three-pointcloud-hud {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 8px 12px;
-  border: 1px solid rgba(91, 205, 255, 0.2);
-  border-radius: 999px;
-  background: rgba(3, 12, 24, 0.72);
-  color: rgba(220, 242, 255, 0.92);
-  font-size: 12px;
-  line-height: 1;
-  z-index: 2;
-}
 </style>
