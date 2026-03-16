@@ -34,6 +34,10 @@ interface NormalizationParams {
   maxRange: number
 }
 
+const KEEP_ALL_POINTS_THRESHOLD = 120000
+const TARGET_MAX_POINTS = 160000
+const HARD_MAX_POINTS = 220000
+
 function readBinaryValue(view: DataView, offset: number, type: string, size: number): number {
   switch (type) {
     case 'F':
@@ -159,12 +163,33 @@ function normalizePointCloud(rawPoints: RawPointCloudPoint[]): { points: PointCl
   })
 
   // 随机降采样，最多保留 80000 点，避免渲染卡顿
-  const MAX_POINTS = 80000
-  const sampled = points.length > MAX_POINTS
-    ? points.filter(() => Math.random() < MAX_POINTS / points.length)
-    : points
+  const sampled = sampleNormalizedPoints(points)
 
   return { points: sampled, normParams: { centerX, centerY, centerZ, maxRange } }
+}
+
+function sampleNormalizedPoints(points: PointCloudPoint[]): PointCloudPoint[] {
+  if (points.length <= KEEP_ALL_POINTS_THRESHOLD) return points
+
+  const gridSize = Math.max(32, Math.ceil(Math.sqrt(points.length / TARGET_MAX_POINTS) * 256))
+  const cells = new Map<string, PointCloudPoint>()
+
+  for (const point of points) {
+    const gx = Math.max(0, Math.min(gridSize - 1, Math.floor((point.x + 0.5) * gridSize)))
+    const gy = Math.max(0, Math.min(gridSize - 1, Math.floor((point.y + 0.5) * gridSize)))
+    const gz = Math.max(0, Math.min(gridSize - 1, Math.floor((point.z + 0.5) * gridSize)))
+    const key = `${gx}:${gy}:${gz}`
+    const existing = cells.get(key)
+    if (!existing || point.intensity > existing.intensity) {
+      cells.set(key, point)
+    }
+  }
+
+  const sampled = Array.from(cells.values())
+  if (sampled.length <= HARD_MAX_POINTS) return sampled
+
+  const step = Math.ceil(sampled.length / HARD_MAX_POINTS)
+  return sampled.filter((_, index) => index % step === 0)
 }
 
 function parseBinaryPcdContent(buffer: ArrayBuffer, headerInfo: PcdHeaderInfo) {

@@ -13,6 +13,7 @@ import type {
   MotionStateData,
   BatteryData,
   SensorData,
+  SystemTelemetryData,
   TerrainModeData,
   BodyHeightStateData,
 } from '../composables/useRobotWebSocket'
@@ -59,6 +60,7 @@ export const useRobotStore = defineStore('robot', () => {
 
   // ===== 0x100a 传感器帧（IMU + 关节） =====
   const sensorData = ref<SensorData | null>(null)
+  const systemTelemetry = ref<SystemTelemetryData | null>(null)
 
   // ===== task_status 发布点任务运行状态 =====
   const taskStatus = ref<TaskStatusData | null>(null)
@@ -126,6 +128,11 @@ export const useRobotStore = defineStore('robot', () => {
     sensorData.value = data
   }
 
+  const setSystemTelemetry = (data: SystemTelemetryData) => {
+    if (!data) return
+    systemTelemetry.value = data
+  }
+
   const setTaskStatus = (data: TaskStatusData) => {
     taskStatus.value = data
   }
@@ -157,8 +164,26 @@ export const useRobotStore = defineStore('robot', () => {
     return Math.sqrt(d.acc_x ** 2 + d.acc_y ** 2)
   })
 
-  /** 地形模式文本（来自 0x3100EE01 terrain_mode 字段） */
-  const terrainModeText = computed(() => terrainMode.value?.terrain_mode ?? '--')
+  const terrainModeLabelMap: Record<number, string> = {
+    3: '实心地面',
+    4: '镂空地面',
+    5: '无踢面楼梯',
+    18: '累积帧准备状态',
+    20: '累积帧',
+  }
+
+  /** 地形模式文本（来自 0x3100EE01 terrain_mode 字段，缺失时回退 raw_value） */
+  const terrainModeText = computed(() => {
+    const state = terrainMode.value
+    if (!state) return '--'
+
+    const text = state.terrain_mode?.trim()
+    if (text && text !== '--' && text !== '未知') {
+      return text
+    }
+
+    return terrainModeLabelMap[state.raw_value] ?? '--'
+  })
 
   /** 姿态文本（来自 0x11050f08 state 字段：正常/匍匐/未知） */
   const postureText = computed(() => bodyHeightState.value?.state ?? '--')
@@ -227,8 +252,8 @@ export const useRobotStore = defineStore('robot', () => {
       2: '斜坡步态',
       3: '跑步步态',
       6: '楼梯步态',
-      7: '帧楼梯步态',
-      8: '45°楼梯步态',
+      7: '楼梯步态（累积帧模式）',
+      8: '45°楼梯步态（累积帧模式）',
       32: 'L行走步态',
       33: '山地步态',
       34: '静音步态',
@@ -301,6 +326,7 @@ export const useRobotStore = defineStore('robot', () => {
     terrainMode,
     bodyHeightState,
     sensorData,
+    systemTelemetry,
     taskStatus,
     // mutations
     setOnlineStatus,
@@ -317,6 +343,7 @@ export const useRobotStore = defineStore('robot', () => {
     setTerrainMode,
     setBodyHeightState,
     setSensorData,
+    setSystemTelemetry,
     setTaskStatus,
     // computed
     batteryLevel,

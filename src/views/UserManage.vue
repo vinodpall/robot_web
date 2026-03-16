@@ -67,21 +67,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import bodyInfoIcon from '@/assets/source_data/svg_data/robot_source/body_info.svg'
+import { useRobotStore } from '@/stores/robot'
 
 const router = useRouter()
 const route = useRoute()
+const robotStore = useRobotStore()
 
 const sidebarTabs = [
   { key: 'body', label: '本体参数', icon: bodyInfoIcon, path: '/dashboard/users' }
 ]
 const currentTab = ref('body')
-const jointMotorTemps = ref(Array.from({ length: 12 }, () => 42))
-const driverTemps = ref(Array.from({ length: 12 }, () => 38))
-const cpuTemp = ref(55)
-const cpuFrequency = ref(1800)
+const formatTelemetryValue = (value: number | undefined | null, digits = 1) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return value.toFixed(digits)
+}
+
+const jointMotorTemps = computed(() =>
+  Array.from({ length: 12 }, (_, idx) =>
+    formatTelemetryValue(robotStore.systemTelemetry?.motor_temperature?.[idx])
+  )
+)
+
+const driverTemps = computed(() =>
+  Array.from({ length: 12 }, (_, idx) =>
+    formatTelemetryValue(robotStore.systemTelemetry?.driver_temperature?.[idx], 0)
+  )
+)
+
+const cpuTemp = computed(() =>
+  formatTelemetryValue(robotStore.systemTelemetry?.cpu_info?.temperature)
+)
+
+const cpuFrequency = computed(() =>
+  formatTelemetryValue(robotStore.systemTelemetry?.cpu_info?.frequency, 0)
+)
 
 const handleTabClick = (key: string) => {
   const tab = sidebarTabs.find(t => t.key === key)

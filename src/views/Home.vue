@@ -266,6 +266,9 @@
                 <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
             </button>
+            <button class="pcd-tool-btn pcd-text-btn" @click.stop="showThreePointCloudPreview = true" title="Three.js 预览">
+              <span>3D</span>
+            </button>
             <button class="pcd-tool-btn" @click.stop="togglePointCloudFullscreen" :title="isPointCloudFullscreen ? '退出全屏' : '全屏显示'">
               <svg v-if="!isPointCloudFullscreen" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M3 8V3H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -280,6 +283,25 @@
                 <path d="M16 21V16H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showThreePointCloudPreview" class="custom-dialog-mask three-pointcloud-dialog-mask" @click.self="showThreePointCloudPreview = false">
+        <div class="three-pointcloud-dialog">
+          <div class="three-pointcloud-dialog-header">
+            <div>
+              <div class="three-pointcloud-dialog-title">Three.js 点云预览</div>
+              <div class="three-pointcloud-dialog-subtitle">独立预览，不影响当前首页点云图逻辑</div>
+            </div>
+            <button class="three-pointcloud-dialog-close" @click="showThreePointCloudPreview = false">关闭</button>
+          </div>
+          <div class="three-pointcloud-dialog-body">
+            <ThreePointCloudPreview
+              :points="pointCloudData"
+              :loading="pointCloudLoading"
+              :error="pointCloudError"
+            />
           </div>
         </div>
       </div>
@@ -1046,6 +1068,7 @@ import {
 } from '../api/services'
 import SuccessMessage from '../components/SuccessMessage.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
+import ThreePointCloudPreview from '../components/ThreePointCloudPreview.vue'
 import { useSharedPointCloudRenderer } from '../composables/usePointCloudRenderer'
 import { load3MF } from '../utils/threemfParser'
 import type { MeshData } from '../utils/threemfParser'
@@ -1366,27 +1389,6 @@ const robotStatusMap: Record<number, string> = {
   16: 'RL状态'
 }
 
-// 地面类型映射
-const groundTypeMap: Record<number, string> = {
-  1: '实心地面',
-  2: '镂空地面',
-  3: '无踢面地面',
-  4: '累积帧模式'
-}
-
-// 步态映射
-const gaitTypeMap: Record<number, string> = {
-  1: '行走步态',
-  2: '斜坡步态',
-  3: '越障步态',
-  4: '楼梯步态',
-  5: '帧楼梯步态',
-  6: '帧45°楼梯步态',
-  7: 'L行走步态',
-  8: '山地步态',
-  9: '静音步态'
-}
-
 // 格式化机器人状态（来自 robotStore.robotStatusText）
 const formatRobotStatus = (_value?: number) => robotStore.robotStatusText
 
@@ -1473,6 +1475,7 @@ const pointCloudPanY = sharedPointCloud.panY
 const pointCloudPointSize = sharedPointCloud.pointSize
 const isPointCloudDragging = ref(false)
 const isPointCloudFullscreen = ref(false)
+const showThreePointCloudPreview = ref(false)
 let lastPointerX = 0
 let lastPointerY = 0
 let activePointerId: number | null = null
@@ -8572,6 +8575,15 @@ onActivated(async () => {
   height: 100%;
 }
 
+.pcd-text-btn {
+  width: auto;
+  min-width: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 /* 点云全屏模式 */
 .pointcloud-fullscreen {
   position: fixed !important;
@@ -8587,6 +8599,59 @@ onActivated(async () => {
   bottom: 16px;
   right: 16px;
   z-index: 10000;
+}
+
+.three-pointcloud-dialog-mask {
+  z-index: 10020;
+  background: rgba(2, 9, 21, 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.three-pointcloud-dialog {
+  width: min(1180px, calc(100vw - 60px));
+  height: min(760px, calc(100vh - 60px));
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid rgba(91, 205, 255, 0.25);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(5, 18, 32, 0.98), rgba(2, 10, 20, 0.98));
+  box-shadow: 0 22px 80px rgba(0, 0, 0, 0.45);
+}
+
+.three-pointcloud-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.three-pointcloud-dialog-title {
+  color: #f2fbff;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.three-pointcloud-dialog-subtitle {
+  margin-top: 6px;
+  color: rgba(183, 220, 243, 0.72);
+  font-size: 13px;
+}
+
+.three-pointcloud-dialog-close {
+  padding: 8px 14px;
+  border: 1px solid rgba(91, 205, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(7, 27, 44, 0.9);
+  color: #ddf4ff;
+  cursor: pointer;
+}
+
+.three-pointcloud-dialog-body {
+  flex: 1;
+  min-height: 0;
 }
 
 .boxGrid-box {

@@ -307,6 +307,13 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
     }
   }
 
+  const _getDrawBudget = (width: number, height: number) => {
+    const area = Math.max(width * height, 1)
+    const zoomFactor = Math.min(2.2, Math.max(0.7, Math.sqrt(Math.max(scale.value, 0.01))))
+    const budget = Math.floor(area * 0.22 * zoomFactor)
+    return Math.max(60000, Math.min(180000, budget))
+  }
+
   const drawFrame = () => {
     const canvas = canvasRef.value
     if (!canvas) return
@@ -330,15 +337,19 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
     const bs = Math.min(rect.width, rect.height) * 0.8 * scale.value
     const panOX = panX.value * rect.width
     const panOY = panY.value * rect.height
+    const drawBudget = _getDrawBudget(rect.width, rect.height)
+    const drawStep = data.value.length > drawBudget ? Math.ceil(data.value.length / drawBudget) : 1
+    const pointBoost = data.value.length <= 40000 ? 1.35 : data.value.length <= 80000 ? 1.15 : 1
 
     // — 绘制点云 —
-    data.value.forEach(point => {
+    for (let index = 0; index < data.value.length; index += drawStep) {
+      const point = data.value[index]
       const { px, py, persp } = _project(
         point.x, point.y, point.z,
         cosYaw, sinYaw, cosPitch, sinPitch,
         bs, panOX, panOY, rect.width, rect.height
       )
-      if (px < -100 || px > rect.width + 100 || py < -100 || py > rect.height + 100) return
+      if (px < -100 || px > rect.width + 100 || py < -100 || py > rect.height + 100) continue
 
       // intensity区分：轨迹绿色、任务点黄色、机器人品红色
       if (point.intensity >= 1.9) {
@@ -385,13 +396,13 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         }
       } else {
         // 普通点云 →蓝色渐变
-        const r = (1.2 + point.intensity * 2) * persp * pointSize.value
+        const r = (1.2 + point.intensity * 2) * persp * pointSize.value * pointBoost
         ctx.fillStyle = `rgba(${Math.floor(40 + point.intensity * 200)}, ${Math.floor(120 + point.intensity * 100)}, 255, ${0.35 + point.intensity * 0.4})`
         ctx.beginPath()
         ctx.arc(px, py, r, 0, Math.PI * 2)
         ctx.fill()
       }
-    })
+    }
 
     // — 绘制原点 (0,0,0) —
     const { centerX, centerY, centerZ, maxRange } = normalizationParams.value
