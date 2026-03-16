@@ -414,7 +414,7 @@
             <div class="dispatch-task-row">
               <label>避障模式：</label>
               <div class="custom-select-wrapper">
-                <select v-model="trackStartDialog.form.obs_mode" class="mission-select">
+                <select v-model="trackStartDialog.form.obs_mode" class="mission-select" :disabled="trackStartDialog.loading">
                   <option :value="1">近障模式</option>
                   <option :value="2">停障模式</option>
                   <option :value="3">绕障模式</option>
@@ -429,7 +429,7 @@
             <div class="dispatch-task-row">
               <label>步态类型：</label>
               <div class="custom-select-wrapper">
-                <select v-model="trackStartDialog.form.gait_type" class="mission-select">
+                <select v-model="trackStartDialog.form.gait_type" class="mission-select" :disabled="trackStartDialog.loading">
                   <option :value="0">行走步态</option>
                   <option :value="1">斜坡步态</option>
                   <option :value="2">越障步态</option>
@@ -447,10 +447,23 @@
                 </span>
               </div>
             </div>
+            <div v-if="trackStartDialog.statusText || trackStartDialog.stepLogs.length > 0" class="dispatch-task-row track-process-row">
+              <label>启动流程：</label>
+              <div class="track-process-panel" :class="trackStartDialog.statusType">
+                <div class="track-process-current">{{ trackStartDialog.statusText }}</div>
+                <div v-if="trackStartDialog.stepLogs.length > 0" class="track-process-log">
+                  <div v-for="(log, index) in trackStartDialog.stepLogs" :key="`${index}-${log}`" class="track-process-log-item">
+                    {{ index + 1 }}. {{ log }}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="dispatch-task-actions">
-            <button class="mission-btn mission-btn-cancel" @click="onTrackStartCancel">取消</button>
-            <button class="mission-btn mission-btn-pause" @click="onTrackStartConfirm">确定</button>
+            <button class="mission-btn mission-btn-cancel" :disabled="trackStartDialog.loading" @click="onTrackStartCancel">取消</button>
+            <button class="mission-btn mission-btn-pause" :disabled="trackStartDialog.loading" @click="onTrackStartConfirm">
+              {{ trackStartDialog.loading ? '启动中...' : '确定' }}
+            </button>
           </div>
         </div>
       </div>
@@ -722,7 +735,7 @@ import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.s
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
 import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
-import { waylineApi, navigationApi } from '@/api/services'
+import { waylineApi, navigationApi, dogApi } from '@/api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import icon360Photo from '@/assets/source_data/svg_data/task_line_svg/360_photo.svg'
 import iconAbsPhoto from '@/assets/source_data/svg_data/task_line_svg/abs_photo.svg'
@@ -842,6 +855,28 @@ const errorMessage = ref({
   show: false,
   text: ''
 })
+
+const showMissionSuccess = (text: string, duration = 2500) => {
+  successMessage.value = { show: true, text }
+  window.setTimeout(() => {
+    successMessage.value.show = false
+  }, duration)
+}
+
+const showMissionError = (text: string, duration = 3000) => {
+  errorMessage.value = { show: true, text }
+  window.setTimeout(() => {
+    errorMessage.value.show = false
+  }, duration)
+}
+
+const parseMissionErrorMessage = (error: any) => {
+  const message = error?.response?.data?.message
+    || error?.response?.data?.msg?.error_msg
+    || error?.message
+    || error?.msg
+  return typeof message === 'string' && message.trim() ? message.trim() : '未知错误'
+}
 
 const normalizeTrackName = (raw: string) => {
   const name = (raw || '').trim()
@@ -1109,6 +1144,10 @@ watch(selectedTaskGroupName, (newVal) => {
 // 循迹任务启动弹窗
 const trackStartDialog = ref({
   visible: false,
+  loading: false,
+  statusText: '',
+  statusType: 'idle' as 'idle' | 'running' | 'success' | 'error',
+  stepLogs: [] as string[],
   form: {
     action: 1, // 固定为1，表示启动
     wait: 0, // 0=立即启动, 1=不立即启动
@@ -1150,22 +1189,22 @@ const handleStartTrack = async () => {
     return
   }
   if (!canStartTrackTask.value) {
-    alert('当前有其他任务正在运行')
+    showMissionError('当前有其他任务正在运行')
     return
   }
   // 必须开启导航、INS或MSF中的至少一个
   const cmdStatus = robotStore.cmdStatus
   const hasNavEnabled = cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
   if (!hasNavEnabled) {
-    alert('请先开启导航、INS或MSF')
+    showMissionError('请先开启导航、INS或MSF')
     return
   }
   if (!selectedRouteName.value) {
-    alert('请先选择路线')
+    showMissionError('请先选择路线')
     return
   }
   if (!selectedTaskGroupName.value) {
-    alert('请先选择任务组')
+    showMissionError('请先选择任务组')
     return
   }
 
@@ -1174,7 +1213,63 @@ const handleStartTrack = async () => {
   trackStartDialog.value.form.obs_mode = 1
   trackStartDialog.value.form.gait_type = 0
   trackStartDialog.value.form.wait = 0
+  trackStartDialog.value.loading = false
+  trackStartDialog.value.statusText = ''
+  trackStartDialog.value.statusType = 'idle'
+  trackStartDialog.value.stepLogs = []
   trackStartDialog.value.visible = true
+}
+
+const resetTrackStartProgress = () => {
+  trackStartDialog.value.statusText = ''
+  trackStartDialog.value.statusType = 'idle'
+  trackStartDialog.value.stepLogs = []
+}
+
+const pushTrackStartStep = (message: string, statusType: 'running' | 'success' | 'error' = 'running') => {
+  trackStartDialog.value.statusText = message
+  trackStartDialog.value.statusType = statusType
+  trackStartDialog.value.stepLogs = [...trackStartDialog.value.stepLogs, message]
+}
+
+const missionTrackGaitConfigMap: Record<number, { command: string; label: string }> = {
+  0: { command: 'foot_walk', label: '行走步态' },
+  1: { command: 'foot_climb', label: '斜坡步态' },
+  2: { command: 'foot_obs', label: '越障步态' },
+  3: { command: 'foot_stair', label: '楼梯步态' },
+  4: { command: 'foot_stair2', label: '楼梯步态（累积帧模式）' },
+  5: { command: 'foot_stair3', label: '45°楼梯步态（累积帧模式）' },
+  6: { command: 'foot_l', label: 'L行走步态' },
+  7: { command: 'foot_mountain', label: '山地步态' },
+  8: { command: 'foot_silent', label: '静音步态' }
+}
+
+const waitForMissionRobotState = async (
+  condition: () => boolean,
+  timeoutMs: number,
+  errorMessage: string
+) => {
+  if (condition()) return
+
+  await new Promise<void>((resolve, reject) => {
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => {
+      if (condition()) {
+        window.clearInterval(timer)
+        resolve()
+        return
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        window.clearInterval(timer)
+        reject(new Error(errorMessage))
+      }
+    }, 100)
+  })
+}
+
+const sendMissionDogCommand = async (robotId: string, commandName: string) => {
+  await dogApi.sendCommand(robotId, { command_name: commandName })
 }
 
 // 暂停循迹任务
@@ -1273,13 +1368,66 @@ const handleDeleteTaskGroup = () => {
 const onTrackStartConfirm = async () => {
   const form = trackStartDialog.value.form
   
+  const gaitConfig = missionTrackGaitConfigMap[form.gait_type]
+  if (!gaitConfig) {
+    showMissionError('请选择有效的步态')
+    return
+  }
+
+  if (trackStartDialog.value.loading) return
+  trackStartDialog.value.loading = true
+
   try {
     const robotId = localStorage.getItem('selected_robot_id')
     if (!robotId) {
-      alert('未找到机器人ID')
+      showMissionError('未找到机器人ID')
       return
     }
-    
+
+    resetTrackStartProgress()
+    pushTrackStartStep('开始准备循迹任务启动流程')
+
+    if (robotStore.robotStatusText === 'RL状态') {
+      pushTrackStartStep('检测到 RL状态，先切换到行走步态')
+      await sendMissionDogCommand(robotId, 'foot_walk')
+    }
+
+    pushTrackStartStep('发送非手动模式指令')
+    await sendMissionDogCommand(robotId, 'mode_auto')
+    pushTrackStartStep('设置地形为实心地面')
+    await sendMissionDogCommand(robotId, 'ground_1')
+
+    pushTrackStartStep('等待机器人进入非手动模式')
+    await waitForMissionRobotState(
+      () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
+      8000,
+      '等待机器人切换到非手动模式超时'
+    )
+
+    pushTrackStartStep('发送导航模块非手动模式指令')
+    await sendMissionDogCommand(robotId, 'mode_auto_2')
+
+    if (robotStore.motionState?.basic_state !== 4) {
+      pushTrackStartStep('机器人当前未处于踏步状态，发送踏步指令')
+      await sendMissionDogCommand(robotId, 'action')
+      pushTrackStartStep('等待机器人进入踏步状态')
+      await waitForMissionRobotState(
+        () => robotStore.motionState?.basic_state === 4,
+        10000,
+        '等待机器人进入踏步状态超时'
+      )
+    }
+
+    pushTrackStartStep(`切换目标步态为${gaitConfig.label}`)
+    await sendMissionDogCommand(robotId, gaitConfig.command)
+    pushTrackStartStep(`等待机器人切换到${gaitConfig.label}`)
+    await waitForMissionRobotState(
+      () => robotStore.gaitText === gaitConfig.label,
+      10000,
+      `等待机器人切换到${gaitConfig.label}超时`
+    )
+
+    pushTrackStartStep('发送循迹任务启动指令')
     // 调用启动循迹任务API
     const response = await navigationApi.startTrack(robotId, {
       action: form.action,
@@ -1295,22 +1443,38 @@ const onTrackStartConfirm = async () => {
     if (response && (response as any).response && (response as any).response.msg) {
       const { error_code, error_msg } = (response as any).response.msg
       if (error_code === 0) {
-        alert((response as any).message || '循迹任务启动成功')
-        trackStartDialog.value.visible = false
+        pushTrackStartStep((response as any).message || '循迹任务启动成功', 'success')
+        showMissionSuccess((response as any).message || '循迹任务启动成功')
+        window.setTimeout(() => {
+          if (!trackStartDialog.value.loading) {
+            trackStartDialog.value.visible = false
+          }
+        }, 1500)
       } else {
-        alert(`启动失败: ${error_msg || '未知错误'}`)
+        pushTrackStartStep(`启动失败: ${error_msg || '未知错误'}`, 'error')
+        showMissionError(`启动失败: ${error_msg || '未知错误'}`)
       }
     } else {
-      alert('启动循迹任务成功')
-      trackStartDialog.value.visible = false
+      pushTrackStartStep('循迹任务启动成功', 'success')
+      showMissionSuccess('循迹任务启动成功')
+      window.setTimeout(() => {
+        if (!trackStartDialog.value.loading) {
+          trackStartDialog.value.visible = false
+        }
+      }, 1500)
     }
   } catch (error) {
     console.error('启动循迹任务失败:', error)
-    alert('启动循迹任务失败，请稍后重试')
+    const errorMessage = parseMissionErrorMessage(error)
+    pushTrackStartStep(errorMessage, 'error')
+    showMissionError(errorMessage)
+  } finally {
+    trackStartDialog.value.loading = false
   }
 }
 
 const onTrackStartCancel = () => {
+  if (trackStartDialog.value.loading) return
   trackStartDialog.value.visible = false
 }
 
@@ -2984,6 +3148,52 @@ const confirmExtraConfig = () => {
   align-items: center;
   margin-bottom: 12px;
   gap: 12px;
+}
+
+.track-process-row {
+  align-items: flex-start;
+}
+
+.track-process-panel {
+  flex: 1;
+  min-height: 88px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(10, 26, 40, 0.92);
+  border: 1px solid rgba(103, 213, 253, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(103, 213, 253, 0.04);
+}
+
+.track-process-panel.running {
+  border-color: rgba(103, 213, 253, 0.35);
+}
+
+.track-process-panel.success {
+  border-color: rgba(53, 208, 127, 0.45);
+}
+
+.track-process-panel.error {
+  border-color: rgba(255, 107, 107, 0.45);
+}
+
+.track-process-current {
+  color: #d7f5ff;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.track-process-log {
+  margin-top: 8px;
+  max-height: 136px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.track-process-log-item {
+  color: rgba(215, 245, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .dispatch-task-row label {

@@ -1,6 +1,12 @@
 ﻿
 <template>
   <div class="home-container">
+    <div v-if="fallAlertActive" class="fall-alert-frame" aria-hidden="true">
+      <div class="fall-alert-edge top"></div>
+      <div class="fall-alert-edge right"></div>
+      <div class="fall-alert-edge bottom"></div>
+      <div class="fall-alert-edge left"></div>
+    </div>
     <!-- 左侧状态栏 -->
     <div class="left-box">
       <!-- 可见光视频 -->
@@ -60,177 +66,84 @@
         </div>
       </div>
 
-<!-- 任务下发 -->
+<!-- 任务统计 -->
       <div class="left-on3">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          任务下发
+          任务统计
         </div>
-        <div class="on3-bottom">
-          <div class="on3-bottom-center">
-            <div class="task-row">
-              <div class="map-dropdown-wrapper" :class="{ 'disabled': navigationEnabled || insEnabled || msfEnabled }">
-                <select class="map-dropdown" v-model="selectedMap" :disabled="navigationEnabled || insEnabled || msfEnabled">
-                  <option v-if="mapList.length === 0" value="">选择地图</option>
-                  <option v-for="map in mapList" :key="map" :value="map">
-                    {{ map }}
-                  </option>
-                </select>
-                <span class="dropdown-arrow">
-                  <svg width="12" height="12" viewBox="0 0 12 12">
-                    <polygon points="2,4 6,8 10,4" fill="#67d5fd"/>
-                  </svg>
-                </span>
+        <div class="chart-container">
+          <div class="task-content">
+            <div class="task-header">
+              <div class="task-time">
+                <div class="task-name">任务名称：{{ waylineTaskName }}</div>
+                <div class="time-item">
+                  <span class="label">任务开始时间：{{ waylineTaskStartTime }}</span>
+                  <span class="label">当前航点：第{{ waylineCurrentWaypoint }}个</span>
+                </div>
               </div>
-              <div class="task-buttons">
-                <span 
-                  class="task-btn" 
-                  :class="{ 
-                    'active': navigationEnabled, 
-                    'disabled': insEnabled || msfEnabled,
-                    'loading': navigationLoading
-                  }"
-                  @click="handleEnableNavigation"
-                >导航</span>
-                <span 
-                  class="task-btn" 
-                  :class="{ 
-                    'active': insEnabled, 
-                    'disabled': navigationEnabled || msfEnabled,
-                    'loading': insLoading
-                  }"
-                  @click="handleEnableIns"
-                >INS</span>
-                <span 
-                  class="task-btn" 
-                  :class="{ 
-                    'active': msfEnabled, 
-                    'disabled': navigationEnabled || insEnabled,
-                    'loading': msfLoading
-                  }"
-                  @click="handleEnableMsf"
-                >MSF</span>
+              <div class="task-status">
+                <div :class="['status-btn', waylineTaskStatus]">{{ waylineTaskStatusText }}</div>
               </div>
             </div>
-            <div class="wayline-control-list">
-              <div class="control-row">
-                <div class="div">循迹任务：</div>
-                <div class="wayline-select-wrapper">
-                  <select 
-                    v-model="selectedTrack" 
-                    class="wayline-select"
-                    :disabled="activeTaskType === 'track' || robotStore.isTracking"
-                  >
-                    <option v-if="filteredTrackList.length === 0" value="">暂无循迹任务</option>
-                    <option 
-                      v-for="track in filteredTrackList"
-                      :key="track"
-                      :value="track"
+            <div class="task-progress">
+              <div class="chart-box">
+                <div class="progress-circle-container">
+                  <div class="progress-circle">
+                    <div 
+                      class="progress-circle-outer-glow" 
+                      :class="{ 'completed': waylineProgressPercent >= 100 }"
+                      :style="{ '--glow-color': waylineProgressPercent > 0 ? '#00e1ff' : '#FF8000' }"
+                    ></div>
+                    <div 
+                      class="progress-circle-outer-ring" 
+                      :class="{ 'completed': waylineProgressPercent >= 100 }"
+                      :style="{
+                        background: `conic-gradient(from -90deg, #00e1ff ${waylineProgressPercent}%, #FF8000 ${waylineProgressPercent}% 100%)`
+                      }"
                     >
-                      {{ track }}
-                    </option>
-                  </select>
-                  <span class="wayline-custom-arrow">
-                    <svg width="12" height="12" viewBox="0 0 12 12">
-                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                    </svg>
-                  </span>
+                    </div>
+                    <div class="progress-circle-center">
+                      <div class="progress-text">
+                        <span>进度</span>
+                        <span class="percentage">{{ waylineProgressPercent }}%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="button-group">
-                  <span 
-                    class="span" 
-                    :class="{ disabled: !canDispatchTask }"
-                    @click="handleDispatchTask"
-                  >下发任务</span>
-                  <span 
-                    class="span1" 
-                    :class="{ 
-                      disabled: activeTaskType !== 'track' && !robotStore.isTracking,
-                      active: activeTaskType === 'track' || robotStore.isTracking
-                    }"
-                    @click="handleCancelTask"
-                  >
-                    取消任务
-                  </span>
+                <div class="chart-legend">
+                  <div class="legend-item">
+                    <span class="legend-color blue-gradient"></span>
+                    <span>已巡检</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-color orange-gradient"></span>
+                    <span>待巡检</span>
+                  </div>
                 </div>
               </div>
-              <div class="control-row">
-                <div class="div">发布点任务：</div>
-                <div class="wayline-select-wrapper">
-                  <select 
-                    v-model="selectedPointTask" 
-                    class="wayline-select"
-                    :disabled="activeTaskType === 'point' || robotStore.isPointTaskRunning"
-                  >
-                    <option v-if="filteredPointTaskList.length === 0" value="">暂无发布点任务</option>
-                    <option 
-                      v-for="task in filteredPointTaskList"
-                      :key="task.task_id"
-                      :value="task.task_id"
-                    >
-                      {{ task.task_name }}
-                    </option>
-                  </select>
-                  <span class="wayline-custom-arrow">
-                    <svg width="12" height="12" viewBox="0 0 12 12">
-                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                    </svg>
-                  </span>
+              
+              <div class="chart-box">
+                <div class="progress-circle-container">
+                  <div class="progress-circle">
+                    <div class="task-status-outer-ring" :class="{ 'error': waylineTaskStatus === 'failed' }"></div>
+                    <div class="progress-circle-center">
+                      <div class="progress-text">
+                        <span>任务</span>
+                        <span>状态</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="button-group">
-                  <span 
-                    class="span" 
-                    :class="{ disabled: !canDispatchTask }"
-                    @click="handleDispatchPointTask"
-                  >下发任务</span>
-                  <span 
-                    class="span1" 
-                    :class="{ 
-                      disabled: activeTaskType !== 'point' && !robotStore.isPointTaskRunning,
-                      active: activeTaskType === 'point' || robotStore.isPointTaskRunning
-                    }"
-                    @click="handleCancelTask"
-                  >
-                    取消任务
-                  </span>
-                </div>
-              </div>
-              <div class="control-row">
-                <div class="div">多任务组：</div>
-                <div class="wayline-select-wrapper">
-                  <select 
-                    v-model="selectedMultiTask" 
-                    class="wayline-select"
-                    :disabled="activeTaskType === 'multi'"
-                  >
-                    <option v-if="multiTaskList.length === 0" value="">暂无多任务组</option>
-                    <option 
-                      v-for="task in multiTaskList"
-                      :key="task.multitask_id"
-                      :value="task.multitask_id"
-                    >
-                      {{ task.multitask_name }}
-                    </option>
-                  </select>
-                  <span class="wayline-custom-arrow">
-                    <svg width="12" height="12" viewBox="0 0 12 12">
-                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                    </svg>
-                  </span>
-                </div>
-                <div class="button-group">
-                  <span 
-                    class="span" 
-                    :class="{ disabled: !canDispatchTask }"
-                    @click="handleDispatchMultiTask"
-                  >下发任务</span>
-                  <span 
-                    class="span1" 
-                    :class="{ disabled: activeTaskType !== 'multi', active: activeTaskType === 'multi' }"
-                    @click="handleCancelTask"
-                  >
-                    取消任务
-                  </span>
+                <div class="chart-legend">
+                  <div class="legend-item" @click="toggleTaskStatus">
+                    <span class="legend-color green-gradient"></span>
+                    <span>正常</span>
+                  </div>
+                  <div class="legend-item" @click="toggleTaskStatus">
+                    <span class="legend-color red-gradient"></span>
+                    <span>异常</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -498,7 +411,7 @@
             
             <!-- 第二行 -->
             <button :class="getControlButtonClass('startMove')" :disabled="isControlDisabled('startMove')" @click="handleControlClick('startMove')">{{ moveControlLabel }}</button>
-            <button :class="getControlButtonClass('crawl')" :disabled="isControlDisabled('crawl')" @click="handleControlClick('crawl')">匍匐姿态</button>
+            <button :class="getControlButtonClass('crawl')" :disabled="isControlDisabled('crawl')" @click="handleControlClick('crawl')">{{ crawlControlLabel }}</button>
             <button :class="getControlButtonClass('autoMode')" :disabled="isControlDisabled('autoMode')" @click="handleControlClick('autoMode')">非手动模式</button>
             
             <!-- 第三行 -->
@@ -524,84 +437,177 @@
         </div>
       </div>
 
-      <!-- 任务统计 -->
+      <!-- 任务下发 -->
       <div class="right-on3">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          任务统计
+          任务下发
         </div>
-        <div class="chart-container">
-          <div class="task-content">
-            <div class="task-header">
-              <div class="task-time">
-                <div class="task-name">任务名称：{{ waylineTaskName }}</div>
-                <div class="time-item">
-                  <span class="label">任务开始时间：{{ waylineTaskStartTime }}</span>
-                  <span class="label">当前航点：第{{ waylineCurrentWaypoint }}个</span>
-                </div>
+        <div class="on3-bottom">
+          <div class="on3-bottom-center">
+            <div class="task-row">
+              <div class="map-dropdown-wrapper" :class="{ 'disabled': navigationEnabled || insEnabled || msfEnabled }">
+                <select class="map-dropdown" v-model="selectedMap" :disabled="navigationEnabled || insEnabled || msfEnabled">
+                  <option v-if="mapList.length === 0" value="">选择地图</option>
+                  <option v-for="map in mapList" :key="map" :value="map">
+                    {{ map }}
+                  </option>
+                </select>
+                <span class="dropdown-arrow">
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <polygon points="2,4 6,8 10,4" fill="#67d5fd"/>
+                  </svg>
+                </span>
               </div>
-              <div class="task-status">
-                <div :class="['status-btn', waylineTaskStatus]">{{ waylineTaskStatusText }}</div>
+              <div class="task-buttons">
+                <span 
+                  class="task-btn" 
+                  :class="{ 
+                    'active': navigationEnabled, 
+                    'disabled': insEnabled || msfEnabled,
+                    'loading': navigationLoading
+                  }"
+                  @click="handleEnableNavigation"
+                >导航</span>
+                <span 
+                  class="task-btn" 
+                  :class="{ 
+                    'active': insEnabled, 
+                    'disabled': navigationEnabled || msfEnabled,
+                    'loading': insLoading
+                  }"
+                  @click="handleEnableIns"
+                >INS</span>
+                <span 
+                  class="task-btn" 
+                  :class="{ 
+                    'active': msfEnabled, 
+                    'disabled': navigationEnabled || insEnabled,
+                    'loading': msfLoading
+                  }"
+                  @click="handleEnableMsf"
+                >MSF</span>
               </div>
             </div>
-            <div class="task-progress">
-              <div class="chart-box">
-                <div class="progress-circle-container">
-                  <div class="progress-circle">
-                    <div 
-                      class="progress-circle-outer-glow" 
-                      :class="{ 'completed': waylineProgressPercent >= 100 }"
-                      :style="{ '--glow-color': waylineProgressPercent > 0 ? '#00e1ff' : '#FF8000' }"
-                    ></div>
-                    <div 
-                      class="progress-circle-outer-ring" 
-                      :class="{ 'completed': waylineProgressPercent >= 100 }"
-                      :style="{
-                        background: `conic-gradient(from -90deg, #00e1ff ${waylineProgressPercent}%, #FF8000 ${waylineProgressPercent}% 100%)`
-                      }"
+            <div class="wayline-control-list">
+              <div class="control-row">
+                <div class="div">循迹任务：</div>
+                <div class="wayline-select-wrapper">
+                  <select 
+                    v-model="selectedTrack" 
+                    class="wayline-select"
+                    :disabled="activeTaskType === 'track' || robotStore.isTracking"
+                  >
+                    <option v-if="filteredTrackList.length === 0" value="">暂无循迹任务</option>
+                    <option 
+                      v-for="track in filteredTrackList"
+                      :key="track"
+                      :value="track"
                     >
-                    </div>
-                    <div class="progress-circle-center">
-                      <div class="progress-text">
-                        <span>进度</span>
-                        <span class="percentage">{{ waylineProgressPercent }}%</span>
-                      </div>
-                    </div>
-                  </div>
+                      {{ track }}
+                    </option>
+                  </select>
+                  <span class="wayline-custom-arrow">
+                    <svg width="12" height="12" viewBox="0 0 12 12">
+                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                    </svg>
+                  </span>
                 </div>
-                <div class="chart-legend">
-                  <div class="legend-item">
-                    <span class="legend-color blue-gradient"></span>
-                    <span>已巡检</span>
-                  </div>
-                  <div class="legend-item">
-                    <span class="legend-color orange-gradient"></span>
-                    <span>待巡检</span>
-                  </div>
+                <div class="button-group">
+                  <span 
+                    class="span" 
+                    :class="{ disabled: !canDispatchTask }"
+                    @click="handleDispatchTask"
+                  >下发任务</span>
+                  <span 
+                    class="span1" 
+                    :class="{ 
+                      disabled: activeTaskType !== 'track' && !robotStore.isTracking,
+                      active: activeTaskType === 'track' || robotStore.isTracking
+                    }"
+                    @click="handleCancelTask"
+                  >
+                    取消任务
+                  </span>
                 </div>
               </div>
-              
-              <div class="chart-box">
-                <div class="progress-circle-container">
-                  <div class="progress-circle">
-                    <div class="task-status-outer-ring" :class="{ 'error': waylineTaskStatus === 'failed' }"></div>
-                    <div class="progress-circle-center">
-                      <div class="progress-text">
-                        <span>任务</span>
-                        <span>状态</span>
-                      </div>
-                    </div>
-                  </div>
+              <div class="control-row">
+                <div class="div">发布点任务：</div>
+                <div class="wayline-select-wrapper">
+                  <select 
+                    v-model="selectedPointTask" 
+                    class="wayline-select"
+                    :disabled="activeTaskType === 'point' || robotStore.isPointTaskRunning"
+                  >
+                    <option v-if="filteredPointTaskList.length === 0" value="">暂无发布点任务</option>
+                    <option 
+                      v-for="task in filteredPointTaskList"
+                      :key="task.task_id"
+                      :value="task.task_id"
+                    >
+                      {{ task.task_name }}
+                    </option>
+                  </select>
+                  <span class="wayline-custom-arrow">
+                    <svg width="12" height="12" viewBox="0 0 12 12">
+                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                    </svg>
+                  </span>
                 </div>
-                <div class="chart-legend">
-                  <div class="legend-item" @click="toggleTaskStatus">
-                    <span class="legend-color green-gradient"></span>
-                    <span>正常</span>
-                  </div>
-                  <div class="legend-item" @click="toggleTaskStatus">
-                    <span class="legend-color red-gradient"></span>
-                    <span>异常</span>
-                  </div>
+                <div class="button-group">
+                  <span 
+                    class="span" 
+                    :class="{ disabled: !canDispatchTask }"
+                    @click="handleDispatchPointTask"
+                  >下发任务</span>
+                  <span 
+                    class="span1" 
+                    :class="{ 
+                      disabled: activeTaskType !== 'point' && !robotStore.isPointTaskRunning,
+                      active: activeTaskType === 'point' || robotStore.isPointTaskRunning
+                    }"
+                    @click="handleCancelTask"
+                  >
+                    取消任务
+                  </span>
+                </div>
+              </div>
+              <div class="control-row">
+                <div class="div">多任务组：</div>
+                <div class="wayline-select-wrapper">
+                  <select 
+                    v-model="selectedMultiTask" 
+                    class="wayline-select"
+                    :disabled="activeTaskType === 'multi'"
+                  >
+                    <option v-if="multiTaskList.length === 0" value="">暂无多任务组</option>
+                    <option 
+                      v-for="task in multiTaskList"
+                      :key="task.multitask_id"
+                      :value="task.multitask_id"
+                    >
+                      {{ task.multitask_name }}
+                    </option>
+                  </select>
+                  <span class="wayline-custom-arrow">
+                    <svg width="12" height="12" viewBox="0 0 12 12">
+                      <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                    </svg>
+                  </span>
+                </div>
+                <div class="button-group">
+                  <span 
+                    class="span" 
+                    :class="{ disabled: !canDispatchTask }"
+                    @click="handleDispatchMultiTask"
+                  >下发任务</span>
+                  <span 
+                    class="span1" 
+                    :class="{ disabled: activeTaskType !== 'multi', active: activeTaskType === 'multi' }"
+                    @click="handleCancelTask"
+                  >
+                    取消任务
+                  </span>
                 </div>
               </div>
             </div>
@@ -763,7 +769,7 @@
               <select 
                 v-model="trackStartDialog.form.taskpoint_name" 
                 class="mission-select"
-                :disabled="taskpointList.length === 0"
+                :disabled="taskpointList.length === 0 || trackStartDialog.loading"
               >
                 <option v-if="taskpointList.length === 0" value="">暂无关键点文件</option>
                 <option 
@@ -788,7 +794,7 @@
           <div class="dispatch-task-row">
             <label>避障模式：</label>
             <div class="custom-select-wrapper">
-              <select v-model="trackStartDialog.form.obs_mode" class="mission-select">
+              <select v-model="trackStartDialog.form.obs_mode" class="mission-select" :disabled="trackStartDialog.loading">
                 <option :value="1">近障模式</option>
                 <option :value="2">停障模式</option>
                 <option :value="3">绕障模式</option>
@@ -803,7 +809,7 @@
           <div class="dispatch-task-row">
             <label>步态选择：</label>
             <div class="custom-select-wrapper">
-              <select v-model="trackStartDialog.form.gait_type" class="mission-select">
+              <select v-model="trackStartDialog.form.gait_type" class="mission-select" :disabled="trackStartDialog.loading">
                 <option :value="0">行走步态</option>
                 <option :value="1">斜坡步态</option>
                 <option :value="2">越障步态</option>
@@ -827,21 +833,32 @@
               <div
                 class="switch-container"
                 :class="{ active: !trackStartDialog.form.wait }"
-                @click="trackStartDialog.form.wait = trackStartDialog.form.wait ? 0 : 1"
+                @click="!trackStartDialog.loading && (trackStartDialog.form.wait = trackStartDialog.form.wait ? 0 : 1)"
               >
                 <div class="switch-toggle"></div>
               </div>
               <span class="dispatch-switch-label">{{ trackStartDialog.form.wait ? '否' : '是' }}</span>
             </div>
           </div>
+          <div v-if="trackStartDialog.statusText || trackStartDialog.stepLogs.length > 0" class="dispatch-task-row track-process-row">
+            <label>启动流程：</label>
+            <div class="track-process-panel" :class="trackStartDialog.statusType">
+              <div class="track-process-current">{{ trackStartDialog.statusText }}</div>
+              <div v-if="trackStartDialog.stepLogs.length > 0" class="track-process-log">
+                <div v-for="(log, index) in trackStartDialog.stepLogs" :key="`${index}-${log}`" class="track-process-log-item">
+                  {{ index + 1 }}. {{ log }}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="dispatch-task-actions">
-          <button class="mission-btn mission-btn-cancel" @click="onTrackStartCancel">取消</button>
+          <button class="mission-btn mission-btn-cancel" :disabled="trackStartDialog.loading" @click="onTrackStartCancel">取消</button>
           <button 
             class="mission-btn mission-btn-pause" 
-            :class="{ disabled: taskpointList.length === 0 || !trackStartDialog.form.taskpoint_name }"
+            :class="{ disabled: taskpointList.length === 0 || !trackStartDialog.form.taskpoint_name || trackStartDialog.loading }"
             @click="onTrackStartConfirm"
-          >确定</button>
+          >{{ trackStartDialog.loading ? '启动中...' : '确定' }}</button>
         </div>
       </div>
     </div>
@@ -971,6 +988,23 @@
     <!-- 自定义成功/错误提示 -->
     <SuccessMessage :show="successToast.show" :message="successToast.message" @close="successToast.show = false" />
     <ErrorMessage :show="errorToast.show" :message="errorToast.message" @close="errorToast.show = false" />
+
+    <div v-if="fallAlertDialogVisible" class="custom-dialog-mask fall-alert-mask">
+      <div class="fall-alert-dialog">
+        <div class="fall-alert-title">机器狗摔倒告警</div>
+        <div class="fall-alert-body">
+          <div class="fall-alert-message">检测到机器狗可能已摔倒，请立即检查现场状态并及时处理。</div>
+          <div class="fall-alert-metrics">
+            <span>当前状态：{{ robotStore.robotStatusText }}</span>
+            <span>横滚角：{{ formatFallAngle(robotStore.imuRoll) }}</span>
+            <span>俯仰角：{{ formatFallAngle(robotStore.imuPitch) }}</span>
+          </div>
+        </div>
+        <div class="fall-alert-actions">
+          <button class="confirm-btn confirm-btn-ok" @click="acknowledgeFallAlert">我知道了</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1164,6 +1198,14 @@ const isRobotCharging = computed(() => {
   if (typeof current !== 'number' || !Number.isFinite(current)) return false
   return current > 0
 })
+
+// 导航、INS、MSF 状态（初始值直接读取 store，避免 watch immediate 顺序问题）
+const navigationEnabled = ref(robotStore.cmdStatus?.nav === 1)
+const insEnabled = ref(robotStore.cmdStatus?.ins === 1)
+const msfEnabled = ref(robotStore.cmdStatus?.msf === 1)
+const navigationLoading = ref(false)
+const insLoading = ref(false)
+const msfLoading = ref(false)
 
 // cmd_status 同步到本地按钮状态
 watch(() => robotStore.cmdStatus, (status) => {
@@ -1419,6 +1461,7 @@ const formatRobotYaw = () => {
 
 // 格式化姿态（来自 robotStore.postureText: 0x11050f08 body_height_state.state）
 const formatPosture = () => robotStore.postureText
+const formatFallAngle = (value: number | null) => typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}°` : '--'
 
 type PointCloudPoint = { x: number; y: number; z: number; intensity: number }
 type RawPointCloudPoint = { x: number; y: number; z?: number; intensityValue?: number }
@@ -4208,13 +4251,51 @@ const selectedMap = computed({
 })
 const showWaylineDropdown = ref(false)
 
-// 导航、INS、MSF 状态（初始值直接读取 store，避免 watch immediate 顺序问题）
-const navigationEnabled = ref(robotStore.cmdStatus?.nav === 1)
-const insEnabled = ref(robotStore.cmdStatus?.ins === 1)
-const msfEnabled = ref(robotStore.cmdStatus?.msf === 1)
-const navigationLoading = ref(false)
-const insLoading = ref(false)
-const msfLoading = ref(false)
+const fallAlertActive = ref(false)
+const fallAlertDialogVisible = ref(false)
+const fallAlertAcknowledged = ref(false)
+let fallAlertTimer: number | null = null
+
+const FALL_ANGLE_THRESHOLD = 45
+const FALL_DETECTION_DELAY_MS = 1200
+
+const isFallAngleExceeded = computed(() => {
+  const roll = Math.abs(robotStore.imuRoll ?? 0)
+  const pitch = Math.abs(robotStore.imuPitch ?? 0)
+  return roll >= FALL_ANGLE_THRESHOLD || pitch >= FALL_ANGLE_THRESHOLD
+})
+
+const isFallDetected = computed(() => {
+  return robotStore.motionState?.basic_state === 6 && isFallAngleExceeded.value
+})
+
+const acknowledgeFallAlert = () => {
+  fallAlertAcknowledged.value = true
+  fallAlertDialogVisible.value = false
+}
+
+watch(isFallDetected, (detected) => {
+  if (detected) {
+    if (fallAlertActive.value || fallAlertTimer !== null) return
+    fallAlertTimer = window.setTimeout(() => {
+      fallAlertTimer = null
+      if (!isFallDetected.value) return
+      fallAlertActive.value = true
+      if (!fallAlertAcknowledged.value) {
+        fallAlertDialogVisible.value = true
+      }
+    }, FALL_DETECTION_DELAY_MS)
+    return
+  }
+
+  if (fallAlertTimer !== null) {
+    window.clearTimeout(fallAlertTimer)
+    fallAlertTimer = null
+  }
+  fallAlertActive.value = false
+  fallAlertDialogVisible.value = false
+  fallAlertAcknowledged.value = false
+})
 
 // 当前活动任务类型：'wayline' | 'point' | 'multi' | null
 const activeTaskType = ref<'wayline' | 'point' | 'multi' | 'track' | null>(null)
@@ -4287,6 +4368,10 @@ const dispatchTaskDialog = ref({
 // 循迹任务启动弹窗
 const trackStartDialog = ref({
   visible: false,
+  loading: false,
+  statusText: '',
+  statusType: 'idle' as 'idle' | 'running' | 'success' | 'error',
+  stepLogs: [] as string[],
   form: {
     action: 1, // 固定为1，表示启动
     wait: 0, // 0=立即启动, 1=不立即启动
@@ -4845,6 +4930,7 @@ const handleDispatchTask = () => {
   trackStartDialog.value.form.obs_mode = 1
   trackStartDialog.value.form.gait_type = 0
   trackStartDialog.value.form.wait = 0
+  resetTrackStartProgress()
   trackStartDialog.value.visible = true
   
   // 获取关键点文件列表
@@ -5293,7 +5379,71 @@ const onDispatchTaskCancel = () => {
 
 // 循迹任务启动弹窗 - 取消
 const onTrackStartCancel = () => {
+  if (trackStartDialog.value.loading) return
   trackStartDialog.value.visible = false
+}
+
+const resetTrackStartProgress = () => {
+  trackStartDialog.value.statusText = ''
+  trackStartDialog.value.statusType = 'idle'
+  trackStartDialog.value.stepLogs = []
+}
+
+const pushTrackStartStep = (message: string, statusType: 'running' | 'success' | 'error' = 'running') => {
+  trackStartDialog.value.statusText = message
+  trackStartDialog.value.statusType = statusType
+  trackStartDialog.value.stepLogs = [...trackStartDialog.value.stepLogs, message]
+}
+
+const trackGaitConfigMap: Record<number, { command: string; label: string }> = {
+  0: { command: 'foot_walk', label: '行走步态' },
+  1: { command: 'foot_climb', label: '斜坡步态' },
+  2: { command: 'foot_obs', label: '越障步态' },
+  3: { command: 'foot_stair', label: '楼梯步态' },
+  4: { command: 'foot_stair2', label: '楼梯步态（累积帧模式）' },
+  5: { command: 'foot_stair3', label: '45°楼梯步态（累积帧模式）' },
+  6: { command: 'foot_l', label: 'L行走步态' },
+  7: { command: 'foot_mountain', label: '山地步态' },
+  8: { command: 'foot_silent', label: '静音步态' }
+}
+
+const waitForRobotState = async (
+  condition: () => boolean,
+  timeoutMs: number,
+  errorMessage: string
+) => {
+  if (condition()) return
+
+  await new Promise<void>((resolve, reject) => {
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => {
+      if (condition()) {
+        window.clearInterval(timer)
+        resolve()
+        return
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        window.clearInterval(timer)
+        reject(new Error(errorMessage))
+      }
+    }, 100)
+  })
+}
+
+const sendDogCommand = async (robotId: string, commandName: string) => {
+  await dogApi.sendCommand(robotId, { command_name: commandName })
+}
+
+const finalizeTrackTaskStart = async (trackName: string, taskpointName: string, successMessage?: string) => {
+  const normalizedTrackName = normalizeTrackName(trackName)
+  activeTaskType.value = 'track'
+  taskExecutionStore.markMultiTaskStopped()
+  selectedTrack.value = normalizedTrackName
+  activeTrackInfo.value = { track_name: normalizedTrackName, taskpoint_name: taskpointName }
+  activeOverlayTrackName.value = normalizedTrackName
+  await overlayTrackTrajectory(normalizedTrackName)
+  showSuccess(successMessage || '循迹任务启动成功')
 }
 
 // 循迹任务启动弹窗 - 确认
@@ -5302,38 +5452,88 @@ const onTrackStartConfirm = async () => {
   
   // 验证循迹任务名称
   if (!form.track_name || form.track_name.trim() === '') {
-    alert('循迹任务名称不能为空')
+    showError('循迹任务名称不能为空')
     return
   }
   
   // 验证关键点文件是否选择
   if (!form.taskpoint_name || form.taskpoint_name.trim() === '') {
-    alert('请选择关键点文件')
+    showError('请选择关键点文件')
     return
   }
   
   // 验证关键点文件列表是否为空
   if (taskpointList.value.length === 0) {
-    alert('当前循迹任务没有可用的关键点文件，请先创建关键点文件')
+    showError('当前循迹任务没有可用的关键点文件，请先创建关键点文件')
     return
   }
   
   // 验证避障模式
   if (form.obs_mode === null || form.obs_mode === undefined) {
-    alert('请选择避障模式')
+    showError('请选择避障模式')
+    return
+  }
+
+  const gaitConfig = trackGaitConfigMap[form.gait_type]
+  if (!gaitConfig) {
+    showError('请选择有效的步态')
     return
   }
   
+  if (trackStartDialog.value.loading) return
+  trackStartDialog.value.loading = true
+
   try {
     const robotId = deviceStore.selectedRobotId
     if (!robotId) {
-      alert('未找到机器人ID')
+      showError('未找到机器人ID')
       return
     }
-    
-    // 点击确定立即关闭弹窗，不等待接口返回
-    trackStartDialog.value.visible = false
-    
+
+    resetTrackStartProgress()
+    pushTrackStartStep('开始准备循迹任务启动流程')
+
+    if (robotStore.robotStatusText === 'RL状态') {
+      pushTrackStartStep('检测到 RL状态，先切换到行走步态')
+      await sendDogCommand(robotId, 'foot_walk')
+    }
+
+    pushTrackStartStep('发送非手动模式指令')
+    await sendDogCommand(robotId, 'mode_auto')
+    pushTrackStartStep('设置地形为实心地面')
+    await sendDogCommand(robotId, 'ground_1')
+
+    pushTrackStartStep('等待机器人进入非手动模式')
+    await waitForRobotState(
+      () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
+      8000,
+      '等待机器人切换到非手动模式超时'
+    )
+
+    pushTrackStartStep('发送导航模块非手动模式指令')
+    await sendDogCommand(robotId, 'mode_auto_2')
+
+    if (robotStore.motionState?.basic_state !== 4) {
+      pushTrackStartStep('机器人当前未处于踏步状态，发送踏步指令')
+      await sendDogCommand(robotId, 'action')
+      pushTrackStartStep('等待机器人进入踏步状态')
+      await waitForRobotState(
+        () => robotStore.motionState?.basic_state === 4,
+        10000,
+        '等待机器人进入踏步状态超时'
+      )
+    }
+
+    pushTrackStartStep(`切换目标步态为${gaitConfig.label}`)
+    await sendDogCommand(robotId, gaitConfig.command)
+    pushTrackStartStep(`等待机器人切换到${gaitConfig.label}`)
+    await waitForRobotState(
+      () => robotStore.gaitText === gaitConfig.label,
+      10000,
+      `等待机器人切换到${gaitConfig.label}超时`
+    )
+
+    pushTrackStartStep('发送循迹任务启动指令')
     // 调用启动循迹任务API
     const response = await navigationApi.startTrack(robotId, {
       action: form.action,
@@ -5347,30 +5547,33 @@ const onTrackStartConfirm = async () => {
     if (response && (response as any).response && (response as any).response.msg) {
       const { error_code, error_msg } = (response as any).response.msg
       if (error_code === 0) {
-        const normalizedTrackName = normalizeTrackName(form.track_name)
-        activeTaskType.value = 'track'
-        taskExecutionStore.markMultiTaskStopped()
-        selectedTrack.value = normalizedTrackName
-        activeTrackInfo.value = { track_name: normalizedTrackName, taskpoint_name: form.taskpoint_name }
-        activeOverlayTrackName.value = normalizedTrackName
-        await overlayTrackTrajectory(normalizedTrackName)
-        showSuccess((response as any).message || '循迹任务启动成功')
+        pushTrackStartStep((response as any).message || '循迹任务启动成功', 'success')
+        await finalizeTrackTaskStart(form.track_name, form.taskpoint_name, (response as any).message || '循迹任务启动成功')
+        window.setTimeout(() => {
+          if (!trackStartDialog.value.loading) {
+            trackStartDialog.value.visible = false
+          }
+        }, 1500)
       } else {
+        pushTrackStartStep(`启动失败: ${error_msg || '未知错误'}`, 'error')
         showError(`启动失败: ${error_msg || '未知错误'}`)
       }
     } else {
-      const normalizedTrackName = normalizeTrackName(form.track_name)
-      activeTaskType.value = 'track'
-      taskExecutionStore.markMultiTaskStopped()
-      selectedTrack.value = normalizedTrackName
-      activeTrackInfo.value = { track_name: normalizedTrackName, taskpoint_name: form.taskpoint_name }
-      activeOverlayTrackName.value = normalizedTrackName
-      await overlayTrackTrajectory(normalizedTrackName)
-      showSuccess('循迹任务启动成功')
+      pushTrackStartStep('循迹任务启动成功', 'success')
+      await finalizeTrackTaskStart(form.track_name, form.taskpoint_name)
+      window.setTimeout(() => {
+        if (!trackStartDialog.value.loading) {
+          trackStartDialog.value.visible = false
+        }
+      }, 1500)
     }
   } catch (error) {
     console.error('启动循迹任务失败:', error)
-    showError('启动循迹任务失败，请稍后重试')
+    const errorMessage = parseErrorMessage(error) || '启动循迹任务失败，请稍后重试'
+    pushTrackStartStep(errorMessage, 'error')
+    showError(errorMessage)
+  } finally {
+    trackStartDialog.value.loading = false
   }
 }
 
@@ -6684,15 +6887,12 @@ const controlCommandNameMap: Partial<Record<RobotControlName, string>> = {
   stairGait: 'foot_stair',
   stairFollowGait: 'foot_stair2',
   stair45Gait: 'foot_stair3',
+  lGait: 'foot_l',
+  mountainGait: 'foot_mountain',
+  quietGait: 'foot_silent',
   startCharge: 'charge_start',
   endCharge: 'charge_stop',
   resetCharge: 'charge_clean',
-}
-
-const unsupportedControlHint: Partial<Record<RobotControlName, string>> = {
-  lGait: 'L步态接口未在当前后端指令清单中开放',
-  mountainGait: '山地步态接口未在当前后端指令清单中开放',
-  quietGait: '静音步态接口未在当前后端指令清单中开放',
 }
 
 const controlButtonLabelMap: Record<RobotControlName, string> = {
@@ -6725,10 +6925,15 @@ const moveControlLabel = computed(() => {
   const basicState = robotStore.motionState?.basic_state
   return basicState === 4 ? '停止运动' : '开始运动'
 })
+const crawlControlLabel = computed(() => {
+  const postureText = robotStore.postureText || ''
+  return postureText.includes('匍匐') ? '正常姿态' : '匍匐姿态'
+})
 
 const getControlActionLabel = (controlName: RobotControlName) => {
   if (controlName === 'stand') return standControlLabel.value
   if (controlName === 'startMove') return moveControlLabel.value
+  if (controlName === 'crawl') return crawlControlLabel.value
   return controlButtonLabelMap[controlName]
 }
 
@@ -6815,9 +7020,12 @@ const getControlRuleViolationMessage = (controlName: RobotControlName): string |
 
 // 机器人控制按钮点击处理
 const handleControlClick = async (controlName: RobotControlName) => {
-  const commandName = controlCommandNameMap[controlName]
+  const postureText = robotStore.postureText || ''
+  const commandName = controlName === 'crawl'
+    ? (postureText.includes('匍匐') ? 'height_normal' : 'height_down')
+    : controlCommandNameMap[controlName]
   if (!commandName) {
-    showError(unsupportedControlHint[controlName] || '该控制项暂未接入后端指令')
+    showError('该控制项暂未接入后端指令')
     return
   }
 
@@ -7081,6 +7289,52 @@ onActivated(async () => {
   align-items: center;
   margin-bottom: 12px;
   gap: 10px;
+}
+
+.track-process-row {
+  align-items: flex-start;
+}
+
+.track-process-panel {
+  flex: 1;
+  min-height: 88px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(10, 26, 40, 0.92);
+  border: 1px solid rgba(103, 213, 253, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(103, 213, 253, 0.04);
+}
+
+.track-process-panel.running {
+  border-color: rgba(103, 213, 253, 0.35);
+}
+
+.track-process-panel.success {
+  border-color: rgba(53, 208, 127, 0.45);
+}
+
+.track-process-panel.error {
+  border-color: rgba(255, 107, 107, 0.45);
+}
+
+.track-process-current {
+  color: #d7f5ff;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.track-process-log {
+  margin-top: 8px;
+  max-height: 136px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.track-process-log-item {
+  color: rgba(215, 245, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .dispatch-task-row label {
@@ -7476,6 +7730,109 @@ onActivated(async () => {
   align-items: center;
   z-index: 2000;
 }
+
+.fall-alert-frame {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2100;
+}
+
+.fall-alert-edge {
+  position: absolute;
+  background: linear-gradient(90deg, rgba(255, 84, 84, 0) 0%, rgba(255, 84, 84, 0.95) 50%, rgba(255, 84, 84, 0) 100%);
+  box-shadow: 0 0 18px rgba(255, 60, 60, 0.65);
+  animation: fall-alert-pulse 0.9s ease-in-out infinite;
+}
+
+.fall-alert-edge.top,
+.fall-alert-edge.bottom {
+  left: 0;
+  width: 100%;
+  height: 8px;
+}
+
+.fall-alert-edge.left,
+.fall-alert-edge.right {
+  top: 0;
+  width: 8px;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(255, 84, 84, 0) 0%, rgba(255, 84, 84, 0.95) 50%, rgba(255, 84, 84, 0) 100%);
+}
+
+.fall-alert-edge.top { top: 0; }
+.fall-alert-edge.right { right: 0; }
+.fall-alert-edge.bottom { bottom: 0; }
+.fall-alert-edge.left { left: 0; }
+
+.fall-alert-mask {
+  z-index: 2200;
+  background: rgba(16, 0, 0, 0.48);
+}
+
+.fall-alert-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border-radius: 14px;
+  border: 1px solid rgba(255, 107, 107, 0.45);
+  background: linear-gradient(180deg, rgba(52, 10, 10, 0.98) 0%, rgba(24, 9, 9, 0.98) 100%);
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.45), 0 0 36px rgba(255, 80, 80, 0.18);
+  overflow: hidden;
+}
+
+.fall-alert-title {
+  padding: 18px 22px 10px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #ff8d8d;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.fall-alert-body {
+  padding: 0 22px 10px;
+}
+
+.fall-alert-message {
+  color: #ffe5e5;
+  font-size: 15px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.fall-alert-metrics {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 8px;
+  color: rgba(255, 230, 230, 0.88);
+  font-size: 13px;
+}
+
+.fall-alert-actions {
+  display: flex;
+  justify-content: center;
+  padding: 0 22px 22px;
+}
+
+.fall-alert-actions .confirm-btn-ok {
+  min-width: 132px;
+  background: linear-gradient(180deg, #ff6f6f 0%, #e34747 100%);
+  box-shadow: 0 10px 24px rgba(227, 71, 71, 0.28);
+}
+
+@keyframes fall-alert-pulse {
+  0%, 100% {
+    opacity: 0.35;
+    filter: saturate(0.85);
+  }
+  50% {
+    opacity: 1;
+    filter: saturate(1.2);
+  }
+}
+
 .home-container {
   display: grid;
   grid-template-columns: clamp(280px, 28vw, 480px) 1fr clamp(280px, 28vw, 480px);

@@ -54,7 +54,7 @@
                 <div class="map-section-title">创建二维地图</div>
                 <div class="map-section-buttons">
                   <button class="map-btn map-btn-primary" :disabled="isRecording" @click="handleGenerateMap">生成地图</button>
-                  <button class="map-btn map-btn-primary" :disabled="isRecording" @click="handleGenerateGridMap">生成栅格地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording || mappingStopLoading" @click="handleGenerateGridMap">生成栅格地图</button>
                   <button class="map-btn map-btn-primary" :disabled="isRecording" @click="handleCreateFusionMap">新建融合地图</button>
                 </div>
               </div>
@@ -1052,7 +1052,7 @@ const handleTrackRecord = () => {
   } else {
     // 未录制 -> 打开弹窗开始录制
     if (!trackRecordMap.value) {
-      alert('请先选择地图')
+      showErrorMessage('请先选择地图')
       return
     }
     trackRecordDialog.value.trackName = ''
@@ -1061,55 +1061,76 @@ const handleTrackRecord = () => {
 }
 
 // 停止录制逻辑
-const stopTrackRecord = async () => {
-  if (!confirm('确定要完成录制吗？')) return
-
+const stopTrackRecordRequest = async () => {
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
-  if (!robotId) return
+  if (!robotId) {
+    showErrorMessage('未选择机器人')
+    return
+  }
 
   try {
     // action 0 是停止
-    const response = await navigationApi.trackRecord(robotId, {
+    await navigationApi.trackRecord(robotId, {
       action: 0,
       track_name: '' 
     })
     
     isTrackRecording.value = false
-    alert('录制完成')
+    showSuccessMessage('录制完成')
     
     // 刷新列表
     await fetchAllTrackList()
     
   } catch(error: any) {
-      console.error('停止录制失败:', error)
-      alert(`停止录制失败: ${error.message || '未知错误'}`)
+    console.error('停止录制失败:', error)
+    showErrorMessage(`停止录制失败: ${error.message || '未知错误'}`)
   }
+}
+
+const stopTrackRecord = () => {
+  showConfirmDialog({
+    title: '完成录制',
+    message: '确定要完成录制吗？',
+    confirmText: '确定',
+    cancelText: '取消',
+    type: 'warning',
+    onConfirm: () => {
+      closeConfirmDialog()
+      void stopTrackRecordRequest()
+    },
+    onCancel: () => {
+      closeConfirmDialog()
+    }
+  })
 }
 
 // 确认开始录制
 const confirmTrackRecord = async () => {
   if (!trackRecordDialog.value.trackName) {
-    alert('请输入路线名称')
+    showErrorMessage('请输入路线名称')
     return
   }
   
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
-  if (!robotId) return
+  if (!robotId) {
+    showErrorMessage('未选择机器人')
+    return
+  }
 
   trackRecordDialog.value.loading = true
   try {
     const fullTrackName = `${trackRecordMap.value}_${trackRecordDialog.value.trackName}`
-    const response = await navigationApi.trackRecord(robotId, {
+    await navigationApi.trackRecord(robotId, {
       action: 1, // 开始
       track_name: fullTrackName
     })
     
     isTrackRecording.value = true
     trackRecordDialog.value.visible = false
-    alert('开始录制路线')
+    showSuccessMessage('开始录制路线')
   } catch (error: any) {
     console.error('开始录制失败:', error)
-    alert(`开始录制失败: ${error.message || '未知错误'}`)
+    showErrorMessage(`开始录制失败: ${error.message || '未知错误'}`)
   } finally {
     trackRecordDialog.value.loading = false
   }
@@ -1121,7 +1142,7 @@ const cancelTrackRecord = () => {
 
 const handleTrackDelete = () => {
   if (!trackRecordLine.value) {
-    alert('请先选择要删除的路线') // 保持简单的alert提示，或改用showErrorMessage
+    showErrorMessage('请先选择要删除的路线')
     return
   }
   
@@ -1305,12 +1326,15 @@ const handleTrackPreview = async () => {
 
 const handleTrackSmooth = async () => {
   if (!trackRecordLine.value) {
-    alert('请先选择要平滑的路线')
+    showErrorMessage('请先选择要平滑的路线')
     return
   }
   
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
-  if (!robotId) return
+  if (!robotId) {
+    showErrorMessage('未选择机器人')
+    return
+  }
 
   try {
     await navigationApi.trajectorySmooth(robotId, {
@@ -2636,11 +2660,16 @@ onUnmounted(() => {
 // 录包建图相关状态
 const isRecording = computed(() => robotStore.cmdStatus?.data_record === 1)
 const mapProgress = ref(0)
+const mappingStopLoading = ref(false)
+const mappingAutoStopTriggered = ref(false)
 
 // 对接 WebSocket 实时建图进度（mapping_progress 消息）
 watch(() => robotStore.mappingProgress?.progress, (progress) => {
   if (progress != null && progress > 0) {
     mapProgress.value = progress
+    if (progress >= 100) {
+      void handleStopMapping(true)
+    }
   }
 })
 const recordingDialogVisible = ref(false)
@@ -2759,6 +2788,15 @@ const handleStopRecording = async () => {
       data_name: nameToSend
     })
 
+    await fetchDataPackageList()
+    if (nameToSend && dataPackageList.value.includes(nameToSend)) {
+      selectedDataPackage.value = nameToSend
+    } else if (dataPackageList.value.length > 0) {
+      selectedDataPackage.value = dataPackageList.value[0]
+    } else {
+      selectedDataPackage.value = ''
+    }
+
     showSuccessMessage('停止录包指令已发送')
     // 可选：清空录制名称
     // recordingName.value = ''
@@ -2824,6 +2862,7 @@ const confirmGenerateMap = async () => {
     // 保存当前建图参数，用于终止
     currentMappingDataName.value = dataName
     currentMappingMapName.value = mapName
+    mappingAutoStopTriggered.value = false
     
     generateMapDialogVisible.value = false
     showSuccessMessage('生成地图指令已发送')
@@ -2897,6 +2936,7 @@ const confirmGenerateGridMap = async () => {
     
     generateGridMapDialogVisible.value = false
     showSuccessMessage('生成栅格地图指令已发送')
+    mappingAutoStopTriggered.value = false
     mapProgress.value = 10 // 开始进度
   } catch (err) {
     console.error('生成栅格地图失败:', err)
@@ -2945,6 +2985,7 @@ const confirmCreateFusionMap = async () => {
     
     createFusionMapDialogVisible.value = false
     showSuccessMessage('新建融合地图指令已发送')
+    mappingAutoStopTriggered.value = false
     mapProgress.value = 10 // 开始进度
   } catch (err) {
     console.error('新建融合地图失败:', err)
@@ -2958,8 +2999,16 @@ const cancelCreateFusionMap = () => {
   createFusionMapDialogVisible.value = false
 }
 
-const handleStopMapping = async () => {
+const handleStopMapping = async (autoTriggered = false) => {
   if (mapProgress.value === 0) return
+  if (mappingStopLoading.value) return
+  if (autoTriggered && mappingAutoStopTriggered.value) return
+  if (!currentMappingMapName.value && !currentMappingDataName.value) return
+
+  if (autoTriggered) {
+    mappingAutoStopTriggered.value = true
+  }
+  mappingStopLoading.value = true
   
   try {
     const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
@@ -2974,16 +3023,31 @@ const handleStopMapping = async () => {
       data_name: currentMappingDataName.value,
       map_name: currentMappingMapName.value
     })
+
+    await refreshMapListCache()
+    fetchMapList()
+    fetchEditMapList()
+    fetchTrackMapList()
+    fetchFileMapList()
     
     mapProgress.value = 0
-    showSuccessMessage('终止建图指令已发送')
+    if (autoTriggered) {
+      showSuccessMessage('建图完成，已自动停止并刷新地图列表')
+    } else {
+      showSuccessMessage('终止建图指令已发送')
+    }
     
     // 清空保存的参数
     currentMappingDataName.value = ''
     currentMappingMapName.value = ''
   } catch (err) {
+    if (autoTriggered) {
+      mappingAutoStopTriggered.value = false
+    }
     console.error('终止建图失败:', err)
     showErrorMessage('终止建图失败')
+  } finally {
+    mappingStopLoading.value = false
   }
 }
 
