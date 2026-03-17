@@ -37,6 +37,7 @@ const dynamicGroupRef = shallowRef<THREE.Group | null>(null)
 let resizeObserver: ResizeObserver | null = null
 let animationFrameId = 0
 const SCREEN_POINT_SIZE = 1
+const ROBOT_ICON_SCALE = 0.5
 const labelSprites: THREE.Sprite[] = []
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0)
@@ -123,6 +124,8 @@ const createLabelSprite = (text: string, options: {
     depthWrite: false,
   })
   const sprite = new THREE.Sprite(material)
+  // Always render labels above point cloud primitives.
+  sprite.renderOrder = 1000
   sprite.userData.aspect = logicalWidth / logicalHeight
   sprite.userData.heightPx = options.heightPx ?? 18
   sprite.userData.minHeightPx = options.heightPx ?? 18
@@ -200,6 +203,36 @@ const createTrajectoryLineObject = (points: PointCloudPoint[]) => {
   return new THREE.Line(geometry, material)
 }
 
+const createBullseyeMarkerSprite = (innerColor: string) => {
+  const markerCanvas = document.createElement('canvas')
+  markerCanvas.width = 64
+  markerCanvas.height = 64
+  const markerCtx = markerCanvas.getContext('2d')
+  if (markerCtx) {
+    markerCtx.clearRect(0, 0, 64, 64)
+    markerCtx.beginPath()
+    markerCtx.arc(32, 32, 14, 0, Math.PI * 2)
+    markerCtx.fillStyle = '#ffffff'
+    markerCtx.fill()
+    markerCtx.beginPath()
+    markerCtx.arc(32, 32, 10, 0, Math.PI * 2)
+    markerCtx.fillStyle = innerColor
+    markerCtx.fill()
+  }
+  const markerTexture = new THREE.CanvasTexture(markerCanvas)
+  markerTexture.needsUpdate = true
+  markerTexture.colorSpace = THREE.SRGBColorSpace
+  const markerMaterial = new THREE.SpriteMaterial({
+    map: markerTexture,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+  })
+  const marker = new THREE.Sprite(markerMaterial)
+  marker.scale.set(0.018, 0.018, 1)
+  return marker
+}
+
 const createOriginMarker = () => {
   const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
   if (maxRange <= 1e-6) return null
@@ -211,10 +244,7 @@ const createOriginMarker = () => {
   )
 
   const group = new THREE.Group()
-  const marker = new THREE.Mesh(
-    new THREE.SphereGeometry(0.01, 18, 18),
-    new THREE.MeshBasicMaterial({ color: '#ff3b3b' })
-  )
+  const marker = createBullseyeMarkerSprite('#ff2f2f')
   marker.position.copy(origin)
   group.add(marker)
 
@@ -230,7 +260,7 @@ const createOriginMarker = () => {
     strokeWidth: 1.2,
   })
   if (label) {
-    label.position.copy(origin.clone().add(new THREE.Vector3(0, 0.045, 0)))
+    label.position.copy(origin.clone().add(new THREE.Vector3(0, 0.03, 0)))
     group.add(label)
   }
 
@@ -244,14 +274,7 @@ const createTaskMarkers = () => {
   const group = new THREE.Group()
   for (const point of taskPoints) {
     const world = toWorldPosition(point.x, point.y, point.z)
-    const marker = new THREE.Mesh(
-      new THREE.SphereGeometry(0.008, 16, 16),
-      new THREE.MeshStandardMaterial({
-        color: '#ffd21f',
-        emissive: '#8a6200',
-        emissiveIntensity: 0.9,
-      })
-    )
+    const marker = createBullseyeMarkerSprite('#ffd21f')
     marker.position.copy(world)
     group.add(marker)
 
@@ -267,7 +290,7 @@ const createTaskMarkers = () => {
       strokeWidth: 1.2,
     })
     if (label) {
-      label.position.copy(world.clone().add(new THREE.Vector3(0, 0.05, 0)))
+      label.position.copy(world.clone().add(new THREE.Vector3(0, 0.03, 0)))
       group.add(label)
     }
   }
@@ -314,7 +337,7 @@ const createRobotObject = () => {
     })
 
     const mesh = new THREE.Mesh(geometry, material)
-    mesh.scale.setScalar(0.026)
+    mesh.scale.setScalar(0.026 * ROBOT_ICON_SCALE)
     mesh.rotation.y = -pose.theta
     group.add(mesh)
 
@@ -329,7 +352,7 @@ const createRobotObject = () => {
     edges.rotation.copy(mesh.rotation)
     group.add(edges)
   } else {
-    const geometry = new THREE.ConeGeometry(0.026, 0.078, 3)
+    const geometry = new THREE.ConeGeometry(0.026 * ROBOT_ICON_SCALE, 0.078 * ROBOT_ICON_SCALE, 3)
     const material = new THREE.MeshStandardMaterial({
       color: '#ff00ff',
       emissive: '#ff00ff',
@@ -503,7 +526,9 @@ const resizeRenderer = () => {
   if (!width || !height) return
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-  renderer.setSize(width, height, false)
+  // Keep CSS display size in sync with container; otherwise high-DPI screens
+  // can show a clipped, bottom-right shifted view when DPR > 1.
+  renderer.setSize(width, height, true)
   camera.aspect = width / height
   camera.updateProjectionMatrix()
 }

@@ -1513,21 +1513,20 @@ const parseTrajectoryPoints = (text: string): Array<{ x: number; y: number; z: n
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) continue
     const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
-    if (parts.length >= 4) {
-      const v1 = parseFloat(parts[1])
-      const v2 = parseFloat(parts[2])
-      const v3 = parseFloat(parts[3])
-      if (!Number.isNaN(v1) && !Number.isNaN(v2) && !Number.isNaN(v3)) {
-        points.push({ x: v1, y: v2, z: v3 })
+    if (parts.length === 6) {
+      const x = parseFloat(parts[1])
+      const y = parseFloat(parts[2])
+      const z = parseFloat(parts[3])
+      if (!Number.isNaN(x) && !Number.isNaN(y) && !Number.isNaN(z)) {
+        points.push({ x, y, z })
         continue
       }
     }
-    if (parts.length >= 3) {
-      const v0 = parseFloat(parts[0])
-      const v1 = parseFloat(parts[1])
-      const v2 = parseFloat(parts[2])
-      if (!Number.isNaN(v0) && !Number.isNaN(v1) && !Number.isNaN(v2)) {
-        points.push({ x: v0, y: v1, z: v2 })
+    if (parts.length === 5) {
+      const x = parseFloat(parts[1])
+      const y = parseFloat(parts[2])
+      if (!Number.isNaN(x) && !Number.isNaN(y)) {
+        points.push({ x, y, z: 0 })
       }
     }
   }

@@ -1299,6 +1299,7 @@ watch(() => robotStore.cmdStatus?.nav, (nav) => {
   } else if (nav === 0) {
     // 导航关闭后清除标记，下次切换机器人时不再受约束
     localStorage.removeItem('nav_confirmed_map')
+    ensureDefaultMapSelection()
   }
 })
 
@@ -2243,8 +2244,10 @@ const overlayTrackTrajectory = async (trackName: string) => {
         if (!trimmed || trimmed.startsWith('#')) continue
         const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
         const len = parts.length
-        // 6列：index, x, y, z, ... 使用实际 z
-        if (len >= 6) {
+        // 仅支持两种格式：
+        // 6列：index, x, y, z, ... 取实际 z
+        // 5列：index, x, y, ...    无 z，默认 0
+        if (len === 6) {
           const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
           if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
             trajectoryPoints.push({ x, y, z })
@@ -2259,21 +2262,7 @@ const overlayTrackTrajectory = async (trackName: string) => {
             continue
           }
         }
-        // 4列：index, x, y, z 使用实际 z
-        if (len === 4) {
-          const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
-          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-            trajectoryPoints.push({ x, y, z })
-            continue
-          }
-        }
-        // 3列：x, y, z 使用实际 z
-        if (len === 3) {
-          const x = parseFloat(parts[0]), y = parseFloat(parts[1]), z = parseFloat(parts[2])
-          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-            trajectoryPoints.push({ x, y, z })
-          }
-        }
+        // 其他列数按无效行跳过
       }
     }
 
@@ -4638,6 +4627,21 @@ const getMapFileUrl = async (mapName: string, fileName: string): Promise<string 
 // 地图更新时间映射（运行时使用，key: 地图名, value: 更新时间）
 const mapUpdateTimeMap = ref<Record<string, string>>({})
 
+const ensureDefaultMapSelection = () => {
+  // 导航进行中由 cmd_status.map_name 驱动，不在这里覆盖
+  if (robotStore.cmdStatus?.nav === 1) return
+
+  const current = taskExecutionStore.selectedMapName
+  if (mapList.value.length === 0) {
+    if (current) taskExecutionStore.setSelectedMapName('')
+    return
+  }
+
+  if (!current || !mapList.value.includes(current)) {
+    taskExecutionStore.setSelectedMapName(mapList.value[0])
+  }
+}
+
 // 获取地图列表
 const fetchMapList = async () => {
   const cached = localStorage.getItem('cached_map_list')
@@ -4649,10 +4653,13 @@ const fetchMapList = async () => {
   const cachedMapName = taskExecutionStore.selectedMapName
   if (cachedMapName && mapList.value.includes(cachedMapName)) {
     taskExecutionStore.setSelectedMapName(cachedMapName)
-  } else if (mapList.value.length > 0 && !taskExecutionStore.selectedMapName) {
-    taskExecutionStore.setSelectedMapName(mapList.value[0])
   }
+  ensureDefaultMapSelection()
 }
+
+watch(mapList, () => {
+  ensureDefaultMapSelection()
+})
 
 // 循迹任务列表
 const trackList = ref<string[]>([])
@@ -8505,6 +8512,30 @@ onActivated(async () => {
 .map-dropdown option {
   background: #0c3c56;
   color: #67d5fd;
+}
+
+/* 地图下拉列表滚动条（支持 WebKit/Chromium 的可样式化场景） */
+.map-dropdown {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.map-dropdown::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.map-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.map-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.map-dropdown::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .dropdown-arrow {

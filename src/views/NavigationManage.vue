@@ -524,7 +524,7 @@
             <label class="form-label">选择地图：</label>
             <select v-model="selectedMapForGrid" class="recording-input">
               <option v-for="map in gridMapList" :key="map" :value="map">
-                {{ map }}
+                {{ normalizeMapName(map) }}
               </option>
             </select>
           </div>
@@ -1039,6 +1039,9 @@ watch(trackRecordLine, async (newLine) => {
 
 // 路线录制状态
 const isTrackRecording = ref(false)
+watch(() => robotStore.cmdStatus?.track_record, (val) => {
+  isTrackRecording.value = Number(val) === 1
+}, { immediate: true })
 const trackRecordDialog = ref({
   visible: false,
   trackName: '',
@@ -1220,8 +1223,10 @@ const handleTrackPreview = async () => {
       // 格式可能是: index, x, y, z, ...  列数决定 z 轴是否有效
       const len = parts.length
 
-      // 6列+：index, x, y, z, ... 使用实际 z
-      if (len >= 6) {
+      // 仅支持两种格式：
+      // 6列：index, x, y, z, ... 取实际 z
+      // 5列：index, x, y, ...    无 z，默认 0
+      if (len === 6) {
         const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
         if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
           trajectoryPoints.push({ x, y, z })
@@ -1236,21 +1241,7 @@ const handleTrackPreview = async () => {
           continue
         }
       }
-      // 4列：index, x, y, z 使用实际 z
-      if (len === 4) {
-        const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
-        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-          trajectoryPoints.push({ x, y, z })
-          continue
-        }
-      }
-      // 3列：x, y, z 使用实际 z
-      if (len === 3) {
-        const x = parseFloat(parts[0]), y = parseFloat(parts[1]), z = parseFloat(parts[2])
-        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-          trajectoryPoints.push({ x, y, z })
-        }
-      }
+      // 其他列数按无效行跳过
     }
     
     if (trajectoryPoints.length === 0) {
@@ -2357,8 +2348,10 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
         if (!trimmed || trimmed.startsWith('#')) continue
         const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
         const len = parts.length
-        // 6列+：index, x, y, z, ... 使用实际 z
-        if (len >= 6) {
+        // 仅支持两种格式：
+        // 6列：index, x, y, z, ... 取实际 z
+        // 5列：index, x, y, ...    无 z，默认 0
+        if (len === 6) {
           const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
           if (!isNaN(x) && !isNaN(y) && !isNaN(z)) { trajectoryPoints.push({ x, y, z }); continue }
         }
@@ -2367,16 +2360,7 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
           const x = parseFloat(parts[1]), y = parseFloat(parts[2])
           if (!isNaN(x) && !isNaN(y)) { trajectoryPoints.push({ x, y, z: 0 }); continue }
         }
-        // 4列：index, x, y, z 使用实际 z
-        if (len === 4) {
-          const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
-          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) { trajectoryPoints.push({ x, y, z }); continue }
-        }
-        // 3列：x, y, z 使用实际 z
-        if (len === 3) {
-          const x = parseFloat(parts[0]), y = parseFloat(parts[1]), z = parseFloat(parts[2])
-          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) { trajectoryPoints.push({ x, y, z }) }
-        }
+        // 其他列数按无效行跳过
       }
     }
 
@@ -2448,6 +2432,13 @@ const normalizeTrackName = (rawTrackName: string) => {
 
 const normalizeTaskPointName = (rawTaskPointName: string) => {
   const trimmed = (rawTaskPointName || '').trim()
+  if (!trimmed) return ''
+  const atIndex = trimmed.indexOf('@')
+  return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
+}
+
+const normalizeMapName = (rawMapName: string) => {
+  const trimmed = (rawMapName || '').trim()
   if (!trimmed) return ''
   const atIndex = trimmed.indexOf('@')
   return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
@@ -2768,7 +2759,7 @@ const cancelStartRecording = () => {
   recordingDialogVisible.value = false
 }
 
-const handleStopRecording = async () => {
+const stopRecordingRequest = async () => {
   if (!isRecording.value) return
   if (recordingLoading.value) return
 
@@ -2806,6 +2797,24 @@ const handleStopRecording = async () => {
   } finally {
     recordingLoading.value = false
   }
+}
+
+const handleStopRecording = () => {
+  if (!isRecording.value) return
+  showConfirmDialog({
+    title: '完成录制',
+    message: '确定要完成录制吗？',
+    confirmText: '确定',
+    cancelText: '取消',
+    type: 'warning',
+    onConfirm: () => {
+      closeConfirmDialog()
+      void stopRecordingRequest()
+    },
+    onCancel: () => {
+      closeConfirmDialog()
+    }
+  })
 }
 
 const handleGenerateMap = async () => {
@@ -2911,7 +2920,7 @@ const handleGenerateGridMap = () => {
 const confirmGenerateGridMap = async () => {
   if (!ensureNotRecordingForMapActions()) return
   if (!ensureNavigationClosedForMapping()) return
-  const mapName = selectedMapForGrid.value.trim()
+  const mapName = normalizeMapName(selectedMapForGrid.value).trim()
   
   if (!mapName) {
     showErrorMessage('请选择地图')
@@ -3032,7 +3041,7 @@ const handleStopMapping = async (autoTriggered = false) => {
     
     mapProgress.value = 0
     if (autoTriggered) {
-      showSuccessMessage('建图完成，已自动停止并刷新地图列表')
+      showSuccessMessage('建图完成')
     } else {
       showSuccessMessage('终止建图指令已发送')
     }

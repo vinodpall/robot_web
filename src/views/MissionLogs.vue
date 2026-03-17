@@ -80,9 +80,6 @@
                   <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center;">&nbsp;</div>
                   <div class="file-table-cell file-table-action" style="min-width: 160px; width: 160px; text-align: center;">&nbsp;</div>
                 </div>
-                <div v-if="alerts.length === 0" class="mission-empty">
-                暂无任务记录
-              </div>
               </div>
             </div>
           </div>
