@@ -1,17 +1,23 @@
 export interface User {
   id: number
   username: string
-  userfullname: string
-  is_activate: string
-  is_superuser: string
-  created_by: string | null
-  created_time: string
-  updated_by: string | null
-  updated_time: string
-  workspace_id: string
-  user_type: number
+  email?: string
+  full_name?: string
+  userfullname?: string
+  is_active?: boolean
+  is_activate?: string
+  is_superuser?: boolean | string
+  created_by?: string | null
+  created_at?: string
+  created_time?: string
+  updated_by?: string | null
+  updated_at?: string | null
+  updated_time?: string
+  workspace_id?: string
+  user_type?: number
   roles: Role[] | string[] | ReadonlyArray<Role> | ReadonlyArray<string> // 兼容后端返回的只读数组
-  workspace_name: string | null
+  robots?: Robot[] | string[] | ReadonlyArray<Robot> | ReadonlyArray<string>
+  workspace_name?: string | null
 }
 
 export interface Dock {
@@ -86,9 +92,13 @@ export interface Alert {
 export interface Role {
   id: number
   role_name: string
-  role_description: string
-  created_time: string
-  updated_time: string
+  role_code?: string
+  description?: string
+  role_description?: string
+  created_at?: string
+  updated_at?: string | null
+  created_time?: string
+  updated_time?: string
   permissions: Permission[] | ReadonlyArray<Permission>
 }
 
@@ -281,9 +291,13 @@ export interface Alert {
 export interface Role {
   id: number
   role_name: string
-  role_description: string
-  created_time: string
-  updated_time: string
+  role_code?: string
+  description?: string
+  role_description?: string
+  created_at?: string
+  updated_at?: string | null
+  created_time?: string
+  updated_time?: string
   permissions: Permission[] | ReadonlyArray<Permission>
 }
 

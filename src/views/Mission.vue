@@ -8,6 +8,7 @@
           :key="tab.key"
           :class="['sidebar-tab', { active: route.path === tab.path }]"
           :title="tab.label"
+          v-permission-click-dialog="tab.permission"
           @click="handleTabClick(tab)"
         >
           <img :src="tab.icon" :alt="tab.label" />
@@ -53,17 +54,18 @@
                   class="mission-btn"
                   :class="isTrackTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
                   :disabled="!canStartTrackTask && !isTrackTaskRunning"
+                  v-permission-click-dialog="'task-tracklist-execute'"
                   @click="handleStartTrack"
                 >
                   {{ isTrackTaskRunning ? '关闭' : '开始' }}
                 </button>
-                <button class="mission-btn mission-btn-secondary" :disabled="!isNavigationEnabled" @click="handlePauseTrack">
+                <button class="mission-btn mission-btn-secondary" :disabled="!isNavigationEnabled" v-permission-click-dialog="'task-tracklist-pause'" @click="handlePauseTrack">
                   {{ isNavPaused ? '恢复' : '暂停' }}
                 </button>
-                <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
-                <button class="mission-btn mission-btn-stop" :disabled="isTrackTaskRunning" @click="handleDeleteTaskGroup">删除任务组</button>
-                <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" @click="handleAddTask">添加任务</button>
-                <button class="mission-btn mission-btn-secondary" @click="openPreviewDialog">预览</button>
+                <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" v-permission-click-dialog="'task-tracklist-create'" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
+                <button class="mission-btn mission-btn-stop" :disabled="isTrackTaskRunning" v-permission-click-dialog="'task-tracklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
+                <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" v-permission-click-dialog="'task-tracklist-create'" @click="handleAddTask">添加任务</button>
+                <button class="mission-btn mission-btn-secondary" v-permission-click-dialog="'task-tracklist-show'" @click="openPreviewDialog">预览</button>
               </div>
             </div>
             <div class="file-table file-table-adaptive">
@@ -110,15 +112,15 @@
                     <span v-else class="ms-empty">-</span>
                   </div>
                   <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
-                    <button class="action-btn action-btn-edit" @click="handleEditTask(waypoint)">
+                    <button class="action-btn action-btn-edit" v-permission-click-dialog="'task-tracklist-edit'" @click="handleEditTask(waypoint)">
                       <img :src="editIcon" alt="编辑" />
                       编辑
                     </button>
-                    <button class="action-btn action-btn-delete" @click="handleDeleteTask(waypoint)">
+                    <button class="action-btn action-btn-delete" v-permission-click-dialog="'task-tracklist-delete'" @click="handleDeleteTask(waypoint)">
                       <img :src="deleteIcon" alt="删除" />
                       删除
                     </button>
-                    <button class="action-btn action-btn-arrive" @click="handleArriveTask(waypoint)">
+                    <button class="action-btn action-btn-arrive" v-permission-click-dialog="'task-tracklist-execute'" @click="handleArriveTask(waypoint)">
                       <img :src="arriveIcon" alt="到点" />
                       到点
                     </button>
@@ -361,7 +363,7 @@
           </div>
           <div class="dispatch-task-actions">
             <button class="mission-btn mission-btn-cancel" @click="onDispatchTaskCancel">取消</button>
-            <button class="mission-btn mission-btn-pause" @click="onDispatchTaskConfirm">确定</button>
+            <button class="mission-btn mission-btn-pause" v-permission-click-dialog="'task-tracklist-execute'" @click="onDispatchTaskConfirm">确定</button>
           </div>
         </div>
       </div>
@@ -385,7 +387,7 @@
         </div>
         <div class="simple-modal-footer">
           <button class="mission-btn mission-btn-secondary" @click="closeCreateTaskGroupDialog">取消</button>
-          <button class="mission-btn mission-btn-primary" @click="handleCreateTaskGroup">确定</button>
+          <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tracklist-create'" @click="handleCreateTaskGroup">确定</button>
         </div>
       </div>
     </div>
@@ -461,7 +463,7 @@
           </div>
           <div class="dispatch-task-actions">
             <button class="mission-btn mission-btn-cancel" :disabled="trackStartDialog.loading" @click="onTrackStartCancel">取消</button>
-            <button class="mission-btn mission-btn-pause" :disabled="trackStartDialog.loading" @click="onTrackStartConfirm">
+            <button class="mission-btn mission-btn-pause" :disabled="trackStartDialog.loading" v-permission-click-dialog="'task-tracklist-execute'" @click="onTrackStartConfirm">
               {{ trackStartDialog.loading ? '启动中...' : '确定' }}
             </button>
           </div>
@@ -586,7 +588,7 @@
 
           <!-- Footer -->
           <div class="simple-modal-footer">
-             <button class="mission-btn mission-btn-primary" style="width: 100px;" @click="confirmAddTask">确定</button>
+             <button class="mission-btn mission-btn-primary" style="width: 100px;" v-permission-click-dialog="['task-tracklist-create', 'task-tracklist-edit']" @click="confirmAddTask">确定</button>
              <button class="mission-btn" style="width: 100px; background: transparent; border: 1px solid #606266; color: #fff;" @click="cancelAddTask">取消</button>
           </div>
         </div>
@@ -762,9 +764,11 @@ import { usePointCloudRenderer } from '@/composables/usePointCloudRenderer'
 import ThreePointCloudPreview from '@/components/ThreePointCloudPreview.vue'
 import { getTrajectoryFile } from '@/utils/trajectoryDB'
 import { load3MF } from '@/utils/threemfParser'
+import { usePermissionStore } from '@/stores/permission'
 
 const router = useRouter()
 const route = useRoute()
+const permissionStore = usePermissionStore()
 
 // 使用航线文件API
 const { waylineFiles, waylineDetail, fetchWaylineFiles, fetchWaylineDetail, createJob, executeJob } = useWaylineJobs()
@@ -1917,13 +1921,25 @@ const getActionIcon = (actionType: string) => {
 }
 
 const sidebarTabs = [
-  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission' },
-  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records' },
-  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs' },
-  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group' }
+  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission', permission: 'task-tracklist-show' },
+  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records', permission: 'task-tasklist-show' },
+  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs', permission: 'task-plantracklist-show' },
+  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group', permission: 'task-multitasklist-show' }
 ]
 
+const emitPermissionDenied = (permission: string) => {
+  if (typeof document !== 'undefined') {
+    document.dispatchEvent(new CustomEvent('permission-denied', {
+      detail: { permission }
+    }))
+  }
+}
+
 const handleTabClick = (tab: any) => {
+  if (tab.permission && !permissionStore.hasPermission(tab.permission)) {
+    emitPermissionDenied(tab.permission)
+    return
+  }
   if (route.path !== tab.path) {
     router.push(tab.path)
   }

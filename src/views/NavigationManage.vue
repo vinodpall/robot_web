@@ -8,7 +8,8 @@
           :key="tab.key"
           :class="['sidebar-tab', { active: currentTab === tab.key }]"
           :title="tab.label"
-          @click="handleTabClick(tab.key)"
+          v-permission-click-dialog="tab.permission"
+          @click="handleTabClick(tab)"
         >
           <img :src="tab.icon" :alt="tab.label" />
         </div>
@@ -34,6 +35,7 @@
                   <button 
                     class="map-btn map-btn-primary" 
                     :disabled="isRecording"
+                    v-permission-click-dialog="'nav-lbjt-startrecord'"
                     @click="handleStartRecording"
                   >
                     开始录包
@@ -42,6 +44,7 @@
                     class="map-btn"
                     :class="isRecording ? 'map-btn-danger' : 'map-btn-secondary'"
                     :disabled="!isRecording"
+                    v-permission-click-dialog="'nav-lbjt-finishrecord'"
                     @click="handleStopRecording"
                   >
                     完成录制
@@ -53,9 +56,9 @@
               <div class="map-section">
                 <div class="map-section-title">创建二维地图</div>
                 <div class="map-section-buttons">
-                  <button class="map-btn map-btn-primary" :disabled="isRecording" @click="handleGenerateMap">生成地图</button>
-                  <button class="map-btn map-btn-primary" :disabled="isRecording || mappingStopLoading" @click="handleGenerateGridMap">生成栅格地图</button>
-                  <button class="map-btn map-btn-primary" :disabled="isRecording" @click="handleCreateFusionMap">新建融合地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording" v-permission-click-dialog="'nav-lbjt-slam'" @click="handleGenerateMap">生成地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording || mappingStopLoading" v-permission-click-dialog="'nav-lbjt-changepcd'" @click="handleGenerateGridMap">生成栅格地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording" v-permission-click-dialog="'nav-lbjt-msfrecord'" @click="handleCreateFusionMap">新建融合地图</button>
                 </div>
               </div>
 
@@ -74,6 +77,7 @@
                   <button 
                     class="map-btn map-btn-stop" 
                     :disabled="mapProgress === 0"
+                    v-permission-click-dialog="'nav-lbjt-stopslam'"
                     @click="handleStopMapping"
                   >
                     终止
@@ -99,32 +103,35 @@
                     class="map-btn" 
                     :class="[navigationEnabled ? 'map-btn-danger' : 'map-btn-primary', { loading: navigationLoading }]"
                     :disabled="insEnabled || msfEnabled || navigationLoading"
+                    v-permission-click-dialog="'nav-navmanage-startnav'"
                     @click="handleStartNav"
                   >
                     {{ navigationEnabled ? '关闭导航' : '开始导航' }}
                   </button>
-                  <button class="map-btn map-btn-secondary" @click="handlePauseNav">暂停导航</button>
-                  <button class="map-btn map-btn-secondary" @click="handleResumeNav">暂停停障</button>
+                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handlePauseNav">暂停导航</button>
+                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-resumenav'" @click="handleResumeNav">暂停停障</button>
                   <button 
                     class="map-btn" 
                     :class="insEnabled ? 'map-btn-danger' : 'map-btn-primary'"
                     :disabled="navigationEnabled || msfEnabled"
+                    v-permission-click-dialog="'nav-navmanage-startnav'"
                     @click="handleStartINS"
                   >
                     {{ insEnabled ? '关闭INS' : '开始INS' }}
                   </button>
-                  <button class="map-btn map-btn-primary" :disabled="navigationEnabled || msfEnabled" @click="handleInitINS">INS初始化</button>
+                  <button class="map-btn map-btn-primary" :disabled="navigationEnabled || msfEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleInitINS">INS初始化</button>
                   <button 
                     class="map-btn" 
                     :class="msfEnabled ? 'map-btn-danger' : 'map-btn-primary'"
                     :disabled="navigationEnabled || insEnabled"
+                    v-permission-click-dialog="'nav-navmanage-startnav'"
                     @click="handleStartMSF"
                   >
                     {{ msfEnabled ? '关闭MSF' : '开始MSF' }}
                   </button>
-                  <button class="map-btn map-btn-secondary" @click="handleCircleMode">循迹避障模式</button>
-                  <button class="map-btn map-btn-secondary" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
-                  <button class="map-btn map-btn-secondary" @click="handleSetOrigin">原点设置</button>
+                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handleCircleMode">循迹避障模式</button>
+                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
+                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleSetOrigin">原点设置</button>
                 </div>
               </div>
 
@@ -256,7 +263,7 @@
                     </select>
                   </div>
                   <div class="toolbar-right">
-                    <button class="toolbar-btn" :class="{ active: isEditMode }" @click="toggleEditMode" title="栅格图编辑">
+                    <button class="toolbar-btn" :class="{ active: isEditMode }" v-permission-click-dialog="'nav-mapedit-edit'" @click="toggleEditMode" title="栅格图编辑">
                       编辑
                     </button>
                   </div>
@@ -282,19 +289,19 @@
                         <img :src="mapReduceIcon" class="tool-icon-img" alt="缩小" />
                       </button>
                       <!-- 画笔 -->
-                      <button class="tool-button" :class="{ active: activeTool === 'pen' && navMode === 'edit' }" @click="setTool('pen')" title="画笔">
+                      <button class="tool-button" :class="{ active: activeTool === 'pen' && navMode === 'edit' }" v-permission-click-dialog="'nav-mapedit-edit'" @click="setTool('pen')" title="画笔">
                         <img :src="mapPenIcon" class="tool-icon-img" alt="画笔" />
                       </button>
                       <!-- 橡皮擦 -->
-                      <button class="tool-button" :class="{ active: activeTool === 'eraser' && navMode === 'edit' }" @click="setTool('eraser')" title="橡皮擦">
+                      <button class="tool-button" :class="{ active: activeTool === 'eraser' && navMode === 'edit' }" v-permission-click-dialog="'nav-mapedit-edit'" @click="setTool('eraser')" title="橡皮擦">
                         <img :src="mapEraserIcon" class="tool-icon-img" alt="橡皮擦" />
                       </button>
                       <!-- 撤销 -->
-                      <button class="tool-button" :class="{ disabled: !canUndo }" @click="canUndo && undoEdit()" title="撤回">
+                      <button class="tool-button" :class="{ disabled: !canUndo }" v-permission-click-dialog="'nav-mapedit-edit'" @click="canUndo && undoEdit()" title="撤回">
                         <img :src="mapRollbackIcon" class="tool-icon-img" alt="撤回" />
                       </button>
                       <!-- 初始化 -->
-                      <button class="tool-button" @click="clearGridEdit" title="初始化">
+                      <button class="tool-button" v-permission-click-dialog="'nav-mapedit-delete'" @click="clearGridEdit" title="初始化">
                         <img :src="mapInitIcon" class="tool-icon-img" alt="初始化" />
                       </button>
                       <!-- 大小滚动条 -->
@@ -304,7 +311,7 @@
                         <div class="slider-value">{{ brushSize }}</div>
                       </div>
                       <!-- 保存 -->
-                      <button class="tool-button" :class="{ disabled: !gridImageData }" @click="gridImageData && handleSaveGridMap()" title="保存地图">
+                      <button class="tool-button" :class="{ disabled: !gridImageData }" v-permission-click-dialog="'nav-mapedit-publish'" @click="gridImageData && handleSaveGridMap()" title="保存地图">
                         <img :src="mapUploadIcon" class="tool-icon-img" alt="保存地图" />
                       </button>
                     </div>
@@ -340,6 +347,7 @@
                 <button 
                   class="map-btn map-btn-secondary track-btn" 
                   :class="{'map-btn-danger': isTrackRecording}"
+                  v-permission-click-dialog="'nav-trackrecord-create'"
                   @click="handleTrackRecord"
                 >
                   {{ isTrackRecording ? '停止录制' : '录制路线' }}
@@ -373,9 +381,9 @@
                   </div>
                 </div>
                 <div class="track-toolbar-actions">
-                  <button class="map-btn track-btn track-btn-danger" @click="handleTrackDelete">删除路线</button>
-                  <button class="map-btn map-btn-primary track-btn" @click="handleTrackPreview">预览路线</button>
-                  <button class="map-btn map-btn-primary track-btn" @click="handleTrackSmooth">轨迹平滑</button>
+                  <button class="map-btn track-btn track-btn-danger" v-permission-click-dialog="'nav-trackrecord-delete'" @click="handleTrackDelete">删除路线</button>
+                  <button class="map-btn map-btn-primary track-btn" v-permission-click-dialog="'nav-trackrecord-preview'" @click="handleTrackPreview">预览路线</button>
+                  <button class="map-btn map-btn-primary track-btn" v-permission-click-dialog="'nav-trackrecord-edit'" @click="handleTrackSmooth">轨迹平滑</button>
                 </div>
               </div>
               <div class="track-record-map">
@@ -411,13 +419,13 @@
                 <select v-model="fileManageMap" class="mission-toolbar-select" style="min-width: 220px;">
                   <option v-for="map in fileMapList" :key="map" :value="map">{{ map }}</option>
                 </select>
-                <button class="mission-btn mission-btn-stop" @click="handleDeleteMap">删除地图</button>
+                <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'nav-file-delete'" @click="handleDeleteMap">删除地图</button>
                 <span class="mission-toolbar-label" style="margin-left: 20px;">数据包:</span>
                 <select v-model="fileManagePackage" class="mission-toolbar-select" style="min-width: 220px;">
                   <option v-if="dataPackageList.length === 0" value="">暂无数据包</option>
                   <option v-for="pkg in dataPackageList" :key="pkg" :value="pkg">{{ pkg }}</option>
                 </select>
-                <button class="mission-btn mission-btn-stop" @click="handleDeletePackage">删除数据包</button>
+                <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'nav-file-delete'" @click="handleDeletePackage">删除数据包</button>
               </div>
               <div class="file-table file-manage-table file-table-adaptive">
                 <div class="file-table-header" style="grid-template-columns: 100px 360px 1fr 180px 150px;">
@@ -435,7 +443,7 @@
                       <div class="file-table-cell file-table-name">{{ item.name }}</div>
                       <div class="file-table-cell">{{ item.createTime }}</div>
                       <div class="file-table-cell file-table-action">
-                        <button class="action-btn action-btn-delete" @click="handleDelete(item)">
+                        <button class="action-btn action-btn-delete" v-permission-click-dialog="'nav-file-delete'" @click="handleDelete(item)">
                           <img :src="deleteIcon" alt="删除" />
                           删除
                         </button>
@@ -467,7 +475,7 @@
         </div>
         <div class="recording-dialog-actions">
           <button class="map-btn" @click="cancelStartRecording">取消</button>
-          <button class="map-btn map-btn-primary" @click="confirmStartRecording" :disabled="recordingLoading">
+          <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-lbjt-startrecord'" @click="confirmStartRecording" :disabled="recordingLoading">
             {{ recordingLoading ? '提交中...' : '开始录包' }}
           </button>
         </div>
@@ -500,7 +508,7 @@
           </div>
         </div>
         <div class="recording-dialog-actions">
-          <button class="map-btn map-btn-primary" @click="confirmGenerateMap" :disabled="generateMapLoading">
+          <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-lbjt-slam'" @click="confirmGenerateMap" :disabled="generateMapLoading">
             {{ generateMapLoading ? '生成中...' : '确定' }}
           </button>
           <button class="map-btn" @click="cancelGenerateMap">取消</button>
@@ -530,7 +538,7 @@
           </div>
         </div>
         <div class="recording-dialog-actions">
-          <button class="map-btn map-btn-primary" @click="confirmGenerateGridMap" :disabled="generateGridMapLoading">
+          <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-lbjt-changepcd'" @click="confirmGenerateGridMap" :disabled="generateGridMapLoading">
             {{ generateGridMapLoading ? '生成中...' : '确定' }}
           </button>
           <button class="map-btn" @click="cancelGenerateGridMap">取消</button>
@@ -556,7 +564,7 @@
           </div>
         </div>
         <div class="recording-dialog-actions">
-          <button class="map-btn map-btn-primary" @click="confirmCreateFusionMap" :disabled="createFusionMapLoading">
+          <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-lbjt-msfrecord'" @click="confirmCreateFusionMap" :disabled="createFusionMapLoading">
             {{ createFusionMapLoading ? '创建中...' : '确定' }}
           </button>
           <button class="map-btn" @click="cancelCreateFusionMap">取消</button>
@@ -598,7 +606,7 @@
         </div>
         <div class="recording-dialog-actions">
           <button class="map-btn" @click="cancelObsHandleDialog">取消</button>
-          <button class="map-btn map-btn-primary" @click="confirmObsHandleDialog" :disabled="obsHandleLoading">
+          <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="confirmObsHandleDialog" :disabled="obsHandleLoading">
             {{ obsHandleLoading ? '提交中...' : '确认' }}
           </button>
         </div>
@@ -621,7 +629,7 @@
         </div>
         <div class="recording-dialog-actions">
           <button class="map-btn" @click="cancelTrackRecord">取消</button>
-          <button class="map-btn map-btn-primary" @click="confirmTrackRecord" :disabled="trackRecordDialog.loading">
+          <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-trackrecord-create'" @click="confirmTrackRecord" :disabled="trackRecordDialog.loading">
             {{ trackRecordDialog.loading ? '提交中...' : '开始录制' }}
           </button>
         </div>
@@ -686,10 +694,12 @@ import { useRobotStore } from '../stores/robot'
 import { navigationApi, mapFileApi } from '../api/services'
 import { useDeviceStore } from '../stores/device'
 import { useTaskExecutionStore } from '../stores/taskExecution'
+import { usePermissionStore } from '@/stores/permission'
 
 const deviceStore = useDeviceStore()
 const robotStore = useRobotStore()
 const taskExecutionStore = useTaskExecutionStore()
+const permissionStore = usePermissionStore()
 
 // 导航点云图相关变量（需要在前面声明，因为在cleanupNavPointCloud中使用）
 let navPointCloudInitialized = false
@@ -780,16 +790,29 @@ const closeErrorMessage = () => {
 
 // 侧边栏菜单配置
 const sidebarTabs = [
-  { key: 'map_record', label: '录包建图', icon: mapRecordIcon },
-  { key: 'nav', label: '导航', icon: navIcon },
-  { key: 'map_edit', label: '地图编辑', icon: mapEditIcon },
-  { key: 'track_record', label: '路线录制', icon: trackRecordIcon },
-  { key: 'file_manage', label: '文件管理', icon: packageManageIcon }
+  { key: 'map_record', label: '录包建图', icon: mapRecordIcon, permission: 'nav-lbjt-show' },
+  { key: 'nav', label: '导航', icon: navIcon, permission: 'nav-navmanage-show' },
+  { key: 'map_edit', label: '地图编辑', icon: mapEditIcon, permission: 'nav-mapedit-show' },
+  { key: 'track_record', label: '路线录制', icon: trackRecordIcon, permission: 'nav-trackrecord-show' },
+  { key: 'file_manage', label: '文件管理', icon: packageManageIcon, permission: 'nav-file-show' }
 ]
 
 const currentTab = ref('map_record')
 
-const handleTabClick = (key: string) => {
+const emitPermissionDenied = (permission: string) => {
+  if (typeof document !== 'undefined') {
+    document.dispatchEvent(new CustomEvent('permission-denied', {
+      detail: { permission }
+    }))
+  }
+}
+
+const handleTabClick = (tab: { key: string; permission?: string }) => {
+  const key = tab.key
+  if (tab.permission && !permissionStore.hasPermission(tab.permission)) {
+    emitPermissionDenied(tab.permission)
+    return
+  }
   const previousTab = currentTab.value
   currentTab.value = key
   
@@ -3008,7 +3031,8 @@ const cancelCreateFusionMap = () => {
   createFusionMapDialogVisible.value = false
 }
 
-const handleStopMapping = async (autoTriggered = false) => {
+const handleStopMapping = async (autoTriggeredOrEvent: boolean | MouseEvent = false) => {
+  const autoTriggered = autoTriggeredOrEvent === true
   if (mapProgress.value === 0) return
   if (mappingStopLoading.value) return
   if (autoTriggered && mappingAutoStopTriggered.value) return

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -7,6 +7,7 @@
           v-for="tab in sidebarTabs"
           :key="tab.key"
           :class="['sidebar-tab', { active: route.path === tab.path }]"
+          v-permission-click-dialog="tab.permission"
           @click="handleTabClick(tab)"
         >
           <img :src="tab.icon" :alt="tab.label" />
@@ -25,7 +26,7 @@
           </div>
           <div class="mission-content-wrapper">
             <div class="mission-toolbar">
-              <button class="mission-btn mission-btn-primary" @click="handleOpenCreateDialog">新增定时任务</button>
+              <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-plantracklist-create'" @click="handleOpenCreateDialog">新增定时任务</button>
 
               <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">循迹任务名称：</span>
               <select v-model="selectedTrackName" class="mission-toolbar-select" style="min-width: 180px;">
@@ -65,7 +66,7 @@
                     <span class="ms-time-val">{{ alert.start_time || '-' }}</span>
                   </div>
                   <div class="file-table-cell file-table-action" style="min-width: 160px; width: 160px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
-                    <button class="action-btn action-btn-delete" @click="handleDeleteScheduledTask(alert)">
+                    <button class="action-btn action-btn-delete" v-permission-click-dialog="'task-plantracklist-delete'" @click="handleDeleteScheduledTask(alert)">
                       <img :src="deleteIcon" />
                       删除
                     </button>
@@ -124,7 +125,7 @@
         </div>
         <div class="simple-modal-footer">
           <button class="mission-btn mission-btn-secondary" @click="closeCreateDialog">取消</button>
-          <button class="mission-btn mission-btn-primary" @click="handleCreateScheduledTask">确定</button>
+          <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-plantracklist-create'" @click="handleCreateScheduledTask">确定</button>
         </div>
       </div>
     </div>
@@ -304,6 +305,7 @@ const buildImageFetchUrl = (path: string) => {
   return `${API_BASE_URL}/${path}`
 }
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/stores/permission'
 import type { VisionAlert } from '@/types'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
@@ -313,15 +315,28 @@ import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const permissionStore = usePermissionStore()
 
 const sidebarTabs = [
-  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission' },
-  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records' },
-  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs' },
-  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group' }
+  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission', permission: 'task-tracklist-show' },
+  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records', permission: 'task-tasklist-show' },
+  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs', permission: 'task-plantracklist-show' },
+  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group', permission: 'task-multitasklist-show' }
 ]
 
+const emitPermissionDenied = (permission: string) => {
+  if (typeof document !== 'undefined') {
+    document.dispatchEvent(new CustomEvent('permission-denied', {
+      detail: { permission }
+    }))
+  }
+}
+
 const handleTabClick = (tab: any) => {
+  if (tab.permission && !permissionStore.hasPermission(tab.permission)) {
+    emitPermissionDenied(tab.permission)
+    return
+  }
   if (route.path !== tab.path) {
     router.push(tab.path)
   }
@@ -2147,3 +2162,4 @@ const transformLng = (lng: number, lat: number) => {
   flex: 1;
 }
 </style>
+

@@ -399,40 +399,41 @@
             alt="麦克风" 
             class="mic-icon"
             title="语音对讲开关"
+            v-permission-click-dialog="'main-robotcontrol'"
             @click="toggleMic"
           />
         </div>
         <div class="robot-control-container">
           <div class="robot-control-grid">
             <!-- 第一行 -->
-            <button :class="getControlButtonClass('stand')" :disabled="isControlDisabled('stand')" @click="handleControlClick('stand')">{{ standControlLabel }}</button>
-            <button :class="getControlButtonClass('forceControlMode')" :disabled="isControlDisabled('forceControlMode')" @click="handleControlClick('forceControlMode')">力控模式</button>
-            <button :class="getControlButtonClass('emergencyStop', true)" :disabled="isControlDisabled('emergencyStop')" @click="handleControlClick('emergencyStop')">急停</button>
+            <button :class="getControlButtonClass('stand')" :disabled="isControlDisabled('stand')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('stand')">{{ standControlLabel }}</button>
+            <button :class="getControlButtonClass('forceControlMode')" :disabled="isControlDisabled('forceControlMode')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('forceControlMode')">力控模式</button>
+            <button :class="getControlButtonClass('emergencyStop', true)" :disabled="isControlDisabled('emergencyStop')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('emergencyStop')">急停</button>
             
             <!-- 第二行 -->
-            <button :class="getControlButtonClass('startMove')" :disabled="isControlDisabled('startMove')" @click="handleControlClick('startMove')">{{ moveControlLabel }}</button>
-            <button :class="getControlButtonClass('crawl')" :disabled="isControlDisabled('crawl')" @click="handleControlClick('crawl')">{{ crawlControlLabel }}</button>
-            <button :class="getControlButtonClass('autoMode')" :disabled="isControlDisabled('autoMode')" @click="handleControlClick('autoMode')">非手动模式</button>
+            <button :class="getControlButtonClass('startMove')" :disabled="isControlDisabled('startMove')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('startMove')">{{ moveControlLabel }}</button>
+            <button :class="getControlButtonClass('crawl')" :disabled="isControlDisabled('crawl')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('crawl')">{{ crawlControlLabel }}</button>
+            <button :class="getControlButtonClass('autoMode')" :disabled="isControlDisabled('autoMode')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('autoMode')">非手动模式</button>
             
             <!-- 第三行 -->
-            <button :class="getControlButtonClass('walkGait')" :disabled="isControlDisabled('walkGait')" @click="handleControlClick('walkGait')">行走步态</button>
-            <button :class="getControlButtonClass('obstacleGait')" :disabled="isControlDisabled('obstacleGait')" @click="handleControlClick('obstacleGait')">超障步态</button>
-            <button :class="getControlButtonClass('slopeGait')" :disabled="isControlDisabled('slopeGait')" @click="handleControlClick('slopeGait')">斜坡步态</button>
+            <button :class="getControlButtonClass('walkGait')" :disabled="isControlDisabled('walkGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('walkGait')">行走步态</button>
+            <button :class="getControlButtonClass('obstacleGait')" :disabled="isControlDisabled('obstacleGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('obstacleGait')">超障步态</button>
+            <button :class="getControlButtonClass('slopeGait')" :disabled="isControlDisabled('slopeGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('slopeGait')">斜坡步态</button>
             
             <!-- 第四行 -->
-            <button :class="getControlButtonClass('stairGait')" :disabled="isControlDisabled('stairGait')" @click="handleControlClick('stairGait')">楼梯步态</button>
-            <button :class="getControlButtonClass('stairFollowGait')" :disabled="isControlDisabled('stairFollowGait')" @click="handleControlClick('stairFollowGait')">顺楼梯步态</button>
-            <button :class="getControlButtonClass('stair45Gait')" :disabled="isControlDisabled('stair45Gait')" @click="handleControlClick('stair45Gait')">45°楼梯步态</button>
+            <button :class="getControlButtonClass('stairGait')" :disabled="isControlDisabled('stairGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('stairGait')">楼梯步态</button>
+            <button :class="getControlButtonClass('stairFollowGait')" :disabled="isControlDisabled('stairFollowGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('stairFollowGait')">帧楼梯步态</button>
+            <button :class="getControlButtonClass('stair45Gait')" :disabled="isControlDisabled('stair45Gait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('stair45Gait')">45°楼梯步态</button>
             
             <!-- 第五行 -->
-            <button :class="getControlButtonClass('lGait')" :disabled="isControlDisabled('lGait')" @click="handleControlClick('lGait')">L步态</button>
-            <button :class="getControlButtonClass('mountainGait')" :disabled="isControlDisabled('mountainGait')" @click="handleControlClick('mountainGait')">山地步态</button>
-            <button :class="getControlButtonClass('quietGait')" :disabled="isControlDisabled('quietGait')" @click="handleControlClick('quietGait')">静音步态</button>
+            <button :class="getControlButtonClass('lGait')" :disabled="isControlDisabled('lGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('lGait')">L步态</button>
+            <button :class="getControlButtonClass('mountainGait')" :disabled="isControlDisabled('mountainGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('mountainGait')">山地步态</button>
+            <button :class="getControlButtonClass('quietGait')" :disabled="isControlDisabled('quietGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('quietGait')">静音步态</button>
             
             <!-- 第六行 -->
-            <button :class="getControlButtonClass('startCharge')" :disabled="isControlDisabled('startCharge')" @click="handleControlClick('startCharge')">开始充电</button>
-            <button :class="getControlButtonClass('endCharge')" :disabled="isControlDisabled('endCharge')" @click="handleControlClick('endCharge')">结束充电</button>
-            <button :class="getControlButtonClass('resetCharge')" :disabled="isControlDisabled('resetCharge')" @click="handleControlClick('resetCharge')">重置充电</button>
+            <button :class="getControlButtonClass('startCharge')" :disabled="isControlDisabled('startCharge')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('startCharge')">开始充电</button>
+            <button :class="getControlButtonClass('endCharge')" :disabled="isControlDisabled('endCharge')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('endCharge')">结束充电</button>
+            <button :class="getControlButtonClass('resetCharge')" :disabled="isControlDisabled('resetCharge')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('resetCharge')">重置充电</button>
           </div>
         </div>
       </div>
@@ -467,6 +468,7 @@
                     'disabled': insEnabled || msfEnabled,
                     'loading': navigationLoading
                   }"
+                  v-permission-click-dialog="'main-taskdispatch'"
                   @click="handleEnableNavigation"
                 >导航</span>
                 <span 
@@ -476,6 +478,7 @@
                     'disabled': navigationEnabled || msfEnabled,
                     'loading': insLoading
                   }"
+                  v-permission-click-dialog="'main-taskdispatch'"
                   @click="handleEnableIns"
                 >INS</span>
                 <span 
@@ -485,6 +488,7 @@
                     'disabled': navigationEnabled || insEnabled,
                     'loading': msfLoading
                   }"
+                  v-permission-click-dialog="'main-taskdispatch'"
                   @click="handleEnableMsf"
                 >MSF</span>
               </div>
@@ -517,6 +521,7 @@
                   <span 
                     class="span" 
                     :class="{ disabled: !canDispatchTask }"
+                    v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchTask"
                   >下发任务</span>
                   <span 
@@ -525,6 +530,7 @@
                       disabled: activeTaskType !== 'track' && !robotStore.isTracking,
                       active: activeTaskType === 'track' || robotStore.isTracking
                     }"
+                    v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -558,6 +564,7 @@
                   <span 
                     class="span" 
                     :class="{ disabled: !canDispatchTask }"
+                    v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchPointTask"
                   >下发任务</span>
                   <span 
@@ -566,6 +573,7 @@
                       disabled: activeTaskType !== 'point' && !robotStore.isPointTaskRunning,
                       active: activeTaskType === 'point' || robotStore.isPointTaskRunning
                     }"
+                    v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -599,11 +607,13 @@
                   <span 
                     class="span" 
                     :class="{ disabled: !canDispatchTask }"
+                    v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchMultiTask"
                   >下发任务</span>
                   <span 
                     class="span1" 
                     :class="{ disabled: activeTaskType !== 'multi', active: activeTaskType === 'multi' }"
+                    v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleCancelTask"
                   >
                     取消任务
@@ -742,7 +752,7 @@
         </div>
         <div class="dispatch-task-actions">
           <button class="mission-btn mission-btn-cancel" @click="onDispatchTaskCancel">取消</button>
-          <button class="mission-btn mission-btn-pause" @click="onDispatchTaskConfirm">确定</button>
+          <button class="mission-btn mission-btn-pause" v-permission-click-dialog="'main-taskdispatch'" @click="onDispatchTaskConfirm">确定</button>
         </div>
       </div>
 
@@ -857,6 +867,7 @@
           <button 
             class="mission-btn mission-btn-pause" 
             :class="{ disabled: taskpointList.length === 0 || !trackStartDialog.form.taskpoint_name || trackStartDialog.loading }"
+            v-permission-click-dialog="'main-taskdispatch'"
             @click="onTrackStartConfirm"
           >{{ trackStartDialog.loading ? '启动中...' : '确定' }}</button>
         </div>
@@ -896,6 +907,7 @@
           <button class="mission-btn mission-btn-cancel" @click="onMultiTaskStartCancel">取消</button>
           <button 
             class="mission-btn mission-btn-pause" 
+            v-permission-click-dialog="'main-taskdispatch'"
             @click="onMultiTaskStartConfirm"
           >确定</button>
         </div>
@@ -923,6 +935,7 @@
           <button class="mission-btn mission-btn-cancel" @click="onPointTaskStartCancel">取消</button>
           <button 
             class="mission-btn mission-btn-pause" 
+            v-permission-click-dialog="'main-taskdispatch'"
             @click="onPointTaskStartConfirm"
           >确定</button>
         </div>
@@ -1066,7 +1079,7 @@ const downloadAllTrajectoryFiles = async (trackList: string[], robotIp: string) 
     }
   }
 }
-import { ref, computed, onMounted, onActivated, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted, nextTick, watch } from 'vue'
 import { useDevices, useWaylineJobs } from '../composables/useApi'
 import {
   navigationApi,
@@ -1149,6 +1162,10 @@ const taskProgressStore = useTaskProgressStore()
 
 // 设备告警数据
 const deviceAlarmData = ref<any[]>([])
+const isHomePageActive = ref(true)
+const isAlarmLogLoading = ref(false)
+const nextAlarmLogRetryAt = ref(0)
+const ALARM_LOG_RETRY_COOLDOWN_MS = 30_000
 
 // 机场位置信息（用于地图显示）
 const position = computed(() => {
@@ -2616,12 +2633,20 @@ const formatCameraName = (raw: string): string => {
 
 // 获取最新4条告警日志并显示在实时警情表格
 const fetchLatestAlarmLogs = async () => {
+  if (!isHomePageActive.value) return
+  if (isAlarmLogLoading.value) return
+  if (Date.now() < nextAlarmLogRetryAt.value) return
+
+  isAlarmLogLoading.value = true
   try {
     const robotIp = deviceStore.selectedRobot?.ip_address
     const params = new URLSearchParams({ page: '1', page_size: '4' })
     if (robotIp) params.append('robot_ip', robotIp)
     const res = await fetch(`/api/dxr_api/getLog?${params.toString()}`)
-    if (!res.ok) return
+    if (!res.ok) {
+      nextAlarmLogRetryAt.value = Date.now() + ALARM_LOG_RETRY_COOLDOWN_MS
+      return
+    }
     const json = await res.json()
     const rows: any[] = json.data?.data || []
     const formatTs = (ts: number | null) => {
@@ -2681,8 +2706,12 @@ const fetchLatestAlarmLogs = async () => {
         time: formatTs(row.create_time)
       }
     })
+    nextAlarmLogRetryAt.value = 0
   } catch (err) {
-    // 静默处理
+    // 本地服务关闭等网络错误时进入冷却，避免请求刷屏
+    nextAlarmLogRetryAt.value = Date.now() + ALARM_LOG_RETRY_COOLDOWN_MS
+  } finally {
+    isAlarmLogLoading.value = false
   }
 }
 
@@ -4664,6 +4693,26 @@ watch(mapList, () => {
 // 循迹任务列表
 const trackList = ref<string[]>([])
 const selectedTrack = ref('')
+const trajectoryDownloadInFlight = ref(false)
+
+const syncSelectedMapTrajectoryFiles = async (mapName: string) => {
+  if (!mapName) return
+  if (trajectoryDownloadInFlight.value) return
+  if (trackList.value.length === 0) return
+
+  const relatedTracks = trackList.value.filter(track => track.startsWith(mapName + '_'))
+  if (relatedTracks.length === 0) return
+
+  const robotIp = deviceStore.selectedRobot?.ip_address || ''
+  if (!robotIp) return
+
+  trajectoryDownloadInFlight.value = true
+  try {
+    await downloadAllTrajectoryFiles(relatedTracks, robotIp)
+  } finally {
+    trajectoryDownloadInFlight.value = false
+  }
+}
 
 const fetchTrackList = async () => {
   const cached = localStorage.getItem('cached_track_list')
@@ -4720,12 +4769,7 @@ watch(selectedMap, async (newMapName) => {
       await downloadMapFiles(newMapName, updateTime)
 
       // 下载所有轨迹文件（带更新时间校验）
-      if (trackList.value.length > 0) {
-        // 只处理属于当前地图的轨迹
-        const relatedTracks = trackList.value.filter(track => track.startsWith(newMapName + '_'))
-        const robotIp = deviceStore.selectedRobot?.ip_address || ''
-        await downloadAllTrajectoryFiles(relatedTracks, robotIp)
-      }
+      await syncSelectedMapTrajectoryFiles(newMapName)
 
       // 地图文件和轨迹文件下载/验证完成后，刷新点云图
       await refreshPointCloud()
@@ -4743,6 +4787,14 @@ watch(filteredTrackList, (newList) => {
   if (newList.length > 0 && !newList.includes(selectedTrack.value)) {
     selectedTrack.value = newList[0]
   }
+})
+
+// 地图先到、轨迹后到时，补偿触发一次轨迹文件下载
+watch(trackList, async (newList, oldList) => {
+  if (!selectedMap.value) return
+  if (newList.length === 0) return
+  if (oldList.length > 0) return
+  await syncSelectedMapTrajectoryFiles(selectedMap.value)
 })
 
 // 发布点任务列表
@@ -6348,6 +6400,7 @@ onMounted(async () => {
 
   // 监听机器人切换事件，切换后刷新下拉列表数据
   window.addEventListener('robot-camera-ready', handleRobotCameraReady)
+  window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 
   window.addEventListener('resize', () => {
@@ -6436,6 +6489,20 @@ const handleRobotCameraReady = async (event: Event) => {
 }
 
 // 切换机器人第二阶段：其余数据就绪，刷新下拉框和点云
+const handleRobotMapListReady = async (event: Event) => {
+  const { robotId } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+
+  await fetchMapList()
+  const navMapName = robotStore.cmdStatus?.map_name
+  if (robotStore.cmdStatus?.nav === 1 && navMapName) {
+    syncMapFromNavigation(navMapName)
+  }
+}
+
+// 切换机器人第三阶段：其余数据就绪，刷新其他下拉和点云
 const handleRobotContextRefreshed = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
   if (robotId && robotId !== deviceStore.selectedRobotId) {
@@ -6443,16 +6510,13 @@ const handleRobotContextRefreshed = async (event: Event) => {
   }
   // 切换机器人时清空实时警情列表
   deviceAlarmData.value = []
-  // 先清空旧机器人的地图/循迹选择，避免 fetchMapList 的 !selectedMap 条件阻止更新
-  selectedMap.value = ''
+  // 地图下拉已在 robot-map-list-ready 阶段刷新，这里只刷新其余列表
   selectedTrack.value = ''
   selectedPointTask.value = ''
   selectedMultiTask.value = ''
-  mapList.value = []
   trackList.value = []
   pointTaskList.value = []
   multiTaskList.value = []
-  await fetchMapList()
   await fetchTrackList()
   await fetchPointTaskList()
   await fetchMultiTaskList()
@@ -6476,6 +6540,7 @@ onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick)
   window.removeEventListener('keydown', handlePointCloudKeydown)
   window.removeEventListener('robot-camera-ready', handleRobotCameraReady)
+  window.removeEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   stopPointCloudDragging()
 
@@ -6913,7 +6978,7 @@ const controlButtonLabelMap: Record<RobotControlName, string> = {
   obstacleGait: '超障步态',
   slopeGait: '斜坡步态',
   stairGait: '楼梯步态',
-  stairFollowGait: '顺楼梯步态',
+  stairFollowGait: '帧楼梯步态',
   stair45Gait: '45°楼梯步态',
   lGait: 'L步态',
   mountainGait: '山地步态',
@@ -6956,6 +7021,7 @@ const gaitControlSet = new Set<RobotControlName>([
   'quietGait',
 ])
 
+const allControlNames = Object.keys(controlCommandNameMap) as RobotControlName[]
 const allowedGaitsWhenCrouch = new Set<RobotControlName>(['walkGait', 'slopeGait'])
 const bodyHeightControlSet = new Set<RobotControlName>(['crawl'])
 
@@ -6964,42 +7030,284 @@ const canUseStandingControls = (state: number | null) => {
   return state === 2 || state === 3 || state === 4 || state === 16
 }
 
+type RobotControlMode = 'manual' | 'navigation' | 'assist'
+type GaitTag = 'walk' | 'slope' | 'obstacle' | 'stair' | 'l' | 'mountain' | 'quiet' | 'unknown'
+
+const getCurrentControlMode = (): RobotControlMode => {
+  const navEnabled = robotStore.cmdStatus?.nav === 1
+  if (navEnabled) return 'navigation'
+  const isManual = (robotStore.rcsData?.rcs_state?.[0] ?? 0) === 0
+  return isManual ? 'manual' : 'assist'
+}
+
+const getCurrentGaitTag = (): GaitTag => {
+  const gaitText = robotStore.gaitText || ''
+  if (gaitText.includes('行走')) return 'walk'
+  if (gaitText.includes('斜坡')) return 'slope'
+  if (gaitText.includes('超障')) return 'obstacle'
+  if (gaitText.includes('楼梯') || gaitText.includes('45°')) return 'stair'
+  if (gaitText.includes('L')) return 'l'
+  if (gaitText.includes('山地')) return 'mountain'
+  if (gaitText.includes('静音')) return 'quiet'
+  return 'unknown'
+}
+
+const getCurrentGaitControlName = (): RobotControlName | null => {
+  const tag = getCurrentGaitTag()
+  if (tag === 'walk') return 'walkGait'
+  if (tag === 'slope') return 'slopeGait'
+  if (tag === 'obstacle') return 'obstacleGait'
+  if (tag === 'l') return 'lGait'
+  if (tag === 'mountain') return 'mountainGait'
+  if (tag === 'quiet') return 'quietGait'
+  if (tag === 'stair') {
+    const gaitText = robotStore.gaitText || ''
+    if (gaitText.includes('45°')) return 'stair45Gait'
+    if (gaitText.includes('帧') || gaitText.includes('累积帧')) return 'stairFollowGait'
+    return 'stairGait'
+  }
+  return null
+}
+
+const addAllGaitControls = (set: Set<RobotControlName>) => {
+  gaitControlSet.forEach(name => set.add(name))
+}
+
+const addCurrentGaitControl = (set: Set<RobotControlName>) => {
+  const current = getCurrentGaitControlName()
+  if (current) set.add(current)
+}
+
+// 按产品文档生成“置灰按钮集合”（在基础安全规则之上叠加）
+const getDocDisabledControls = (): Set<RobotControlName> => {
+  const disabled = new Set<RobotControlName>()
+  const mode = getCurrentControlMode()
+  const basicState = robotStore.motionState?.basic_state ?? null
+  const isForce = basicState === 3
+  const isCrouch = (robotStore.postureText || '').includes('匍匐')
+  const gaitTag = getCurrentGaitTag()
+  const chargeActive = robotStore.cmdStatus?.charge === 1
+  const dockCharging = isRobotCharging.value
+
+  // 手动模式：起立但未处于力控
+  if (mode === 'manual' && !isCrouch && !isForce) {
+    addAllGaitControls(disabled)
+    disabled.add('stand')
+    return disabled
+  }
+
+  // 文档中的其余规则均在“处于力控”条件下
+  if (!isForce) return disabled
+
+  if (mode === 'manual' && !isCrouch && gaitTag === 'walk' && chargeActive && dockCharging) {
+    allControlNames.forEach(name => {
+      if (name !== 'stand' && name !== 'endCharge') disabled.add(name)
+    })
+    return disabled
+  }
+
+  if (mode === 'manual') {
+    if (!isCrouch) {
+      if (gaitTag === 'walk' && chargeActive) {
+        disabled.add('forceControlMode')
+        disabled.add('walkGait')
+        disabled.add('startCharge')
+        disabled.add('stand')
+      } else if (gaitTag === 'walk') {
+        disabled.add('forceControlMode')
+        disabled.add('walkGait')
+        disabled.add('stand')
+      } else if (gaitTag === 'slope') {
+        disabled.add('forceControlMode')
+        disabled.add('slopeGait')
+        disabled.add('stand')
+      } else if (gaitTag === 'obstacle') {
+        disabled.add('forceControlMode')
+        disabled.add('obstacleGait')
+        disabled.add('stand')
+      } else if (gaitTag === 'stair') {
+        disabled.add('forceControlMode')
+        addCurrentGaitControl(disabled)
+        disabled.add('stand')
+      } else if (gaitTag === 'l') {
+        disabled.add('forceControlMode')
+        disabled.add('lGait')
+        disabled.add('startCharge')
+        disabled.add('endCharge')
+        disabled.add('stand')
+      } else if (gaitTag === 'mountain') {
+        disabled.add('forceControlMode')
+        disabled.add('mountainGait')
+        disabled.add('startCharge')
+        disabled.add('endCharge')
+        disabled.add('stand')
+      } else if (gaitTag === 'quiet') {
+        disabled.add('forceControlMode')
+        disabled.add('quietGait')
+        disabled.add('startCharge')
+        disabled.add('endCharge')
+        disabled.add('stand')
+      } else {
+        disabled.add('forceControlMode')
+        addAllGaitControls(disabled)
+        disabled.add('stand')
+      }
+      return disabled
+    }
+
+    // 手动 + 匍匐 + 力控
+    if (gaitTag === 'walk' && chargeActive) {
+      disabled.add('forceControlMode')
+      disabled.add('walkGait')
+      disabled.add('startCharge')
+      disabled.add('crawl')
+    } else if (gaitTag === 'walk') {
+      disabled.add('forceControlMode')
+      disabled.add('walkGait')
+      disabled.add('crawl')
+    } else {
+      disabled.add('forceControlMode')
+      addAllGaitControls(disabled)
+      disabled.add('stand')
+    }
+    return disabled
+  }
+
+  if (mode === 'navigation') {
+    if (!isCrouch) {
+      if (gaitTag === 'walk' && chargeActive) {
+        disabled.add('forceControlMode')
+        disabled.add('walkGait')
+        disabled.add('startCharge')
+      } else if (gaitTag === 'walk') {
+        disabled.add('forceControlMode')
+        disabled.add('walkGait')
+      } else {
+        disabled.add('forceControlMode')
+        addAllGaitControls(disabled)
+        disabled.add('startCharge')
+        disabled.add('endCharge')
+        disabled.add('stand')
+      }
+      return disabled
+    }
+
+    if (gaitTag === 'walk' && chargeActive) {
+      disabled.add('forceControlMode')
+      disabled.add('walkGait')
+      disabled.add('startCharge')
+      disabled.add('crawl')
+    } else if (gaitTag === 'walk') {
+      disabled.add('forceControlMode')
+      disabled.add('walkGait')
+      disabled.add('crawl')
+    } else {
+      disabled.add('forceControlMode')
+      addAllGaitControls(disabled)
+      disabled.add('startCharge')
+      disabled.add('endCharge')
+      disabled.add('crawl')
+    }
+    return disabled
+  }
+
+  // 辅助模式
+  if (!isCrouch) {
+    if (gaitTag === 'walk' && chargeActive) {
+      disabled.add('forceControlMode')
+      disabled.add('walkGait')
+      disabled.add('startCharge')
+      disabled.add('stand')
+    } else if (gaitTag === 'walk') {
+      disabled.add('forceControlMode')
+      disabled.add('walkGait')
+      disabled.add('stand')
+    } else if (gaitTag === 'slope') {
+      disabled.add('forceControlMode')
+      disabled.add('slopeGait')
+      disabled.add('stand')
+    } else if (gaitTag === 'obstacle') {
+      disabled.add('forceControlMode')
+      disabled.add('obstacleGait')
+      disabled.add('stand')
+    } else if (gaitTag === 'stair') {
+      disabled.add('forceControlMode')
+      addCurrentGaitControl(disabled)
+      disabled.add('stand')
+    } else if (gaitTag === 'l') {
+      disabled.add('forceControlMode')
+      disabled.add('lGait')
+      disabled.add('startCharge')
+      disabled.add('endCharge')
+      disabled.add('stand')
+    } else if (gaitTag === 'mountain') {
+      disabled.add('forceControlMode')
+      disabled.add('mountainGait')
+      disabled.add('startCharge')
+      disabled.add('endCharge')
+      disabled.add('stand')
+    } else if (gaitTag === 'quiet') {
+      disabled.add('forceControlMode')
+      disabled.add('quietGait')
+      disabled.add('startCharge')
+      disabled.add('endCharge')
+      disabled.add('stand')
+    } else {
+      disabled.add('forceControlMode')
+      addAllGaitControls(disabled)
+      disabled.add('stand')
+    }
+    return disabled
+  }
+
+  if (gaitTag === 'walk' && chargeActive) {
+    disabled.add('forceControlMode')
+    disabled.add('walkGait')
+    disabled.add('startCharge')
+    disabled.add('crawl')
+  } else if (gaitTag === 'walk') {
+    disabled.add('forceControlMode')
+    disabled.add('walkGait')
+    disabled.add('crawl')
+  } else {
+    disabled.add('forceControlMode')
+    addAllGaitControls(disabled)
+    disabled.add('startCharge')
+    disabled.add('endCharge')
+    disabled.add('crawl')
+  }
+  return disabled
+}
+
 const isControlEnabled = (controlName: RobotControlName) => {
   if (isControlRequesting.value) return false
   if (!robotStore.isOnline) return false
   if (!controlCommandNameMap[controlName]) return false
 
   const basicState = robotStore.motionState?.basic_state ?? null
+  let baseEnabled = false
 
   if (controlName === 'stand') {
-    return basicState === 0 || basicState === 2 || basicState === 3 || basicState === 4 || basicState === 6 || basicState === 16
+    baseEnabled = basicState === 0 || basicState === 2 || basicState === 3 || basicState === 4 || basicState === 6 || basicState === 16
+  } else if (controlName === 'crawl') {
+    baseEnabled = canUseStandingControls(basicState)
+  } else if (controlName === 'startMove') {
+    baseEnabled = basicState === 2 || basicState === 3 || basicState === 4 || basicState === 16
+  } else if (controlName === 'forceControlMode' || controlName === 'autoMode') {
+    baseEnabled = canUseStandingControls(basicState)
+  } else if (gaitControlSet.has(controlName)) {
+    baseEnabled = canUseStandingControls(basicState)
+  } else if (controlName === 'startCharge' || controlName === 'endCharge' || controlName === 'resetCharge') {
+    baseEnabled = basicState !== 1 && basicState !== 5
+  } else if (controlName === 'emergencyStop') {
+    baseEnabled = basicState !== 6
+  } else {
+    baseEnabled = false
   }
+  if (!baseEnabled) return false
 
-  if (controlName === 'crawl') {
-    return canUseStandingControls(basicState)
-  }
-
-  if (controlName === 'startMove') {
-    return basicState === 2 || basicState === 3 || basicState === 4 || basicState === 16
-  }
-
-  if (controlName === 'forceControlMode' || controlName === 'autoMode') {
-    return canUseStandingControls(basicState)
-  }
-
-  if (gaitControlSet.has(controlName)) {
-    return canUseStandingControls(basicState)
-  }
-
-  if (controlName === 'startCharge' || controlName === 'endCharge' || controlName === 'resetCharge') {
-    return basicState !== 1 && basicState !== 5
-  }
-
-  if (controlName === 'emergencyStop') {
-    return basicState !== 6
-  }
-
-  return false
+  const docDisabledControls = getDocDisabledControls()
+  return !docDisabledControls.has(controlName)
 }
 
 const isControlDisabled = (controlName: RobotControlName) => !isControlEnabled(controlName)
@@ -7067,10 +7375,22 @@ const handleControlClick = async (controlName: RobotControlName) => {
 
 
 // 监听选中的机器人ID变化
-watch(() => deviceStore.selectedRobotId, async (newId) => {
-  if (newId) {
-    await fetchDeviceStatus(newId)
+watch(() => deviceStore.selectedRobotId, async (newId, oldId) => {
+  if (!newId) return
+
+  // 切换机器人时，先清空下拉数据，避免短暂显示上一台机器人的缓存
+  if (newId !== oldId) {
+    selectedMap.value = ''
+    selectedTrack.value = ''
+    selectedPointTask.value = ''
+    selectedMultiTask.value = ''
+    mapList.value = []
+    trackList.value = []
+    pointTaskList.value = []
+    multiTaskList.value = []
   }
+
+  await fetchDeviceStatus(newId)
 })
 
 // 监听 selectedRobot 对象的变化（修复首次登录数据不显示的问题）
@@ -7124,6 +7444,7 @@ onMounted(async () => {
 
 // 从其他页面切回首页时（keep-alive 缓存，onMounted 不再重复执行）
 onActivated(async () => {
+  isHomePageActive.value = true
   if (deviceStore.selectedRobot) {
     // 重新拉取循迹列表，确保数据最新（接口失败时自动回退到缓存）
     await fetchTrackList()
@@ -7178,6 +7499,10 @@ onActivated(async () => {
       await refreshPointCloud()
     }
   }
+})
+
+onDeactivated(() => {
+  isHomePageActive.value = false
 })
 
 </script>

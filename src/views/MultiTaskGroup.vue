@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -7,6 +7,7 @@
           v-for="tab in sidebarTabs"
           :key="tab.key"
           :class="['sidebar-tab', { active: route.path === tab.path }]"
+          v-permission-click-dialog="tab.permission"
           @click="handleTabClick(tab)"
         >
           <img :src="tab.icon" :alt="tab.label" />
@@ -38,16 +39,17 @@
                   class="mission-btn"
                   :class="isMultiTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
                   :disabled="!canStartMultiTask && !isMultiTaskRunning"
+                  v-permission-click-dialog="'task-multitasklist-execute'"
                   @click="handleExecuteTaskGroup"
                 >
                   {{ isMultiTaskRunning ? '关闭' : '开始' }}
                 </button>
-                <button class="mission-btn mission-btn-secondary" :disabled="!isNavigationEnabled" @click="handlePauseMultiTask">
+                <button class="mission-btn mission-btn-secondary" :disabled="!isNavigationEnabled" v-permission-click-dialog="'task-multitasklist-pause'" @click="handlePauseMultiTask">
                   {{ isNavPaused ? '恢复' : '暂停' }}
                 </button>
-                <button class="mission-btn mission-btn-primary" @click="handleCreateTaskGroup">添加多任务组</button>
-                <button class="mission-btn mission-btn-stop" @click="handleDeleteTaskGroup">删除多任务组</button>
-                <button class="mission-btn mission-btn-primary" @click="handleAddTaskGroup">添加任务组</button>
+                <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-multitasklist-create'" @click="handleCreateTaskGroup">添加多任务组</button>
+                <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'task-multitasklist-delete'" @click="handleDeleteTaskGroup">删除多任务组</button>
+                <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-multitasklist-create'" @click="handleAddTaskGroup">添加任务组</button>
               </div>
 
               <label class="mission-toolbar-label" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
@@ -100,19 +102,19 @@
                     <span :class="task.is_origin_publish === 1 ? 'ms-bool-yes' : 'ms-bool-no'">{{ task.is_origin_publish === 1 ? '是' : '否' }}</span>
                   </div>
                   <div class="file-table-cell file-table-action" style="min-width: 360px; width: 360px; text-align: center; display: flex; gap: 8px; justify-content: center; align-items: center;">
-                    <button class="action-btn action-btn-edit" @click="handleEditTaskGroup(task)">
+                    <button class="action-btn action-btn-edit" v-permission-click-dialog="'task-multitasklist-edit'" @click="handleEditTaskGroup(task)">
                       <img :src="editIcon" alt="编辑" />
                       编辑
                     </button>
-                    <button class="action-btn action-btn-delete" @click="handleDeleteTask(task)">
+                    <button class="action-btn action-btn-delete" v-permission-click-dialog="'task-multitasklist-delete'" @click="handleDeleteTask(task)">
                       <img :src="deleteIcon" alt="删除" />
                       删除
                     </button>
-                    <button class="action-btn action-btn-secondary" style="padding: 0 8px; color: #67d5fd;" @click="handleMoveTask(task, 'up')">
+                    <button class="action-btn action-btn-secondary" style="padding: 0 8px; color: #67d5fd;" v-permission-click-dialog="'task-multitasklist-edit'" @click="handleMoveTask(task, 'up')">
                       <img :src="upIcon" alt="上移" style="width: 14px; height: 14px;" />
                       上移
                     </button>
-                    <button class="action-btn action-btn-secondary" style="padding: 0 8px; color: #67d5fd;" @click="handleMoveTask(task, 'down')">
+                    <button class="action-btn action-btn-secondary" style="padding: 0 8px; color: #67d5fd;" v-permission-click-dialog="'task-multitasklist-edit'" @click="handleMoveTask(task, 'down')">
                       <img :src="downIcon" alt="下移" style="width: 14px; height: 14px;" />
                       下移
                     </button>
@@ -153,7 +155,7 @@
           </div>
         </div>
         <div class="dialog-footer">
-          <button class="mission-btn mission-btn-primary" style="height: 40px; min-width: 120px;" @click="confirmCreateGroup">确定</button>
+          <button class="mission-btn mission-btn-primary" style="height: 40px; min-width: 120px;" v-permission-click-dialog="'task-multitasklist-create'" @click="confirmCreateGroup">确定</button>
           <button class="mission-btn" style="height: 40px; min-width: 120px; background-color: rgba(100, 100, 100, 0.6); border: 1px solid rgba(150, 150, 150, 0.5); color: #ddd;" @click="closeCreateGroupDialog">取消</button>
         </div>
       </div>
@@ -171,7 +173,7 @@
           <div style="color: rgba(255, 255, 255, 0.6); font-size: 14px;">{{ deleteGroupDialog.name }}</div>
         </div>
         <div class="dialog-footer">
-          <button class="mission-btn mission-btn-primary" style="height: 40px; min-width: 120px;" @click="confirmDeleteGroup">确定</button>
+          <button class="mission-btn mission-btn-primary" style="height: 40px; min-width: 120px;" v-permission-click-dialog="'task-multitasklist-delete'" @click="confirmDeleteGroup">确定</button>
           <button class="mission-btn" style="height: 40px; min-width: 120px; background-color: rgba(100, 100, 100, 0.6); border: 1px solid rgba(150, 150, 150, 0.5); color: #ddd;" @click="closeDeleteGroupDialog">取消</button>
         </div>
       </div>
@@ -298,7 +300,7 @@
           </div>
         </div>
         <div class="dialog-footer" style="padding: 24px;">
-          <button class="mission-btn mission-btn-primary" style="height: 40px; min-width: 120px;" @click="confirmAddTaskGroup">确定</button>
+          <button class="mission-btn mission-btn-primary" style="height: 40px; min-width: 120px;" v-permission-click-dialog="['task-multitasklist-create', 'task-multitasklist-edit']" @click="confirmAddTaskGroup">确定</button>
           <button class="mission-btn" style="height: 40px; min-width: 120px; background-color: rgba(100, 100, 100, 0.6); border: 1px solid rgba(150, 150, 150, 0.5); color: #ddd;" @click="closeAddTaskGroupDialog">取消</button>
         </div>
       </div>
@@ -351,9 +353,11 @@ import downIcon from '@/assets/source_data/svg_data/robot_source/down.png'
 import lockIcon from '@/assets/source_data/svg_data/robot_source/lock.png'
 import unlockIcon from '@/assets/source_data/svg_data/robot_source/unlock.png'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
+import { usePermissionStore } from '@/stores/permission'
 
 const router = useRouter()
 const route = useRoute()
+const permissionStore = usePermissionStore()
 const taskExecutionStore = useTaskExecutionStore()
 const {
   isMultiTaskRunning,
@@ -363,13 +367,25 @@ const {
 } = storeToRefs(taskExecutionStore)
 
 const sidebarTabs = [
-  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission' },
-  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records' },
-  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs' },
-  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group' }
+  { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission', permission: 'task-tracklist-show' },
+  { key: 'records', label: '发布点任务', icon: taskAutoIcon, path: '/dashboard/mission-records', permission: 'task-tasklist-show' },
+  { key: 'logs', label: '定时循迹任务', icon: taskTimeIcon, path: '/dashboard/mission-logs', permission: 'task-plantracklist-show' },
+  { key: 'multi', label: '多任务组任务', icon: taskMultiIcon, path: '/dashboard/multi-task-group', permission: 'task-multitasklist-show' }
 ]
 
+const emitPermissionDenied = (permission: string) => {
+  if (typeof document !== 'undefined') {
+    document.dispatchEvent(new CustomEvent('permission-denied', {
+      detail: { permission }
+    }))
+  }
+}
+
 const handleTabClick = (tab: any) => {
+  if (tab.permission && !permissionStore.hasPermission(tab.permission)) {
+    emitPermissionDenied(tab.permission)
+    return
+  }
   if (route.path !== tab.path) {
     router.push(tab.path)
   }
@@ -1676,3 +1692,4 @@ watch(selectedMultiTaskName, (newVal) => {
   background: rgba(255, 255, 255, 0.25);
 }
 </style>
+

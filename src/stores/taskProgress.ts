@@ -71,7 +71,7 @@ export const useTaskProgressStore = defineStore('taskProgress', () => {
       
       const response = await visionApi.getAlerts(workspaceId, {
         job_id: jobId,
-        limit: 1000 // 获取所有异常
+        limit: 100 // 单次请求上限不超过100
       })
       
       return response.total || 0
