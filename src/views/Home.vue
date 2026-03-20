@@ -1092,9 +1092,10 @@ import {
 import SuccessMessage from '../components/SuccessMessage.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
 import ThreePointCloudPreview from '../components/ThreePointCloudPreview.vue'
-import { useSharedPointCloudRenderer } from '../composables/usePointCloudRenderer'
+import type { NormalizationParams, PointCloudPoint } from '../composables/usePointCloudRenderer'
 import { load3MF } from '../utils/threemfParser'
 import type { MeshData } from '../utils/threemfParser'
+import { getRobotMapCacheKeys } from '../utils/robotBootstrap'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config, getCurrentEnvironment } from '../config/environment'
 import { useDeviceStore } from '../stores/device'
@@ -1355,7 +1356,6 @@ watch(() => robotStore.isTracking, (tracking) => {
     activeOverlayTrackName.value = ''
     if (basePointCloudData.value.length > 0) {
       pointCloudData.value = basePointCloudData.value
-      schedulePointCloudRender()
     }
     // 恢复显示列表第一项
     if (filteredTrackList.value.length > 0) {
@@ -1481,766 +1481,22 @@ const formatRobotYaw = () => {
 const formatPosture = () => robotStore.postureText
 const formatFallAngle = (value: number | null) => typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}°` : '--'
 
-type PointCloudPoint = { x: number; y: number; z: number; intensity: number }
-type RawPointCloudPoint = { x: number; y: number; z?: number; intensityValue?: number }
-type PcdHeaderInfo = {
-  fields: string[]
-  size: number[]
-  type: string[]
-  count: number[]
-  points: number
-  width: number
-  height: number
-  dataType: string
-  dataStartIndex: number
-}
-const sharedPointCloud = useSharedPointCloudRenderer()
-const pointCloudCanvas = sharedPointCloud.canvasRef
-const pointCloudData = sharedPointCloud.data
-const basePointCloudData = sharedPointCloud.baseData
+const pointCloudData = ref<PointCloudPoint[]>([])
+const basePointCloudData = ref<PointCloudPoint[]>([])
 const threePointCloudRef = ref<InstanceType<typeof ThreePointCloudPreview> | null>(null)
 /** 机器狗箭头 3MF 网格（加载完成后设置） */
 const arrowMesh = ref<MeshData | null>(null)
-const pointCloudNormalizationParams = sharedPointCloud.normalizationParams
+const pointCloudNormalizationParams = ref<NormalizationParams>({ centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 })
 const pointCloudLoading = ref(false)
 const pointCloudError = ref('')
-const pointCloudScale = sharedPointCloud.scale
-const pointCloudRotationX = sharedPointCloud.rotationX
-const pointCloudRotationY = sharedPointCloud.rotationY
-const pointCloudPanX = sharedPointCloud.panX
-const pointCloudPanY = sharedPointCloud.panY
-const pointCloudPointSize = sharedPointCloud.pointSize
-const isPointCloudDragging = ref(false)
 const isPointCloudFullscreen = ref(false)
-let lastPointerX = 0
-let lastPointerY = 0
-let activePointerId: number | null = null
-let pointCloudDragMode: 'rotate' | 'pan' | null = null
-let pointCloudFrameRequested = false
-
-const schedulePointCloudRender = () => {
-  if (pointCloudFrameRequested) return
-  pointCloudFrameRequested = true
-  requestAnimationFrame(() => {
-    pointCloudFrameRequested = false
-    drawPointCloud()
-  })
-}
-
-const generateMockPointCloud = (count = 800): PointCloudPoint[] => {
-  return Array.from({ length: count }, () => ({
-    x: Math.random(),
-    y: Math.random(),
-    z: Math.random(),
-    intensity: Math.random()
-  }))
-}
-
-const normalizePointCloud = (rawPoints: RawPointCloudPoint[]): PointCloudPoint[] => {
-  if (!rawPoints.length) return []
-
-  let minX = Infinity, maxX = -Infinity
-  let minY = Infinity, maxY = -Infinity
-  let minZ = Infinity, maxZ = -Infinity
-  let minIntensity = Infinity, maxIntensity = -Infinity
-  let hasIntensity = false
-
-  for (const p of rawPoints) {
-    if (p.x < minX) minX = p.x
-    if (p.x > maxX) maxX = p.x
-    if (p.y < minY) minY = p.y
-    if (p.y > maxY) maxY = p.y
-    const z = p.z ?? 0
-    if (z < minZ) minZ = z
-    if (z > maxZ) maxZ = z
-    if (p.intensityValue !== undefined && Number.isFinite(p.intensityValue)) {
-      hasIntensity = true
-      if (p.intensityValue < minIntensity) minIntensity = p.intensityValue
-      if (p.intensityValue > maxIntensity) maxIntensity = p.intensityValue
-    }
-  }
-
-  if (!hasIntensity) { minIntensity = 0; maxIntensity = 1 }
-
-  const rangeX = maxX - minX
-  const rangeY = maxY - minY
-  const rangeZ = maxZ - minZ
-  const maxRange = Math.max(rangeX, rangeY, rangeZ, 1e-6)
-
-  const centerX = (maxX + minX) / 2
-  const centerY = (maxY + minY) / 2
-  const centerZ = (maxZ + minZ) / 2
-  const intensityRange = maxIntensity - minIntensity || 1
-
-  // 保存归一化参数，供轨迹叠加使用
-  pointCloudNormalizationParams.value = { centerX, centerY, centerZ, maxRange }
-
-  return rawPoints.map(point => {
-    const centeredZ = point.z ?? centerZ
-    let normalizedIntensity: number
-    if (point.intensityValue !== undefined && Number.isFinite(point.intensityValue)) {
-      normalizedIntensity = (point.intensityValue - minIntensity) / intensityRange
-    } else if (point.z !== undefined && Number.isFinite(point.z)) {
-      normalizedIntensity = (point.z - minZ) / (rangeZ || 1)
-    } else {
-      normalizedIntensity = 0.5
-    }
-    normalizedIntensity = Math.min(1, Math.max(0, normalizedIntensity))
-
-    return {
-      x: (point.x - centerX) / maxRange,
-      y: (point.y - centerY) / maxRange,
-      z: (centeredZ - centerZ) / maxRange,
-      intensity: normalizedIntensity
-    }
-  })
-}
-
-const parseAsciiPcdContent = (content: string): PointCloudPoint[] => {
-  const lines = content.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0 && !line.startsWith('#'))
-  const dataIndex = lines.findIndex(line => line.toLowerCase().startsWith('data'))
-  if (dataIndex === -1) return []
-  const headerLines = lines.slice(0, dataIndex)
-  const dataLines = lines.slice(dataIndex + 1)
-  const fieldsLine = headerLines.find(line => line.toLowerCase().startsWith('fields'))
-  const fields = fieldsLine ? fieldsLine.split(/\s+/).slice(1) : []
-  const xIndex = fields.indexOf('x')
-  const yIndex = fields.indexOf('y')
-  const zIndex = fields.indexOf('z')
-  const intensityIndex = fields.findIndex(field => field === 'intensity' || field === 'rgb')
-  if (xIndex === -1 || yIndex === -1) return []
-
-  const rawPoints = dataLines.map(line => line.split(/\s+/))
-    .filter(parts => parts.length > Math.max(xIndex, yIndex))
-    .map(parts => {
-      const x = parseFloat(parts[xIndex])
-      const y = parseFloat(parts[yIndex])
-      const z = zIndex !== -1 ? parseFloat(parts[zIndex]) : 0
-      const intensityValue = intensityIndex !== -1 && parts[intensityIndex] !== undefined ? parseFloat(parts[intensityIndex]) : undefined
-      return { x, y, z, intensityValue }
-    })
-    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
-
-  return normalizePointCloud(rawPoints)
-}
-
-const readBinaryValue = (view: DataView, offset: number, type: string, size: number) => {
-  switch (type) {
-    case 'F':
-      if (size === 8) return view.getFloat64(offset, true)
-      return view.getFloat32(offset, true)
-    case 'I':
-      if (size === 1) return view.getInt8(offset)
-      if (size === 2) return view.getInt16(offset, true)
-      return view.getInt32(offset, true)
-    case 'U':
-      if (size === 1) return view.getUint8(offset)
-      if (size === 2) return view.getUint16(offset, true)
-      return view.getUint32(offset, true)
-    default:
-      return view.getFloat32(offset, true)
-  }
-}
-
-const extractPcdHeaderInfo = (buffer: ArrayBuffer): PcdHeaderInfo => {
-  const bytes = new Uint8Array(buffer)
-  const decoder = new TextDecoder('utf-8')
-  let lineStart = 0
-  let dataStartIndex = buffer.byteLength
-  const headerInfo: PcdHeaderInfo = {
-    fields: [],
-    size: [],
-    type: [],
-    count: [],
-    points: 0,
-    width: 0,
-    height: 0,
-    dataType: 'ascii',
-    dataStartIndex: buffer.byteLength
-  }
-
-  for (let i = 0; i < bytes.length; i++) {
-    if (bytes[i] === 0x0a) {
-      const line = decoder.decode(bytes.slice(lineStart, i)).replace(/\r/g, '').trim()
-      const lowerLine = line.toLowerCase()
-      if (lowerLine.startsWith('fields')) {
-        headerInfo.fields = line.split(/\s+/).slice(1)
-      } else if (lowerLine.startsWith('size')) {
-        headerInfo.size = line.split(/\s+/).slice(1).map(val => Number(val) || 0)
-      } else if (lowerLine.startsWith('type')) {
-        headerInfo.type = line.split(/\s+/).slice(1).map(val => val.toUpperCase())
-      } else if (lowerLine.startsWith('count')) {
-        headerInfo.count = line.split(/\s+/).slice(1).map(val => Number(val) || 1)
-      } else if (lowerLine.startsWith('points')) {
-        const [, value] = line.split(/\s+/)
-        headerInfo.points = Number(value) || 0
-      } else if (lowerLine.startsWith('width')) {
-        const [, value] = line.split(/\s+/)
-        headerInfo.width = Number(value) || 0
-      } else if (lowerLine.startsWith('height')) {
-        const [, value] = line.split(/\s+/)
-        headerInfo.height = Number(value) || 0
-      } else if (lowerLine.startsWith('data')) {
-        const parts = line.split(/\s+/)
-        headerInfo.dataType = parts[1]?.toLowerCase() || 'ascii'
-        dataStartIndex = i + 1
-        break
-      }
-      lineStart = i + 1
-    }
-  }
-
-  headerInfo.dataStartIndex = dataStartIndex
-  if (!headerInfo.count.length && headerInfo.fields.length) {
-    headerInfo.count = headerInfo.fields.map(() => 1)
-  }
-  return headerInfo
-}
-
-const parseBinaryPcdContent = (buffer: ArrayBuffer, headerInfo: PcdHeaderInfo): PointCloudPoint[] => {
-  const counts = headerInfo.count.length ? headerInfo.count : headerInfo.fields.map(() => 1)
-  const stride = headerInfo.fields.reduce((sum, _, idx) => {
-    const size = headerInfo.size[idx] || 0
-    const count = counts[idx] || 1
-    return sum + size * count
-  }, 0)
-  if (!stride) return []
-
-  const bytesAvailable = buffer.byteLength - headerInfo.dataStartIndex
-  if (bytesAvailable <= 0) return []
-
-  const totalPoints = headerInfo.points || (headerInfo.width * headerInfo.height) || 0
-  const maxReadablePoints = Math.floor(bytesAvailable / stride)
-  const pointsToRead = totalPoints > 0 ? Math.min(totalPoints, maxReadablePoints) : maxReadablePoints
-
-  const view = new DataView(buffer, headerInfo.dataStartIndex)
-  const rawPoints: RawPointCloudPoint[] = []
-
-  for (let pointIndex = 0; pointIndex < pointsToRead; pointIndex++) {
-    const baseOffset = pointIndex * stride
-    let fieldOffset = 0
-    let truncated = false
-    const point: RawPointCloudPoint = { x: 0, y: 0, z: 0 }
-
-    for (let fieldIndex = 0; fieldIndex < headerInfo.fields.length; fieldIndex++) {
-      const field = headerInfo.fields[fieldIndex]
-      const size = headerInfo.size[fieldIndex] || 0
-      const repeat = counts[fieldIndex] || 1
-      const type = headerInfo.type[fieldIndex] || 'F'
-
-      for (let repeatIndex = 0; repeatIndex < repeat; repeatIndex++) {
-        const valueOffset = baseOffset + fieldOffset + repeatIndex * size
-        if (valueOffset + size > bytesAvailable) {
-          truncated = true
-          break
-        }
-
-        if (field === 'rgb') {
-          const rgbValue = view.getUint32(valueOffset, true)
-          const r = rgbValue & 0xff
-          const g = (rgbValue >> 8) & 0xff
-          const b = (rgbValue >> 16) & 0xff
-          point.intensityValue = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-        } else {
-          const value = readBinaryValue(view, valueOffset, type, size)
-          if (field === 'x') point.x = value
-          else if (field === 'y') point.y = value
-          else if (field === 'z') point.z = value
-          else if (field === 'intensity') point.intensityValue = value
-        }
-      }
-
-      if (truncated) break
-      fieldOffset += size * repeat
-    }
-
-    if (truncated) break
-    if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
-      rawPoints.push(point)
-    }
-  }
-
-  return normalizePointCloud(rawPoints)
-}
-
-const parsePcdBuffer = (buffer: ArrayBuffer): PointCloudPoint[] => {
-  const headerInfo = extractPcdHeaderInfo(buffer)
-  if (!headerInfo.fields.length) return []
-
-  if (headerInfo.dataType === 'binary') {
-    return parseBinaryPcdContent(buffer, headerInfo)
-  }
-
-  if (headerInfo.dataType === 'binary_compressed') {
-    console.warn('暂不支持 binary_compressed PCD 数据')
-    return []
-  }
-
-  return parseAsciiPcdContent(new TextDecoder('utf-8').decode(buffer))
-}
-
-const clampPointCloudScale = (value: number) => {
-  const MIN_SCALE = 0.01
-  const MAX_SCALE = 50
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value))
-}
-
-const adjustPointCloudScale = (delta: number) => {
-  pointCloudScale.value = clampPointCloudScale(pointCloudScale.value + delta)
-}
-
-const clampPointCloudPointSize = (value: number) => {
-  const MIN_SIZE = 0.5
-  const MAX_SIZE = 3
-  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, value))
-}
-
-const handlePointCloudWheel = (event: WheelEvent) => {
-  const direction = event.deltaY < 0 ? 1 : -1
-  adjustPointCloudScale(direction * 0.1)
-  schedulePointCloudRender()
-}
-
-const handlePointCloudKeydown = (event: KeyboardEvent) => {
-  const target = event.target as HTMLElement | null
-  const tagName = target?.tagName
-  const isTypingElement = tagName === 'INPUT' || tagName === 'TEXTAREA' || target?.isContentEditable
-  if (isTypingElement || event.ctrlKey || event.metaKey || event.altKey) {
-    return
-  }
-
-  if (event.key === 'Escape' && isPointCloudFullscreen.value) {
-    isPointCloudFullscreen.value = false
-    nextTick(() => {
-      threePointCloudRef.value?.fitCameraToScene?.()
-    })
-    event.preventDefault()
-    return
-  }
-
-  if (event.key === '+' || event.key === '=') {
-    pointCloudPointSize.value = clampPointCloudPointSize(pointCloudPointSize.value + 0.1)
-    schedulePointCloudRender()
-    event.preventDefault()
-  } else if (event.key === '-' || event.key === '_') {
-    pointCloudPointSize.value = clampPointCloudPointSize(pointCloudPointSize.value - 0.1)
-    schedulePointCloudRender()
-    event.preventDefault()
-  }
-}
-
-const handlePointCloudPointerMove = (event: PointerEvent) => {
-  if (!isPointCloudDragging.value || (activePointerId !== null && event.pointerId !== activePointerId)) return
-  const deltaX = event.clientX - lastPointerX
-  const deltaY = event.clientY - lastPointerY
-  lastPointerX = event.clientX
-  lastPointerY = event.clientY
-  if (pointCloudDragMode === 'pan') {
-    const canvas = pointCloudCanvas.value
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    pointCloudPanX.value += deltaX / rect.width
-    pointCloudPanY.value += deltaY / rect.height
-  } else {
-    pointCloudRotationY.value += deltaX * 0.005
-    const nextPitch = pointCloudRotationX.value - deltaY * 0.005
-    const clampPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, nextPitch))
-    pointCloudRotationX.value = clampPitch
-  }
-  schedulePointCloudRender()
-}
-
 const togglePointCloudFullscreen = () => {
   isPointCloudFullscreen.value = !isPointCloudFullscreen.value
-  nextTick(() => { threePointCloudRef.value?.fitCameraToScene?.() })
 }
 
 // 将视图居中到机器人当前位置
 const centerToRobot = () => {
   threePointCloudRef.value?.centerToRobot?.()
-}
-
-const stopPointCloudDragging = () => {
-  if (!isPointCloudDragging.value) return
-  isPointCloudDragging.value = false
-  activePointerId = null
-  pointCloudDragMode = null
-  window.removeEventListener('pointermove', handlePointCloudPointerMove)
-  window.removeEventListener('pointerup', stopPointCloudDragging)
-  window.removeEventListener('pointercancel', stopPointCloudDragging)
-}
-
-const handlePointCloudPointerDown = (event: PointerEvent) => {
-  event.preventDefault()
-  if (isPointCloudDragging.value) return
-  lastPointerX = event.clientX
-  lastPointerY = event.clientY
-  isPointCloudDragging.value = true
-  activePointerId = event.pointerId
-  const shouldPan = event.button === 2 || (event.button === 0 && event.ctrlKey)
-  pointCloudDragMode = shouldPan ? 'pan' : 'rotate'
-  window.addEventListener('pointermove', handlePointCloudPointerMove)
-  window.addEventListener('pointerup', stopPointCloudDragging)
-  window.addEventListener('pointercancel', stopPointCloudDragging)
-}
-
-const drawPointCloud = () => {
-  const canvas = pointCloudCanvas.value
-  if (!canvas) return
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-
-  const rect = canvas.getBoundingClientRect()
-  if (rect.width === 0 || rect.height === 0) return
-
-  const dpr = window.devicePixelRatio || 1
-  const w = Math.floor(rect.width * dpr)
-  const h = Math.floor(rect.height * dpr)
-  canvas.width = w
-  canvas.height = h
-
-  const imageData = ctx.createImageData(w, h)
-  const data = imageData.data
-
-  // 背景色 #020915 -> rgb(2,9,21)
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = 2; data[i + 1] = 9; data[i + 2] = 21; data[i + 3] = 255
-  }
-
-  const yaw = pointCloudRotationY.value
-  const pitch = pointCloudRotationX.value
-  const cosYaw = Math.cos(yaw)
-  const sinYaw = Math.sin(yaw)
-  const cosPitch = Math.cos(pitch)
-  const sinPitch = Math.sin(pitch)
-  const baseScale = Math.min(rect.width, rect.height) * 0.8 * pointCloudScale.value
-  const panOffsetX = pointCloudPanX.value * rect.width
-  const panOffsetY = pointCloudPanY.value * rect.height
-  const cameraDistance = 2.2
-  const depthScale = 1.4
-  const halfW = rect.width / 2
-  const halfH = rect.height / 2
-  const ptSize = Math.max(1, Math.round(pointCloudPointSize.value * dpr))
-
-  const writePixel = (px: number, py: number, r: number, g: number, b: number, a: number) => {
-    const ix = Math.round(px * dpr)
-    const iy = Math.round(py * dpr)
-    for (let dy = 0; dy < ptSize; dy++) {
-      for (let dx = 0; dx < ptSize; dx++) {
-        const nx = ix + dx
-        const ny = iy + dy
-        if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue
-        const idx = (ny * w + nx) * 4
-        const alpha = a / 255
-        data[idx]     = Math.round(data[idx]     * (1 - alpha) + r * alpha)
-        data[idx + 1] = Math.round(data[idx + 1] * (1 - alpha) + g * alpha)
-        data[idx + 2] = Math.round(data[idx + 2] * (1 - alpha) + b * alpha)
-        data[idx + 3] = 255
-      }
-    }
-  }
-
-  // 分两轮绘制：先绘制普通点云和轨迹，再绘制任务点（确保任务点在最上层）
-  const taskPoints: Array<{x: number, y: number, name?: string}> = []
-  let taskPointCount = 0
-  
-  pointCloudData.value.forEach(point => {
-    const centeredX = -point.x
-    const centeredY = -point.z
-    const centeredZ = point.y
-
-    const xzRotatedX = centeredX * cosYaw + centeredZ * sinYaw
-    const xzRotatedZ = -centeredX * sinYaw + centeredZ * cosYaw
-
-    const yRotatedY = centeredY * cosPitch - xzRotatedZ * sinPitch
-    const yRotatedZ = centeredY * sinPitch + xzRotatedZ * cosPitch
-
-    const perspectiveZ = yRotatedZ * depthScale
-    const perspective = cameraDistance / (cameraDistance - perspectiveZ)
-    const projectedX = xzRotatedX * baseScale * perspective + halfW + panOffsetX
-    const projectedY = yRotatedY * baseScale * perspective + halfH + panOffsetY
-
-    if (projectedX < -10 || projectedX > rect.width + 10 || projectedY < -10 || projectedY > rect.height + 10) return
-
-    // 任务点（intensity >= 2.5 && < 3.5）延后绘制
-    if (point.intensity >= 2.5 && point.intensity < 3.5) {
-      taskPointCount++
-      taskPoints.push({ 
-        x: projectedX, 
-        y: projectedY, 
-        name: (point as any).name 
-      })
-    } else if (point.intensity >= 1.9) {
-      // 轨迹点 - 绿色
-      writePixel(projectedX, projectedY, 0, 255, 0, 230)
-    } else {
-      // 普通点云
-      const t = point.intensity
-      const r = Math.floor(40 + t * 200)
-      const g = Math.floor(120 + t * 100)
-      const b = 255
-      const a = Math.floor((0.35 + t * 0.4) * 255)
-      writePixel(projectedX, projectedY, r, g, b, a)
-    }
-  })
-
-  ctx.putImageData(imageData, 0, 0)
-
-  // 原点和任务点使用普通 arc 绘制（数量较少，无性能问题）
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-  // 绘制任务点（绿色圆圈+名称）
-  
-  taskPoints.forEach(tp => {
-    ctx.beginPath()
-    ctx.arc(tp.x, tp.y, 4, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255, 216, 0, 0.92)'  // 黄色
-    ctx.fill()
-    ctx.strokeStyle = '#FFFFFF'
-    ctx.lineWidth = 1.5
-    ctx.stroke()
-    
-    // 绘制任务点名称（黄色文字 + 半透明深色背景标签）
-    if (tp.name) {
-      ctx.font = 'bold 10px Arial'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      const textW = ctx.measureText(tp.name).width
-      const padX = 4, padY = 2
-      const tagW = textW + padX * 2
-      const tagH = 12 + padY * 2
-      const tagX = tp.x - tagW / 2
-      const tagY = tp.y - 18 - tagH / 2
-      const r = 3
-      ctx.beginPath()
-      ctx.moveTo(tagX + r, tagY)
-      ctx.lineTo(tagX + tagW - r, tagY)
-      ctx.quadraticCurveTo(tagX + tagW, tagY, tagX + tagW, tagY + r)
-      ctx.lineTo(tagX + tagW, tagY + tagH - r)
-      ctx.quadraticCurveTo(tagX + tagW, tagY + tagH, tagX + tagW - r, tagY + tagH)
-      ctx.lineTo(tagX + r, tagY + tagH)
-      ctx.quadraticCurveTo(tagX, tagY + tagH, tagX, tagY + tagH - r)
-      ctx.lineTo(tagX, tagY + r)
-      ctx.quadraticCurveTo(tagX, tagY, tagX + r, tagY)
-      ctx.closePath()
-      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(255, 216, 0, 0.55)'
-      ctx.lineWidth = 0.8
-      ctx.stroke()
-      ctx.fillStyle = '#FFD800'
-      ctx.shadowColor = 'transparent'
-      ctx.shadowBlur = 0
-      ctx.fillText(tp.name, tp.x, tagY + tagH / 2)
-    }
-  })
-
-  // 绘制原点
-  const { centerX, centerY, centerZ, maxRange } = pointCloudNormalizationParams.value
-  if (maxRange > 1e-6) {
-    const originNormX = (0 - centerX) / maxRange
-    const originNormY = (0 - centerY) / maxRange
-    const originNormZ = (0 - centerZ) / maxRange
-
-    const oCenteredX = -originNormX
-    const oCenteredY = -originNormZ
-    const oCenteredZ = originNormY
-
-    const oXzRotatedX = oCenteredX * cosYaw + oCenteredZ * sinYaw
-    const oXzRotatedZ = -oCenteredX * sinYaw + oCenteredZ * cosYaw
-
-    const oYRotatedY = oCenteredY * cosPitch - oXzRotatedZ * sinPitch
-    const oYRotatedZ = oCenteredY * sinPitch + oXzRotatedZ * cosPitch
-
-    const oPerspectiveZ = oYRotatedZ * depthScale
-    const oPerspective = cameraDistance / (cameraDistance - oPerspectiveZ)
-    const oProjX = oXzRotatedX * baseScale * oPerspective + halfW + panOffsetX
-    const oProjY = oYRotatedY * baseScale * oPerspective + halfH + panOffsetY
-
-    ctx.beginPath()
-    ctx.arc(oProjX, oProjY, 3, 0, Math.PI * 2)
-    ctx.fillStyle = '#FF0000'
-    ctx.fill()
-    ctx.strokeStyle = '#FFFFFF'
-    ctx.lineWidth = 1.5
-    ctx.stroke()
-
-    ;{
-      const lbl = '原点'
-      ctx.font = 'bold 10px Arial'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      const tw = ctx.measureText(lbl).width
-      const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
-      const tx = oProjX - tagW / 2, ty = oProjY - 10 - tagH
-      ctx.beginPath()
-      ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
-      ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
-      ctx.lineTo(tx + tagW, ty + tagH - rr)
-      ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
-      ctx.lineTo(tx + rr, ty + tagH)
-      ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
-      ctx.lineTo(tx, ty + rr)
-      ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
-      ctx.closePath()
-      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(255, 68, 68, 0.55)'
-      ctx.lineWidth = 0.8
-      ctx.stroke()
-      ctx.fillStyle = '#FF5555'
-      ctx.shadowBlur = 0
-      ctx.fillText(lbl, oProjX, ty + tagH / 2)
-    }
-  }
-
-  // ===== 绘制机器狗实时位置（3MF 箭头模型）=====
-  const pose = robotStore.pose
-  if (pose && maxRange > 1e-6) {
-    // 机器狗位置归一化到点云空间
-    const robotNormX = (pose.x - centerX) / maxRange
-    const robotNormY = (pose.y - centerY) / maxRange
-    const robotNormZ = (pose.z - centerZ) / maxRange
-
-    // 用于投影的辅助函数（复用外层投影参数）
-    const projectNorm = (nx: number, ny: number, nz: number) => {
-      const cx2 = -nx, cy2 = -nz, cz2 = ny
-      const rx = cx2 * cosYaw + cz2 * sinYaw
-      const rz = -cx2 * sinYaw + cz2 * cosYaw
-      const ry = cy2 * cosPitch - rz * sinPitch
-      const rzF = cy2 * sinPitch + rz * cosPitch
-      const persp = cameraDistance / (cameraDistance - rzF * depthScale)
-      return {
-        px: rx * baseScale * persp + halfW + panOffsetX,
-        py: ry * baseScale * persp + halfH + panOffsetY,
-      }
-    }
-
-    // 投影机器狗中心点（用于文字标注）
-    const { px: rProjX, py: rProjY } = projectNorm(robotNormX, robotNormY, robotNormZ)
-
-    const mesh = arrowMesh.value
-    if (mesh) {
-      // ===== 使用 3MF 网格渲染箭头 =====
-      // 动态缩放：基础比例0.004，最小宽度8px
-      const baseArrowScale = 0.004
-      const minArrowPx = 8
-      const maxArrowPx = 24
-      const arrowScale = Math.min(
-        Math.max(
-          baseArrowScale * pointCloudScale.value,
-          minArrowPx / (baseScale || 1)
-        ),
-        maxArrowPx / (baseScale || 1)
-      )
-      // 3MF 模型尖端朝向 +Y 轴，theta=0 时前进方向为 +X，需预减 π/2 对齐
-      const cosT = Math.cos(pose.theta - Math.PI / 2)
-      const sinT = Math.sin(pose.theta - Math.PI / 2)
-
-      // 预先投影所有顶点
-      const projVerts: Array<{ px: number; py: number }> = mesh.vertices.map(v => {
-        // 1. 缩放
-        const sx = v.x * arrowScale
-        const sy = v.y * arrowScale
-        const sz = v.z * arrowScale
-        // 2. 绕 Z 轴旋转 theta（世界 XY 平面偏航）
-        const rx = sx * cosT - sy * sinT
-        const ry = sx * sinT + sy * cosT
-        const rz = sz
-        // 3. 平移到机器狗位置
-        return projectNorm(robotNormX + rx, robotNormY + ry, robotNormZ + rz)
-      })
-
-      // 收集所有三角面并按深度排序（画家算法）
-      const faces: Array<{ avgPy: number; i0: number; i1: number; i2: number }> = []
-      for (let i = 0; i < mesh.indices.length; i += 3) {
-        const i0 = mesh.indices[i], i1 = mesh.indices[i + 1], i2 = mesh.indices[i + 2]
-        faces.push({
-          avgPy: (projVerts[i0].py + projVerts[i1].py + projVerts[i2].py) / 3,
-          i0, i1, i2
-        })
-      }
-      faces.sort((a, b) => b.avgPy - a.avgPy)  // 从远到近绘制
-
-      ctx.save()
-      ctx.shadowColor = '#00ff88'
-      ctx.shadowBlur = 0
-      for (const face of faces) {
-        const p0 = projVerts[face.i0]
-        const p1 = projVerts[face.i1]
-        const p2 = projVerts[face.i2]
-        ctx.beginPath()
-        ctx.moveTo(p0.px, p0.py)
-        ctx.lineTo(p1.px, p1.py)
-        ctx.lineTo(p2.px, p2.py)
-        ctx.closePath()
-        ctx.fillStyle = 'rgba(255, 0, 255, 0.85)'
-        ctx.fill()
-        ctx.strokeStyle = '#FFB6FF'
-        ctx.lineWidth = 0.5
-        ctx.stroke()
-      }
-      ctx.shadowBlur = 0
-      ctx.restore()
-    } else {
-      // ===== 降级：3MF未加载时使用简单三角形箭头 =====
-      // 计算朝向屏幕角度
-      const tipDist = 0.06
-      const { px: tProjX, py: tProjY } = projectNorm(
-        robotNormX + Math.cos(pose.theta) * tipDist,
-        robotNormY + Math.sin(pose.theta) * tipDist,
-        robotNormZ
-      )
-      const screenAngle = Math.atan2(tProjY - rProjY, tProjX - rProjX)
-      const arrowSize = 14
-      ctx.save()
-      ctx.translate(rProjX, rProjY)
-      ctx.rotate(screenAngle + Math.PI / 2)
-      ctx.beginPath()
-      ctx.moveTo(0, -arrowSize)
-      ctx.lineTo(-arrowSize * 0.55, arrowSize * 0.65)
-      ctx.lineTo(arrowSize * 0.55, arrowSize * 0.65)
-      ctx.closePath()
-      ctx.shadowColor = '#00ff88'
-      ctx.shadowBlur = 12
-      ctx.fillStyle = 'rgba(255, 0, 255, 0.88)'
-      ctx.fill()
-      ctx.shadowBlur = 0
-      ctx.strokeStyle = '#FFFFFF'
-      ctx.lineWidth = 1.5
-      ctx.stroke()
-      ctx.restore()
-    }
-
-    // 标注文字
-    ;{
-      const lbl = '机器狗'
-      ctx.font = 'bold 10px Arial'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      const tw = ctx.measureText(lbl).width
-      const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
-      const tx = rProjX - tagW / 2, ty = rProjY - 18 - tagH
-      ctx.beginPath()
-      ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
-      ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
-      ctx.lineTo(tx + tagW, ty + tagH - rr)
-      ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
-      ctx.lineTo(tx + rr, ty + tagH)
-      ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
-      ctx.lineTo(tx, ty + rr)
-      ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
-      ctx.closePath()
-      ctx.fillStyle = 'rgba(5, 15, 35, 0.50)'
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(255, 150, 255, 0.55)'
-      ctx.lineWidth = 0.8
-      ctx.stroke()
-      ctx.fillStyle = '#FF88FF'
-      ctx.shadowBlur = 0
-      ctx.fillText(lbl, rProjX, ty + tagH / 2)
-    }
-  }
 }
 
 // 叠加循迹轨迹到点云图
@@ -2357,8 +1613,6 @@ const overlayTrackTrajectory = async (trackName: string) => {
       ...normalizedTrajectory,
       ...normalizedTaskPoints
     ]
-    await nextTick()
-    schedulePointCloudRender()
   } catch (e) {
     console.warn('叠加轨迹失败:', e)
   }
@@ -2388,23 +1642,8 @@ const parsePcdBufferInWorker = (buffer: ArrayBuffer): Promise<{ points: PointClo
 const clearPointCloud = () => {
   pointCloudData.value = []
   basePointCloudData.value = []
-  // 重置归一化参数，使 drawPointCloud 中 maxRange <= 1e-6，不再绘制原点图标
+  // 重置归一化参数，避免继续显示原场景辅助元素
   pointCloudNormalizationParams.value = { centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 }
-  const canvas = pointCloudCanvas.value
-  if (canvas) {
-    const ctx = canvas.getContext('2d')
-    if (ctx) {
-      // 用背景色填充，与 drawPointCloud 一致
-      const dpr = window.devicePixelRatio || 1
-      const rect = canvas.getBoundingClientRect()
-      const w = Math.floor(rect.width * dpr)
-      const h = Math.floor(rect.height * dpr)
-      canvas.width = w
-      canvas.height = h
-      ctx.fillStyle = '#020915'
-      ctx.fillRect(0, 0, w, h)
-    }
-  }
 }
 
 const refreshPointCloud = async () => {
@@ -2450,8 +1689,6 @@ const refreshPointCloud = async () => {
     if (robotStore.isTracking && currentTrackName) {
       activeOverlayTrackName.value = currentTrackName
       await overlayTrackTrajectory(currentTrackName)
-    } else {
-      schedulePointCloudRender()
     }
   } catch (error) {
     console.error('[点云] 加载失败:', error)
@@ -3490,23 +2727,28 @@ const infraredStreamUrl = ref('')
 const infraredLoading = ref(false)
 const infraredError = ref('')
 let infraredPc: RTCPeerConnection | null = null
+let infraredSessionId = 0
 
 // ===== WebRTC 自动重连配置 =====
 const WEBRTC_MAX_RECONNECT = 10
 const WEBRTC_RECONNECT_BASE_DELAY = 3000   // 基础重连间隔 3s，最大退避 15s
 const WEBRTC_FREEZE_CHECK_INTERVAL = 5000  // 每 5s 检测一次视频是否冻结
+const WEBRTC_START_TIMEOUT = 10000         // 10s 内未建立有效画面则判定为启动失败
 
 // 主视频重连状态
 let webrtcReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let webrtcReconnectCount = 0
 let webrtcFreezeTimer: ReturnType<typeof setInterval> | null = null
 let webrtcLastVideoTime = -1
+let webrtcStartTimer: ReturnType<typeof setTimeout> | null = null
 
 // 红外视频重连状态
 let infraredReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let infraredReconnectCount = 0
 let infraredFreezeTimer: ReturnType<typeof setInterval> | null = null
 let infraredLastVideoTime = -1
+let infraredStartTimer: ReturnType<typeof setTimeout> | null = null
+let hasHomeActivatedOnce = false
 
 // ---------- 主视频重连辅助函数 ----------
 const clearWebRTCReconnectTimer = () => {
@@ -3522,17 +2764,26 @@ const clearWebRTCFreezeDetection = () => {
   }
   webrtcLastVideoTime = -1
 }
+const clearWebRTCStartTimer = () => {
+  if (webrtcStartTimer) {
+    clearTimeout(webrtcStartTimer)
+    webrtcStartTimer = null
+  }
+}
 const scheduleWebRTCReconnect = () => {
   if (!videoStreamUrl.value) {
     clearWebRTCReconnectTimer()
+    clearWebRTCStartTimer()
     webrtcReconnecting.value = false
     return
   }
   if (webrtcReconnectTimer) return // 已有待执行的重连
   if (webrtcReconnectCount >= WEBRTC_MAX_RECONNECT) {
+    clearWebRTCStartTimer()
     webrtcReconnecting.value = false
     return
   }
+  clearWebRTCStartTimer()
   webrtcReconnectCount++
   webrtcReconnecting.value = true  // 显示 overlay，保留最后一帧
   const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * webrtcReconnectCount, 15000)
@@ -3572,17 +2823,26 @@ const clearInfraredFreezeDetection = () => {
   }
   infraredLastVideoTime = -1
 }
+const clearInfraredStartTimer = () => {
+  if (infraredStartTimer) {
+    clearTimeout(infraredStartTimer)
+    infraredStartTimer = null
+  }
+}
 const scheduleInfraredReconnect = () => {
   if (!infraredStreamUrl.value) {
     clearInfraredReconnectTimer()
+    clearInfraredStartTimer()
     infraredReconnecting.value = false
     return
   }
   if (infraredReconnectTimer) return
   if (infraredReconnectCount >= WEBRTC_MAX_RECONNECT) {
+    clearInfraredStartTimer()
     infraredReconnecting.value = false
     return
   }
+  clearInfraredStartTimer()
   infraredReconnectCount++
   infraredReconnecting.value = true  // 显示 overlay，保留最后一帧
   const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * infraredReconnectCount, 15000)
@@ -3814,6 +3074,7 @@ const startVideoPlayback = () => {
 // WebRTC播放器实例
 let pc: RTCPeerConnection | null = null
 let isPlaying = false
+let webrtcSessionId = 0
 
 // 构建SRS API地址（通过 nginx 代理，解决 CORS 问题）
 const buildApiUrl = (webrtcUrl: string) => {
@@ -3840,38 +3101,55 @@ const startWebRTCPlayback = async () => {
     return
   }
 
+  let sessionId = 0
   try {
-    
     // 确保之前的连接已清理
     if (pc) {
       pc.close()
       pc = null
     }
+
+    sessionId = ++webrtcSessionId
     
     // 创建新的RTCPeerConnection
-    pc = new RTCPeerConnection({
+    const currentPc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' }
       ]
     })
+    pc = currentPc
+
+    clearWebRTCStartTimer()
+    webrtcStartTimer = setTimeout(() => {
+      if (sessionId === webrtcSessionId && pc === currentPc && !isPlaying) {
+        scheduleWebRTCReconnect()
+      }
+    }, WEBRTC_START_TIMEOUT)
 
     // 添加ICE candidate监听
-    pc.onicecandidate = (_event) => {
+    currentPc.onicecandidate = (_event) => {
       // ICE candidate gathering
     }
 
     // 监听连接状态
-    pc.onconnectionstatechange = () => {
-      if (pc?.connectionState === 'failed' || pc?.connectionState === 'disconnected') {
+    currentPc.onconnectionstatechange = () => {
+      if (pc !== currentPc || sessionId !== webrtcSessionId) return
+      if (currentPc.connectionState === 'connected') {
+        clearWebRTCReconnectTimer()
+        clearWebRTCStartTimer()
+      } else if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'disconnected') {
         scheduleWebRTCReconnect()
       }
     }
 
     // 处理远程流
-    pc.ontrack = (e) => {
+    currentPc.ontrack = (e) => {
+      if (pc !== currentPc || sessionId !== webrtcSessionId) return
       if (videoElement.value) {
         // 新流到来时直接替换 srcObject（重连时旧流已保留最后一帧）
         videoElement.value.srcObject = e.streams[0]
+        clearWebRTCReconnectTimer()
+        clearWebRTCStartTimer()
         webrtcReconnecting.value = false  // 隐藏 overlay
         
         // 强制设置WebRTC视频播放器样式
@@ -3885,6 +3163,7 @@ const startWebRTCPlayback = async () => {
         videoEl.onloadedmetadata = () => {
           videoEl.play().catch(err => {
             console.error('[WebRTC播放] ❌ 视频播放失败:', err)
+            scheduleWebRTCReconnect()
           })
         }
         
@@ -3893,6 +3172,7 @@ const startWebRTCPlayback = async () => {
           if (videoEl.readyState === 0) {
             videoEl.play().catch(err => {
               console.error('[WebRTC播放] ❌ 强制播放失败:', err)
+              scheduleWebRTCReconnect()
             })
           }
         }, 2000)
@@ -3902,25 +3182,32 @@ const startWebRTCPlayback = async () => {
     }
 
     // ICE连接状态监听
-    pc.oniceconnectionstatechange = () => {
-      if (pc?.iceConnectionState === 'connected') {
+    currentPc.oniceconnectionstatechange = () => {
+      if (pc !== currentPc || sessionId !== webrtcSessionId) return
+      if (currentPc.iceConnectionState === 'connected') {
         isPlaying = true
+        clearWebRTCReconnectTimer()
+        clearWebRTCStartTimer()
         webrtcReconnectCount = 0        // 连接成功，重置重连计数
         webrtcReconnecting.value = false // 隐藏 overlay
         startWebRTCFreezeDetection()   // 启动画面冻结检测
-      } else if (pc?.iceConnectionState === 'disconnected') {
+      } else if (currentPc.iceConnectionState === 'disconnected') {
         scheduleWebRTCReconnect()      // 网络抖动，调度重连
-      } else if (pc?.iceConnectionState === 'failed') {
+      } else if (currentPc.iceConnectionState === 'failed') {
         scheduleWebRTCReconnect()      // 连接彻底失败，调度重连
       }
     }
 
     // 创建offer
-    const offer = await pc.createOffer({
+    const offer = await currentPc.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true
     })
-    await pc.setLocalDescription(offer)
+    if (pc !== currentPc || sessionId !== webrtcSessionId) {
+      currentPc.close()
+      return
+    }
+    await currentPc.setLocalDescription(offer)
 
     // 构建SRS API地址
     const apiUrl = buildApiUrl(serverUrl)
@@ -3947,21 +3234,34 @@ const startWebRTCPlayback = async () => {
     }
 
     // 设置远程描述
-    await pc.setRemoteDescription({
+    if (pc !== currentPc || sessionId !== webrtcSessionId) {
+      currentPc.close()
+      return
+    }
+    await currentPc.setRemoteDescription({
       type: 'answer',
       sdp: data.sdp
     })
 
   } catch (error) {
     // 连接建立过程中失败，关闭当前 pc 后调度重连（保留最后一帧）
-    if (pc) { pc.close(); pc = null }
+    if (pc && sessionId === webrtcSessionId) {
+      pc.close()
+      pc = null
+    }
+    if (sessionId !== webrtcSessionId) {
+      return
+    }
     isPlaying = false
+    clearWebRTCStartTimer()
     scheduleWebRTCReconnect()
   }
 }
 
 // 仅关闭连接，不清空 srcObject（重连时调用，保留最后一帧）
 const stopWebRTCPlaybackForReconnect = () => {
+  webrtcSessionId++
+  clearWebRTCStartTimer()
   clearWebRTCFreezeDetection()
   if (pc) { pc.close(); pc = null }
   isPlaying = false
@@ -3969,7 +3269,9 @@ const stopWebRTCPlaybackForReconnect = () => {
 
 // 停止WebRTC播放（完全停止，清空画面）
 const stopWebRTCPlayback = () => {
+  webrtcSessionId++
   clearWebRTCReconnectTimer()
+  clearWebRTCStartTimer()
   clearWebRTCFreezeDetection()
   webrtcReconnecting.value = false
 
@@ -4099,19 +3401,30 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
     return
   }
 
+  let sessionId = 0
   try {
     // 重连时（keepFrame=true）已由 scheduleInfraredReconnect 内调用 stopInfraredWebRTCPlaybackForReconnect
     // 直接开始即可，不需要再次 stop
     if (!keepFrame) {
       stopInfraredWebRTCPlayback()
     }
-    infraredPc = new RTCPeerConnection({
+    sessionId = ++infraredSessionId
+    const currentInfraredPc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' }
       ]
     })
+    infraredPc = currentInfraredPc
 
-    infraredPc.ontrack = (e) => {
+    clearInfraredStartTimer()
+    infraredStartTimer = setTimeout(() => {
+      if (sessionId === infraredSessionId && infraredPc === currentInfraredPc && currentInfraredPc.iceConnectionState !== 'connected') {
+        scheduleInfraredReconnect()
+      }
+    }, WEBRTC_START_TIMEOUT)
+
+    currentInfraredPc.ontrack = (e) => {
+      if (infraredPc !== currentInfraredPc || sessionId !== infraredSessionId) return
       if (!infraredVideoElement.value) {
         console.error('[红外视频播放] ❌ infraredVideoElement.value 为空')
         return
@@ -4119,6 +3432,8 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
       
       // 新流到来，直接替换 srcObject（重连时旧流已保留最后一帧）
       infraredVideoElement.value.srcObject = e.streams[0]
+      clearInfraredReconnectTimer()
+      clearInfraredStartTimer()
       infraredReconnecting.value = false  // 隐藏 overlay
       infraredVideoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
       
@@ -4132,6 +3447,7 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
           console.error('[红外视频播放] ❌ 视频播放失败:', err)
           infraredError.value = '红外视频播放失败'
           infraredLoading.value = false
+          scheduleInfraredReconnect()
         })
       }
       
@@ -4141,6 +3457,7 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
         if (videoEl.readyState === 0) {
           videoEl.play().catch(err => {
             console.error('[红外视频播放] ❌ 兜底播放失败:', err)
+            scheduleInfraredReconnect()
           })
         }
         // 无论如何都结束 loading
@@ -4148,29 +3465,40 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
       }, 2000)
     }
 
-    infraredPc.onconnectionstatechange = () => {
-      if (infraredPc?.connectionState === 'failed' || infraredPc?.connectionState === 'disconnected') {
+    currentInfraredPc.onconnectionstatechange = () => {
+      if (infraredPc !== currentInfraredPc || sessionId !== infraredSessionId) return
+      if (currentInfraredPc.connectionState === 'connected') {
+        clearInfraredReconnectTimer()
+        clearInfraredStartTimer()
+      } else if (currentInfraredPc.connectionState === 'failed' || currentInfraredPc.connectionState === 'disconnected') {
         scheduleInfraredReconnect()
       }
     }
 
-    infraredPc.oniceconnectionstatechange = () => {
-      if (infraredPc?.iceConnectionState === 'connected') {
+    currentInfraredPc.oniceconnectionstatechange = () => {
+      if (infraredPc !== currentInfraredPc || sessionId !== infraredSessionId) return
+      if (currentInfraredPc.iceConnectionState === 'connected') {
+        clearInfraredReconnectTimer()
+        clearInfraredStartTimer()
         infraredReconnectCount = 0       // 连接成功，重置重连计数
         infraredReconnecting.value = false // 隐藏 overlay
         startInfraredFreezeDetection()   // 启动画面冻结检测
-      } else if (infraredPc?.iceConnectionState === 'disconnected') {
+      } else if (currentInfraredPc.iceConnectionState === 'disconnected') {
         scheduleInfraredReconnect()      // 网络抖动，调度重连
-      } else if (infraredPc?.iceConnectionState === 'failed') {
+      } else if (currentInfraredPc.iceConnectionState === 'failed') {
         scheduleInfraredReconnect()      // 连接彻底失败，调度重连
       }
     }
 
-    const offer = await infraredPc.createOffer({
+    const offer = await currentInfraredPc.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true
     })
-    await infraredPc.setLocalDescription(offer)
+    if (infraredPc !== currentInfraredPc || sessionId !== infraredSessionId) {
+      currentInfraredPc.close()
+      return
+    }
+    await currentInfraredPc.setLocalDescription(offer)
     const apiUrl = buildApiUrl(serverUrl)
     const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
       method: 'POST',
@@ -4192,27 +3520,39 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
       throw new Error(data.msg || 'WebRTC播放失败')
     }
 
-    await infraredPc.setRemoteDescription({
+    if (infraredPc !== currentInfraredPc || sessionId !== infraredSessionId) {
+      currentInfraredPc.close()
+      return
+    }
+    await currentInfraredPc.setRemoteDescription({
       type: 'answer',
       sdp: data.sdp
     })
     // loading 由 ontrack 回调负责关闭
   } catch (error) {
     // 连接建立过程中失败，关闭当前 pc 后调度重连（保留最后一帧）
-    if (infraredPc) { infraredPc.close(); infraredPc = null }
+    if (infraredPc && sessionId === infraredSessionId) { infraredPc.close(); infraredPc = null }
+    if (sessionId !== infraredSessionId) {
+      return
+    }
     infraredLoading.value = false
+    clearInfraredStartTimer()
     scheduleInfraredReconnect()
   }
 }
 
 // 仅关闭连接，不清空 srcObject（重连时调用，保留最后一帧）
 const stopInfraredWebRTCPlaybackForReconnect = () => {
+  infraredSessionId++
+  clearInfraredStartTimer()
   clearInfraredFreezeDetection()
   if (infraredPc) { infraredPc.close(); infraredPc = null }
 }
 
 const stopInfraredWebRTCPlayback = () => {
+  infraredSessionId++
   clearInfraredReconnectTimer()
+  clearInfraredStartTimer()
   clearInfraredFreezeDetection()
   infraredReconnecting.value = false
 
@@ -4262,10 +3602,24 @@ const reloadInfraredStream = () => {
 const selectedWayline = ref('')
 const selectedMultiTask = ref('')
 const mapList = ref<string[]>([])
+const getCurrentRobotMapKeys = () => {
+  const robotId = deviceStore.selectedRobotId || ''
+  return robotId ? getRobotMapCacheKeys(robotId) : null
+}
+const persistSelectedMapForCurrentRobot = (mapName: string) => {
+  const keys = getCurrentRobotMapKeys()
+  if (keys) {
+    localStorage.setItem(keys.selectedMapKey, mapName)
+  }
+  localStorage.setItem('selected_map_name', mapName)
+}
 // selectedMap 由 taskExecutionStore 全局驱动，实现多页面同步
 const selectedMap = computed({
   get: () => taskExecutionStore.selectedMapName,
-  set: (v: string) => taskExecutionStore.setSelectedMapName(v)
+  set: (v: string) => {
+    taskExecutionStore.setSelectedMapName(v)
+    persistSelectedMapForCurrentRobot(v)
+  }
 })
 const showWaylineDropdown = ref(false)
 
@@ -4568,6 +3922,7 @@ const getMapFile = async (mapName: string, fileName: string): Promise<Blob | nul
  * }
  */
 const MAP_CONFIG_KEY = 'map_config'
+const mapDownloadTasks = new Map<string, Promise<void>>()
 
 // 读取地图配置
 const getMapConfig = (): Record<string, string> => {
@@ -4617,33 +3972,53 @@ const shouldDownloadMap = async (mapName: string, serverUpdateTime: string): Pro
 
 // 下载地图文件
 const downloadMapFiles = async (mapName: string, updateTime: string) => {
-  if (!(await shouldDownloadMap(mapName, updateTime))) {
+  const robotId = deviceStore.selectedRobotId || 'unknown'
+  const taskKey = `${robotId}:${mapName}:${updateTime}`
+  const existingTask = mapDownloadTasks.get(taskKey)
+  if (existingTask) {
+    await existingTask
     return
   }
-  
-  // 获取机器人 IP
-  const robotInfo = deviceStore.selectedRobot
-  if (!robotInfo?.ip_address) {
-    console.warn('[地图缓存] 机器人IP地址不存在，无法下载')
-    return
-  }
-  
-  const robotIp = robotInfo.ip_address
-  
-  const files = await mapFileApi.downloadAllMapFiles(robotIp, mapName)
-  
-  // 保存文件到 IndexedDB
-  let savedCount = 0
-  for (const [fileName, blob] of files) {
-    try {
-      await saveMapFile(mapName, fileName, blob)
-      savedCount++
-    } catch (err) {
-      console.error(`[地图缓存] 保存文件失败: ${fileName}`, err)
+
+  const task = (async () => {
+    if (!(await shouldDownloadMap(mapName, updateTime))) {
+      return
     }
-  }
-  if (files.size === mapFileApi.MAP_FILES.length) {
-    updateMapConfig(mapName, updateTime)
+    
+    // 获取机器人 IP
+    const robotInfo = deviceStore.selectedRobot
+    if (!robotInfo?.ip_address) {
+      console.warn('[地图缓存] 机器人IP地址不存在，无法下载')
+      return
+    }
+    
+    const robotIp = robotInfo.ip_address
+    
+    const files = await mapFileApi.downloadAllMapFiles(robotIp, mapName)
+    
+    // 保存文件到 IndexedDB
+    let savedCount = 0
+    for (const [fileName, blob] of files) {
+      try {
+        await saveMapFile(mapName, fileName, blob)
+        savedCount++
+      } catch (err) {
+        console.error(`[地图缓存] 保存文件失败: ${fileName}`, err)
+      }
+    }
+    if (files.size === mapFileApi.MAP_FILES.length) {
+      updateMapConfig(mapName, updateTime)
+    }
+  })()
+
+  mapDownloadTasks.set(taskKey, task)
+
+  try {
+    await task
+  } finally {
+    if (mapDownloadTasks.get(taskKey) === task) {
+      mapDownloadTasks.delete(taskKey)
+    }
   }
 }
 
@@ -4656,32 +4031,96 @@ const getMapFileUrl = async (mapName: string, fileName: string): Promise<string 
 // 地图更新时间映射（运行时使用，key: 地图名, value: 更新时间）
 const mapUpdateTimeMap = ref<Record<string, string>>({})
 
+const applyMapListCache = (rawList: string[]) => {
+  const parsedMapList: string[] = []
+  const parsedUpdateTimeMap: Record<string, string> = {}
+
+  rawList.forEach((item: string) => {
+    const value = String(item || '').trim()
+    if (!value) return
+
+    const atIndex = value.indexOf('@')
+    if (atIndex !== -1) {
+      const mapName = value.substring(0, atIndex)
+      const updateTime = value.substring(atIndex + 1)
+      if (mapName) {
+        parsedMapList.push(mapName)
+        parsedUpdateTimeMap[mapName] = updateTime
+      }
+      return
+    }
+
+    parsedMapList.push(value)
+    parsedUpdateTimeMap[value] = ''
+  })
+
+  mapList.value = parsedMapList
+  mapUpdateTimeMap.value = parsedUpdateTimeMap
+  const keys = getCurrentRobotMapKeys()
+  if (keys) {
+    localStorage.setItem(keys.mapListKey, JSON.stringify(parsedMapList))
+    localStorage.setItem(keys.mapUpdateTimeKey, JSON.stringify(parsedUpdateTimeMap))
+  }
+  localStorage.setItem('cached_map_list', JSON.stringify(parsedMapList))
+  localStorage.setItem('cached_map_update_time_map', JSON.stringify(parsedUpdateTimeMap))
+}
+
 const ensureDefaultMapSelection = () => {
   // 导航进行中由 cmd_status.map_name 驱动，不在这里覆盖
   if (robotStore.cmdStatus?.nav === 1) return
 
   const current = taskExecutionStore.selectedMapName
   if (mapList.value.length === 0) {
-    if (current) taskExecutionStore.setSelectedMapName('')
+    if (current) {
+      taskExecutionStore.setSelectedMapName('')
+      const keys = getCurrentRobotMapKeys()
+      if (keys) {
+        localStorage.removeItem(keys.selectedMapKey)
+      }
+      localStorage.removeItem('selected_map_name')
+    }
     return
   }
 
   if (!current || !mapList.value.includes(current)) {
-    taskExecutionStore.setSelectedMapName(mapList.value[0])
+    selectedMap.value = mapList.value[0]
   }
 }
 
 // 获取地图列表
 const fetchMapList = async () => {
-  const cached = localStorage.getItem('cached_map_list')
-  const cachedTimeMap = localStorage.getItem('cached_map_update_time_map')
+  const keys = getCurrentRobotMapKeys()
+  const cached =
+    (keys ? localStorage.getItem(keys.mapListKey) : null)
+    || localStorage.getItem('cached_map_list')
+  const cachedTimeMap =
+    (keys ? localStorage.getItem(keys.mapUpdateTimeKey) : null)
+    || localStorage.getItem('cached_map_update_time_map')
 
   mapList.value = cached ? JSON.parse(cached) : []
   mapUpdateTimeMap.value = cachedTimeMap ? JSON.parse(cachedTimeMap) : {}
 
-  const cachedMapName = taskExecutionStore.selectedMapName
+  if (mapList.value.length === 0) {
+    const robotId = deviceStore.selectedRobotId
+    if (robotId) {
+      try {
+        const response = await navigationApi.getMapList(robotId)
+        const rawList = Array.isArray(response?.msg?.result) ? response.msg.result : []
+        if (rawList.length > 0) {
+          applyMapListCache(rawList)
+        }
+      } catch (err) {
+        console.error('[地图列表] 获取地图列表失败:', err)
+      }
+    }
+  }
+
+  const cachedMapName =
+    (keys ? localStorage.getItem(keys.selectedMapKey) : null)
+    || taskExecutionStore.selectedMapName
   if (cachedMapName && mapList.value.includes(cachedMapName)) {
     taskExecutionStore.setSelectedMapName(cachedMapName)
+    persistSelectedMapForCurrentRobot(cachedMapName)
   }
   ensureDefaultMapSelection()
 }
@@ -6343,24 +5782,11 @@ watch(() => infraredStreamUrl.value, (newUrl) => {
   })
 })
 
-watch(pointCloudData, () => {
-  schedulePointCloudRender()
-})
-
-// 机器狗位姿更新时重新绘制点云（实时显示位置）
-watch(() => robotStore.pose, () => {
-  if (pointCloudData.value.length > 0) {
-    schedulePointCloudRender()
-  }
-}, { deep: true })
-
-watch(pointCloudCanvas, (canvas) => {
-  if (canvas && pointCloudData.value.length > 0) {
-    schedulePointCloudRender()
-  }
-})
-
 onMounted(async () => {
+  window.addEventListener('robot-camera-ready', handleRobotCameraReady)
+  window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
+  window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+
   // 初始化警报声（使用Web Audio API生成）
   
   // WebSocket 在 App.vue 全局启动，此处无需再轮询机器人状态
@@ -6376,12 +5802,8 @@ onMounted(async () => {
 
   // 航线任务进度数据现在由全局store管理，无需本地加载
   
-  // 如果机器人已就绪，初始化视频和点云
-  // 否则等待 watch(selectedRobot) 触发
+  // 视频初始化统一由 robot-camera-ready / onActivated 处理，避免重复起流
   if (deviceStore.selectedRobot) {
-    await initCameraStreams()
-    initVideoPlayer()
-    initInfraredVideo()
     await refreshPointCloud()
   }
   
@@ -6396,19 +5818,13 @@ onMounted(async () => {
 
   // 添加全局点击事件监听器，用于点击空白处关闭菜单
   document.addEventListener('click', handleGlobalClick)
-  window.addEventListener('keydown', handlePointCloudKeydown)
 
   // 监听机器人切换事件，切换后刷新下拉列表数据
-  window.addEventListener('robot-camera-ready', handleRobotCameraReady)
-  window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
-  window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
-
   window.addEventListener('resize', () => {
     alarmTrendChart?.resize()
     taskPieChart1?.resize()
     taskPieChart2?.resize()
     lineChart?.resize()
-    drawPointCloud()
   })
 
   // 初始化地图
@@ -6538,11 +5954,9 @@ const handleRobotContextRefreshed = async (event: Event) => {
 onUnmounted(() => {
   // 移除全局事件监听
   document.removeEventListener('click', handleGlobalClick)
-  window.removeEventListener('keydown', handlePointCloudKeydown)
   window.removeEventListener('robot-camera-ready', handleRobotCameraReady)
   window.removeEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
-  stopPointCloudDragging()
 
   // robotInfoTimer 已废弃，无需清理
 
@@ -7405,11 +6819,6 @@ watch(() => deviceStore.selectedRobot, async (newRobot, oldRobot) => {
     await fetchPointTaskList()
     await fetchMultiTaskList()
     
-    // 初始化视频流（需要机器人信息）
-    await initCameraStreams()
-    initVideoPlayer()
-    initInfraredVideo()
-    
     // 如果已经有选中的地图，触发刷新
     if (selectedMap.value) {
       await nextTick()
@@ -7422,16 +6831,12 @@ watch(() => deviceStore.selectedRobot, async (newRobot, oldRobot) => {
 
 onMounted(async () => {
   // 首次挂载时：如果 robot 已就绪（刷新页面直接进来的情况），加载列表并初始化
-  // 正常登录流程由 watch(selectedRobot) 触发，此处兜底
+  // 视频初始化由 robot-camera-ready 事件处理，此处只做列表与点云兜底
   if (deviceStore.selectedRobot) {
     if (mapList.value.length === 0) await fetchMapList()
     if (trackList.value.length === 0) await fetchTrackList()
     if (pointTaskList.value.length === 0) await fetchPointTaskList()
     if (multiTaskList.value.length === 0) await fetchMultiTaskList()
-
-    await initCameraStreams()
-    initVideoPlayer()
-    initInfraredVideo()
 
     if (selectedMap.value) {
       await nextTick()
@@ -7445,6 +6850,10 @@ onMounted(async () => {
 // 从其他页面切回首页时（keep-alive 缓存，onMounted 不再重复执行）
 onActivated(async () => {
   isHomePageActive.value = true
+  if (!hasHomeActivatedOnce) {
+    hasHomeActivatedOnce = true
+    return
+  }
   if (deviceStore.selectedRobot) {
     // 重新拉取循迹列表，确保数据最新（接口失败时自动回退到缓存）
     await fetchTrackList()

@@ -1,6 +1,5 @@
 ﻿<template>
   <div class="drone-control-main">
-    <!-- 渚ц竟鏍忚彍鍗?-->
     <aside class="sidebar-menu">
       <div class="sidebar-tabs">
         <div
@@ -15,20 +14,16 @@
         </div>
       </div>
     </aside>
-    <!-- 涓讳綋鍐呭鍖?-->
     <main class="main-content">
       <div class="main-flex">
         <section class="right-panel">
-          <!-- 鏍囬鍖?-->
           <div class="mission-top-card card">
             <div class="mission-top-header mission-top-header-left">
               <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
               <span class="mission-top-title">循迹记录</span>
             </div>
           </div>
-          <!-- 鍒楄〃鍖?-->
           <div class="mission-content-wrapper">
-            <!-- 宸ュ叿鏍忕涓€琛?-->
             <div class="mission-toolbar track-toolbar-row">
               <div class="track-toolbar-group">
                 <span class="mission-toolbar-label">地图名称：</span>
@@ -71,7 +66,6 @@
                 <button class="mission-btn mission-btn-export" v-permission-click-dialog="'log-tracklog-export'" @click="handleExport">导出</button>
               </div>
             </div>
-            <!-- 宸ュ叿鏍忕浜岃 -->
             <div class="mission-toolbar track-toolbar-row track-toolbar-row-bottom">
               <div class="track-toolbar-group">
                 <span class="mission-toolbar-label">循迹路线：</span>
@@ -89,7 +83,6 @@
               </div>
             </div>
 
-            <!-- 琛ㄦ牸 -->
             <div class="file-table file-table-adaptive trc-table">
               <div class="file-table-header">
                 <div class="file-table-cell trc-id">id</div>
@@ -159,7 +152,6 @@
               </div>
             </div>
 
-            <!-- 鍒嗛〉鏍?-->
             <div class="track-pagination">
               <span class="track-pagination-info">共 {{ pagination.total }} 条</span>
               <div class="track-pagination-center">
@@ -208,7 +200,6 @@
       </div>
     </main>
 
-    <!-- 鍥剧墖棰勮寮圭獥 -->
     <Teleport to="body">
       <div v-if="imgModal.visible" class="trc-img-mask" @click="closeImagePreview">
         <div class="trc-img-modal" @click.stop>
@@ -258,7 +249,6 @@ const getDxrBaseUrl = () => {
   return ip ? `http://${ip}:81` : ''
 }
 
-// ---- 渚ц竟鏍?----
 const sidebarTabs = [
   { key: 'track-record', label: '循迹记录', icon: trackRecordIcon, path: '/dashboard/alarm-log', permission: 'log-tracklog-show' }
 ]
@@ -278,10 +268,9 @@ const handleTabClick = (tab: { path: string; permission?: string }) => {
   if (route.path !== tab.path) router.push(tab.path)
 }
 
-// ---- 鍦板浘鍒楄〃锛堜粠 localStorage 缂撳瓨璇诲彇锛?----
 const mapListTrigger = ref(0)
 const mapList = computed<string[]>(() => {
-  mapListTrigger.value // 渚濊禆瑙﹀彂鍣紝鍒囨崲鏈哄櫒浜哄悗寮哄埗閲嶈绠?
+  mapListTrigger.value
   try {
     const cached = localStorage.getItem('cached_map_list')
     return cached ? JSON.parse(cached) : []
@@ -290,12 +279,10 @@ const mapList = computed<string[]>(() => {
   }
 })
 
-// ---- 璺嚎鍒楄〃 ----
 const routeList = ref<string[]>([])
 const taskGroupList = ref<string[]>([])
 const contentList = ref<string[]>([])
 
-// 鏍规嵁閫変腑鍦板浘鍚嶇О杩囨护璺嚎锛堣矾绾垮悕鏍煎紡锛歿鍦板浘鍚峿_{璺嚎鍚峿锛?
 const filteredRouteList = computed(() => {
   if (!filterMapName.value) return routeList.value
   return routeList.value.filter(r => r.startsWith(filterMapName.value + '_'))
@@ -318,7 +305,6 @@ const loadFilterOptions = async () => {
   }
 }
 
-// ---- 绛涢€夋潯浠?----
 const filterMapName = ref('')
 const filterContent = ref('')
 const filterTrackRoute = ref('')
@@ -330,23 +316,19 @@ const endTimeInput = ref<HTMLInputElement | null>(null)
 const openStartTimePicker = () => { startTimeInput.value?.showPicker?.(); startTimeInput.value?.focus() }
 const openEndTimePicker = () => { endTimeInput.value?.showPicker?.(); endTimeInput.value?.focus() }
 
-// 璺嚎鍙樺寲鏃堕噸缃换鍔＄粍閫夋嫨
 watch(filterTrackRoute, () => {
   filterTaskGroup.value = ''
 })
 
-// 鍦板浘鍙樺寲鏃堕噸缃矾绾垮拰浠诲姟缁?
 watch(filterMapName, () => {
   filterTrackRoute.value = ''
   filterTaskGroup.value = ''
 })
 
-// ---- 鍒楄〃鏁版嵁 ----
 const recordList = ref<any[]>([])
 const loading = ref(false)
 const errorMsg = ref('')
 
-// ---- 鍒嗛〉鐘舵€?----
 const pagination = ref({
   total: 0,
   perPage: 9,
@@ -355,7 +337,6 @@ const pagination = ref({
 })
 const jumpPage = ref(1)
 
-// 鐢熸垚椤电爜鍒楄〃锛堟渶澶氭樉绀?涓級
 const pageList = computed(() => {
   const { currentPage, lastPage } = pagination.value
   const maxShow = 5
@@ -367,7 +348,6 @@ const pageList = computed(() => {
   return pages
 })
 
-// ---- 鑾峰彇鍒楄〃 ----
 const fetchRecords = async (page = 1) => {
   loading.value = true
   errorMsg.value = ''
@@ -406,7 +386,6 @@ const fetchRecords = async (page = 1) => {
   }
 }
 
-// ---- 鍒嗛〉鎿嶄綔 ----
 const goPage = (page: number) => {
   if (page < 1 || page > pagination.value.lastPage) return
   fetchRecords(page)
@@ -416,7 +395,6 @@ const handleJump = () => {
   if (!isNaN(p) && p >= 1 && p <= pagination.value.lastPage) goPage(p)
 }
 
-// ---- 宸ュ叿鏍忔搷浣?----
 const handleSearch = () => fetchRecords(1)
 const handleReset = () => {
   filterMapName.value = ''
@@ -430,7 +408,6 @@ const handleReset = () => {
 const handleDelete = () => console.log('鍒犻櫎')
 const handleExport = () => console.log('瀵煎嚭')
 
-// ---- 杈呭姪鍑芥暟 ----
 const formatTime = (timestamp: number | null): string => {
   if (!timestamp) return '-'
   const ms = timestamp > 1e10 ? timestamp : timestamp * 1000
@@ -473,7 +450,6 @@ const getOutMessage = (row: any): Record<string, any> => {
 const getImage = (row: any): string | null => {
   const img = getOutMessage(row)?.out_image
   if (!img) return null
-  // 宸叉槸瀹屾暣 URL锛氶€氳繃 /robot81/ 浠ｇ悊杞彂锛堝幓鎺夊墠缂€鍚庣洿鎺ヨ浆鍒?robot_ip:81/path锛?
   if (img.startsWith('http://') || img.startsWith('https://')) {
     try {
       const url = new URL(img)
@@ -484,19 +460,16 @@ const getImage = (row: any): string | null => {
       return img
     }
   }
-  // 鐩稿璺緞
   const ip = deviceStore.selectedRobot?.ip_address
   if (!ip) return null
   const path = img.startsWith('/') ? img : '/' + img
   return `/robot81${path}?robot_ip=${ip}`
 }
-// 缂╃暐鍥?URL锛氬皢 .jpg/.jpeg/.png 鏇挎崲涓?_thumb.jpg
 const getThumbImage = (row: any): string | null => {
   const original = getImage(row)
   if (!original) return null
   return original.replace(/\.(jpg|jpeg|png)(\?|$)/i, '_thumb.jpg$2')
 }
-// ---- 鍥剧墖棰勮 ----
 const imgModal = ref({ visible: false, url: '', recordId: 0, error: false })
 const openImagePreview = (url: string, id: number) => {
   imgModal.value = { visible: true, url, recordId: id, error: false }
@@ -525,12 +498,10 @@ onUnmounted(() => {
 <style scoped>
 @import './mission-common.css';
 
-/* 寰抗璁板綍鏍囬宸﹀榻?*/
 .mission-top-header.mission-top-header-left {
   justify-content: flex-start !important;
 }
 
-/* 宸ュ叿鏍忓竷灞€浼樺寲 */
 .track-toolbar-row {
   flex-wrap: nowrap;
   column-gap: 12px;
@@ -690,7 +661,6 @@ onUnmounted(() => {
   border: 1.5px solid #67d5fd;
   box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
 }
-/* 闅愯棌鎵€鏈夋祻瑙堝櫒鐨勯粯璁や笅鎷夌澶?*/
 .mission-select::-ms-expand {
   display: none;
 }
@@ -700,7 +670,6 @@ onUnmounted(() => {
 .mission-select::-moz-select-placeholder {
   display: none;
 }
-/* 閽堝涓嶅悓娴忚鍣ㄧ殑棰濆闅愯棌瑙勫垯 */
 .mission-select::-webkit-inner-spin-button,
 .mission-select::-webkit-outer-spin-button {
   -webkit-appearance: none;
@@ -709,28 +678,24 @@ onUnmounted(() => {
 .mission-select::-webkit-calendar-picker-indicator {
   display: none;
 }
-/* 纭繚鍦⊿afari涓篃涓嶆樉绀洪粯璁ょ澶?*/
 .mission-select {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
-/* 瑕嗙洊mission-common.css涓殑::after浼厓绱狅紝绉婚櫎閲嶅绠ご */
 .custom-select-wrapper::after {
   display: none !important;
 }
-/* 淇濊瘉涓嬫媺鑿滃崟锛坥ption锛夎儗鏅壊涓嶅彉 */
 .mission-select option {
   background: #172233;
   color: #fff;
 }
-/* 绛涢€夐」甯冨眬 */
 .filter-item {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  margin-right: 24px; /* 澧炲姞鍙充晶闂磋窛锛屼粠16px鏀逛负24px */
+  margin-right: 24px;
 }
 .filter-label {
   color: #b8c7d9;
@@ -739,7 +704,6 @@ onUnmounted(() => {
   white-space: nowrap;
   flex-shrink: 0;
 }
-/* 鎸夐挳鏍峰紡浼樺寲 */
 .mission-btn {
   min-width: 72px;
   max-width: 120px;
@@ -747,13 +711,11 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
-  margin-left: 12px; /* 澧炲姞宸︿晶闂磋窛锛屼粠8px鏀逛负12px */
+  margin-left: 12px;
 }
-/* 璋冩暣mission-top-row鐨勯棿璺?*/
 .mission-top-row {
-  gap: 24px; /* 澧炲姞鏁翠綋闂磋窛锛屼粠20px鏀逛负24px */
+  gap: 24px;
 }
-/* 鍏朵綑 alarm-xxx 鏍峰紡宸茬Щ闄わ紝缁熶竴澶嶇敤 mission-common.css */
 .mission-th:last-child,
 .mission-td:last-child {
   min-width: 220px;
@@ -763,7 +725,6 @@ onUnmounted(() => {
   padding-right: 16px;
 }
 
-/* 绛夌骇寰界珷鏍峰紡 */
 .level-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -787,7 +748,6 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 107, 107, 0.35);
 }
 
-/* 閲嶇疆鎸夐挳鏍峰紡 */
 .mission-btn-reset {
   background: #232b3a;
   color: #fff;
@@ -798,13 +758,11 @@ onUnmounted(() => {
   color: #fff;
 }
 
-/* ---- 寰抗璁板綍琛ㄦ牸鍒楀锛氳鐩?mission-common.css 涓殑 grid 甯冨眬锛屾敼涓?flex 鍧囩瓑鍒嗗竷 ---- */
 .track-records-table-wrap {
   overflow-x: auto;
   min-width: 0;
   width: 100%;
 }
-/* 寮哄埗瑕嗙洊 mission-common.css 涓?.file-table-header / .file-table-row 鐨?grid */
 .trc-table .file-table-header,
 .trc-table .file-table-row {
   display: flex !important;
@@ -814,19 +772,16 @@ onUnmounted(() => {
   min-width: 900px;
   box-sizing: border-box;
 }
-/* body 鍏佽妯悜婊氬姩锛岀旱鍚戠敱 file-table-adaptive 鎺у埗 */
 .trc-table .file-table-body {
   overflow-x: hidden;
   overflow-y: auto;
 }
-/* 瑕嗙洊涓?9 琛岃嚜閫傚簲锛氭瘡琛屽崰琛ㄤ綋 1/9 楂樺害 */
 .trc-table.file-table-adaptive .file-table-row {
   flex: 0 0 calc(100% / 9) !important;
   height: auto;
   min-height: 36px;
 }
 
-/* id鍒楀浐瀹氱獎瀹斤紝鍏朵綑鍒楀潎绛?flex:1 */
 .trc-id        { flex: 0 0 55px;  min-width: 55px;  text-align: center; }
 .trc-time      { flex: 0.7 1 0;   min-width: 110px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
 .trc-map       { flex: 1 1 0;     min-width: 80px;  text-align: center; }
@@ -837,12 +792,10 @@ onUnmounted(() => {
 .trc-result    { flex: 0.8 1 0;   min-width: 70px;  text-align: center; }
 .trc-desc      { flex: 2 1 0;     min-width: 100px; text-align: center; }
 .trc-pic       { flex: 0 0 80px;  min-width: 80px;  padding: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; overflow: visible; }
-/* 鏁版嵁琛岀殑鍥剧墖鍒楋細灞呬腑瀵归綈 */
 .file-table-row .trc-pic {
   justify-content: center !important;
   padding: 0 !important;
 }
-/* 鍥剧墖鍒楃缉鐣ュ浘 */
 .trc-thumb-img {
   max-width: 48px;
   max-height: 34px;
@@ -859,8 +812,6 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(103, 213, 253, 0.3);
 }
 
-/* ---- 琛ㄦ牸鍗曞厓鏍煎唴瀹规牱寮?---- */
-/* 鏃堕棿鍒嗚壊 */
 .trc-date-part {
   color: #7fa8c2;
   font-size: 11px;
@@ -874,12 +825,10 @@ onUnmounted(() => {
   display: block;
   line-height: 1.4;
 }
-/* 鍦板浘鍚?*/
 .trc-map-text {
   color: #9ec8e0;
   font-size: 12px;
 }
-/* 浠诲姟琛ㄥ弻鏍囩 */
 .trc-task-inner {
   display: flex;
   flex-direction: column;
@@ -915,7 +864,6 @@ onUnmounted(() => {
   font-size: 11px;
   line-height: 1.5;
 }
-/* 浠诲姟鐐瑰窘绔?*/
 .trc-point-tag {
   display: inline-block;
   background: rgba(250, 173, 20, 0.1);
@@ -929,14 +877,12 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 鍧愭爣鍊?*/
 .trc-coord-val {
   font-family: 'Consolas', 'Courier New', monospace;
   color: #8cd6a8;
   font-size: 12px;
   letter-spacing: 0.2px;
 }
-/* 璇嗗埆椤圭洰 */
 .trc-item-tag {
   display: inline-block;
   color: #9ec3f0;
@@ -950,7 +896,6 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 璇嗗埆缁撴灉寰界珷 */
 .trc-result-badge {
   display: inline-block;
   background: rgba(255, 143, 100, 0.12);
@@ -964,12 +909,10 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 绌哄€煎崰浣?*/
 .trc-empty {
   color: rgba(255,255,255,0.2);
 }
 
-/* 绛涢€夎緭鍏ユ */
 .track-filter-input {
   height: 32px;
   width: 160px;
@@ -989,7 +932,6 @@ onUnmounted(() => {
 .track-filter-input::placeholder {
   color: rgba(255,255,255,0.35);
 }
-/* select 涓撳睘锛氶殣钘忓師鐢熺澶达紝娣诲姞鑷畾涔夌澶?*/
 select.track-filter-input {
   appearance: none;
   -webkit-appearance: none;
@@ -1012,7 +954,6 @@ select.track-filter-input:hover {
   background-position: right 10px center;
 }
 
-/* ---- 鍒嗛〉鏍?---- */
 .track-pagination {
   display: flex;
   align-items: center;
@@ -1110,7 +1051,6 @@ select.track-filter-input:hover {
 .track-pg-jump-input::-webkit-inner-spin-button,
 .track-pg-jump-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-/* ---- 鍥剧墖棰勮寮圭獥 ---- */
 .trc-img-mask {
   position: fixed;
   inset: 0;

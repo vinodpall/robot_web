@@ -26,6 +26,12 @@ interface RefreshRobotCacheOptions {
 
 const isAbortError = (e: any) => e?.name === 'AbortError' || e?.message === 'canceled'
 
+export const getRobotMapCacheKeys = (robotId: string) => ({
+  mapListKey: `cached_map_list_${robotId}`,
+  mapUpdateTimeKey: `cached_map_update_time_map_${robotId}`,
+  selectedMapKey: `selected_map_name_${robotId}`,
+})
+
 // 第一阶段：仅获取摄像头列表并写入缓存，供主界面尽快启动视频流
 export const refreshCameraCache = async (robotId: string, signal?: AbortSignal) => {
   if (!robotId) return
@@ -68,21 +74,30 @@ export const refreshMapCache = async (
       }
     })
 
+    const { mapListKey, mapUpdateTimeKey, selectedMapKey } = getRobotMapCacheKeys(robotId)
+    localStorage.setItem(mapListKey, JSON.stringify(mapList))
+    localStorage.setItem(mapUpdateTimeKey, JSON.stringify(mapUpdateTimeMap))
     localStorage.setItem('cached_map_list', JSON.stringify(mapList))
     localStorage.setItem('cached_map_update_time_map', JSON.stringify(mapUpdateTimeMap))
 
-    const currentSelectedMap = localStorage.getItem('selected_map_name') || ''
+    const currentSelectedMap =
+      localStorage.getItem(selectedMapKey)
+      || localStorage.getItem('selected_map_name')
+      || ''
     const isCurrentMapValid = currentSelectedMap && mapList.includes(currentSelectedMap)
     // nav_confirmed_map 由 syncMapFromNavigation 写入，表示 WebSocket 已确认的地图，优先级最高
     const navConfirmedMap = localStorage.getItem('nav_confirmed_map') || ''
 
     if (mapList.length > 0) {
       if (navConfirmedMap && mapList.includes(navConfirmedMap)) {
+        localStorage.setItem(selectedMapKey, navConfirmedMap)
         localStorage.setItem('selected_map_name', navConfirmedMap)
       } else if (options.forceResetMapSelection || !isCurrentMapValid) {
+        localStorage.setItem(selectedMapKey, mapList[0])
         localStorage.setItem('selected_map_name', mapList[0])
       }
     } else {
+      localStorage.removeItem(selectedMapKey)
       localStorage.removeItem('selected_map_name')
     }
   } catch (mapErr) {

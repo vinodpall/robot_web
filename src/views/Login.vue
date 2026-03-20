@@ -84,7 +84,6 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useAuth } from '../composables/useApi'
 import { initUserPermissions, initAllPermissions } from '../utils/initPermissions'
-import { debugPermissions } from '../utils/permissionDebug'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -176,7 +175,6 @@ const handleLogin = async () => {
       try {
         await initAllPermissions()
         await initUserPermissions()
-        debugPermissions()
       } catch (err) {
         console.error('权限初始化失败:', err)
       }

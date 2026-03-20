@@ -29,7 +29,6 @@
       </nav>
       
       <div class="header-right">
-        <!-- 鏈哄満鍚嶇О涓嬫媺妗?-->
         <div class="el-select">
           <div class="el-select__wrapper" 
                :class="{ 'is-active': isSelectActive }" 
@@ -49,7 +48,6 @@
             </div>
           </div>
           
-          <!-- 涓嬫媺閫夐」 -->
           <div class="el-select__dropdown" v-show="isSelectActive" @click.stop>
             <div class="el-select__dropdown-list">
               <div 
@@ -66,21 +64,18 @@
           </div>
         </div>
 
-        <!-- 鎬ュ仠鎸夐挳 -->
         <span class="stop-btn" :class="{ 'is-active': isStopActive }" @click="toggleStop">
           <div class="stop-content">
             <span>{{ isStopActive ? '启动' : '急停' }}</span>
           </div>
         </span>
 
-        <!-- 鐢ㄦ埛淇℃伅 -->
         <div class="user-info" @click="toggleUserMenu">
           <img src="/src/assets/source_data/avatar.jpg" alt="avatar" class="avatar" />
           <div class="right-sel">
             <span class="name">{{ user?.username || 'admin' }}</span>
             <span class="triangle" :class="{ 'is-active': isUserMenuVisible }"></span>
           </div>
-          <!-- 涓嬫媺鑿滃崟 -->
           <div class="user-menu" v-show="isUserMenuVisible">
             <div class="menu-item" @click="handleChangePassword">
               <span>修改密码</span>
@@ -101,7 +96,6 @@
       </router-view>
     </main>
 
-    <!-- 鏈哄櫒浜哄垏鎹腑閬僵 -->
     <transition name="robot-switching-fade">
       <div v-if="robotSwitching" class="robot-switching-overlay">
         <div class="robot-switching-box">
@@ -121,14 +115,12 @@ import { useDeviceStore } from '../stores/device'
 import { robotApi, userApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { refreshRobotRelatedCache, refreshCameraCache, refreshMapCache } from '../utils/robotBootstrap'
-// 瀵煎叆鑳屾櫙鍥剧墖
 import titleBg from '/src/assets/source_data/bg_data/title.png'
 
 const router = useRouter()
 const userStore = useUserStore()
 const deviceStore = useDeviceStore()
 
-// 璁惧鐘舵€佺鐞?
 const { fetchDeviceStatus, deviceStatus } = useDeviceStatus()
 
 const user = computed(() => userStore.user)
@@ -142,7 +134,6 @@ const selectedRobot = computed(() => {
   return robots.value.find(robot => robot.robot_id === selectedRobotId.value)
 })
 
-// 根据 robot_id 拉取详情，补全 /users/{id}/robots 返回中缺失字段（如 ip_address）
 const enrichSelectedRobotDetail = async (robotId: string) => {
   if (!robotId) return
   try {
@@ -161,23 +152,16 @@ const enrichSelectedRobotDetail = async (robotId: string) => {
   }
 }
 
-// 鍒ゆ柇褰撳墠閫変腑鐨勬満鍣ㄤ汉鏄惁鍦ㄧ嚎
 const isSelectedRobotOnline = computed(() => {
-  // 1. 浼樺厛妫€鏌ラ€変腑鏈哄櫒浜虹殑闈欐€佺姸鎬?(鍏煎澶у皬鍐?
   if (selectedRobot.value) {
     const status = selectedRobot.value.status?.toLowerCase()
     if (status === 'online') return true
   }
   
-  // 2. 濡傛灉闈欐€佺姸鎬佷笉鍦ㄧ嚎锛屾鏌ュ疄鏃惰澶囩姸鎬?(浠呴拡瀵瑰綋鍓嶉€変腑鐨勬満鍣ㄤ汉)
-  // 娉ㄦ剰锛歞eviceStatus 鏄綋鍓嶉€変腑鏈哄櫒浜虹殑瀹炴椂鐘舵€?
   return deviceStatus.value?.online || false
 })
 
-// 鍒ゆ柇鍒楄〃涓殑鏈哄櫒浜烘槸鍚﹀湪绾?
 const isRobotItemOnline = (robot: any) => {
-  // 鍒楄〃涓殑鏈哄櫒浜轰富瑕佷緷璧栧叾闈欐€佺姸鎬佸瓧娈?
-  // 濡傛灉鏄綋鍓嶉€変腑鐨勬満鍣ㄤ汉锛屼篃鍙互鍙傝€冨疄鏃剁姸鎬?鍙€夛紝涓轰簡淇濇寔鍒楄〃鍜屽ご閮ㄤ竴鑷达紝杩欓噷绠€鍗曞鐞?
   if (robot.robot_id === selectedRobotId.value) {
     return isSelectedRobotOnline.value
   }
@@ -200,7 +184,6 @@ const selectRobot = (id: string) => {
   isSelectActive.value = false
 }
 
-// 鐐瑰嚮澶栭儴鍏抽棴涓嬫媺鍒楄〃
 const closeSelect = (event: Event) => {
   const target = event.target as Element
   if (!target.closest('.el-select')) {
@@ -208,7 +191,6 @@ const closeSelect = (event: Event) => {
   }
 }
 
-// 鐩戝惉鐐瑰嚮浜嬩欢
 document.addEventListener('click', closeSelect)
 
 const isUserMenuVisible = ref(false)
@@ -219,31 +201,25 @@ const toggleUserMenu = (e: Event) => {
 }
 
 const handleChangePassword = () => {
-  // 澶勭悊淇敼瀵嗙爜閫昏緫
   isUserMenuVisible.value = false
 }
 
 const handleLogout = () => {
-  // 澶勭悊閫€鍑虹櫥褰曢€昏緫
   userStore.logout()
   router.push('/login')
   isUserMenuVisible.value = false
 }
 
-// 鐐瑰嚮鍏朵粬鍦版柟鍏抽棴鐢ㄦ埛鑿滃崟
 const closeUserMenu = () => {
   isUserMenuVisible.value = false
 }
 
-// 鐩戝惉鐐瑰嚮浜嬩欢
 document.addEventListener('click', closeUserMenu)
 
-// 鎬ュ仠鐘舵€佽绠?
 const isStopActive = computed(() => {
   return deviceStatus.value?.emergency_stop_state || false
 })
 
-// 鎬ュ仠鎸夐挳鐐瑰嚮澶勭悊
 const toggleStop = async () => {
   if (!selectedRobotId.value) {
     console.warn('No robot selected')
@@ -251,19 +227,15 @@ const toggleStop = async () => {
   }
 
   try {
-    // 鎬ュ仠鎺ュ彛宸茬Щ闄わ紙鏃х郴缁熷凡鍋滅敤锛?
   } catch (error) {
     console.error('鎬ュ仠鎿嶄綔澶辫触:', error)
   }
 }
 
-// 姣忔鍒囨崲鏈哄櫒浜烘椂閫掑锛岀敤浜庝涪寮冨凡杩囨湡鐨勫紓姝ュ洖璋?
 let switchToken = 0
-// 鐢ㄤ簬鍙栨秷灞氬皬璇锋眰鐨?AbortController
 let currentAbortController: AbortController | null = null
 
 const refreshRobotContext = async (robotId: string) => {
-  // 涓涓婁竴涓満鍣ㄤ汉鐨勬墍鏈夋鍦ㄩ琛岀殑璇锋眰
   if (currentAbortController) currentAbortController.abort()
   currentAbortController = new AbortController()
   const { signal } = currentAbortController
@@ -271,17 +243,15 @@ const refreshRobotContext = async (robotId: string) => {
   const myToken = ++switchToken
 
   await fetchDeviceStatus(robotId)
-  if (switchToken !== myToken) return // 宸插垏鎹㈠埌鍏朵粬鏈哄櫒浜猴紝涓㈠純
+  if (switchToken !== myToken) return
 
-  // 绗竴闃舵锛氫粎鎷夊彇鎽勫儚澶村垪琛紝绔嬪嵆閫氱煡涓荤晫闈㈠惎鍔ㄨ棰?
   await refreshCameraCache(robotId, signal)
-  if (switchToken !== myToken) return // 涓㈠純
+  if (switchToken !== myToken) return
 
   window.dispatchEvent(new CustomEvent('robot-camera-ready', {
     detail: { robotId, timestamp: Date.now() }
   }))
 
-  // 绗簩闃舵锛氬悗鍙板姞杞藉叾浣欐暟鎹紙鍦板浘銆佸惊杩广€佷换鍔＄粍绛夛級锛屽畬鎴愬悗鍐嶉€氱煡涓嬫媺妗嗗埛鏂?
   await refreshMapCache(robotId, { forceResetMapSelection: true }, signal)
   if (switchToken !== myToken) return
   window.dispatchEvent(new CustomEvent('robot-map-list-ready', {
@@ -289,14 +259,13 @@ const refreshRobotContext = async (robotId: string) => {
   }))
 
   refreshRobotRelatedCache(robotId, { forceResetMapSelection: true, skipMapRefresh: true }, signal).then(() => {
-    if (switchToken !== myToken) return // 宸茶繃鏈燂紝涓㈠純
+    if (switchToken !== myToken) return
     window.dispatchEvent(new CustomEvent('robot-context-refreshed', {
       detail: { robotId, timestamp: Date.now() }
     }))
   })
 }
 
-// 鐩戝惉閫変腑鐨勬満鍣ㄤ汉鍙樺寲锛屽垏鎹㈠悗寮哄埗閲嶆媺鎺ュ彛
 watch(
   () => deviceStore.selectedRobotId,
   async (newRobotId, oldRobotId) => {
@@ -311,12 +280,9 @@ watch(
   }
 )
 
-// 椤甸潰鍔犺浇鏃舵仮澶嶈澶囧垪琛ㄥ拰鐘舵€?
 onMounted(async () => {
   const hadSelectedRobotBeforeMount = !!deviceStore.selectedRobotId
 
-  // 鑾峰彇鏈哄櫒浜哄垪琛?
-  // 获取机器人列表（优先当前用户绑定）
   try {
     const userId = Number(user.value?.id)
     let robotList: any[] = []
@@ -331,7 +297,6 @@ onMounted(async () => {
       robotList = Array.isArray(res?.items) ? res.items : []
     }
 
-    // /users/{id}/robots 返回通常不含 ip_address，补拉全量机器人信息并按 robot_id 合并
     if (fromUserBinding && robotList.length > 0) {
       const hasMissingIp = robotList.some(robot => !robot?.ip_address)
       if (hasMissingIp) {
@@ -365,8 +330,6 @@ onMounted(async () => {
     console.error('Failed to fetch robot list:', e)
   }
 
-  // 浠呭湪鎸傝浇鍓嶅凡瀛樺湪閫変腑鏈哄櫒浜烘椂涓诲姩鍒锋柊
-  // 鑻ユ寕杞芥椂閫氳繃 setSelectedRobot 閫変腑鐨勬満鍣ㄤ汉锛寃atch 浼氳礋璐ｈЕ鍙戝埛鏂?
   if (hadSelectedRobotBeforeMount && deviceStore.selectedRobotId) {
     await refreshRobotContext(deviceStore.selectedRobotId)
   }
@@ -382,7 +345,6 @@ onMounted(async () => {
   font-display: swap;
 }
 
-/* 鏈哄櫒浜哄垏鎹㈤伄缃?*/
 .robot-switching-overlay {
   position: fixed;
   inset: 0;
@@ -449,7 +411,6 @@ onMounted(async () => {
   background-color: #0a0f1c;
 }
 
-/* 椤堕儴瀵艰埅鏍?*/
 .header {
   width: 100%;
   height: 90px;
@@ -467,7 +428,6 @@ onMounted(async () => {
   gap: clamp(10px, 2vw, 20px);
 }
 
-/* 宸︿晶Logo鍜屾爣棰?*/
 .header-left {
   display: flex;
   align-items: center;
@@ -492,7 +452,7 @@ onMounted(async () => {
 
 .title {
   font-family: 'YouSheBiaoTiHei', 'Microsoft YaHei', '榛戜綋', 'SimHei', sans-serif;
-  font-size: clamp(20px, 2.5vw, 34px); /* 浣跨敤clamp鑷姩缂╂斁 */
+  font-size: clamp(20px, 2.5vw, 34px);
   font-weight: normal;
   letter-spacing: 1px;
   text-align: left;
@@ -509,10 +469,9 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: clamp(200px, 25vw, 400px); /* 浣跨敤clamp鑷姩缂╂斁鏈€澶у搴?*/
+  max-width: clamp(200px, 25vw, 400px);
 }
 
-/* 涓棿瀵艰埅鑿滃崟 */
 .nav-menu {
   display: flex;
   align-items: flex-start;
@@ -526,13 +485,13 @@ onMounted(async () => {
   height: 54px;
   margin-top: 26px;
   border-radius: 0;
-  padding-left: clamp(6vw, 9vw, 14vw); /* 淇濊瘉鍏釜鑿滃崟鍧囧寑鍒嗗竷 */
+  padding-left: clamp(6vw, 9vw, 14vw);
   padding-right: clamp(6vw, 9vw, 14vw);
   min-width: 0;
 }
 
 .nav-item {
-  width: clamp(70px, 6vw, 110px); /* 浣跨敤clamp鑷姩缂╂斁瀹藉害 */
+  width: clamp(70px, 6vw, 110px);
   height: 54px;
   background: url('/src/assets/source_data/bg_data/title_dark.png') no-repeat;
   background-position: bottom center;
@@ -541,7 +500,7 @@ onMounted(async () => {
   justify-content: center;
   font-family: Source Han Sans CN;
   font-weight: 400;
-  font-size: clamp(14px, 1.2vw, 18px); /* 浣跨敤clamp鑷姩缂╂斁瀛椾綋澶у皬 */
+  font-size: clamp(14px, 1.2vw, 18px);
   color: #9f9f9f;
   font-style: normal;
   text-transform: none;
@@ -564,7 +523,6 @@ onMounted(async () => {
   display: none;
 }
 
-/* 鍙充晶鍔熻兘鍖?*/
 .header-right {
   display: flex;
   align-items: center;
@@ -575,10 +533,9 @@ onMounted(async () => {
   flex-shrink: 0;
   min-width: 0;
   flex: 0 0 auto;
-  width: clamp(250px, 30vw, 350px); /* 澧炲姞瀹藉害鑼冨洿 */
+  width: clamp(250px, 30vw, 350px);
 }
 
-/* 鏈哄満閫夋嫨鍣ㄦ牱寮?*/
 .el-select {
   --el-transition-duration: 0.3s;
   --el-border-radius-base: 4px;
@@ -608,7 +565,7 @@ onMounted(async () => {
   padding: 4px 12px;
   position: absolute;
   right: 0;
-  width: 170px; /* 瑙嗚瀹藉害锛屽悜宸︽孩鍑哄鍣紝涓嶅奖鍝嶅閮ㄥ竷灞€ */
+  width: 170px;
   text-align: left;
   transform: translateZ(0);
   transition: var(--el-transition-duration);
@@ -627,7 +584,7 @@ onMounted(async () => {
   color: #fff;
   font-size: 14px;
   line-height: 24px;
-  white-space: nowrap; /* 闃叉鏂囧瓧鎹㈣ */
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -635,7 +592,7 @@ onMounted(async () => {
 .el-select__placeholder {
   color: #fff;
   margin-right: 20px;
-  white-space: nowrap; /* 闃叉鏂囧瓧鎹㈣ */
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -674,7 +631,6 @@ onMounted(async () => {
   transform: rotate(180deg);
 }
 
-/* 娣诲姞涓€涓縺娲荤姸鎬佺殑绫?*/
 .el-select__wrapper.is-active {
   --el-border-color: rgba(255, 255, 255, 0.6);
   --el-fill-color-blank: rgba(255, 255, 255, 0.2);
@@ -684,7 +640,6 @@ onMounted(async () => {
   transform: rotate(180deg);
 }
 
-/* 涓嬫媺閫夐」鏍峰紡 */
 .el-select__dropdown {
   position: absolute;
   top: 100%;
@@ -729,10 +684,9 @@ onMounted(async () => {
   font-weight: bold;
 }
 
-/* 鎬ュ仠鎸夐挳鏍峰紡 */
 .stop-btn {
-  width: clamp(40px, 4vw, 48px); /* 缂╁皬灏哄 */
-  height: clamp(40px, 4vw, 48px); /* 缂╁皬灏哄 */
+  width: clamp(40px, 4vw, 48px);
+  height: clamp(40px, 4vw, 48px);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -756,7 +710,7 @@ onMounted(async () => {
 }
 
 .stop-content {
-  display: none; /* 闅愯棌鏂囧瓧鍐呭 */
+  display: none;
 }
 
 .stop-icon {
@@ -769,7 +723,6 @@ onMounted(async () => {
   height: 16px;
 }
 
-/* 鐢ㄦ埛淇℃伅鏍峰紡 */
 .user-info {
   display: flex;
   align-items: center;
@@ -789,13 +742,13 @@ onMounted(async () => {
 .right-sel {
   display: flex;
   align-items: center;
-  gap: 6px; /* 鍑忓皯闂磋窛 */
-  min-width: clamp(60px, 8vw, 80px); /* 璋冩暣鏈€灏忓搴?*/
+  gap: 6px;
+  min-width: clamp(60px, 8vw, 80px);
 }
 
 .name {
   color: #fff;
-  font-size: clamp(14px, 1.2vw, 16px); /* 璋冩暣瀛椾綋澶у皬 */
+  font-size: clamp(14px, 1.2vw, 16px);
   font-weight: bold;
   font-family: Source Han Sans CN;
 }
@@ -814,7 +767,6 @@ onMounted(async () => {
   transform: rotate(180deg);
 }
 
-/* 鐢ㄦ埛鑿滃崟鏍峰紡 */
 .user-menu {
   position: absolute;
   top: calc(100% + 8px);
@@ -843,14 +795,12 @@ onMounted(async () => {
   border-bottom: 1px solid #f0f0f0;
 }
 
-/* 涓诲唴瀹瑰尯 */
 .main-content {
   height: calc(100vh - 88px);
   overflow-y: auto;
   background: #f5f5f5;
 }
 
-/* 鍝嶅簲寮忔柇鐐?*/
 @media (max-width: 1400px) {
   .nav-menu {
     gap: clamp(15px, 3vw, 35px);
@@ -947,7 +897,6 @@ onMounted(async () => {
   }
 }
 
-/* 鏂板锛氶珮鍒嗚鲸鐜囧睆骞曚紭鍖?*/
 @media (min-width: 1920px) {
   .nav-menu {
     padding-left: 12vw;
@@ -973,7 +922,6 @@ onMounted(async () => {
   }
 }
 
-/* 鏂板锛氳秴楂樺垎杈ㄧ巼灞忓箷浼樺寲 */
 @media (min-width: 2560px) {
   .nav-menu {
     padding-left: 20vw;
@@ -1003,26 +951,25 @@ onMounted(async () => {
   }
 }
 
-/* 鍛煎惛鐏姸鎬佹寚绀哄櫒 */
 .status-light {
   display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #999; /* 榛樿鏈煡鐏拌壊 */
+  background-color: #999;
   margin-right: 8px;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
   flex-shrink: 0;
 }
 
 .status-light.is-online {
-  background-color: #52c41a; /* 鍦ㄧ嚎缁胯壊 */
+  background-color: #52c41a;
   box-shadow: 0 0 8px #52c41a;
   animation: breathing 2s infinite ease-in-out;
 }
 
 .status-light.is-offline {
-  background-color: #ff4d4f; /* 绂荤嚎绾㈣壊 */
+  background-color: #ff4d4f;
   box-shadow: 0 0 4px #ff4d4f;
 }
 

@@ -39,6 +39,7 @@ let animationFrameId = 0
 const SCREEN_POINT_SIZE = 1
 const ROBOT_ICON_SCALE = 0.5
 const labelSprites: THREE.Sprite[] = []
+const lastFitSceneKey = ref<string>('')
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0)
 const LABEL_TEXTURE_SCALE = Math.min(4, Math.max(2, window.devicePixelRatio || 1))
@@ -497,6 +498,17 @@ const fitCameraToScene = () => {
   controls.update()
 }
 
+const getSceneFitKey = () => {
+  const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
+  return [
+    props.points.length > 0 ? 'ready' : 'empty',
+    centerX.toFixed(6),
+    centerY.toFixed(6),
+    centerZ.toFixed(6),
+    maxRange.toFixed(6),
+  ].join('|')
+}
+
 const centerToRobot = () => {
   const controls = controlsRef.value
   const camera = cameraRef.value
@@ -554,7 +566,11 @@ watch(
   () => [props.points, props.robotMesh, props.normalizationParams] as const,
   () => {
     rebuildSceneContent()
-    fitCameraToScene()
+    const sceneKey = getSceneFitKey()
+    if (sceneKey !== lastFitSceneKey.value) {
+      fitCameraToScene()
+      lastFitSceneKey.value = sceneKey
+    }
   },
   { deep: true }
 )

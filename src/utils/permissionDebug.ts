@@ -1,18 +1,11 @@
 import { usePermissionStore } from '../stores/permission'
 import { useUserStore } from '../stores/user'
 
-// 权限调试工具
+// 权限调试快照，仅在需要时手动调用
 export function debugPermissions() {
   const permissionStore = usePermissionStore()
   const userStore = useUserStore()
-  
-  console.log('=== 权限调试信息 ===')
-  console.log('当前用户:', userStore.user)
-  console.log('用户角色信息:', userStore.user?.roles)
-  console.log('用户权限列表:', permissionStore.userPermissions)
-  console.log('所有权限配置:', permissionStore.allPermissions)
-  
-  // 测试常见权限
+
   const testPermissions = [
     'home.view',
     'drone_control.view',
@@ -22,17 +15,20 @@ export function debugPermissions() {
     'task_records.view',
     'device_management.view'
   ]
-  
-  console.log('=== 权限检查结果 ===')
-  testPermissions.forEach(permission => {
-    const hasPermission = permissionStore.hasPermission(permission)
-    console.log(`${permission}: ${hasPermission ? '✅' : '❌'}`)
-  })
-  
-  console.log('=== 权限调试完成 ===')
+
+  return {
+    user: userStore.user,
+    roles: userStore.user?.roles ?? [],
+    userPermissions: permissionStore.userPermissions,
+    allPermissions: permissionStore.allPermissions,
+    checks: testPermissions.map((permission) => ({
+      permission,
+      allowed: permissionStore.hasPermission(permission)
+    }))
+  }
 }
 
-// 在控制台暴露调试函数
+// 暴露到 window，便于人工排查时手动调用
 if (typeof window !== 'undefined') {
-  (window as any).debugPermissions = debugPermissions
+  ;(window as Window & typeof globalThis & { debugPermissions?: typeof debugPermissions }).debugPermissions = debugPermissions
 }
