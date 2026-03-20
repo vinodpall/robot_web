@@ -124,8 +124,8 @@
           </div>
         </div>
         <div class="simple-modal-footer">
-          <button class="mission-btn mission-btn-secondary" @click="closeCreateDialog">取消</button>
           <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-plantracklist-create'" @click="handleCreateScheduledTask">确定</button>
+          <button class="mission-btn mission-btn-secondary" @click="closeCreateDialog">取消</button>
         </div>
       </div>
     </div>

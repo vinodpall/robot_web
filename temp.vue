@@ -3703,8 +3703,9 @@ const drawMissionRobotSVGIcon = async (ctx: CanvasRenderingContext2D, x: number,
   // 绘制方向指示三角箭头（在圆的外部）
   ctx.save()
   
-  // 根据theta角度旋转
-  ctx.rotate(-theta || 0)
+  // 箭头图形默认朝向 +X（屏幕右侧），补一个固定偏移让尖端与路线方向对齐
+  const robotHeadingOffset = Math.PI / 2
+  ctx.rotate((-theta || 0) + robotHeadingOffset)
   
   // 计算三角形的位置和大小
   const arrowHeight = circleRadius * 1.3 // 箭头高度

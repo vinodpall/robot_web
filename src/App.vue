@@ -28,9 +28,11 @@ import { initUserPermissions, initAllPermissions } from './utils/initPermissions
 import { usePermissionStore } from './stores/permission'
 import { useRobotWebSocket } from './composables/useRobotWebSocket'
 import { useDeviceStore } from './stores/device'
+import { useRobotStore } from './stores/robot'
 
 const taskProgressStore = useTaskProgressStore()
 const deviceStore = useDeviceStore()
+const robotStore = useRobotStore()
 const { connect: connectRobotWs, disconnect: disconnectRobotWs } = useRobotWebSocket()
 
 // 权限管理状态
@@ -84,7 +86,8 @@ watch(() => deviceStore.selectedRobotId, (newId, oldId) => {
     // 断开旧连接，用新的 robot_id 重新连接
     disconnectRobotWs()
     // 等一帧再重连，确保 disconnect 清理完成
-    setTimeout(() => connectRobotWs(newId), 100)
+    robotStore.resetRuntimeState()
+    connectRobotWs(newId)
   }
 })
 

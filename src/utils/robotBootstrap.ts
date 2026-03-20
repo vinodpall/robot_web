@@ -26,10 +26,24 @@ interface RefreshRobotCacheOptions {
 
 const isAbortError = (e: any) => e?.name === 'AbortError' || e?.message === 'canceled'
 
+const shouldSyncLegacyCache = (robotId: string) => {
+  if (typeof window === 'undefined') return false
+  const currentRobotId = localStorage.getItem('selected_robot_id') || ''
+  return !currentRobotId || currentRobotId === robotId
+}
+
 export const getRobotMapCacheKeys = (robotId: string) => ({
   mapListKey: `cached_map_list_${robotId}`,
   mapUpdateTimeKey: `cached_map_update_time_map_${robotId}`,
   selectedMapKey: `selected_map_name_${robotId}`,
+})
+
+export const getRobotContextCacheKeys = (robotId: string) => ({
+  allTrackTaskListKey: `all_track_task_list_${robotId}`,
+  trackListKey: `cached_track_list_${robotId}`,
+  taskpointGroupMapKey: `cached_taskpoint_group_map_${robotId}`,
+  pointTaskListKey: `cached_point_task_list_${robotId}`,
+  multiTaskListKey: `cached_multi_task_list_${robotId}`,
 })
 
 // 第一阶段：仅获取摄像头列表并写入缓存，供主界面尽快启动视频流
@@ -39,7 +53,10 @@ export const refreshCameraCache = async (robotId: string, signal?: AbortSignal) 
     const cameraResponse = await cameraApi.getCameraList(robotId, signal)
     if (signal?.aborted) return
     if (cameraResponse && cameraResponse.data) {
-      localStorage.setItem('camera_list', JSON.stringify(cameraResponse.data))
+      localStorage.setItem(`camera_list_${robotId}`, JSON.stringify(cameraResponse.data))
+      if (shouldSyncLegacyCache(robotId)) {
+        localStorage.setItem('camera_list', JSON.stringify(cameraResponse.data))
+      }
     }
   } catch (cameraErr) {
     if (isAbortError(cameraErr)) return
@@ -77,8 +94,10 @@ export const refreshMapCache = async (
     const { mapListKey, mapUpdateTimeKey, selectedMapKey } = getRobotMapCacheKeys(robotId)
     localStorage.setItem(mapListKey, JSON.stringify(mapList))
     localStorage.setItem(mapUpdateTimeKey, JSON.stringify(mapUpdateTimeMap))
-    localStorage.setItem('cached_map_list', JSON.stringify(mapList))
-    localStorage.setItem('cached_map_update_time_map', JSON.stringify(mapUpdateTimeMap))
+    if (shouldSyncLegacyCache(robotId)) {
+      localStorage.setItem('cached_map_list', JSON.stringify(mapList))
+      localStorage.setItem('cached_map_update_time_map', JSON.stringify(mapUpdateTimeMap))
+    }
 
     const currentSelectedMap =
       localStorage.getItem(selectedMapKey)
@@ -91,14 +110,20 @@ export const refreshMapCache = async (
     if (mapList.length > 0) {
       if (navConfirmedMap && mapList.includes(navConfirmedMap)) {
         localStorage.setItem(selectedMapKey, navConfirmedMap)
-        localStorage.setItem('selected_map_name', navConfirmedMap)
+        if (shouldSyncLegacyCache(robotId)) {
+          localStorage.setItem('selected_map_name', navConfirmedMap)
+        }
       } else if (options.forceResetMapSelection || !isCurrentMapValid) {
         localStorage.setItem(selectedMapKey, mapList[0])
-        localStorage.setItem('selected_map_name', mapList[0])
+        if (shouldSyncLegacyCache(robotId)) {
+          localStorage.setItem('selected_map_name', mapList[0])
+        }
       }
     } else {
       localStorage.removeItem(selectedMapKey)
-      localStorage.removeItem('selected_map_name')
+      if (shouldSyncLegacyCache(robotId)) {
+        localStorage.removeItem('selected_map_name')
+      }
     }
   } catch (mapErr) {
     if (isAbortError(mapErr)) return
@@ -112,6 +137,7 @@ export const refreshRobotRelatedCache = async (
   signal?: AbortSignal
 ) => {
   if (!robotId) return
+  const contextKeys = getRobotContextCacheKeys(robotId)
 
   // 摄像头列表已由 refreshCameraCache 单独处理，此处不重复请求
   if (!options.skipMapRefresh) {
@@ -123,7 +149,10 @@ export const refreshRobotRelatedCache = async (
     const trackTaskResponse = await navigationApi.getAllTrackTaskList(robotId, signal)
     if (signal?.aborted) return
     const allTrackTaskList = extractTrackTaskList(trackTaskResponse)
-    localStorage.setItem('all_track_task_list', JSON.stringify(allTrackTaskList))
+    localStorage.setItem(contextKeys.allTrackTaskListKey, JSON.stringify(allTrackTaskList))
+    if (shouldSyncLegacyCache(robotId)) {
+      localStorage.setItem('all_track_task_list', JSON.stringify(allTrackTaskList))
+    }
   } catch (trackErr) {
     if (isAbortError(trackErr)) return
     console.error('获取循迹任务点列表失败:', trackErr)
@@ -133,29 +162,35 @@ export const refreshRobotRelatedCache = async (
     const trackListResponse = await navigationApi.getTrackList(robotId, signal)
     if (signal?.aborted) return
     const rawTrackList = trackListResponse?.msg?.result || []
-    localStorage.setItem('cached_track_list', JSON.stringify(rawTrackList))
+    localStorage.setItem(contextKeys.trackListKey, JSON.stringify(rawTrackList))
+    if (shouldSyncLegacyCache(robotId)) {
+      localStorage.setItem('cached_track_list', JSON.stringify(rawTrackList))
+    }
   } catch (trackListErr) {
     if (isAbortError(trackListErr)) return
     console.error('获取循迹列表失败:', trackListErr)
   }
 
   try {
-    const cachedTrackListRaw = localStorage.getItem('cached_track_list')
+    const cachedTrackListRaw = localStorage.getItem(contextKeys.trackListKey)
     const currentTrackList = cachedTrackListRaw ? JSON.parse(cachedTrackListRaw) : []
     if (!Array.isArray(currentTrackList) || currentTrackList.length === 0) {
-      const cachedAllTaskListRaw = localStorage.getItem('all_track_task_list')
+      const cachedAllTaskListRaw = localStorage.getItem(contextKeys.allTrackTaskListKey)
       const allTaskList = cachedAllTaskListRaw ? extractTrackTaskList(JSON.parse(cachedAllTaskListRaw)) : []
       const derivedTracks = Array.from(
         new Set(allTaskList.map((task: any) => String(task.track_name || '').trim()).filter(Boolean))
       )
-      localStorage.setItem('cached_track_list', JSON.stringify(derivedTracks))
+      localStorage.setItem(contextKeys.trackListKey, JSON.stringify(derivedTracks))
+      if (shouldSyncLegacyCache(robotId)) {
+        localStorage.setItem('cached_track_list', JSON.stringify(derivedTracks))
+      }
     }
   } catch (deriveTrackErr) {
     console.error('从任务点缓存推导循迹列表失败:', deriveTrackErr)
   }
 
   try {
-    const cachedTrackListRaw = localStorage.getItem('cached_track_list')
+    const cachedTrackListRaw = localStorage.getItem(contextKeys.trackListKey)
     const trackList: string[] = cachedTrackListRaw ? JSON.parse(cachedTrackListRaw) : []
     const trackSet = Array.from(new Set(trackList.map(item => normalizeTrackName(item)).filter(Boolean)))
     const taskGroupMap: Record<string, string[]> = {}
@@ -174,7 +209,7 @@ export const refreshRobotRelatedCache = async (
       }
     }
 
-    const cachedAllTaskListRaw = localStorage.getItem('all_track_task_list')
+    const cachedAllTaskListRaw = localStorage.getItem(contextKeys.allTrackTaskListKey)
     if (cachedAllTaskListRaw) {
       const allTaskList = extractTrackTaskList(JSON.parse(cachedAllTaskListRaw))
       allTaskList.forEach((task: any) => {
@@ -188,7 +223,10 @@ export const refreshRobotRelatedCache = async (
       })
     }
 
-    localStorage.setItem('cached_taskpoint_group_map', JSON.stringify(taskGroupMap))
+    localStorage.setItem(contextKeys.taskpointGroupMapKey, JSON.stringify(taskGroupMap))
+    if (shouldSyncLegacyCache(robotId)) {
+      localStorage.setItem('cached_taskpoint_group_map', JSON.stringify(taskGroupMap))
+    }
   } catch (taskGroupErr) {
     if (isAbortError(taskGroupErr)) return
     console.error('构建任务组缓存失败:', taskGroupErr)
@@ -198,7 +236,10 @@ export const refreshRobotRelatedCache = async (
     const pointTaskResponse = await navigationApi.getPointTaskList(robotId, signal)
     if (signal?.aborted) return
     const pointTaskList = Array.isArray(pointTaskResponse?.data) ? pointTaskResponse.data : []
-    localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList))
+    localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList))
+    if (shouldSyncLegacyCache(robotId)) {
+      localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList))
+    }
   } catch (pointTaskErr) {
     if (isAbortError(pointTaskErr)) return
     console.error('获取发布点任务列表失败:', pointTaskErr)
@@ -208,7 +249,10 @@ export const refreshRobotRelatedCache = async (
     const multiTaskResponse = await navigationApi.getMultiTaskList(robotId, signal)
     if (signal?.aborted) return
     const multiTaskList = Array.isArray(multiTaskResponse?.msg) ? multiTaskResponse.msg : []
-    localStorage.setItem('cached_multi_task_list', JSON.stringify(multiTaskList))
+    localStorage.setItem(contextKeys.multiTaskListKey, JSON.stringify(multiTaskList))
+    if (shouldSyncLegacyCache(robotId)) {
+      localStorage.setItem('cached_multi_task_list', JSON.stringify(multiTaskList))
+    }
   } catch (multiTaskErr) {
     if (isAbortError(multiTaskErr)) return
     console.error('获取多任务组列表失败:', multiTaskErr)

@@ -14,11 +14,11 @@
         <p v-for="(line, index) in messageLines" :key="index">{{ line }}</p>
       </div>
       <div class="confirm-actions">
-        <button class="confirm-btn confirm-btn-cancel" @click="handleCancel">
-          {{ cancelText }}
-        </button>
         <button class="confirm-btn confirm-btn-confirm" @click="handleConfirm">
           {{ confirmText }}
+        </button>
+        <button class="confirm-btn confirm-btn-cancel" @click="handleCancel">
+          {{ cancelText }}
         </button>
       </div>
     </div>

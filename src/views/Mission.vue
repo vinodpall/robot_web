@@ -146,16 +146,17 @@
       </div>
     </main>
     <!-- 弹窗等 -->
-    <div v-if="confirmDialog.visible" class="custom-dialog-mask">
-      <div class="custom-dialog">
-        <div class="custom-dialog-title">操作确认</div>
-        <div class="custom-dialog-content">{{ confirmDialog.message }}</div>
-        <div class="custom-dialog-actions">
-          <button class="mission-btn mission-btn-pause" @click="onConfirmDialogOk">确定</button>
-          <button v-if="confirmDialog.showCancel" class="mission-btn mission-btn-cancel" @click="onConfirmDialogCancel">取消</button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      :show="confirmDialog.visible"
+      title="操作确认"
+      :message="confirmDialog.message"
+      type="warning"
+      confirm-text="确认"
+      cancel-text="取消"
+      @confirm="onConfirmDialogOk"
+      @cancel="onConfirmDialogCancel"
+      @close="onConfirmDialogCancel"
+    />
     <div v-if="previewDialog.visible" class="custom-dialog-mask preview-dialog-mask" @click="closePreviewDialog">
       <div class="preview-modal" @click.stop>
         <div class="preview-modal-header">
@@ -386,8 +387,8 @@
           </div>
         </div>
         <div class="simple-modal-footer">
-          <button class="mission-btn mission-btn-secondary" @click="closeCreateTaskGroupDialog">取消</button>
           <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tracklist-create'" @click="handleCreateTaskGroup">确定</button>
+          <button class="mission-btn mission-btn-secondary" @click="closeCreateTaskGroupDialog">取消</button>
         </div>
       </div>
     </div>
@@ -725,6 +726,18 @@
     :message="errorMessage.text"
     @close="errorMessage.show = false"
   />
+
+  <ConfirmDialog
+    :show="deleteTaskGroupDialog.show"
+    :title="deleteTaskGroupDialog.title"
+    :message="deleteTaskGroupDialog.message"
+    type="warning"
+    confirm-text="删除"
+    cancel-text="取消"
+    @confirm="deleteTaskGroupDialog.onConfirm"
+    @cancel="deleteTaskGroupDialog.show = false"
+    @close="deleteTaskGroupDialog.show = false"
+  />
   </div>
 </template>
 
@@ -755,6 +768,7 @@ import lockIcon from '@/assets/source_data/svg_data/robot_source/lock.png'
 import unlockIcon from '@/assets/source_data/svg_data/robot_source/unlock.png'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import editIcon from '@/assets/source_data/svg_data/robot_source/edit.png'
 import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import arriveIcon from '@/assets/source_data/svg_data/robot_source/arrive.png'
@@ -858,6 +872,12 @@ const successMessage = ref({
 const errorMessage = ref({
   show: false,
   text: ''
+})
+const deleteTaskGroupDialog = ref({
+  show: false,
+  title: '删除任务组',
+  message: '',
+  onConfirm: async () => {}
 })
 
 const showMissionSuccess = (text: string, duration = 2500) => {
@@ -1306,9 +1326,11 @@ const handleDeleteTaskGroup = () => {
     return
   }
 
-  showConfirmDialog(
-    `确定要删除任务组 "${selectedTaskGroupName.value}" 吗？删除后无法恢复。`,
-    async () => {
+  deleteTaskGroupDialog.value = {
+    show: true,
+    title: '删除任务组',
+    message: `确定要删除任务组「${selectedTaskGroupName.value}」吗？`,
+    onConfirm: async () => {
       const robotId = localStorage.getItem('selected_robot_id')
       if (!robotId) return
 
@@ -1339,7 +1361,7 @@ const handleDeleteTaskGroup = () => {
           let allTaskList = JSON.parse(cachedData)
           const selectedTrack = normalizeTrackName(selectedRouteName.value)
           const selectedGroup = normalizeTaskPointName(deletingTaskGroupName)
-          allTaskList = allTaskList.filter((task: any) => 
+          allTaskList = allTaskList.filter((task: any) =>
             !(
               normalizeTrackName(String(task.track_name || '')) === selectedTrack &&
               normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || '')) === selectedGroup
@@ -1364,9 +1386,11 @@ const handleDeleteTaskGroup = () => {
         setTimeout(() => {
           errorMessage.value.show = false
         }, 2000)
+      } finally {
+        deleteTaskGroupDialog.value.show = false
       }
     }
-  )
+  }
 }
 
 const onTrackStartConfirm = async () => {

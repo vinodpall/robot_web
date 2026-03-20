@@ -7720,6 +7720,7 @@ const handleCameraRecordingStop = async () => {
 
 .takeoff-modal-actions {
   display: flex;
+  flex-direction: row-reverse;
   justify-content: center;
   gap: 16px;
   margin-top: 24px;

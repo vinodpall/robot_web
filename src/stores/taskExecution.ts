@@ -1,26 +1,56 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useRobotStore } from './robot'
+import { useDeviceStore } from './device'
+import { getRobotMapCacheKeys } from '../utils/robotBootstrap'
 
 const MULTI_RUNNING_KEY = 'multi_task_running'
 const SELECTED_MAP_KEY = 'selected_map_name'
 
 export const useTaskExecutionStore = defineStore('taskExecution', () => {
   const robotStore = useRobotStore()
+  const deviceStore = useDeviceStore()
 
   const initialMultiRunning =
     typeof window !== 'undefined' ? localStorage.getItem(MULTI_RUNNING_KEY) === '1' : false
   const multiTaskRunning = ref(initialMultiRunning)
 
+  const readSelectedMapName = (robotId?: string) => {
+    if (typeof window === 'undefined') return ''
+    const currentRobotId = robotId || deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (currentRobotId) {
+      const { selectedMapKey } = getRobotMapCacheKeys(currentRobotId)
+      const robotScopedMap = localStorage.getItem(selectedMapKey)
+      if (robotScopedMap) return robotScopedMap
+    }
+    return localStorage.getItem(SELECTED_MAP_KEY) || ''
+  }
+
+  const syncLegacySelectedMap = (name: string) => {
+    if (typeof window === 'undefined') return
+    if (name) {
+      localStorage.setItem(SELECTED_MAP_KEY, name)
+    } else {
+      localStorage.removeItem(SELECTED_MAP_KEY)
+    }
+  }
+
   // ===== 全局选中地图（供首页、导航页、路线录制页共享） =====
-  const selectedMapName = ref(
-    typeof window !== 'undefined' ? (localStorage.getItem(SELECTED_MAP_KEY) || '') : ''
-  )
+  const selectedMapName = ref(typeof window !== 'undefined' ? readSelectedMapName() : '')
 
   const setSelectedMapName = (name: string) => {
     selectedMapName.value = name
     if (typeof window !== 'undefined') {
-      localStorage.setItem(SELECTED_MAP_KEY, name)
+      const currentRobotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (currentRobotId) {
+        const { selectedMapKey } = getRobotMapCacheKeys(currentRobotId)
+        if (name) {
+          localStorage.setItem(selectedMapKey, name)
+        } else {
+          localStorage.removeItem(selectedMapKey)
+        }
+      }
+      syncLegacySelectedMap(name)
     }
   }
 
@@ -80,6 +110,16 @@ export const useTaskExecutionStore = defineStore('taskExecution', () => {
       navPaused.value = false
     }
   })
+
+  watch(
+    () => deviceStore.selectedRobotId,
+    (robotId) => {
+      const nextMap = readSelectedMapName(robotId)
+      selectedMapName.value = nextMap
+      syncLegacySelectedMap(nextMap)
+    },
+    { immediate: true }
+  )
 
   return {
     isTrackTaskRunning,

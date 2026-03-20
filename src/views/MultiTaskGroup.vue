@@ -161,23 +161,17 @@
       </div>
     </div>
 
-    <!-- Delete Multi Task Group Modal -->
-    <div v-if="deleteGroupDialog.visible" class="custom-dialog-mask">
-      <div class="simple-modal-card" style="width: 420px; margin-top: 100px; background: linear-gradient(135deg, #102a43 0%, #172a3a 100%); border: 1px solid rgba(103, 213, 253, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); border-radius: 12px;">
-        <div class="simple-modal-header" style="position: relative; height: 50px; display: flex; align-items: center; justify-content: center; background: linear-gradient(to right, rgba(103, 213, 253, 0.1), transparent); border-bottom: 1px solid rgba(103, 213, 253, 0.15);">
-          <span style="color: #fff; font-size: 18px; font-weight: 600; text-shadow: 0 0 10px rgba(103, 213, 253, 0.3);">删除多任务组</span>
-          <span class="simple-close-icon" @click="closeDeleteGroupDialog" style="position: absolute; right: 20px; color: rgba(255, 255, 255, 0.6); font-size: 24px; cursor: pointer; transition: color 0.3s; line-height: 1;">×</span>
-        </div>
-        <div class="simple-modal-body" style="padding: 35px 35px 0px; text-align: center;">
-          <div style="color: #fff; font-size: 16px; margin-bottom: 15px;">确定要删除该任务组吗？</div>
-          <div style="color: rgba(255, 255, 255, 0.6); font-size: 14px;">{{ deleteGroupDialog.name }}</div>
-        </div>
-        <div class="dialog-footer">
-          <button class="mission-btn mission-btn-primary" style="height: 40px; min-width: 120px;" v-permission-click-dialog="'task-multitasklist-delete'" @click="confirmDeleteGroup">确定</button>
-          <button class="mission-btn" style="height: 40px; min-width: 120px; background-color: rgba(100, 100, 100, 0.6); border: 1px solid rgba(150, 150, 150, 0.5); color: #ddd;" @click="closeDeleteGroupDialog">取消</button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      :show="deleteGroupDialog.visible"
+      title="删除多任务组"
+      :message="`确定要删除该任务组吗？${deleteGroupDialog.name ? `\n${deleteGroupDialog.name}` : ''}`"
+      type="warning"
+      confirm-text="确认"
+      cancel-text="取消"
+      @confirm="confirmDeleteGroup"
+      @cancel="closeDeleteGroupDialog"
+      @close="closeDeleteGroupDialog"
+    />
 
     <!-- Add Task Group Modal -->
     <div v-if="addTaskGroupDialog.visible" class="custom-dialog-mask">
@@ -186,20 +180,20 @@
           <span style="color: #fff; font-size: 18px; font-weight: 600; text-shadow: 0 0 10px rgba(103, 213, 253, 0.3);">{{ addTaskGroupDialog.isEdit ? '编辑任务组' : '添加任务组' }}</span>
           <span class="simple-close-icon" @click="closeAddTaskGroupDialog" style="position: absolute; right: 20px; color: rgba(255, 255, 255, 0.6); font-size: 24px; cursor: pointer; transition: color 0.3s; line-height: 1;">×</span>
         </div>
-        <div class="simple-modal-body" style="padding: 24px 24px 0px; max-height: 65vh; overflow-y: auto;">
+        <div class="simple-modal-body add-task-group-body" style="padding: 24px 24px 0px; max-height: 65vh; overflow-y: auto;">
           <!-- 启动模式 -->
-          <div class="task-form-row">
-            <label class="task-form-label">启动模式</label>
-            <div class="task-form-radio-group">
-              <label class="task-form-radio">
+          <div class="mtg-task-form-row">
+            <label class="mtg-task-form-label">启动模式</label>
+            <div class="mtg-task-form-radio-group">
+              <label class="mtg-task-form-radio">
                 <input type="radio" v-model="addTaskGroupDialog.form.startMode" value="nav" />
                 <span>导航</span>
               </label>
-              <label class="task-form-radio">
+              <label class="mtg-task-form-radio">
                 <input type="radio" v-model="addTaskGroupDialog.form.startMode" value="ins" />
                 <span>INS</span>
               </label>
-              <label class="task-form-radio">
+              <label class="mtg-task-form-radio">
                 <input type="radio" v-model="addTaskGroupDialog.form.startMode" value="msf" />
                 <span>MSF</span>
               </label>
@@ -207,14 +201,14 @@
           </div>
 
           <!-- 任务组模式 -->
-          <div class="task-form-row">
-            <label class="task-form-label">任务组模式</label>
-            <div class="task-form-radio-group">
-              <label class="task-form-radio">
+          <div class="mtg-task-form-row">
+            <label class="mtg-task-form-label">任务组模式</label>
+            <div class="mtg-task-form-radio-group">
+              <label class="mtg-task-form-radio">
                 <input type="radio" v-model="addTaskGroupDialog.form.taskMode" value="track" />
                 <span>循迹模式</span>
               </label>
-              <label class="task-form-radio">
+              <label class="mtg-task-form-radio">
                 <input type="radio" v-model="addTaskGroupDialog.form.taskMode" value="publish" />
                 <span>发布点模式</span>
               </label>
@@ -222,39 +216,39 @@
           </div>
 
           <!-- 地图 -->
-          <div class="task-form-row">
-            <label class="task-form-label">地图</label>
-            <select v-model="addTaskGroupDialog.form.mapName" class="task-form-select">
+          <div class="mtg-task-form-row">
+            <label class="mtg-task-form-label">地图</label>
+            <select v-model="addTaskGroupDialog.form.mapName" class="mtg-task-form-select">
               <option v-for="map in mapList" :key="map" :value="map">{{ map }}</option>
             </select>
           </div>
 
           <!-- 轨迹 -->
-          <div class="task-form-row" v-if="addTaskGroupDialog.form.taskMode === 'track'">
-            <label class="task-form-label">轨迹</label>
-            <select v-model="addTaskGroupDialog.form.trackName" class="task-form-select">
+          <div class="mtg-task-form-row" v-if="addTaskGroupDialog.form.taskMode === 'track'">
+            <label class="mtg-task-form-label">轨迹</label>
+            <select v-model="addTaskGroupDialog.form.trackName" class="mtg-task-form-select">
               <option v-for="track in filteredTrackList" :key="track" :value="track">{{ track }}</option>
             </select>
           </div>
 
           <!-- 任务组 -->
-          <div class="task-form-row">
-            <label class="task-form-label">任务组</label>
-            <select v-model="addTaskGroupDialog.form.taskGroup" class="task-form-select">
+          <div class="mtg-task-form-row">
+            <label class="mtg-task-form-label">任务组</label>
+            <select v-model="addTaskGroupDialog.form.taskGroup" class="mtg-task-form-select">
               <option v-for="group in taskGroupOptions" :key="group" :value="group">{{ group }}</option>
             </select>
           </div>
 
           <!-- 圈数 -->
-          <div class="task-form-row">
-            <label class="task-form-label">圈数</label>
-            <input v-model="addTaskGroupDialog.form.circle" type="number" class="task-form-input" placeholder="请输入圈数" />
+          <div class="mtg-task-form-row">
+            <label class="mtg-task-form-label">圈数</label>
+            <input v-model="addTaskGroupDialog.form.circle" type="number" class="mtg-task-form-input" placeholder="请输入圈数" />
           </div>
 
           <!-- 避障模式 -->
-          <div class="task-form-row" v-if="addTaskGroupDialog.form.taskMode === 'track'">
-            <label class="task-form-label">避障模式</label>
-            <select v-model="addTaskGroupDialog.form.obsMode" class="task-form-select">
+          <div class="mtg-task-form-row" v-if="addTaskGroupDialog.form.taskMode === 'track'">
+            <label class="mtg-task-form-label">避障模式</label>
+            <select v-model="addTaskGroupDialog.form.obsMode" class="mtg-task-form-select">
               <option value="近障模式">近障模式</option>
               <option value="停障模式">停障模式</option>
               <option value="绕障模式">绕障模式</option>
@@ -262,9 +256,9 @@
           </div>
 
           <!-- 步态切换 -->
-          <div class="task-form-row">
-            <label class="task-form-label">步态切换</label>
-            <select v-model="addTaskGroupDialog.form.gait" class="task-form-select">
+          <div class="mtg-task-form-row">
+            <label class="mtg-task-form-label">步态切换</label>
+            <select v-model="addTaskGroupDialog.form.gait" class="mtg-task-form-select">
               <option value="行走步态">行走步态</option>
               <option value="斜坡步态">斜坡步态</option>
               <option value="越障步态">越障步态</option>
@@ -278,9 +272,9 @@
           </div>
 
           <!-- 地形图设置 -->
-          <div class="task-form-row">
-            <label class="task-form-label">地形图设置</label>
-            <select v-model="addTaskGroupDialog.form.ground" class="task-form-select">
+          <div class="mtg-task-form-row">
+            <label class="mtg-task-form-label">地形图设置</label>
+            <select v-model="addTaskGroupDialog.form.ground" class="mtg-task-form-select">
               <option value="实心地面">实心地面</option>
               <option value="镂空地面">镂空地面</option>
               <option value="无踢面地面">无踢面地面</option>
@@ -289,11 +283,11 @@
           </div>
 
           <!-- 原点发布 -->
-          <div class="task-form-row" v-if="addTaskGroupDialog.form.taskMode === 'track'">
-            <label class="task-form-label">原点发布</label>
-            <div class="task-form-switch-wrapper">
-              <div class="task-form-switch" @click="addTaskGroupDialog.form.originPublish = !addTaskGroupDialog.form.originPublish" :class="{active: addTaskGroupDialog.form.originPublish}">
-                <div class="task-form-switch-dot"></div>
+          <div class="mtg-task-form-row" v-if="addTaskGroupDialog.form.taskMode === 'track'">
+            <label class="mtg-task-form-label">原点发布</label>
+            <div class="mtg-task-form-switch-wrapper">
+              <div class="mtg-task-form-switch" @click="addTaskGroupDialog.form.originPublish = !addTaskGroupDialog.form.originPublish" :class="{active: addTaskGroupDialog.form.originPublish}">
+                <div class="mtg-task-form-switch-dot"></div>
               </div>
               <img :src="addTaskGroupDialog.form.originPublish ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
             </div>
@@ -893,6 +887,16 @@ const loadTrackList = async () => {
         processedSet.add(name)
       })
       trackList.value = Array.from(processedSet)
+
+      if (addTaskGroupDialog.value.form.taskMode === 'track' && addTaskGroupDialog.value.form.mapName) {
+        if (filteredTrackList.value.length > 0) {
+          if (!addTaskGroupDialog.value.form.trackName || !filteredTrackList.value.includes(addTaskGroupDialog.value.form.trackName)) {
+            addTaskGroupDialog.value.form.trackName = filteredTrackList.value[0]
+          }
+        } else {
+          addTaskGroupDialog.value.form.trackName = ''
+        }
+      }
     }
   } catch (err) {
     console.error('获取轨迹列表失败:', err)
@@ -915,6 +919,16 @@ const loadTrackListFromCache = () => {
         processedSet.add(name)
       })
       trackList.value = Array.from(processedSet)
+
+      if (addTaskGroupDialog.value.form.taskMode === 'track' && addTaskGroupDialog.value.form.mapName) {
+        if (filteredTrackList.value.length > 0) {
+          if (!addTaskGroupDialog.value.form.trackName || !filteredTrackList.value.includes(addTaskGroupDialog.value.form.trackName)) {
+            addTaskGroupDialog.value.form.trackName = filteredTrackList.value[0]
+          }
+        } else {
+          addTaskGroupDialog.value.form.trackName = ''
+        }
+      }
     }
   } catch (err) {
     console.error('读取缓存轨迹列表失败:', err)
@@ -923,20 +937,33 @@ const loadTrackListFromCache = () => {
 
 const loadTaskGroupList = async (trackName: string) => {
   const robotId = localStorage.getItem('selected_robot_id')
-  if (!robotId || !trackName) return
+  if (!robotId || !trackName) {
+    taskGroupOptions.value = []
+    addTaskGroupDialog.value.form.taskGroup = ''
+    return
+  }
   
   try {
     const response = await navigationApi.getTaskpointList(robotId, trackName)
     if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
       taskGroupOptions.value = response.msg.result
       
-      // 默认选择第一个
-      if (taskGroupOptions.value.length > 0 && !addTaskGroupDialog.value.form.taskGroup) {
-        addTaskGroupDialog.value.form.taskGroup = taskGroupOptions.value[0]
+      // 有数据时默认选中第一个；若当前值不在新列表中也回退第一个
+      if (taskGroupOptions.value.length > 0) {
+        if (!addTaskGroupDialog.value.form.taskGroup || !taskGroupOptions.value.includes(addTaskGroupDialog.value.form.taskGroup)) {
+          addTaskGroupDialog.value.form.taskGroup = taskGroupOptions.value[0]
+        }
+      } else {
+        addTaskGroupDialog.value.form.taskGroup = ''
       }
+    } else {
+      taskGroupOptions.value = []
+      addTaskGroupDialog.value.form.taskGroup = ''
     }
   } catch (err) {
     console.error('获取任务组列表失败:', err)
+    taskGroupOptions.value = []
+    addTaskGroupDialog.value.form.taskGroup = ''
   }
 }
 
@@ -1054,9 +1081,25 @@ watch(() => addTaskGroupDialog.value.form.mapName, (newVal) => {
 // Watch for trackName changes to load task groups
 watch(() => addTaskGroupDialog.value.form.trackName, (newVal) => {
   if (newVal && addTaskGroupDialog.value.form.taskMode === 'track') {
+    // 切轨迹时先清空旧任务组，加载后会自动回填第一个
+    addTaskGroupDialog.value.form.taskGroup = ''
     loadTaskGroupList(newVal)
   } else if (!newVal) {
     taskGroupOptions.value = []
+    addTaskGroupDialog.value.form.taskGroup = ''
+  }
+})
+
+watch(filteredTrackList, (newList) => {
+  if (addTaskGroupDialog.value.form.taskMode !== 'track') return
+  if (!addTaskGroupDialog.value.form.mapName) return
+
+  if (newList.length > 0) {
+    if (!addTaskGroupDialog.value.form.trackName || !newList.includes(addTaskGroupDialog.value.form.trackName)) {
+      addTaskGroupDialog.value.form.trackName = newList[0]
+    }
+  } else {
+    addTaskGroupDialog.value.form.trackName = ''
   }
 })
 
@@ -1507,13 +1550,13 @@ watch(selectedMultiTaskName, (newVal) => {
 }
 
 /* Add Task Group Modal Styles */
-.task-form-row {
+.mtg-task-form-row {
   display: flex;
   flex-direction: column;
   margin-bottom: 16px;
 }
 
-.simple-modal-card .task-form-label {
+.simple-modal-card .mtg-task-form-label {
   color: #b0d0ff;
   font-size: 14px;
   margin-bottom: 8px;
@@ -1521,12 +1564,12 @@ watch(selectedMultiTaskName, (newVal) => {
   white-space: nowrap;
 }
 
-.simple-modal-card .task-form-radio-group {
+.simple-modal-card .mtg-task-form-radio-group {
   display: flex;
   gap: 20px;
 }
 
-.simple-modal-card .task-form-radio {
+.simple-modal-card .mtg-task-form-radio {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1535,15 +1578,15 @@ watch(selectedMultiTaskName, (newVal) => {
   font-size: 14px;
 }
 
-.simple-modal-card .task-form-radio input[type="radio"] {
+.simple-modal-card .mtg-task-form-radio input[type="radio"] {
   width: 16px;
   height: 16px;
   cursor: pointer;
   accent-color: #409eff;
 }
 
-.simple-modal-card .task-form-select,
-.simple-modal-card .task-form-input {
+.simple-modal-card .mtg-task-form-select,
+.simple-modal-card .mtg-task-form-input {
   width: 100%;
   height: 38px;
   background: #0c3c56;
@@ -1558,39 +1601,51 @@ watch(selectedMultiTaskName, (newVal) => {
   transition: all 0.2s;
 }
 
-.simple-modal-card .task-form-select:hover,
-.simple-modal-card .task-form-input:hover {
+.simple-modal-card .mtg-task-form-select:hover,
+.simple-modal-card .mtg-task-form-input:hover {
   background: #0c4666;
   border-color: rgba(38, 131, 182, 1);
 }
 
-.simple-modal-card .task-form-select:focus,
-.simple-modal-card .task-form-input:focus {
+.simple-modal-card .mtg-task-form-select:focus,
+.simple-modal-card .mtg-task-form-input:focus {
   border-color: #67d5fd;
   background: #0c4666;
   box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
 }
 
-.simple-modal-card .task-form-select option {
+.simple-modal-card .mtg-task-form-select option {
   background: #0c3c56;
   color: #67d5fd;
   padding: 8px 12px;
 }
 
-.simple-modal-card .task-form-input {
+.simple-modal-card .mtg-task-form-input {
   cursor: text;
 }
 
-.simple-modal-card .task-form-input::placeholder {
+.simple-modal-card .mtg-task-form-input::placeholder {
   color: rgba(103, 213, 253, 0.4);
 }
 
-.simple-modal-card .task-form-switch-wrapper {
+/* 隐藏 number 输入框右侧上下调节按钮 */
+.simple-modal-card .mtg-task-form-input[type="number"]::-webkit-outer-spin-button,
+.simple-modal-card .mtg-task-form-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.simple-modal-card .mtg-task-form-input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.simple-modal-card .mtg-task-form-switch-wrapper {
   display: flex;
   align-items: center;
 }
 
-.simple-modal-card .task-form-switch {
+.simple-modal-card .mtg-task-form-switch {
   width: 44px;
   height: 22px;
   background: #4c4d4f;
@@ -1600,11 +1655,11 @@ watch(selectedMultiTaskName, (newVal) => {
   transition: background 0.3s;
 }
 
-.simple-modal-card .task-form-switch.active {
+.simple-modal-card .mtg-task-form-switch.active {
   background: #409eff;
 }
 
-.simple-modal-card .task-form-switch-dot {
+.simple-modal-card .mtg-task-form-switch-dot {
   width: 18px;
   height: 18px;
   background: #fff;
@@ -1616,7 +1671,7 @@ watch(selectedMultiTaskName, (newVal) => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.simple-modal-card .task-form-switch.active .task-form-switch-dot {
+.simple-modal-card .mtg-task-form-switch.active .mtg-task-form-switch-dot {
   left: 24px;
 }
 
@@ -1690,6 +1745,34 @@ watch(selectedMultiTaskName, (newVal) => {
 
 .simple-modal-body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
+}
+
+/* 防止被其他页面未 scoped 的 .simple-modal-body 样式污染 */
+.add-task-group-body {
+  display: block;
+  text-align: left;
+}
+
+.add-task-group-body .mtg-task-form-row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  align-items: stretch !important;
+  margin-bottom: 16px;
+}
+
+.add-task-group-body .mtg-task-form-label {
+  width: 100%;
+  min-width: 0 !important;
+  margin-right: 0 !important;
+  margin-bottom: 8px !important;
+  text-align: left !important;
+  display: block;
+  align-self: flex-start;
+}
+
+.add-task-group-body .mtg-task-form-radio-group {
+  justify-content: flex-start !important;
 }
 </style>
 

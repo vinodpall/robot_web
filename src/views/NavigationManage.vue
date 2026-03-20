@@ -335,6 +335,7 @@
                   <span class="track-label">地图:</span>
                   <div class="track-select-wrapper">
                     <select v-model="trackRecordMap" class="track-select" :disabled="isMapSelectionLocked">
+                      <option v-if="trackMapList.length === 0" value="">暂无地图</option>
                       <option v-for="map in trackMapList" :key="map" :value="map">{{ map }}</option>
                     </select>
                     <span class="track-select-arrow">
@@ -381,9 +382,30 @@
                   </div>
                 </div>
                 <div class="track-toolbar-actions">
-                  <button class="map-btn track-btn track-btn-danger" v-permission-click-dialog="'nav-trackrecord-delete'" @click="handleTrackDelete">删除路线</button>
-                  <button class="map-btn map-btn-primary track-btn" v-permission-click-dialog="'nav-trackrecord-preview'" @click="handleTrackPreview">预览路线</button>
-                  <button class="map-btn map-btn-primary track-btn" v-permission-click-dialog="'nav-trackrecord-edit'" @click="handleTrackSmooth">轨迹平滑</button>
+                  <button
+                    class="map-btn track-btn track-btn-danger"
+                    :disabled="trackLineList.length === 0 || !trackRecordLine"
+                    v-permission-click-dialog="'nav-trackrecord-delete'"
+                    @click="handleTrackDelete"
+                  >
+                    删除路线
+                  </button>
+                  <button
+                    class="map-btn map-btn-primary track-btn"
+                    :disabled="trackLineList.length === 0 || !trackRecordLine"
+                    v-permission-click-dialog="'nav-trackrecord-preview'"
+                    @click="handleTrackPreview"
+                  >
+                    预览路线
+                  </button>
+                  <button
+                    class="map-btn map-btn-primary track-btn"
+                    :disabled="trackLineList.length === 0 || !trackRecordLine"
+                    v-permission-click-dialog="'nav-trackrecord-edit'"
+                    @click="handleTrackSmooth"
+                  >
+                    轨迹平滑
+                  </button>
                 </div>
               </div>
               <div class="track-record-map">
@@ -417,15 +439,30 @@
               <div class="mission-toolbar">
                 <span class="mission-toolbar-label">地图:</span>
                 <select v-model="fileManageMap" class="mission-toolbar-select" style="min-width: 220px;">
+                  <option v-if="fileMapList.length === 0" value="">暂无地图</option>
                   <option v-for="map in fileMapList" :key="map" :value="map">{{ map }}</option>
                 </select>
-                <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'nav-file-delete'" @click="handleDeleteMap">删除地图</button>
+                <button
+                  class="mission-btn mission-btn-stop"
+                  :disabled="fileMapList.length === 0 || !fileManageMap"
+                  v-permission-click-dialog="'nav-file-delete'"
+                  @click="handleDeleteMap"
+                >
+                  删除地图
+                </button>
                 <span class="mission-toolbar-label" style="margin-left: 20px;">数据包:</span>
                 <select v-model="fileManagePackage" class="mission-toolbar-select" style="min-width: 220px;">
                   <option v-if="dataPackageList.length === 0" value="">暂无数据包</option>
                   <option v-for="pkg in dataPackageList" :key="pkg" :value="pkg">{{ pkg }}</option>
                 </select>
-                <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'nav-file-delete'" @click="handleDeletePackage">删除数据包</button>
+                <button
+                  class="mission-btn mission-btn-stop"
+                  :disabled="dataPackageList.length === 0 || !fileManagePackage"
+                  v-permission-click-dialog="'nav-file-delete'"
+                  @click="handleDeletePackage"
+                >
+                  删除数据包
+                </button>
               </div>
               <div class="file-table file-manage-table file-table-adaptive">
                 <div class="file-table-header" style="grid-template-columns: 100px 360px 1fr 180px 150px;">
@@ -474,10 +511,10 @@
           <input v-model="recordingName" placeholder="请输入数据包名称" class="recording-input" />
         </div>
         <div class="recording-dialog-actions">
-          <button class="map-btn" @click="cancelStartRecording">取消</button>
           <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-lbjt-startrecord'" @click="confirmStartRecording" :disabled="recordingLoading">
             {{ recordingLoading ? '提交中...' : '开始录包' }}
           </button>
+          <button class="map-btn" @click="cancelStartRecording">取消</button>
         </div>
       </div>
     </div>
@@ -605,10 +642,10 @@
           </div>
         </div>
         <div class="recording-dialog-actions">
-          <button class="map-btn" @click="cancelObsHandleDialog">取消</button>
           <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="confirmObsHandleDialog" :disabled="obsHandleLoading">
             {{ obsHandleLoading ? '提交中...' : '确认' }}
           </button>
+          <button class="map-btn" @click="cancelObsHandleDialog">取消</button>
         </div>
       </div>
     </div>
@@ -628,10 +665,10 @@
           </div>
         </div>
         <div class="recording-dialog-actions">
-          <button class="map-btn" @click="cancelTrackRecord">取消</button>
           <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-trackrecord-create'" @click="confirmTrackRecord" :disabled="trackRecordDialog.loading">
             {{ trackRecordDialog.loading ? '提交中...' : '开始录制' }}
           </button>
+          <button class="map-btn" @click="cancelTrackRecord">取消</button>
         </div>
       </div>
     </div>
@@ -695,11 +732,17 @@ import { navigationApi, mapFileApi } from '../api/services'
 import { useDeviceStore } from '../stores/device'
 import { useTaskExecutionStore } from '../stores/taskExecution'
 import { usePermissionStore } from '@/stores/permission'
+import { getRobotMapCacheKeys, refreshMapCache } from '@/utils/robotBootstrap'
 
 const deviceStore = useDeviceStore()
 const robotStore = useRobotStore()
 const taskExecutionStore = useTaskExecutionStore()
 const permissionStore = usePermissionStore()
+
+const getCurrentRobotMapKeys = () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  return robotId ? getRobotMapCacheKeys(robotId) : null
+}
 
 // 导航点云图相关变量（需要在前面声明，因为在cleanupNavPointCloud中使用）
 let navPointCloudInitialized = false
@@ -1176,7 +1219,7 @@ const handleTrackDelete = () => {
     title: '删除路线',
     message: `确定要删除路线 "${trackRecordLine.value}" 吗？`,
     type: 'warning',
-    confirmText: '删除',
+    confirmText: '确认',
     onConfirm: async () => {
       const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
       if (!robotId) return
@@ -1188,7 +1231,11 @@ const handleTrackDelete = () => {
         showSuccessMessage('删除成功')
         // 刷新列表
         await fetchAllTrackList()
-        trackRecordLine.value = ''
+        if (trackLineList.value.length > 0) {
+          trackRecordLine.value = trackLineList.value[0]
+        } else {
+          trackRecordLine.value = ''
+        }
       } catch (error: any) {
         console.error('删除路线失败:', error)
         showErrorMessage(`删除失败: ${error.message || '未知错误'}`)
@@ -1659,8 +1706,8 @@ const fetchGpsStatus = async () => {
 // 获取地图列表（从缓存读取，不需要robotId，但为了保持一致性保留检查逻辑如果后续需要API）
 const fetchMapList = () => {
   try {
-    // 从缓存读取地图列表
-    const cached = localStorage.getItem('cached_map_list')
+    const keys = getCurrentRobotMapKeys()
+    const cached = keys ? localStorage.getItem(keys.mapListKey) : null
     if (cached) {
       navMapList.value = JSON.parse(cached)
       
@@ -1685,10 +1732,7 @@ const refreshMapListCache = async () => {
   if (!robotId) return
 
   try {
-    const response = await navigationApi.getMapList(robotId)
-    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-      localStorage.setItem('cached_map_list', JSON.stringify(response.msg.result))
-    }
+    await refreshMapCache(robotId, { forceResetMapSelection: true })
   } catch (err) {
     console.error('刷新地图列表缓存失败:', err)
   }
@@ -1697,8 +1741,8 @@ const refreshMapListCache = async () => {
 // 获取地图编辑页面的地图列表（从缓存读取）
 const fetchEditMapList = () => {
   try {
-    // 从缓存读取地图列表
-    const cached = localStorage.getItem('cached_map_list')
+    const keys = getCurrentRobotMapKeys()
+    const cached = keys ? localStorage.getItem(keys.mapListKey) : null
     if (cached) {
       editMapList.value = JSON.parse(cached)
       
@@ -1719,20 +1763,40 @@ const fetchEditMapList = () => {
 // 获取路线录制页面的地图列表（从缓存读取）
 const fetchTrackMapList = () => {
   try {
-    const cached = localStorage.getItem('cached_map_list')
+    const keys = getCurrentRobotMapKeys()
+    const cached = keys ? localStorage.getItem(keys.mapListKey) : null
     if (cached) {
-      trackMapList.value = JSON.parse(cached)
-      
+      const parsedList = JSON.parse(cached)
+      trackMapList.value = Array.isArray(parsedList) ? parsedList : []
+
+      if (trackMapList.value.length === 0) {
+        taskExecutionStore.setSelectedMapName('')
+        trackRecordLine.value = ''
+        trackRecordTask.value = ''
+        trackTaskList.value = []
+        return
+      }
+
       const storedMapName = taskExecutionStore.selectedMapName
       if (storedMapName && trackMapList.value.includes(storedMapName)) {
         taskExecutionStore.setSelectedMapName(storedMapName)
-      } else if (trackMapList.value.length > 0 && !taskExecutionStore.selectedMapName) {
+      } else if (trackMapList.value.length > 0) {
         taskExecutionStore.setSelectedMapName(trackMapList.value[0])
       }
     } else {
+      trackMapList.value = []
+      taskExecutionStore.setSelectedMapName('')
+      trackRecordLine.value = ''
+      trackRecordTask.value = ''
+      trackTaskList.value = []
       console.warn('缓存中没有地图列表数据')
     }
   } catch (err) {
+    trackMapList.value = []
+    taskExecutionStore.setSelectedMapName('')
+    trackRecordLine.value = ''
+    trackRecordTask.value = ''
+    trackTaskList.value = []
     console.error('读取路线录制地图列表缓存失败:', err)
   }
 }
@@ -1740,7 +1804,8 @@ const fetchTrackMapList = () => {
 // 获取文件管理页面的地图列表（从缓存读取）
 const fetchFileMapList = () => {
   try {
-    const cached = localStorage.getItem('cached_map_list')
+    const keys = getCurrentRobotMapKeys()
+    const cached = keys ? localStorage.getItem(keys.mapListKey) : null
     if (cached) {
       const rawList: string[] = JSON.parse(cached)
       // 处理地图名称：移除 @ 及后面的内容
@@ -1754,13 +1819,19 @@ const fetchFileMapList = () => {
       // 对于文件管理，如果处理后的列表中包含缓存的名字
       if (cachedMapName && fileMapList.value.includes(cachedMapName)) {
         fileManageMap.value = cachedMapName
-      } else if (fileMapList.value.length > 0 && !fileManageMap.value) {
+      } else if (fileMapList.value.length > 0) {
         fileManageMap.value = fileMapList.value[0]
+      } else {
+        fileManageMap.value = ''
       }
     } else {
+      fileMapList.value = []
+      fileManageMap.value = ''
       console.warn('缓存中没有地图列表数据')
     }
   } catch (err) {
+    fileMapList.value = []
+    fileManageMap.value = ''
     console.error('读取文件管理地图列表缓存失败:', err)
   }
 }
@@ -1804,10 +1875,12 @@ const fetchDataPackageList = async () => {
     } else {
       console.warn('获取数据包列表失败或格式错误')
       dataPackageList.value = []
+      fileManagePackage.value = ''
     }
   } catch (error) {
     console.error('获取数据包列表失败:', error)
     dataPackageList.value = []
+    fileManagePackage.value = ''
   }
 }
 
@@ -2679,9 +2752,10 @@ const mappingAutoStopTriggered = ref(false)
 
 // 对接 WebSocket 实时建图进度（mapping_progress 消息）
 watch(() => robotStore.mappingProgress?.progress, (progress) => {
-  if (progress != null && progress > 0) {
-    mapProgress.value = progress
-    if (progress >= 100) {
+  if (progress != null) {
+    const normalizedProgress = Math.min(100, Math.max(0, Number(progress) || 0))
+    mapProgress.value = normalizedProgress
+    if (normalizedProgress >= 100) {
       void handleStopMapping(true)
     }
   }
@@ -2898,7 +2972,7 @@ const confirmGenerateMap = async () => {
     
     generateMapDialogVisible.value = false
     showSuccessMessage('生成地图指令已发送')
-    mapProgress.value = 10 // 开始进度
+    mapProgress.value = 0
   } catch (err) {
     console.error('生成地图失败:', err)
     showErrorMessage('生成地图失败')
@@ -2919,7 +2993,8 @@ const handleGenerateGridMap = () => {
   
   // 从缓存中获取地图列表
   try {
-    const cached = localStorage.getItem('cached_map_list')
+    const keys = getCurrentRobotMapKeys()
+    const cached = keys ? localStorage.getItem(keys.mapListKey) : null
     if (cached) {
       gridMapList.value = JSON.parse(cached)
       
@@ -2969,7 +3044,7 @@ const confirmGenerateGridMap = async () => {
     generateGridMapDialogVisible.value = false
     showSuccessMessage('生成栅格地图指令已发送')
     mappingAutoStopTriggered.value = false
-    mapProgress.value = 10 // 开始进度
+    mapProgress.value = 0
   } catch (err) {
     console.error('生成栅格地图失败:', err)
     showErrorMessage('生成栅格地图失败')
@@ -3018,7 +3093,7 @@ const confirmCreateFusionMap = async () => {
     createFusionMapDialogVisible.value = false
     showSuccessMessage('新建融合地图指令已发送')
     mappingAutoStopTriggered.value = false
-    mapProgress.value = 10 // 开始进度
+    mapProgress.value = 0
   } catch (err) {
     console.error('新建融合地图失败:', err)
     showErrorMessage('新建融合地图失败')
@@ -3956,7 +4031,7 @@ const fileList = ref([
 // 文件管理（路线/任务组）列表
 const fileManageMap = ref('')
 const fileMapList = ref<string[]>([]) // 文件管理页面的地图列表
-const fileManagePackage = ref('包A')
+const fileManagePackage = ref('')
 const fileManageList = ref<any[]>([])
 
 // 获取文件列表
@@ -4009,7 +4084,7 @@ watch(fileManageMap, () => {
 })
 
 watch(fileManageMap, (newMap) => {
-  if (newMap) localStorage.setItem('selected_map_name', newMap)
+  if (newMap) taskExecutionStore.setSelectedMapName(newMap)
 })
 
 
@@ -4042,6 +4117,9 @@ const handleDeleteMap = () => {
         await refreshMapListCache()
         // 更新文件管理页面的地图列表（从缓存读取）
         fetchFileMapList()
+        window.dispatchEvent(new CustomEvent('robot-map-list-ready', {
+          detail: { robotId }
+        }))
       } catch (error) {
         console.error('删除地图失败:', error)
         showErrorMessage('删除地图失败')

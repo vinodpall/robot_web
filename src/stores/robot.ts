@@ -137,6 +137,25 @@ export const useRobotStore = defineStore('robot', () => {
     taskStatus.value = data
   }
 
+  const resetRuntimeState = () => {
+    isOnline.value = false
+    pose.value = null
+    cmdStatus.value = null
+    trackInfo.value = null
+    alerts.value = []
+    mappingProgress.value = null
+    msfStatus.value = null
+    latestDogUdpMessage.value = null
+    rcsData.value = null
+    motionState.value = null
+    batteryData.value = null
+    terrainMode.value = null
+    bodyHeightState.value = null
+    sensorData.value = null
+    systemTelemetry.value = null
+    taskStatus.value = null
+  }
+
   // ===== computed =====
 
   /** IMU Roll 角（度） */
@@ -345,6 +364,7 @@ export const useRobotStore = defineStore('robot', () => {
     setSensorData,
     setSystemTelemetry,
     setTaskStatus,
+    resetRuntimeState,
     // computed
     batteryLevel,
     voltage,

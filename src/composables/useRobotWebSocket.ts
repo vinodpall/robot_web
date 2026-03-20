@@ -1,6 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import { config } from '../config/environment'
 import { useRobotStore } from '../stores/robot'
+import { useDeviceStore } from '../stores/device'
 
 // ===== WebSocket 消息类型定义 =====
 
@@ -208,6 +209,7 @@ const RECONNECT_MAX_DELAY = 30000
 
 export function useRobotWebSocket() {
   const robotStore = useRobotStore()
+  const deviceStore = useDeviceStore()
 
   const ws = ref<WebSocket | null>(null)
   const isConnected = ref(false)
@@ -218,6 +220,7 @@ export function useRobotWebSocket() {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let heartbeatTimer: ReturnType<typeof setTimeout> | null = null
   let shouldReconnect = true
+  let subscribedRobotId = ''
 
   // ===== 心跳超时（wifi_error 方案B） =====
   const resetHeartbeatTimer = () => {
@@ -238,6 +241,13 @@ export function useRobotWebSocket() {
     }
 
     const { type, robot_id, data } = msg
+    const selectedRobotId = deviceStore.selectedRobotId
+    if (selectedRobotId && robot_id && robot_id !== selectedRobotId) {
+      return
+    }
+    if (subscribedRobotId && robot_id && robot_id !== subscribedRobotId) {
+      return
+    }
 
     switch (type) {
       // ---- 位姿 ----
@@ -359,6 +369,7 @@ export function useRobotWebSocket() {
     shouldReconnect = true  // 每次主动 connect 都允许自动重连
     isConnecting.value = true
     connectionError.value = ''
+    subscribedRobotId = robotId || ''
 
     // WebSocket 地址与其他接口用同一套 IP 逻辑
     const wsHost = config.websocket.host
@@ -370,6 +381,7 @@ export function useRobotWebSocket() {
     ws.value = socket
 
     socket.onopen = () => {
+      if (ws.value !== socket) return
       isConnected.value = true
       isConnecting.value = false
       reconnectDelay = RECONNECT_INIT_DELAY
@@ -379,15 +391,18 @@ export function useRobotWebSocket() {
     }
 
     socket.onmessage = (event) => {
+      if (ws.value !== socket) return
       handleMessage(event.data)
     }
 
     socket.onerror = () => {
+      if (ws.value !== socket) return
       connectionError.value = 'WebSocket 连接错误'
       console.error('[RobotWS] 错误')
     }
 
     socket.onclose = () => {
+      if (ws.value !== socket) return
       isConnected.value = false
       isConnecting.value = false
       robotStore.setOnlineStatus(false)
@@ -418,12 +433,14 @@ export function useRobotWebSocket() {
     shouldReconnect = false
     if (reconnectTimer) clearTimeout(reconnectTimer)
     if (heartbeatTimer) clearTimeout(heartbeatTimer)
-    if (ws.value) {
-      ws.value.close()
-      ws.value = null
+    const currentSocket = ws.value
+    ws.value = null
+    if (currentSocket) {
+      currentSocket.close()
     }
     isConnected.value = false
     isConnecting.value = false
+    subscribedRobotId = ''
   }
 
   onUnmounted(() => {

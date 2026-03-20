@@ -21,6 +21,8 @@
               ref="videoElement"
               class="video-only-element"
               controls
+              controlsList="noremoteplayback nodownload"
+              disablePictureInPicture
               muted
               playsinline
               webkit-playsinline
@@ -49,6 +51,8 @@
               ref="infraredVideoElement"
               class="video-only-element"
               controls
+              controlsList="noremoteplayback nodownload"
+              disablePictureInPicture
               muted
               autoplay
               playsinline
@@ -266,7 +270,7 @@
             <div class="b-top">
               <div class="b-top-left">
                 <div class="zhuangtai4">
-                  <div>{{ isRobotOnline ? '在线' : '离线' }}</div>
+                  <div :class="isRobotOnline ? 'robot-status-online' : 'robot-status-offline'">{{ isRobotOnline ? '在线' : '离线' }}</div>
                 </div>
                 <div class="img">
                   <img src="@/assets/source_data/dog.png" alt="" />
@@ -751,8 +755,8 @@
           </div>
         </div>
         <div class="dispatch-task-actions">
-          <button class="mission-btn mission-btn-cancel" @click="onDispatchTaskCancel">取消</button>
           <button class="mission-btn mission-btn-pause" v-permission-click-dialog="'main-taskdispatch'" @click="onDispatchTaskConfirm">确定</button>
+          <button class="mission-btn mission-btn-cancel" @click="onDispatchTaskCancel">取消</button>
         </div>
       </div>
 
@@ -863,13 +867,13 @@
           </div>
         </div>
         <div class="dispatch-task-actions">
-          <button class="mission-btn mission-btn-cancel" :disabled="trackStartDialog.loading" @click="onTrackStartCancel">取消</button>
           <button 
             class="mission-btn mission-btn-pause" 
             :class="{ disabled: taskpointList.length === 0 || !trackStartDialog.form.taskpoint_name || trackStartDialog.loading }"
             v-permission-click-dialog="'main-taskdispatch'"
             @click="onTrackStartConfirm"
           >{{ trackStartDialog.loading ? '启动中...' : '确定' }}</button>
+          <button class="mission-btn mission-btn-cancel" :disabled="trackStartDialog.loading" @click="onTrackStartCancel">取消</button>
         </div>
       </div>
     </div>
@@ -904,12 +908,12 @@
           </div>
         </div>
         <div class="dispatch-task-actions">
-          <button class="mission-btn mission-btn-cancel" @click="onMultiTaskStartCancel">取消</button>
           <button 
             class="mission-btn mission-btn-pause" 
             v-permission-click-dialog="'main-taskdispatch'"
             @click="onMultiTaskStartConfirm"
           >确定</button>
+          <button class="mission-btn mission-btn-cancel" @click="onMultiTaskStartCancel">取消</button>
         </div>
       </div>
     </div>
@@ -932,30 +936,28 @@
 
         </div>
         <div class="dispatch-task-actions">
-          <button class="mission-btn mission-btn-cancel" @click="onPointTaskStartCancel">取消</button>
           <button 
             class="mission-btn mission-btn-pause" 
             v-permission-click-dialog="'main-taskdispatch'"
             @click="onPointTaskStartConfirm"
           >确定</button>
+          <button class="mission-btn mission-btn-cancel" @click="onPointTaskStartCancel">取消</button>
         </div>
       </div>
     </div>
   </div>
     
-    <!-- 确认对话框 -->
-    <div v-if="confirmDialog.visible" class="confirm-dialog-mask" @click.self="confirmDialog.visible = false">
-      <div class="confirm-dialog">
-        <div class="confirm-dialog-header">提示</div>
-        <div class="confirm-dialog-body">
-          {{ confirmDialog.message }}
-        </div>
-        <div class="confirm-dialog-actions">
-          <button class="confirm-btn confirm-btn-cancel" @click="onConfirmCancel">取消</button>
-          <button class="confirm-btn confirm-btn-ok" @click="onConfirmOk">确定</button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      :show="confirmDialog.visible"
+      title="操作确认"
+      :message="confirmDialog.message"
+      type="warning"
+      confirm-text="确认"
+      cancel-text="取消"
+      @confirm="onConfirmOk"
+      @cancel="onConfirmCancel"
+      @close="onConfirmCancel"
+    />
     
     <!-- 大图显示模态框 -->
     <div v-if="showBigImage" class="alert-img-mask" @click="closeBigImage">
@@ -1089,19 +1091,22 @@ import {
   livestreamApi,
   dogApi,
 } from '../api/services'
+import type { CameraInfo } from '../api/services'
 import SuccessMessage from '../components/SuccessMessage.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ThreePointCloudPreview from '../components/ThreePointCloudPreview.vue'
 import type { NormalizationParams, PointCloudPoint } from '../composables/usePointCloudRenderer'
 import { load3MF } from '../utils/threemfParser'
 import type { MeshData } from '../utils/threemfParser'
-import { getRobotMapCacheKeys } from '../utils/robotBootstrap'
+import { getRobotMapCacheKeys, getRobotContextCacheKeys } from '../utils/robotBootstrap'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config, getCurrentEnvironment } from '../config/environment'
 import { useDeviceStore } from '../stores/device'
 import { useRobotStore } from '../stores/robot'
 import { useTaskExecutionStore } from '../stores/taskExecution'
-import { getVideoStreams, getVideoStream, getDefaultVideoType, setVideoStreams } from '../utils/videoCache'
+import { getVideoStreams, getVideoStream, setVideoStreams } from '../utils/videoCache'
+import type { VideoStream } from '../utils/videoCache'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import flvjs from 'flv.js'
 import * as echarts from 'echarts'
@@ -1332,6 +1337,10 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
       if (!trackList.value.includes(normalizedTrackName)) {
         trackList.value = [normalizedTrackName, ...trackList.value]
         try {
+          const contextKeys = getCurrentRobotContextKeys()
+          if (contextKeys) {
+            localStorage.setItem(contextKeys.trackListKey, JSON.stringify(trackList.value))
+          }
           localStorage.setItem('cached_track_list', JSON.stringify(trackList.value))
         } catch { /* 存储失败静默忽略 */ }
       }
@@ -1544,7 +1553,10 @@ const overlayTrackTrajectory = async (trackName: string) => {
     const currentTaskPointName = normalizeTaskPointName(activeTrackInfo.value.taskpoint_name)
     
     try {
-      const cachedData = localStorage.getItem('all_track_task_list')
+      const contextKeys = getCurrentRobotContextKeys()
+      const cachedData = contextKeys
+        ? localStorage.getItem(contextKeys.allTrackTaskListKey)
+        : null
       if (cachedData) {
         const parsed = JSON.parse(cachedData)
         const allTaskList = extractTrackTaskList(parsed)
@@ -2741,6 +2753,8 @@ let webrtcReconnectCount = 0
 let webrtcFreezeTimer: ReturnType<typeof setInterval> | null = null
 let webrtcLastVideoTime = -1
 let webrtcStartTimer: ReturnType<typeof setTimeout> | null = null
+let visibleBootstrapRetryTimer: ReturnType<typeof setTimeout> | null = null
+let visibleBootstrapRetryCount = 0
 
 // 红外视频重连状态
 let infraredReconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -2748,6 +2762,8 @@ let infraredReconnectCount = 0
 let infraredFreezeTimer: ReturnType<typeof setInterval> | null = null
 let infraredLastVideoTime = -1
 let infraredStartTimer: ReturnType<typeof setTimeout> | null = null
+let infraredBootstrapRetryTimer: ReturnType<typeof setTimeout> | null = null
+let infraredBootstrapRetryCount = 0
 let hasHomeActivatedOnce = false
 
 // ---------- 主视频重连辅助函数 ----------
@@ -2769,6 +2785,45 @@ const clearWebRTCStartTimer = () => {
     clearTimeout(webrtcStartTimer)
     webrtcStartTimer = null
   }
+}
+const clearVisibleBootstrapRetryTimer = () => {
+  if (visibleBootstrapRetryTimer) {
+    clearTimeout(visibleBootstrapRetryTimer)
+    visibleBootstrapRetryTimer = null
+  }
+}
+const scheduleVisibleStreamBootstrapRetry = (robotId: string) => {
+  if (!robotId || robotId !== deviceStore.selectedRobotId) return
+  if (visibleBootstrapRetryTimer) return
+  if (visibleBootstrapRetryCount >= 3) return
+
+  visibleBootstrapRetryCount++
+  webrtcReconnecting.value = true
+  const delay = Math.min(1200 * visibleBootstrapRetryCount, 4000)
+  visibleBootstrapRetryTimer = setTimeout(async () => {
+    visibleBootstrapRetryTimer = null
+    if (!deviceStore.selectedRobotId || deviceStore.selectedRobotId !== robotId) {
+      webrtcReconnecting.value = false
+      return
+    }
+
+    await initCameraStreams()
+    if (!deviceStore.selectedRobotId || deviceStore.selectedRobotId !== robotId) {
+      webrtcReconnecting.value = false
+      return
+    }
+
+    initVideoPlayer()
+    if (videoStreamUrl.value) {
+      await nextTick()
+      startVideoPlayback()
+      visibleBootstrapRetryCount = 0
+      webrtcReconnecting.value = false
+      return
+    }
+
+    scheduleVisibleStreamBootstrapRetry(robotId)
+  }, delay)
 }
 const scheduleWebRTCReconnect = () => {
   if (!videoStreamUrl.value) {
@@ -2829,6 +2884,45 @@ const clearInfraredStartTimer = () => {
     infraredStartTimer = null
   }
 }
+const clearInfraredBootstrapRetryTimer = () => {
+  if (infraredBootstrapRetryTimer) {
+    clearTimeout(infraredBootstrapRetryTimer)
+    infraredBootstrapRetryTimer = null
+  }
+}
+const scheduleInfraredStreamBootstrapRetry = (robotId: string) => {
+  if (!robotId || robotId !== deviceStore.selectedRobotId) return
+  if (infraredBootstrapRetryTimer) return
+  if (infraredBootstrapRetryCount >= 3) return
+
+  infraredBootstrapRetryCount++
+  infraredReconnecting.value = true
+  const delay = Math.min(1200 * infraredBootstrapRetryCount, 4000)
+  infraredBootstrapRetryTimer = setTimeout(async () => {
+    infraredBootstrapRetryTimer = null
+    if (!deviceStore.selectedRobotId || deviceStore.selectedRobotId !== robotId) {
+      infraredReconnecting.value = false
+      return
+    }
+
+    await initCameraStreams()
+    if (!deviceStore.selectedRobotId || deviceStore.selectedRobotId !== robotId) {
+      infraredReconnecting.value = false
+      return
+    }
+
+    initInfraredVideo()
+    if (infraredStreamUrl.value) {
+      await nextTick()
+      startInfraredPlayback()
+      infraredBootstrapRetryCount = 0
+      infraredReconnecting.value = false
+      return
+    }
+
+    scheduleInfraredStreamBootstrapRetry(robotId)
+  }, delay)
+}
 const scheduleInfraredReconnect = () => {
   if (!infraredStreamUrl.value) {
     clearInfraredReconnectTimer()
@@ -2868,35 +2962,112 @@ const startInfraredFreezeDetection = () => {
   }, WEBRTC_FREEZE_CHECK_INTERVAL)
 }
 
-// 初始化视频播放器
-const initVideoPlayer = () => {
-  const defaultVideoType = getDefaultVideoType()
-  // 每次初始化先清空，避免沿用旧机器人 URL 触发重连
-  videoStreamUrl.value = ''
-  
-  if (defaultVideoType) {
-    const defaultStream = getVideoStream(defaultVideoType)
-    
-    if (defaultStream) {
-      videoStreamUrl.value = defaultStream.url
-      currentVideoType.value = defaultVideoType
-    } else {
-      const dockStream = getVideoStream('dock')
-      if (dockStream) {
-        videoStreamUrl.value = dockStream.url
-        currentVideoType.value = 'dock'
-      }
+const getCameraIdentityText = (camera: Partial<CameraInfo>) => {
+  return [
+    camera.CamType,
+    camera.CamName,
+    camera.PtzName,
+    camera.PtzType,
+    camera.CamKey,
+    camera.MainUrl,
+    camera.SubUrl,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
+const getCameraStreamType = (camera: Partial<CameraInfo>): VideoStream['type'] | null => {
+  const text = getCameraIdentityText(camera)
+  if (!text) return null
+
+  if (/(infrared|thermal|ir|红外|热成像)/i.test(text)) {
+    return 'drone_infrared'
+  }
+
+  if (/(visible|normal|wide|zoom|vision|rgb|可见光|白光)/i.test(text)) {
+    return 'drone_visible'
+  }
+
+  return null
+}
+
+const buildCameraBindings = (cameraData: CameraInfo[]) => {
+  const candidates = cameraData.slice(0, 2)
+  const bindings: Array<{ camera: CameraInfo; type: Extract<VideoStream['type'], 'drone_visible' | 'drone_infrared'> }> = []
+
+  candidates.forEach((camera, index) => {
+    const inferredType = getCameraStreamType(camera)
+    const fallbackType: Extract<VideoStream['type'], 'drone_visible' | 'drone_infrared'> =
+      index === 0 ? 'drone_visible' : 'drone_infrared'
+    const type = inferredType === 'drone_infrared' || inferredType === 'drone_visible'
+      ? inferredType
+      : fallbackType
+
+    if (!bindings.some(item => item.type === type)) {
+      bindings.push({ camera, type })
     }
-  } else {
-    const allStreams = getVideoStreams()
-    
-    if (allStreams.length > 0) {
-      videoStreamUrl.value = allStreams[0].url
-      currentVideoType.value = allStreams[0].type
+  })
+
+  if (!bindings.some(item => item.type === 'drone_visible') && candidates[0]) {
+    bindings.unshift({ camera: candidates[0], type: 'drone_visible' })
+  }
+
+  if (!bindings.some(item => item.type === 'drone_infrared') && candidates[1]) {
+    bindings.push({ camera: candidates[1], type: 'drone_infrared' })
+  }
+
+  return bindings
+}
+
+const startCameraStreamWithRetry = async (
+  robotId: string,
+  camera: CameraInfo,
+  signal?: AbortSignal
+): Promise<string> => {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
+    }
+
+    try {
+      const response = await cameraApi.startCameraStream(robotId, camera.CamKey, false, signal)
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError')
+      }
+      if (response?.stream_url) {
+        return response.stream_url
+      }
+      lastError = new Error(`Empty stream url for ${camera.CamKey}`)
+    } catch (error) {
+      if ((error as any)?.name === 'AbortError' || (error as any)?.message === 'canceled') {
+        throw error
+      }
+      lastError = error
     }
   }
 
-  if (!videoStreamUrl.value) {
+  throw lastError || new Error(`Failed to start stream for ${camera.CamKey}`)
+}
+
+// 初始化视频播放器
+const initVideoPlayer = () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  const streams = robotId ? getRobotVideoStreams(robotId) : getVideoStreams()
+  // 每次初始化先清空，避免沿用旧机器人 URL 触发重连
+  videoStreamUrl.value = ''
+
+  const visibleStream =
+    (robotId ? getRobotVideoStreamByType(robotId, 'drone_visible') : getVideoStream('drone_visible'))
+    || streams.find(stream => stream.type === 'drone_visible')
+    || null
+
+  if (visibleStream) {
+    videoStreamUrl.value = visibleStream.url
+    currentVideoType.value = 'drone_visible'
+  } else {
     stopVideoPlayback()
   }
   
@@ -2905,6 +3076,9 @@ const initVideoPlayer = () => {
 
 // 摄像头初始化的当前 AbortController，新一轮开始时取消上一轮
 let cameraInitAbortController: AbortController | null = null
+let isCameraInitRunning = false
+let cameraInitRunningRobotId = ''
+let lastCameraInitSuccessAt = 0
 
 // 初始化摄像头流
 const initCameraStreams = async (signal?: AbortSignal) => {
@@ -2918,7 +3092,7 @@ const initCameraStreams = async (signal?: AbortSignal) => {
   }
 
   // 优先读缓存（robotBootstrap 切换机器人后已预填充）
-  const cachedCameraList = localStorage.getItem('camera_list')
+  const cachedCameraList = localStorage.getItem(getRobotCameraListCacheKey(robotId))
   let cameraData: any[] | null = null
   if (cachedCameraList) {
     try {
@@ -2932,51 +3106,67 @@ const initCameraStreams = async (signal?: AbortSignal) => {
       const cameraListResponse = await cameraApi.getCameraList(robotId, signal)
       if (signal?.aborted) return
       if (!cameraListResponse?.data || !Array.isArray(cameraListResponse.data) || cameraListResponse.data.length === 0) {
-        setVideoStreams([])
+        setRobotVideoStreams(robotId, [])
         return
       }
       cameraData = cameraListResponse.data
+      localStorage.setItem(getRobotCameraListCacheKey(robotId), JSON.stringify(cameraData))
     } catch (_) {
-      setVideoStreams([])
+      setRobotVideoStreams(robotId, [])
       return
     }
   }
 
   try {
-    const videoStreams: any[] = []
-    // 只使用前两个摄像头：第一个作为可见光，第二个作为红外
-    const camerasToUse = cameraData.slice(0, 2)
+    const camerasToUse = buildCameraBindings(cameraData as CameraInfo[])
+    const streamByType: Partial<Record<'drone_visible' | 'drone_infrared', VideoStream>> = {}
+    const startTasks = camerasToUse.map(async ({ camera, type }) => {
+      const url = await startCameraStreamWithRetry(robotId, camera, signal)
+      if (signal?.aborted) return
 
-    for (let i = 0; i < camerasToUse.length; i++) {
-      if (signal?.aborted) return  // 已切换机器人，尽早退出
-      const camera = camerasToUse[i]
-      try {
-        const streamResponse = await cameraApi.startCameraStream(robotId, camera.CamKey, false, signal)
-        if (signal?.aborted) return  // startCameraStream 返回后再检查一次
-        // 第一个摄像头作为可见光，第二个摄像头作为红外
-        const type: 'drone_visible' | 'drone_infrared' = i === 0 ? 'drone_visible' : 'drone_infrared'
-        videoStreams.push({
-          type: type,
-          url: streamResponse.stream_url,
-          switchable_video_types: [],
-          device_sn: robotId,
-          camera_index: camera.CamKey,
-          video_index: i.toString()
-        })
-      } catch (error) {
-        if ((error as any)?.name === 'AbortError' || (error as any)?.message === 'canceled') return
-        // 其他错误静默志略，继续尝试下一个
+      const streamItem: VideoStream = {
+        type,
+        url,
+        switchable_video_types: [],
+        device_sn: robotId,
+        camera_index: camera.CamKey,
+        video_index: camera.CamKey,
       }
-    }
-    
-    // 保存视频流到 localStorage（无流时也覆盖，避免沿用上一个机器人的旧流）
-    setVideoStreams(videoStreams)
-    if (videoStreams.length > 0) {
-      localStorage.setItem('default_video_type', 'drone_visible')
+      streamByType[type] = streamItem
+
+      const partialStreams = Object.values(streamByType).filter(
+        (item): item is VideoStream => Boolean(item)
+      )
+      setRobotVideoStreams(robotId, partialStreams)
+      if (type === 'drone_visible') {
+        setRobotDefaultVideoType(robotId, 'drone_visible')
+      }
+
+      // 谁先拿到流地址就先播放谁，不等待另一条
+      if (deviceStore.selectedRobotId === robotId) {
+        if (type === 'drone_visible') {
+          initVideoPlayer()
+        } else if (type === 'drone_infrared') {
+          initInfraredVideo()
+        }
+      }
+    })
+
+    await Promise.allSettled(startTasks)
+    if (signal?.aborted) return
+
+    const streamResults = Object.values(streamByType).filter(
+      (item): item is VideoStream => Boolean(item)
+    )
+
+    // 保存当前成功启动的流；失败的路不会影响另一条成功流
+    setRobotVideoStreams(robotId, streamResults)
+    if (streamResults.some(stream => stream.type === 'drone_visible')) {
+      setRobotDefaultVideoType(robotId, 'drone_visible')
     }
   } catch (error) {
-    // 静默处理错误
-    setVideoStreams([])
+    if ((error as any)?.name === 'AbortError' || (error as any)?.message === 'canceled') return
+    setRobotVideoStreams(robotId, [])
   }
 }
 
@@ -3188,6 +3378,8 @@ const startWebRTCPlayback = async () => {
         isPlaying = true
         clearWebRTCReconnectTimer()
         clearWebRTCStartTimer()
+        clearVisibleBootstrapRetryTimer()
+        visibleBootstrapRetryCount = 0
         webrtcReconnectCount = 0        // 连接成功，重置重连计数
         webrtcReconnecting.value = false // 隐藏 overlay
         startWebRTCFreezeDetection()   // 启动画面冻结检测
@@ -3291,6 +3483,7 @@ const stopWebRTCPlayback = () => {
 const stopVideoPlayback = () => {
   // 清空响应式 URL，确保下次设置相同 URL 时 watch 也能触发
   videoStreamUrl.value = ''
+  clearVisibleBootstrapRetryTimer()
   // 停止WebRTC播放
   stopWebRTCPlayback()
   
@@ -3320,7 +3513,8 @@ const reloadVideo = () => {
 }
 
 const initInfraredVideo = () => {
-  const stream = getVideoStream('drone_infrared')
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  const stream = robotId ? getRobotVideoStreamByType(robotId, 'drone_infrared') : getVideoStream('drone_infrared')
   
   if (stream) {
     infraredStreamUrl.value = stream.url
@@ -3480,6 +3674,8 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
       if (currentInfraredPc.iceConnectionState === 'connected') {
         clearInfraredReconnectTimer()
         clearInfraredStartTimer()
+        clearInfraredBootstrapRetryTimer()
+        infraredBootstrapRetryCount = 0
         infraredReconnectCount = 0       // 连接成功，重置重连计数
         infraredReconnecting.value = false // 隐藏 overlay
         startInfraredFreezeDetection()   // 启动画面冻结检测
@@ -3569,6 +3765,7 @@ const stopInfraredWebRTCPlayback = () => {
 const stopInfraredPlayback = () => {
   // 清空响应式 URL，确保下次赋相同 URL 时 watch 也能触发
   infraredStreamUrl.value = ''
+  clearInfraredBootstrapRetryTimer()
   stopInfraredWebRTCPlayback()
   if (infraredVideoPlayer.value) {
     infraredVideoPlayer.value.pause()
@@ -3602,16 +3799,47 @@ const reloadInfraredStream = () => {
 const selectedWayline = ref('')
 const selectedMultiTask = ref('')
 const mapList = ref<string[]>([])
+let mapListRequestToken = 0
 const getCurrentRobotMapKeys = () => {
   const robotId = deviceStore.selectedRobotId || ''
   return robotId ? getRobotMapCacheKeys(robotId) : null
+}
+const getCurrentRobotContextKeys = () => {
+  const robotId = deviceStore.selectedRobotId || ''
+  return robotId ? getRobotContextCacheKeys(robotId) : null
+}
+const getRobotCameraListCacheKey = (robotId: string) => `camera_list_${robotId}`
+const getRobotVideoStreamsCacheKey = (robotId: string) => `video_streams_${robotId}`
+const getRobotDefaultVideoTypeKey = (robotId: string) => `default_video_type_${robotId}`
+const getRobotVideoStreams = (robotId: string): VideoStream[] => {
+  try {
+    const cached = localStorage.getItem(getRobotVideoStreamsCacheKey(robotId))
+    if (cached) {
+      return JSON.parse(cached)
+    }
+  } catch {}
+  return getVideoStreams()
+}
+const getRobotVideoStreamByType = (robotId: string, type: VideoStream['type']): VideoStream | null => {
+  const streams = getRobotVideoStreams(robotId)
+  return streams.find(stream => stream.type === type) || null
+}
+const setRobotVideoStreams = (robotId: string, streams: VideoStream[]) => {
+  localStorage.setItem(getRobotVideoStreamsCacheKey(robotId), JSON.stringify(streams))
+  setVideoStreams(streams)
+}
+const getRobotDefaultVideoType = (robotId: string): VideoStream['type'] | null => {
+  return localStorage.getItem(getRobotDefaultVideoTypeKey(robotId)) as VideoStream['type'] | null
+}
+const setRobotDefaultVideoType = (robotId: string, type: VideoStream['type']) => {
+  localStorage.setItem(getRobotDefaultVideoTypeKey(robotId), type)
+  localStorage.setItem('default_video_type', type)
 }
 const persistSelectedMapForCurrentRobot = (mapName: string) => {
   const keys = getCurrentRobotMapKeys()
   if (keys) {
     localStorage.setItem(keys.selectedMapKey, mapName)
   }
-  localStorage.setItem('selected_map_name', mapName)
 }
 // selectedMap 由 taskExecutionStore 全局驱动，实现多页面同步
 const selectedMap = computed({
@@ -3788,7 +4016,10 @@ const fetchTaskpointList = async (trackName: string) => {
   const groupSet = new Set<string>()
 
   // 优先使用登录阶段缓存的任务组映射
-  const cachedGroupMapRaw = localStorage.getItem('cached_taskpoint_group_map')
+  const contextKeys = getCurrentRobotContextKeys()
+  const cachedGroupMapRaw = contextKeys
+    ? localStorage.getItem(contextKeys.taskpointGroupMapKey)
+    : null
   if (cachedGroupMapRaw) {
     try {
       const groupMap = JSON.parse(cachedGroupMapRaw) as Record<string, string[]>
@@ -3804,7 +4035,9 @@ const fetchTaskpointList = async (trackName: string) => {
 
   // 次级回退：从 all_track_task_list 推导
   if (groupSet.size === 0) {
-    const cachedTaskListRaw = localStorage.getItem('all_track_task_list')
+    const cachedTaskListRaw = contextKeys
+      ? localStorage.getItem(contextKeys.allTrackTaskListKey)
+      : null
     if (cachedTaskListRaw) {
       try {
         const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
@@ -4031,7 +4264,7 @@ const getMapFileUrl = async (mapName: string, fileName: string): Promise<string 
 // 地图更新时间映射（运行时使用，key: 地图名, value: 更新时间）
 const mapUpdateTimeMap = ref<Record<string, string>>({})
 
-const applyMapListCache = (rawList: string[]) => {
+const applyMapListCache = (rawList: string[], robotId?: string) => {
   const parsedMapList: string[] = []
   const parsedUpdateTimeMap: Record<string, string> = {}
 
@@ -4056,7 +4289,7 @@ const applyMapListCache = (rawList: string[]) => {
 
   mapList.value = parsedMapList
   mapUpdateTimeMap.value = parsedUpdateTimeMap
-  const keys = getCurrentRobotMapKeys()
+  const keys = robotId ? getRobotMapCacheKeys(robotId) : getCurrentRobotMapKeys()
   if (keys) {
     localStorage.setItem(keys.mapListKey, JSON.stringify(parsedMapList))
     localStorage.setItem(keys.mapUpdateTimeKey, JSON.stringify(parsedUpdateTimeMap))
@@ -4088,36 +4321,44 @@ const ensureDefaultMapSelection = () => {
 }
 
 // 获取地图列表
-const fetchMapList = async () => {
-  const keys = getCurrentRobotMapKeys()
-  const cached =
-    (keys ? localStorage.getItem(keys.mapListKey) : null)
-    || localStorage.getItem('cached_map_list')
-  const cachedTimeMap =
-    (keys ? localStorage.getItem(keys.mapUpdateTimeKey) : null)
-    || localStorage.getItem('cached_map_update_time_map')
+const fetchMapList = async (targetRobotId?: string) => {
+  const robotId = targetRobotId || deviceStore.selectedRobotId
+  if (!robotId) {
+    mapList.value = []
+    mapUpdateTimeMap.value = {}
+    return
+  }
+
+  const requestToken = ++mapListRequestToken
+  const keys = getRobotMapCacheKeys(robotId)
+  const cached = keys ? localStorage.getItem(keys.mapListKey) : null
+  const cachedTimeMap = keys ? localStorage.getItem(keys.mapUpdateTimeKey) : null
+
+  if (requestToken !== mapListRequestToken || robotId !== deviceStore.selectedRobotId) {
+    return
+  }
 
   mapList.value = cached ? JSON.parse(cached) : []
   mapUpdateTimeMap.value = cachedTimeMap ? JSON.parse(cachedTimeMap) : {}
 
   if (mapList.value.length === 0) {
-    const robotId = deviceStore.selectedRobotId
-    if (robotId) {
-      try {
-        const response = await navigationApi.getMapList(robotId)
-        const rawList = Array.isArray(response?.msg?.result) ? response.msg.result : []
-        if (rawList.length > 0) {
-          applyMapListCache(rawList)
-        }
-      } catch (err) {
-        console.error('[地图列表] 获取地图列表失败:', err)
+    try {
+      const response = await navigationApi.getMapList(robotId)
+      if (requestToken !== mapListRequestToken || robotId !== deviceStore.selectedRobotId) {
+        return
       }
+      const rawList = Array.isArray(response?.msg?.result) ? response.msg.result : []
+      applyMapListCache(rawList, robotId)
+    } catch (err) {
+      if (requestToken !== mapListRequestToken || robotId !== deviceStore.selectedRobotId) {
+        return
+      }
+      console.error('[地图列表] 获取地图列表失败:', err)
     }
   }
 
   const cachedMapName =
     (keys ? localStorage.getItem(keys.selectedMapKey) : null)
-    || taskExecutionStore.selectedMapName
   if (cachedMapName && mapList.value.includes(cachedMapName)) {
     taskExecutionStore.setSelectedMapName(cachedMapName)
     persistSelectedMapForCurrentRobot(cachedMapName)
@@ -4154,14 +4395,15 @@ const syncSelectedMapTrajectoryFiles = async (mapName: string) => {
 }
 
 const fetchTrackList = async () => {
-  const cached = localStorage.getItem('cached_track_list')
+  const contextKeys = getCurrentRobotContextKeys()
+  const cached = contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null
   if (cached) {
     trackList.value = JSON.parse(cached)
     return
   }
 
   // 兜底：从 all_track_task_list 推导轨迹列表
-  const cachedTaskListRaw = localStorage.getItem('all_track_task_list')
+  const cachedTaskListRaw = contextKeys ? localStorage.getItem(contextKeys.allTrackTaskListKey) : null
   if (cachedTaskListRaw) {
     try {
       const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
@@ -4246,10 +4488,12 @@ interface PointTask {
 
 const pointTaskList = ref<PointTask[]>([])
 const selectedPointTask = ref('')
+let pointTaskRequestToken = 0
 
 const fetchPointTaskList = async () => {
   // 优先读缓存（robotBootstrap 切换机器人后已预填充）
-  const cached = localStorage.getItem('cached_point_task_list')
+  const contextKeys = getCurrentRobotContextKeys()
+  const cached = contextKeys ? localStorage.getItem(contextKeys.pointTaskListKey) : null
   if (cached) {
     try {
       const list = JSON.parse(cached)
@@ -4264,16 +4508,26 @@ const fetchPointTaskList = async () => {
   // 缓存为空时才直接请求接口
   const robotId = deviceStore.selectedRobotId
   if (!robotId) return
+  const requestToken = ++pointTaskRequestToken
   try {
     const response = await navigationApi.getPointTaskList(robotId)
+    if (requestToken !== pointTaskRequestToken || robotId !== deviceStore.selectedRobotId) {
+      return
+    }
     if (response && response.data) {
       pointTaskList.value = response.data.map((task: any) => ({
         ...task,
         task_id: String(task.task_id)
       }))
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList.value))
+      }
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
     }
   } catch (error) {
+    if (requestToken !== pointTaskRequestToken || robotId !== deviceStore.selectedRobotId) {
+      return
+    }
     pointTaskList.value = []
   }
 }
@@ -4312,10 +4566,12 @@ interface MultiTask {
 }
 
 const multiTaskList = ref<MultiTask[]>([])
+let multiTaskRequestToken = 0
 
 const fetchMultiTaskList = async () => {
   // 优先读缓存（robotBootstrap 切换机器人后已预填充）
-  const cached = localStorage.getItem('cached_multi_task_list')
+  const contextKeys = getCurrentRobotContextKeys()
+  const cached = contextKeys ? localStorage.getItem(contextKeys.multiTaskListKey) : null
   if (cached) {
     try {
       multiTaskList.value = JSON.parse(cached)
@@ -4326,13 +4582,23 @@ const fetchMultiTaskList = async () => {
   // 缓存为空时才直接请求接口
   const robotId = deviceStore.selectedRobotId
   if (!robotId) return
+  const requestToken = ++multiTaskRequestToken
   try {
     const response = await navigationApi.getMultiTaskList(robotId)
+    if (requestToken !== multiTaskRequestToken || robotId !== deviceStore.selectedRobotId) {
+      return
+    }
     if (response && response.msg) {
       multiTaskList.value = response.msg
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.multiTaskListKey, JSON.stringify(multiTaskList.value))
+      }
       localStorage.setItem('cached_multi_task_list', JSON.stringify(multiTaskList.value))
     }
   } catch (error) {
+    if (requestToken !== multiTaskRequestToken || robotId !== deviceStore.selectedRobotId) {
+      return
+    }
     multiTaskList.value = []
   }
 }
@@ -5887,21 +6153,37 @@ onMounted(async () => {
 // 切换机器人第一阶段：camera_list 就绪，立即启动视频流
 const handleRobotCameraReady = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
+  const targetRobotId = robotId || deviceStore.selectedRobotId || ''
   // 若事件携带的 robotId 与当前选中不符，说明是过期回调，直接忽略
   if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+  if (!targetRobotId) return
+  // 同一机器人初始化进行中时，忽略重复事件，避免 start 被反复 cancel
+  if (isCameraInitRunning && cameraInitRunningRobotId === targetRobotId) {
     return
   }
   // 取消上一轮摄像头初始化（如 A 的 startCameraStream 还在飞行）
   if (cameraInitAbortController) cameraInitAbortController.abort()
   cameraInitAbortController = new AbortController()
   const { signal } = cameraInitAbortController
+  isCameraInitRunning = true
+  cameraInitRunningRobotId = targetRobotId
 
-  stopVideoPlayback()
-  stopInfraredPlayback()
-  await initCameraStreams(signal)
-  if (signal.aborted) return  // 已被新一轮取代
-  initVideoPlayer()
-  initInfraredVideo()
+  try {
+    stopVideoPlayback()
+    stopInfraredPlayback()
+    await initCameraStreams(signal)
+    if (signal.aborted) return  // 已被新一轮取代
+    lastCameraInitSuccessAt = Date.now()
+    initVideoPlayer()
+    initInfraredVideo()
+  } finally {
+    if (cameraInitRunningRobotId === targetRobotId) {
+      isCameraInitRunning = false
+      cameraInitRunningRobotId = ''
+    }
+  }
 }
 
 // 切换机器人第二阶段：其余数据就绪，刷新下拉框和点云
@@ -5911,7 +6193,7 @@ const handleRobotMapListReady = async (event: Event) => {
     return
   }
 
-  await fetchMapList()
+  await fetchMapList(robotId)
   const navMapName = robotStore.cmdStatus?.map_name
   if (robotStore.cmdStatus?.nav === 1 && navMapName) {
     syncMapFromNavigation(navMapName)
@@ -6492,204 +6774,242 @@ const addCurrentGaitControl = (set: Set<RobotControlName>) => {
   if (current) set.add(current)
 }
 
-// 按产品文档生成“置灰按钮集合”（在基础安全规则之上叠加）
-const getDocDisabledControls = (): Set<RobotControlName> => {
-  const disabled = new Set<RobotControlName>()
-  const mode = getCurrentControlMode()
+const addManyControls = (set: Set<RobotControlName>, controls: RobotControlName[]) => {
+  controls.forEach(control => set.add(control))
+}
+
+const disableAllExcept = (...allowed: RobotControlName[]) => {
+  const disabled = new Set<RobotControlName>(allControlNames)
+  allowed.forEach(control => disabled.delete(control))
+  return disabled
+}
+
+const getControlStateSnapshot = () => {
   const basicState = robotStore.motionState?.basic_state ?? null
-  const isForce = basicState === 3
-  const isCrouch = (robotStore.postureText || '').includes('匍匐')
+  const mode = getCurrentControlMode()
+  const postureText = robotStore.postureText || ''
   const gaitTag = getCurrentGaitTag()
+  const currentGaitControl = getCurrentGaitControlName()
   const chargeActive = robotStore.cmdStatus?.charge === 1
   const dockCharging = isRobotCharging.value
 
-  // 手动模式：起立但未处于力控
-  if (mode === 'manual' && !isCrouch && !isForce) {
-    addAllGaitControls(disabled)
-    disabled.add('stand')
+  return {
+    mode,
+    basicState,
+    isForce: basicState === 3,
+    isMoving: basicState === 4,
+    isDown: basicState === 0 || basicState === 6,
+    isStandingState: basicState === 2 || basicState === 3 || basicState === 4 || basicState === 16,
+    isCrouch: postureText.includes('匍匐'),
+    gaitTag,
+    currentGaitControl,
+    chargeActive,
+    dockCharging,
+  }
+}
+
+// 按产品文档生成“置灰按钮集合”（在基础安全规则之上叠加）
+const getDocDisabledControls = (): Set<RobotControlName> => {
+  const disabled = new Set<RobotControlName>()
+  const state = getControlStateSnapshot()
+
+  if (state.isDown) {
+    return disableAllExcept('stand', 'startCharge', 'autoMode')
+  }
+
+  if (!state.isForce) {
+    if (state.mode === 'manual' && !state.isCrouch && state.isStandingState) {
+      addAllGaitControls(disabled)
+      disabled.add('stand')
+      return disabled
+    }
     return disabled
   }
 
-  // 文档中的其余规则均在“处于力控”条件下
-  if (!isForce) return disabled
-
-  if (mode === 'manual' && !isCrouch && gaitTag === 'walk' && chargeActive && dockCharging) {
-    allControlNames.forEach(name => {
-      if (name !== 'stand' && name !== 'endCharge') disabled.add(name)
-    })
-    return disabled
+  if (state.mode === 'manual' && !state.isCrouch && state.gaitTag === 'walk' && state.chargeActive && state.dockCharging) {
+    return disableAllExcept('stand', 'endCharge')
   }
 
-  if (mode === 'manual') {
-    if (!isCrouch) {
-      if (gaitTag === 'walk' && chargeActive) {
-        disabled.add('forceControlMode')
+  if (state.mode === 'manual') {
+    if (!state.isCrouch) {
+      disabled.add('forceControlMode')
+      disabled.add('stand')
+
+      if (!state.isMoving) {
+        addAllGaitControls(disabled)
+        return disabled
+      }
+
+      disabled.add('startMove')
+      if (state.gaitTag === 'walk') {
         disabled.add('walkGait')
-        disabled.add('startCharge')
-        disabled.add('stand')
-      } else if (gaitTag === 'walk') {
-        disabled.add('forceControlMode')
-        disabled.add('walkGait')
-        disabled.add('stand')
-      } else if (gaitTag === 'slope') {
-        disabled.add('forceControlMode')
+        return disabled
+      }
+      if (state.gaitTag === 'slope') {
         disabled.add('slopeGait')
-        disabled.add('stand')
-      } else if (gaitTag === 'obstacle') {
-        disabled.add('forceControlMode')
+        return disabled
+      }
+      if (state.gaitTag === 'obstacle') {
         disabled.add('obstacleGait')
-        disabled.add('stand')
-      } else if (gaitTag === 'stair') {
-        disabled.add('forceControlMode')
+        return disabled
+      }
+      if (state.gaitTag === 'stair') {
         addCurrentGaitControl(disabled)
-        disabled.add('stand')
-      } else if (gaitTag === 'l') {
-        disabled.add('forceControlMode')
+        return disabled
+      }
+      if (state.gaitTag === 'l') {
         disabled.add('lGait')
         disabled.add('startCharge')
         disabled.add('endCharge')
-        disabled.add('stand')
-      } else if (gaitTag === 'mountain') {
-        disabled.add('forceControlMode')
+        return disabled
+      }
+      if (state.gaitTag === 'mountain') {
         disabled.add('mountainGait')
         disabled.add('startCharge')
         disabled.add('endCharge')
-        disabled.add('stand')
-      } else if (gaitTag === 'quiet') {
-        disabled.add('forceControlMode')
+        return disabled
+      }
+      if (state.gaitTag === 'quiet') {
         disabled.add('quietGait')
         disabled.add('startCharge')
         disabled.add('endCharge')
-        disabled.add('stand')
-      } else {
-        disabled.add('forceControlMode')
-        addAllGaitControls(disabled)
-        disabled.add('stand')
+        return disabled
+      }
+
+      addAllGaitControls(disabled)
+      return disabled
+    }
+
+    disabled.add('forceControlMode')
+    disabled.add('stand')
+
+    if (!state.isMoving) {
+      addAllGaitControls(disabled)
+      return disabled
+    }
+
+    if (state.gaitTag === 'walk') {
+      addManyControls(disabled, ['walkGait', 'crawl', 'startMove', 'obstacleGait', 'stairGait', 'stairFollowGait', 'stair45Gait'])
+      if (state.chargeActive) {
+        disabled.add('startCharge')
       }
       return disabled
     }
 
-    // 手动 + 匍匐 + 力控
-    if (gaitTag === 'walk' && chargeActive) {
-      disabled.add('forceControlMode')
-      disabled.add('walkGait')
-      disabled.add('startCharge')
-      disabled.add('crawl')
-    } else if (gaitTag === 'walk') {
-      disabled.add('forceControlMode')
-      disabled.add('walkGait')
-      disabled.add('crawl')
-    } else {
-      disabled.add('forceControlMode')
-      addAllGaitControls(disabled)
-      disabled.add('stand')
-    }
+    addAllGaitControls(disabled)
+    disabled.add('crawl')
+    disabled.add('startMove')
     return disabled
   }
 
-  if (mode === 'navigation') {
-    if (!isCrouch) {
-      if (gaitTag === 'walk' && chargeActive) {
-        disabled.add('forceControlMode')
-        disabled.add('walkGait')
-        disabled.add('startCharge')
-      } else if (gaitTag === 'walk') {
-        disabled.add('forceControlMode')
-        disabled.add('walkGait')
-      } else {
-        disabled.add('forceControlMode')
+  if (state.mode === 'navigation') {
+    if (!state.isCrouch) {
+      if (!state.isMoving) {
+        addManyControls(disabled, ['forceControlMode', 'startCharge', 'endCharge', 'stand'])
         addAllGaitControls(disabled)
-        disabled.add('startCharge')
-        disabled.add('endCharge')
-        disabled.add('stand')
+        return disabled
       }
+
+      disabled.add('forceControlMode')
+      disabled.add('startMove')
+      if (state.gaitTag === 'walk') {
+        disabled.add('walkGait')
+        if (state.chargeActive) {
+          disabled.add('startCharge')
+        }
+        return disabled
+      }
+
+      addAllGaitControls(disabled)
       return disabled
     }
 
-    if (gaitTag === 'walk' && chargeActive) {
-      disabled.add('forceControlMode')
-      disabled.add('walkGait')
-      disabled.add('startCharge')
-      disabled.add('crawl')
-    } else if (gaitTag === 'walk') {
-      disabled.add('forceControlMode')
-      disabled.add('walkGait')
-      disabled.add('crawl')
-    } else {
-      disabled.add('forceControlMode')
-      addAllGaitControls(disabled)
-      disabled.add('startCharge')
-      disabled.add('endCharge')
-      disabled.add('crawl')
+    addManyControls(disabled, ['forceControlMode', 'startCharge', 'endCharge', 'crawl', 'startMove'])
+    addAllGaitControls(disabled)
+
+    if (state.isMoving && state.gaitTag === 'walk') {
+      disabled.clear()
+      addManyControls(disabled, ['forceControlMode', 'walkGait', 'crawl', 'startMove'])
+      if (state.chargeActive) {
+        disabled.add('startCharge')
+      }
     }
     return disabled
   }
 
-  // 辅助模式
-  if (!isCrouch) {
-    if (gaitTag === 'walk' && chargeActive) {
-      disabled.add('forceControlMode')
+  if (!state.isCrouch) {
+    disabled.add('forceControlMode')
+    disabled.add('stand')
+
+    if (!state.isMoving) {
+      addAllGaitControls(disabled)
+      return disabled
+    }
+
+    disabled.add('startMove')
+    if (state.gaitTag === 'walk') {
       disabled.add('walkGait')
-      disabled.add('startCharge')
-      disabled.add('stand')
-    } else if (gaitTag === 'walk') {
-      disabled.add('forceControlMode')
-      disabled.add('walkGait')
-      disabled.add('stand')
-    } else if (gaitTag === 'slope') {
-      disabled.add('forceControlMode')
+      if (state.chargeActive) {
+        disabled.add('startCharge')
+      }
+      return disabled
+    }
+    if (state.gaitTag === 'slope') {
       disabled.add('slopeGait')
-      disabled.add('stand')
-    } else if (gaitTag === 'obstacle') {
-      disabled.add('forceControlMode')
+      return disabled
+    }
+    if (state.gaitTag === 'obstacle') {
       disabled.add('obstacleGait')
-      disabled.add('stand')
-    } else if (gaitTag === 'stair') {
-      disabled.add('forceControlMode')
+      return disabled
+    }
+    if (state.gaitTag === 'stair') {
       addCurrentGaitControl(disabled)
-      disabled.add('stand')
-    } else if (gaitTag === 'l') {
-      disabled.add('forceControlMode')
+      return disabled
+    }
+    if (state.gaitTag === 'l') {
       disabled.add('lGait')
       disabled.add('startCharge')
       disabled.add('endCharge')
-      disabled.add('stand')
-    } else if (gaitTag === 'mountain') {
-      disabled.add('forceControlMode')
+      return disabled
+    }
+    if (state.gaitTag === 'mountain') {
       disabled.add('mountainGait')
       disabled.add('startCharge')
       disabled.add('endCharge')
-      disabled.add('stand')
-    } else if (gaitTag === 'quiet') {
-      disabled.add('forceControlMode')
+      return disabled
+    }
+    if (state.gaitTag === 'quiet') {
       disabled.add('quietGait')
       disabled.add('startCharge')
       disabled.add('endCharge')
-      disabled.add('stand')
-    } else {
-      disabled.add('forceControlMode')
-      addAllGaitControls(disabled)
-      disabled.add('stand')
+      return disabled
+    }
+
+    addAllGaitControls(disabled)
+    return disabled
+  }
+
+  disabled.add('forceControlMode')
+  disabled.add('crawl')
+
+  if (!state.isMoving) {
+    addAllGaitControls(disabled)
+    disabled.add('startCharge')
+    disabled.add('endCharge')
+    return disabled
+  }
+
+  if (state.gaitTag === 'walk') {
+    disabled.add('walkGait')
+    disabled.add('startMove')
+    if (state.chargeActive) {
+      disabled.add('startCharge')
     }
     return disabled
   }
 
-  if (gaitTag === 'walk' && chargeActive) {
-    disabled.add('forceControlMode')
-    disabled.add('walkGait')
-    disabled.add('startCharge')
-    disabled.add('crawl')
-  } else if (gaitTag === 'walk') {
-    disabled.add('forceControlMode')
-    disabled.add('walkGait')
-    disabled.add('crawl')
-  } else {
-    disabled.add('forceControlMode')
-    addAllGaitControls(disabled)
-    disabled.add('startCharge')
-    disabled.add('endCharge')
-    disabled.add('crawl')
-  }
+  addAllGaitControls(disabled)
+  disabled.add('startMove')
   return disabled
 }
 
@@ -6707,8 +7027,10 @@ const isControlEnabled = (controlName: RobotControlName) => {
     baseEnabled = canUseStandingControls(basicState)
   } else if (controlName === 'startMove') {
     baseEnabled = basicState === 2 || basicState === 3 || basicState === 4 || basicState === 16
-  } else if (controlName === 'forceControlMode' || controlName === 'autoMode') {
+  } else if (controlName === 'forceControlMode') {
     baseEnabled = canUseStandingControls(basicState)
+  } else if (controlName === 'autoMode') {
+    baseEnabled = basicState === 0 || basicState === 2 || basicState === 3 || basicState === 4 || basicState === 6 || basicState === 16
   } else if (gaitControlSet.has(controlName)) {
     baseEnabled = canUseStandingControls(basicState)
   } else if (controlName === 'startCharge' || controlName === 'endCharge' || controlName === 'resetCharge') {
@@ -6814,7 +7136,7 @@ watch(() => deviceStore.selectedRobot, async (newRobot, oldRobot) => {
   if (newRobot && !oldRobot) {
     
     // 加载所有列表数据
-    await fetchMapList()
+    await fetchMapList(newRobot.robot_id)
     await fetchTrackList()
     await fetchPointTaskList()
     await fetchMultiTaskList()
@@ -6833,7 +7155,7 @@ onMounted(async () => {
   // 首次挂载时：如果 robot 已就绪（刷新页面直接进来的情况），加载列表并初始化
   // 视频初始化由 robot-camera-ready 事件处理，此处只做列表与点云兜底
   if (deviceStore.selectedRobot) {
-    if (mapList.value.length === 0) await fetchMapList()
+    if (mapList.value.length === 0) await fetchMapList(deviceStore.selectedRobot.robot_id)
     if (trackList.value.length === 0) await fetchTrackList()
     if (pointTaskList.value.length === 0) await fetchPointTaskList()
     if (multiTaskList.value.length === 0) await fetchMultiTaskList()
@@ -6880,7 +7202,12 @@ onActivated(async () => {
 
     if (!mainConnAlive || !infraredConnAlive) {
       // 至少有一路断开，重新拉取摄像头流地址
-      await initCameraStreams()
+      const shouldRefreshStreams =
+        !isCameraInitRunning && (Date.now() - lastCameraInitSuccessAt > 3000)
+      if (shouldRefreshStreams) {
+        await initCameraStreams()
+        lastCameraInitSuccessAt = Date.now()
+      }
     }
 
     if (!mainConnAlive) {
@@ -7735,6 +8062,14 @@ onDeactivated(() => {
   font-weight: 500;
   background: url('@/assets/source_data/status.png') no-repeat;
   background-size: 100% 100%;
+}
+
+.zhuangtai4 > div.robot-status-online {
+  color: #22c55e;
+}
+
+.zhuangtai4 > div.robot-status-offline {
+  color: #ef4444;
 }
 
 .img {
@@ -9178,6 +9513,15 @@ onDeactivated(() => {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+:deep(.video-only-element::-webkit-media-controls-mute-button),
+:deep(.video-only-element::-webkit-media-controls-volume-control-container),
+:deep(.video-only-element::-webkit-media-controls-volume-slider),
+:deep(.video-only-element::-webkit-media-controls-overflow-button),
+:deep(.video-only-element::-webkit-media-controls-toggle-closed-captions-button) {
+  display: none !important;
+  -webkit-appearance: none;
 }
 
 /* 视频重连 overlay：保留最后一帧，叠加半透明提示 */

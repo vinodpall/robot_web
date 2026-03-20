@@ -533,8 +533,8 @@
           </div>
         </div>
         <div class="simple-modal-footer">
-          <button class="mission-btn mission-btn-secondary" @click="closeCreateTaskGroupDialog">取消</button>
           <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tasklist-create'" @click="handleCreateTaskGroup">确定</button>
+          <button class="mission-btn mission-btn-secondary" @click="closeCreateTaskGroupDialog">取消</button>
         </div>
       </div>
     </div>

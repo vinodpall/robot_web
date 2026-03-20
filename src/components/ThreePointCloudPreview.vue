@@ -339,7 +339,8 @@ const createRobotObject = () => {
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.scale.setScalar(0.026 * ROBOT_ICON_SCALE)
-    mesh.rotation.y = -pose.theta
+    // 3MF 箭头模型的局部前向轴与 pose.theta 的零角基准不一致，这里补一个固定偏移对齐路线方向
+    mesh.rotation.y = -(pose.theta - Math.PI / 2)
     group.add(mesh)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -361,7 +362,7 @@ const createRobotObject = () => {
     })
     const cone = new THREE.Mesh(geometry, material)
     cone.rotation.x = Math.PI / 2
-    cone.rotation.z = -pose.theta
+    cone.rotation.z = -(pose.theta - Math.PI / 2)
     group.add(cone)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
