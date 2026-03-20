@@ -1101,9 +1101,6 @@ const getUploadProgress = (job: any) => {
 // 加载任务记录数据
 const loadJobRecords = async () => {
   const workspaceId = getCachedWorkspaceId()
-  console.log('获取到的workspace_id:', workspaceId)
-  console.log('localStorage中的workspace_id:', localStorage.getItem('workspace_id'))
-  console.log('localStorage中的user:', localStorage.getItem('user'))
   // 航线筛选已移除
   
   // 先清空现有数据
@@ -1111,30 +1108,6 @@ const loadJobRecords = async () => {
   
   if (!workspaceId) {
     console.error('未找到workspace_id，无法加载任务记录')
-    // 尝试从用户信息中获取
-    const userStr = localStorage.getItem('user')
-    if (userStr) {
-      try {
-        const userData = JSON.parse(userStr)
-        console.log('从localStorage解析的用户数据:', userData)
-        if (userData.workspace_id) {
-          console.log('从用户数据中找到workspace_id:', userData.workspace_id)
-          await fetchJobs(userData.workspace_id, {
-            page: currentPage.value,
-            page_size: pageSize.value,
-            status: selectedStatus.value === '' ? undefined : Number(selectedStatus.value),
-            task_type: selectedTaskType.value === '' ? undefined : Number(selectedTaskType.value)
-          })
-          // 更新总数
-          if (pagination.value) {
-            total.value = pagination.value.total || 0
-          }
-          return
-        }
-      } catch (err) {
-        console.error('解析用户数据失败:', err)
-      }
-    }
     return
   }
   

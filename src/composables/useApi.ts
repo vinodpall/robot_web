@@ -198,12 +198,6 @@ export function useAuth() {
       localStorage.setItem('user', JSON.stringify(userData))
       localStorage.setItem('token', access_token)
       
-      if (userData?.workspace_id) {
-        localStorage.setItem('workspace_id', userData.workspace_id)
-      } else {
-        console.warn('当前用户未返回 workspace_id')
-      }
-      
       return { user: userData, token: access_token }
     } catch (err: any) {
       error.value = err.message || 'Login failed'
@@ -225,6 +219,7 @@ export function useAuth() {
       
       localStorage.removeItem('user')
       localStorage.removeItem('token')
+      localStorage.removeItem('workspace_id')
     }
   }
 
@@ -620,7 +615,19 @@ export function useDevices() {
   }
 
   const getCachedWorkspaceId = () => {
-    return localStorage.getItem('workspace_id')
+    // 兼容老逻辑：优先从当前用户对象读取，不再依赖独立 workspace_id 缓存键
+    try {
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        const userData = JSON.parse(userStr)
+        if (userData?.workspace_id) {
+          return String(userData.workspace_id)
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null
   }
 
   const fetchDevices = async (params?: { skip?: number; limit?: number; keyword?: string }) => {

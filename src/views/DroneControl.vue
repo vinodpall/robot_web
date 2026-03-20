@@ -5041,7 +5041,18 @@ const todayAbnormalTasks = ref(0)
 
 // 获取workspace_id
 function getWorkspaceId() {
-  return localStorage.getItem('workspace_id')
+  try {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      const userData = JSON.parse(userStr)
+      if (userData?.workspace_id) {
+        return String(userData.workspace_id)
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null
 }
 
 // 获取今日飞行统计
