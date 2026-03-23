@@ -8,6 +8,7 @@ import type {
   MappingProgressData,
   MsfStatusData,
   TaskStatusData,
+  TaskProgressData,
   DogUdpData,
   RcsData,
   MotionStateData,
@@ -64,6 +65,7 @@ export const useRobotStore = defineStore('robot', () => {
 
   // ===== task_status 发布点任务运行状态 =====
   const taskStatus = ref<TaskStatusData | null>(null)
+  const taskProgress = ref<TaskProgressData | null>(null)
 
   // ===== mutations =====
 
@@ -137,6 +139,10 @@ export const useRobotStore = defineStore('robot', () => {
     taskStatus.value = data
   }
 
+  const setTaskProgress = (data: TaskProgressData | null) => {
+    taskProgress.value = data
+  }
+
   const resetRuntimeState = () => {
     isOnline.value = false
     pose.value = null
@@ -154,6 +160,7 @@ export const useRobotStore = defineStore('robot', () => {
     sensorData.value = null
     systemTelemetry.value = null
     taskStatus.value = null
+    taskProgress.value = null
   }
 
   // ===== computed =====
@@ -347,6 +354,7 @@ export const useRobotStore = defineStore('robot', () => {
     sensorData,
     systemTelemetry,
     taskStatus,
+    taskProgress,
     // mutations
     setOnlineStatus,
     setPose,
@@ -364,6 +372,7 @@ export const useRobotStore = defineStore('robot', () => {
     setSensorData,
     setSystemTelemetry,
     setTaskStatus,
+    setTaskProgress,
     resetRuntimeState,
     // computed
     batteryLevel,

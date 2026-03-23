@@ -307,7 +307,7 @@
                       <!-- 大小滚动条 -->
                       <div class="tool-slider">
                         <div class="slider-label">大小</div>
-                        <input type="range" min="1" max="20" v-model.number="brushSize" class="size-slider-vertical" orient="vertical" />
+                        <input type="range" min="1" max="20" v-model.number="brushSize" class="size-slider-vertical" />
                         <div class="slider-value">{{ brushSize }}</div>
                       </div>
                       <!-- 保存 -->
@@ -5348,9 +5348,10 @@ const handleDelete = (item: any) => {
 }
 
 .size-slider-vertical {
-  writing-mode: bt-lr;
-  -webkit-appearance: slider-vertical;
-  appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  -webkit-appearance: none;
+  appearance: none;
   width: 6px;
   height: 140px;
   background: rgba(40, 120, 150, 0.6);

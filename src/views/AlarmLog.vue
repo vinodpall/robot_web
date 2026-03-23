@@ -782,10 +782,10 @@ onUnmounted(() => {
   min-height: 36px;
 }
 
-.trc-id        { flex: 0 0 55px;  min-width: 55px;  text-align: center; }
+.trc-id        { flex: 0 0 65px;  min-width: 65px;  text-align: center; }
 .trc-time      { flex: 0.7 1 0;   min-width: 110px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
 .trc-map       { flex: 1 1 0;     min-width: 80px;  text-align: center; }
-.trc-task      { flex: 2 1 0;     min-width: 130px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+.trc-task      { flex: 1.8 1 0;   min-width: 120px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
 .trc-point     { flex: 1 1 0;     min-width: 80px;  text-align: center; }
 .trc-coord     { flex: 1 1 0;     min-width: 90px;  text-align: center; }
 .trc-item      { flex: 1 1 0;     min-width: 80px;  text-align: center; }

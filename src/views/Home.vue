@@ -24,6 +24,7 @@
               controlsList="noremoteplayback nodownload"
               disablePictureInPicture
               muted
+              autoplay
               playsinline
               webkit-playsinline
               style="width: 100%; height: 100%; background: #000; border-radius: 0;"
@@ -82,8 +83,8 @@
               <div class="task-time">
                 <div class="task-name">任务名称：{{ waylineTaskName }}</div>
                 <div class="time-item">
-                  <span class="label">任务开始时间：{{ waylineTaskStartTime }}</span>
-                  <span class="label">当前航点：第{{ waylineCurrentWaypoint }}个</span>
+                  <span class="label">任务开始时间：<em class="time-value">{{ waylineTaskStartTime }}</em></span>
+                  <span v-if="hasActiveTaskStatistics" class="label">当前巡检点：<em class="time-value">第{{ waylineCurrentWaypoint }}个</em></span>
                 </div>
               </div>
               <div class="task-status">
@@ -2063,44 +2064,87 @@ const toggleTaskStatus = () => {
 
 
 // 航线任务相关计算属性
+const wsTaskProgress = computed(() => robotStore.taskProgress)
+
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const wsTaskMeta = computed(() => {
+  const p = wsTaskProgress.value
+  if (!p) return null
+  const total = Math.max(0, Math.floor(toFiniteNumber(p.total_points, 0)))
+  const finishedRaw = Math.max(0, Math.floor(toFiniteNumber(p.finished_points, 0)))
+  const finished = total > 0 ? Math.min(finishedRaw, total) : finishedRaw
+  const complete = Math.max(0, Math.min(100, toFiniteNumber(p.task_complete, 0)))
+  const hasTaskName = !!String(p.task_name || '').trim()
+  const started = hasTaskName || total > 0 || complete > 0 || finished > 0
+  const completed = started && ((total > 0 && finished >= total) || complete >= 100)
+  return { total, finished, complete, started, completed }
+})
+
 const waylineTaskName = computed(() => {
+  const name = wsTaskProgress.value?.task_name
+  if (name && String(name).trim()) return name
   return waylineJobDetail.value?.name || '暂无任务'
 })
 
 const waylineTaskStartTime = computed(() => {
+  if (!hasActiveTaskStatistics.value) return '--'
+  const wsTimestamp = wsTaskProgress.value?.timestamp
+  if (wsTimestamp) {
+    const ts = new Date(wsTimestamp).getTime()
+    if (Number.isFinite(ts)) return formatTimestamp(ts)
+  }
   if (!waylineJobDetail.value?.begin_time) return '--'
   return formatTimestamp(new Date(waylineJobDetail.value.begin_time).getTime())
 })
 
 const waylineCurrentWaypoint = computed(() => {
+  const ws = wsTaskMeta.value
+  if (ws) {
+    if (!ws.started) return 0
+    if (ws.completed) return ws.total || ws.finished
+    return ws.total > 0 ? Math.min(ws.finished + 1, ws.total) : ws.finished
+  }
   return waylineProgress.value?.ext?.current_waypoint_index || 0
 })
 
 const waylineTaskStatus = computed(() => {
+  const ws = wsTaskMeta.value
+  if (ws) {
+    if (!ws.started) return 'waiting'
+    return ws.completed ? 'completed' : 'running'
+  }
   return taskProgressStore.taskStatus
 })
 
 const waylineProgressPercent = computed(() => {
+  const ws = wsTaskMeta.value
+  if (ws) return Math.round(ws.complete)
   return taskProgressStore.taskProgressPercent
 })
 
 const waylineTaskStatusText = computed(() => {
-  const status = waylineProgress.value?.status
-  if (!status) return '未知'
-  
-  const statusTextMap: Record<string, string> = {
-    'canceled': '取消或终止',
-    'failed': '失败',
-    'in_progress': '执行中',
-    'ok': '执行成功',
-    'partially_done': '部分完成',
-    'paused': '暂停',
-    'rejected': '拒绝',
-    'sent': '已下发',
-    'timeout': '超时'
+  const ws = wsTaskMeta.value
+  if (ws) {
+    if (!ws.started) return '暂无'
+    return ws.completed ? '已完成' : '进行中'
   }
-  
-  return statusTextMap[status] || '未知'
+
+  const status = waylineProgress.value?.status
+  if (!status) return '暂无'
+  if (status === 'in_progress' || status === 'paused' || status === 'sent') return '进行中'
+  if (status === 'ok' || status === 'partially_done' || status === 'canceled' || status === 'failed' || status === 'timeout' || status === 'rejected') return '已完成'
+  return '暂无'
+})
+
+const hasActiveTaskStatistics = computed(() => {
+  const ws = wsTaskMeta.value
+  if (ws) return ws.started
+  const status = waylineProgress.value?.status
+  return status === 'in_progress' || status === 'paused' || status === 'sent'
 })
 
 // 按钮状态控制
@@ -3336,34 +3380,38 @@ const startWebRTCPlayback = async () => {
     currentPc.ontrack = (e) => {
       if (pc !== currentPc || sessionId !== webrtcSessionId) return
       if (videoElement.value) {
+        const videoEl = videoElement.value
+        const tryPlayVisible = () => {
+          videoEl.play().catch(err => {
+            console.error('[WebRTC播放] ❌ 可见光视频播放失败:', err)
+            scheduleWebRTCReconnect()
+          })
+        }
+
+        // 先绑定事件，再替换 srcObject，避免 metadata 事件先触发导致漏播
+        videoEl.onloadedmetadata = () => {
+          tryPlayVisible()
+        }
+
         // 新流到来时直接替换 srcObject（重连时旧流已保留最后一帧）
-        videoElement.value.srcObject = e.streams[0]
+        videoEl.srcObject = e.streams[0]
         clearWebRTCReconnectTimer()
         clearWebRTCStartTimer()
         webrtcReconnecting.value = false  // 隐藏 overlay
         
         // 强制设置WebRTC视频播放器样式
-        videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
-        
-        const videoEl = videoElement.value
+        videoEl.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
         
         videoEl.addEventListener('error', (e) => console.error('[WebRTC播放] 事件: error', e))
-        
-        // 等待视频流准备好后再播放
-        videoEl.onloadedmetadata = () => {
-          videoEl.play().catch(err => {
-            console.error('[WebRTC播放] ❌ 视频播放失败:', err)
-            scheduleWebRTCReconnect()
-          })
-        }
-        
-        // 添加超时机制：如果2秒后metadata还没加载，尝试强制播放
+
+        // 立即尝试一次，覆盖 metadata 事件触发过快或不触发的场景
+        tryPlayVisible()
+
+        // 添加超时机制：如果2秒后仍未开始，尝试强制播放
         setTimeout(() => {
-          if (videoEl.readyState === 0) {
-            videoEl.play().catch(err => {
-              console.error('[WebRTC播放] ❌ 强制播放失败:', err)
-              scheduleWebRTCReconnect()
-            })
+          if (!videoEl.srcObject) return
+          if (videoEl.paused || videoEl.currentTime === 0) {
+            tryPlayVisible()
           }
         }, 2000)
       } else {
@@ -9724,21 +9772,30 @@ onDeactivated(() => {
   width: calc(100% - 20px);
   height: 50px;
   margin: 10px 10px 0 10px;
-  background: linear-gradient(#1f87cc33, #1f87cc00);
-  border: 1px solid #164159;
+  background:
+    linear-gradient(180deg, rgba(22, 113, 176, 0.24) 0%, rgba(8, 42, 75, 0.06) 100%),
+    radial-gradient(120% 160% at 0% 0%, rgba(86, 193, 255, 0.2) 0%, rgba(86, 193, 255, 0) 65%);
+  border: 1px solid rgba(65, 166, 235, 0.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(27, 107, 171, 0.35),
+    0 4px 12px rgba(0, 18, 33, 0.45);
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 20px;
+  border-radius: 2px;
 }
 
 .task-name {
-  color: #59bfff;
+  color: #8ed9ff;
   font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
   line-height: 25px;
   margin: 0;
   padding: 0;
   text-align: left;
+  text-shadow: 0 0 8px rgba(56, 180, 255, 0.35);
 }
 
 .task-time {
@@ -9754,14 +9811,30 @@ onDeactivated(() => {
   align-items: center;
   height: 25px;
   line-height: 25px;
-  gap: 20px;
+  gap: 16px;
   padding: 0;
 }
 
 .time-item .label {
-  color: #59bfff;
+  color: #6dc9ff;
   font-size: 12px;
+  opacity: 0.94;
   white-space: nowrap; /* 防止文字换行 */
+  text-shadow: 0 0 6px rgba(40, 128, 191, 0.28);
+}
+
+.time-item .time-value {
+  color: #b6e8ff;
+  font-style: normal;
+  font-weight: 600;
+  margin-left: 2px;
+  text-shadow: 0 0 7px rgba(80, 200, 255, 0.35);
+}
+
+.time-item .label:last-child {
+  color: #83eaff;
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(44, 209, 255, 0.35);
 }
 
 .task-status {
@@ -9774,74 +9847,52 @@ onDeactivated(() => {
   margin: 0;
 }
 
-.status-btn.waiting {
-  width: 60px;
-  height: 20px;
+.status-btn {
+  width: 62px;
+  height: 22px;
   text-align: center;
-  color: #c4cdc9;
-  background: linear-gradient(#0bed9654, #0bed9600);
-  box-shadow: inset 0 0 6px #0bed96;
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 12px;
-  border: 1px solid #0BED96;
+  font-weight: 600;
   line-height: 20px;
+  letter-spacing: 0.2px;
   padding: 0;
+  backdrop-filter: blur(2px);
+}
+
+.status-btn.waiting {
+  color: #d5dfdb;
+  background: linear-gradient(180deg, rgba(142, 255, 204, 0.34) 0%, rgba(11, 237, 150, 0.08) 100%);
+  box-shadow: inset 0 0 8px rgba(11, 237, 150, 0.5), 0 0 8px rgba(11, 237, 150, 0.18);
+  border: 1px solid rgba(11, 237, 150, 0.78);
 }
 
 .status-btn.running {
-  width: 60px;
-  height: 20px;
-  text-align: center;
-  color: #1890ff;
-  background: linear-gradient(#1890ff54, #1890ff00);
-  box-shadow: inset 0 0 6px #1890ff;
-  border-radius: 3px;
-  font-size: 12px;
-  border: 1px solid #1890ff;
-  line-height: 20px;
-  padding: 0;
+  color: #7fd0ff;
+  background: linear-gradient(180deg, rgba(24, 144, 255, 0.44) 0%, rgba(24, 144, 255, 0.08) 100%);
+  box-shadow: inset 0 0 8px rgba(24, 144, 255, 0.62), 0 0 10px rgba(24, 144, 255, 0.22);
+  border: 1px solid rgba(80, 176, 255, 0.95);
 }
 
 .status-btn.completed {
-  width: 60px;
-  height: 20px;
-  text-align: center;
-  color: #52c41a;
-  background: linear-gradient(#52c41a54, #52c41a00);
-  box-shadow: inset 0 0 6px #52c41a;
-  border-radius: 3px;
-  font-size: 12px;
-  border: 1px solid #52c41a;
-  line-height: 20px;
-  padding: 0;
+  color: #98ef7a;
+  background: linear-gradient(180deg, rgba(82, 196, 26, 0.42) 0%, rgba(82, 196, 26, 0.08) 100%);
+  box-shadow: inset 0 0 8px rgba(82, 196, 26, 0.6), 0 0 9px rgba(82, 196, 26, 0.2);
+  border: 1px solid rgba(131, 225, 89, 0.92);
 }
 
 .status-btn.failed {
-  width: 60px;
-  height: 20px;
-  text-align: center;
-  color: #ff4d4f;
-  background: linear-gradient(#ff4d4f54, #ff4d4f00);
-  box-shadow: inset 0 0 6px #ff4d4f;
-  border-radius: 3px;
-  font-size: 12px;
-  border: 1px solid #ff4d4f;
-  line-height: 20px;
-  padding: 0;
+  color: #ff8e90;
+  background: linear-gradient(180deg, rgba(255, 77, 79, 0.42) 0%, rgba(255, 77, 79, 0.08) 100%);
+  box-shadow: inset 0 0 8px rgba(255, 77, 79, 0.58), 0 0 9px rgba(255, 77, 79, 0.2);
+  border: 1px solid rgba(255, 120, 122, 0.92);
 }
 
 .status-btn.paused {
-  width: 60px;
-  height: 20px;
-  text-align: center;
-  color: #faad14;
-  background: linear-gradient(#faad1454, #faad1400);
-  box-shadow: inset 0 0 6px #faad14;
-  border-radius: 3px;
-  font-size: 12px;
-  border: 1px solid #faad14;
-  line-height: 20px;
-  padding: 0;
+  color: #ffd074;
+  background: linear-gradient(180deg, rgba(250, 173, 20, 0.42) 0%, rgba(250, 173, 20, 0.08) 100%);
+  box-shadow: inset 0 0 8px rgba(250, 173, 20, 0.58), 0 0 9px rgba(250, 173, 20, 0.2);
+  border: 1px solid rgba(255, 199, 85, 0.92);
 }
 
 /* 任务进度图表样式调整 */
@@ -10093,8 +10144,7 @@ onDeactivated(() => {
     width: 35%;
   }
 
-  .status-btn.waiting,
-  .status-btn.paused {
+  .status-btn {
     width: clamp(50px, 5vw, 60px);
     font-size: clamp(11px, 0.9vw, 12px);
   }

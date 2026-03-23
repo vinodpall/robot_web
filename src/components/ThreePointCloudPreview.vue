@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="three-pointcloud-shell">
     <div ref="containerRef" class="three-pointcloud-canvas"></div>
     <div v-if="loading" class="three-pointcloud-overlay">点云加载中...</div>
@@ -34,6 +34,7 @@ const sceneRef = shallowRef<THREE.Scene | null>(null)
 const cameraRef = shallowRef<THREE.PerspectiveCamera | null>(null)
 const controlsRef = shallowRef<OrbitControls | null>(null)
 const dynamicGroupRef = shallowRef<THREE.Group | null>(null)
+const robotGroupRef = shallowRef<THREE.Group | null>(null)
 let resizeObserver: ResizeObserver | null = null
 let animationFrameId = 0
 const SCREEN_POINT_SIZE = 1
@@ -299,20 +300,61 @@ const createTaskMarkers = () => {
   return group
 }
 
-const createRobotObject = () => {
-  const pose = props.robotPose
+const updateRobotPose = (group: THREE.Group | null, pose: RobotPose | null | undefined) => {
+  if (!group) return
   const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
-  if (!pose || maxRange <= 1e-6) return null
+  if (!pose || maxRange <= 1e-6) {
+    group.visible = false
+    return
+  }
 
+  group.visible = true
   const normalized = {
     x: (pose.x - centerX) / maxRange,
     y: (pose.y - centerY) / maxRange,
     z: (pose.z - centerZ) / maxRange,
   }
   const world = toWorldPosition(normalized.x, normalized.y, normalized.z)
-
-  const group = new THREE.Group()
   group.position.copy(world)
+
+  const headingOffset = (group.userData.headingOffset as number | undefined) ?? 0
+  const previousWorld = group.userData.previousWorld as THREE.Vector3 | undefined
+  let baseHeading =
+    typeof pose.theta === 'number' && Number.isFinite(pose.theta)
+      ? -pose.theta
+      : ((group.userData.lastBaseHeading as number | undefined) ?? 0)
+
+  if (previousWorld) {
+    const dx = world.x - previousWorld.x
+    const dz = world.z - previousWorld.z
+    const movementSq = dx * dx + dz * dz
+    if (movementSq > 1e-8) {
+      // Prefer motion tangent so arrow tip always points to actual forward movement.
+      baseHeading = Math.atan2(dz, dx)
+    } else if (typeof group.userData.lastBaseHeading === 'number') {
+      baseHeading = group.userData.lastBaseHeading as number
+    }
+  }
+
+  group.userData.previousWorld = world.clone()
+  group.userData.lastBaseHeading = baseHeading
+
+  const heading = baseHeading + headingOffset
+  const headingAxis = group.userData.headingAxis as 'y' | 'z' | undefined
+  const headingTargets = group.userData.headingTargets as THREE.Object3D[] | undefined
+  if (!headingAxis || !headingTargets?.length) return
+  for (const target of headingTargets) {
+    if (headingAxis === 'y') {
+      target.rotation.y = heading
+    } else {
+      target.rotation.z = heading
+    }
+  }
+}
+
+const createRobotObject = () => {
+  const group = new THREE.Group()
+  group.visible = false
 
   if (props.robotMesh?.vertices?.length && props.robotMesh.indices?.length) {
     const positions = new Float32Array(props.robotMesh.vertices.length * 3)
@@ -339,8 +381,6 @@ const createRobotObject = () => {
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.scale.setScalar(0.026 * ROBOT_ICON_SCALE)
-    // 3MF 箭头模型的局部前向轴与 pose.theta 的零角基准不一致，这里补一个固定偏移对齐路线方向
-    mesh.rotation.y = -(pose.theta - Math.PI / 2)
     group.add(mesh)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -351,8 +391,12 @@ const createRobotObject = () => {
     })
     const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
     edges.scale.copy(mesh.scale)
-    edges.rotation.copy(mesh.rotation)
     group.add(edges)
+
+    group.userData.headingAxis = 'y'
+    // jiantou.3mf local forward is opposite to runtime heading; add 180deg compensation.
+    group.userData.headingOffset = -Math.PI / 2
+    group.userData.headingTargets = [mesh, edges]
   } else {
     const geometry = new THREE.ConeGeometry(0.026 * ROBOT_ICON_SCALE, 0.078 * ROBOT_ICON_SCALE, 3)
     const material = new THREE.MeshStandardMaterial({
@@ -361,8 +405,8 @@ const createRobotObject = () => {
       emissiveIntensity: 0.22,
     })
     const cone = new THREE.Mesh(geometry, material)
-    cone.rotation.x = Math.PI / 2
-    cone.rotation.z = -(pose.theta - Math.PI / 2)
+    // Cone points to +Y by default; rotate to +X so yaw around Y matches planar heading.
+    cone.rotation.z = -Math.PI / 2
     group.add(cone)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -374,6 +418,11 @@ const createRobotObject = () => {
     const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
     edges.rotation.copy(cone.rotation)
     group.add(edges)
+
+    group.userData.headingAxis = 'y'
+    // Fallback cone local forward is opposite to robot heading in current world mapping.
+    group.userData.headingOffset = Math.PI
+    group.userData.headingTargets = [cone, edges]
   }
 
   const label = createLabelSprite('机器狗', {
@@ -392,16 +441,27 @@ const createRobotObject = () => {
     group.add(label)
   }
 
+  updateRobotPose(group, props.robotPose ?? null)
   return group
 }
 
-const clearDynamicGroup = () => {
-  const scene = sceneRef.value
-  const dynamicGroup = dynamicGroupRef.value
-  if (!scene || !dynamicGroup) return
+const removeLabelSpritesInGroup = (group: THREE.Group) => {
+  const removed = new Set<THREE.Sprite>()
+  group.traverse((object) => {
+    if (object instanceof THREE.Sprite) {
+      removed.add(object)
+    }
+  })
+  if (!removed.size) return
+  for (let index = labelSprites.length - 1; index >= 0; index--) {
+    if (removed.has(labelSprites[index])) {
+      labelSprites.splice(index, 1)
+    }
+  }
+}
 
-  scene.remove(dynamicGroup)
-  dynamicGroup.traverse(object => {
+const disposeGroupResources = (group: THREE.Group) => {
+  group.traverse(object => {
     const mesh = object as THREE.Mesh
     const sprite = object as THREE.Sprite
     const points = object as THREE.Points
@@ -419,8 +479,37 @@ const clearDynamicGroup = () => {
     const spriteMaterial = sprite.material as THREE.SpriteMaterial | undefined
     spriteMaterial?.map?.dispose()
   })
+}
+
+const clearDynamicGroup = () => {
+  const scene = sceneRef.value
+  const dynamicGroup = dynamicGroupRef.value
+  if (!scene || !dynamicGroup) return
+
+  scene.remove(dynamicGroup)
+  removeLabelSpritesInGroup(dynamicGroup)
+  disposeGroupResources(dynamicGroup)
   dynamicGroupRef.value = null
-  labelSprites.length = 0
+}
+
+const clearRobotGroup = () => {
+  const scene = sceneRef.value
+  const robotGroup = robotGroupRef.value
+  if (!scene || !robotGroup) return
+
+  scene.remove(robotGroup)
+  removeLabelSpritesInGroup(robotGroup)
+  disposeGroupResources(robotGroup)
+  robotGroupRef.value = null
+}
+
+const rebuildRobotObject = () => {
+  const scene = sceneRef.value
+  if (!scene) return
+  clearRobotGroup()
+  const robot = createRobotObject()
+  scene.add(robot)
+  robotGroupRef.value = robot
 }
 
 const updateLabelScale = () => {
@@ -470,9 +559,6 @@ const rebuildSceneContent = () => {
 
   const origin = createOriginMarker()
   if (origin) group.add(origin)
-
-  const robot = createRobotObject()
-  if (robot) group.add(robot)
 
   scene.add(group)
   dynamicGroupRef.value = group
@@ -564,9 +650,10 @@ const startRenderLoop = () => {
 }
 
 watch(
-  () => [props.points, props.robotMesh, props.normalizationParams] as const,
+  () => [props.points, props.normalizationParams] as const,
   () => {
     rebuildSceneContent()
+    rebuildRobotObject()
     const sceneKey = getSceneFitKey()
     if (sceneKey !== lastFitSceneKey.value) {
       fitCameraToScene()
@@ -579,7 +666,15 @@ watch(
 watch(
   () => props.robotPose,
   () => {
-    rebuildSceneContent()
+    updateRobotPose(robotGroupRef.value, props.robotPose ?? null)
+  },
+  { deep: true }
+)
+
+watch(
+  () => props.robotMesh,
+  () => {
+    rebuildRobotObject()
   },
   { deep: true }
 )
@@ -622,6 +717,7 @@ onMounted(() => {
 
   resizeRenderer()
   rebuildSceneContent()
+  rebuildRobotObject()
   fitCameraToScene()
   startRenderLoop()
 
@@ -640,6 +736,7 @@ onBeforeUnmount(() => {
   resizeObserver = null
 
   clearDynamicGroup()
+  clearRobotGroup()
   controlsRef.value?.dispose()
   rendererRef.value?.dispose()
 
@@ -693,3 +790,6 @@ defineExpose({
 }
 
 </style>
+
+
+
