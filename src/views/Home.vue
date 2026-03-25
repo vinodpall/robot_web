@@ -16,18 +16,18 @@
           可见光视频
         </div>
         <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
-          <div class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
+          <div ref="visibleVideoWrapper" class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
             <video 
               ref="videoElement"
-              class="video-only-element"
-              controls
+              :class="['video-only-element', { 'video-hidden': !hasVisibleVideoFrame }]"
+              :controls="hasVisibleVideoFrame"
               controlsList="noremoteplayback nodownload"
               disablePictureInPicture
               muted
               autoplay
               playsinline
               webkit-playsinline
-              style="width: 100%; height: 100%; background: #000; border-radius: 0;"
+              style="width: 100%; height: 100%; border-radius: 0;"
             >
               您的浏览器不支持视频播放
             </video>
@@ -35,6 +35,30 @@
             <div v-if="webrtcReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
               <span class="video-reconnect-text">信号重连中...</span>
+            </div>
+            <div v-else-if="!hasVisibleVideoFrame" class="video-empty-state">
+              暂无视频流
+            </div>
+            <div class="video-action-group">
+              <button
+                class="video-action-btn stream-mode-btn"
+                :disabled="isStreamSwitching.visible || !canSwitchVideoStream('visible')"
+                :title="`切换到${getVideoStreamModeLabel('visible') === '主' ? '子码流' : '主码流'}`"
+                @click.stop="handleToggleVideoStream('visible')"
+              >
+                {{ getVideoStreamModeLabel('visible') }}
+              </button>
+              <button class="video-action-btn icon-only" title="手动重连" @click.stop="handleManualReconnect('visible')">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 12A8 8 0 1 1 17.66 6.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M20 4V9H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button class="video-action-btn icon-only" title="全屏" @click.stop="toggleVideoPanelFullscreen('visible')">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 3H3V8M16 3H21V8M8 21H3V16M16 21H21V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -47,18 +71,18 @@
           红外视频
         </div>
         <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
-          <div class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
+          <div ref="infraredVideoWrapper" class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
             <video 
               ref="infraredVideoElement"
-              class="video-only-element"
-              controls
+              :class="['video-only-element', { 'video-hidden': !hasInfraredVideoFrame }]"
+              :controls="hasInfraredVideoFrame"
               controlsList="noremoteplayback nodownload"
               disablePictureInPicture
               muted
               autoplay
               playsinline
               webkit-playsinline
-              style="width: 100%; height: 100%; background: #000; border-radius: 0;"
+              style="width: 100%; height: 100%; border-radius: 0;"
             >
               您的浏览器不支持视频播放
             </video>
@@ -66,6 +90,30 @@
             <div v-if="infraredReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
               <span class="video-reconnect-text">信号重连中...</span>
+            </div>
+            <div v-else-if="!hasInfraredVideoFrame" class="video-empty-state">
+              暂无视频流
+            </div>
+            <div class="video-action-group">
+              <button
+                class="video-action-btn stream-mode-btn"
+                :disabled="isStreamSwitching.infrared || !canSwitchVideoStream('infrared')"
+                :title="`切换到${getVideoStreamModeLabel('infrared') === '主' ? '子码流' : '主码流'}`"
+                @click.stop="handleToggleVideoStream('infrared')"
+              >
+                {{ getVideoStreamModeLabel('infrared') }}
+              </button>
+              <button class="video-action-btn icon-only" title="手动重连" @click.stop="handleManualReconnect('infrared')">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 12A8 8 0 1 1 17.66 6.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M20 4V9H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button class="video-action-btn icon-only" title="全屏" @click.stop="toggleVideoPanelFullscreen('infrared')">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 3H3V8M16 3H21V8M8 21H3V16M16 21H21V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -418,7 +466,7 @@
             <!-- 第二行 -->
             <button :class="getControlButtonClass('startMove')" :disabled="isControlDisabled('startMove')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('startMove')">{{ moveControlLabel }}</button>
             <button :class="getControlButtonClass('crawl')" :disabled="isControlDisabled('crawl')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('crawl')">{{ crawlControlLabel }}</button>
-            <button :class="getControlButtonClass('autoMode')" :disabled="isControlDisabled('autoMode')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('autoMode')">非手动模式</button>
+            <button :class="getControlButtonClass('autoMode')" :disabled="isControlDisabled('autoMode')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('autoMode')">{{ autoModeControlLabel }}</button>
             
             <!-- 第三行 -->
             <button :class="getControlButtonClass('walkGait')" :disabled="isControlDisabled('walkGait')" v-permission-click-dialog="'main-robotcontrol'" @click="handleControlClick('walkGait')">行走步态</button>
@@ -1221,6 +1269,12 @@ const isRobotCharging = computed(() => {
   const current = robotStore.batteryData?.current
   if (typeof current !== 'number' || !Number.isFinite(current)) return false
   return current > 0
+})
+
+// 计算属性：机器人电量是否已满（>=100%）
+const isRobotBatteryFull = computed(() => {
+  const level = Number(robotBatteryLevel.value)
+  return Number.isFinite(level) && level >= 100
 })
 
 // 导航、INS、MSF 状态（初始值直接读取 store，避免 watch immediate 顺序问题）
@@ -2773,6 +2827,10 @@ const updateMapMarkers = (shouldCenter = false) => {
 
 // 视频播放控制相关
 const isVideoPlaying = ref(false)
+const hasVisibleVideoFrame = ref(false)
+const hasInfraredVideoFrame = ref(false)
+const visibleVideoWrapper = ref<HTMLElement | null>(null)
+const infraredVideoWrapper = ref<HTMLElement | null>(null)
 const webrtcReconnecting = ref(false)   // 可见光重连中（保留最后一帧）
 const infraredReconnecting = ref(false) // 红外重连中（保留最后一帧）
 const currentTime = ref('00:00')
@@ -2797,6 +2855,7 @@ let webrtcReconnectCount = 0
 let webrtcFreezeTimer: ReturnType<typeof setInterval> | null = null
 let webrtcLastVideoTime = -1
 let webrtcStartTimer: ReturnType<typeof setTimeout> | null = null
+let visibleReconnectRefreshRunning = false
 let visibleBootstrapRetryTimer: ReturnType<typeof setTimeout> | null = null
 let visibleBootstrapRetryCount = 0
 
@@ -2806,9 +2865,12 @@ let infraredReconnectCount = 0
 let infraredFreezeTimer: ReturnType<typeof setInterval> | null = null
 let infraredLastVideoTime = -1
 let infraredStartTimer: ReturnType<typeof setTimeout> | null = null
+let infraredReconnectRefreshRunning = false
 let infraredBootstrapRetryTimer: ReturnType<typeof setTimeout> | null = null
 let infraredBootstrapRetryCount = 0
 let hasHomeActivatedOnce = false
+let foregroundRecoverTimer: ReturnType<typeof setTimeout> | null = null
+let foregroundRecoverRunning = false
 
 // ---------- 主视频重连辅助函数 ----------
 const clearWebRTCReconnectTimer = () => {
@@ -2886,12 +2948,32 @@ const scheduleWebRTCReconnect = () => {
   webrtcReconnectCount++
   webrtcReconnecting.value = true  // 显示 overlay，保留最后一帧
   const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * webrtcReconnectCount, 15000)
-  webrtcReconnectTimer = setTimeout(() => {
+  webrtcReconnectTimer = setTimeout(async () => {
     webrtcReconnectTimer = null
     if (!videoStreamUrl.value) {
       webrtcReconnecting.value = false
       return
     }
+
+    // 连续失败后主动刷新可见光流地址，避免反复使用失效的旧 URL。
+    // 经验上每 3 次失败刷新一次，兼顾恢复速度与后端压力。
+    if (webrtcReconnectCount >= 3 && webrtcReconnectCount % 3 === 0) {
+      const robotId = deviceStore.selectedRobotId || ''
+      if (robotId && !visibleReconnectRefreshRunning) {
+        visibleReconnectRefreshRunning = true
+        try {
+          await initCameraStreams()
+          if (robotId === deviceStore.selectedRobotId) {
+            initVideoPlayer()
+          }
+        } catch (err) {
+          console.warn('[WebRTC重连] 刷新可见光流地址失败:', err)
+        } finally {
+          visibleReconnectRefreshRunning = false
+        }
+      }
+    }
+
     stopWebRTCPlaybackForReconnect()  // 只关连接，不清 srcObject
     startWebRTCPlayback()
   }, delay)
@@ -2984,12 +3066,31 @@ const scheduleInfraredReconnect = () => {
   infraredReconnectCount++
   infraredReconnecting.value = true  // 显示 overlay，保留最后一帧
   const delay = Math.min(WEBRTC_RECONNECT_BASE_DELAY * infraredReconnectCount, 15000)
-  infraredReconnectTimer = setTimeout(() => {
+  infraredReconnectTimer = setTimeout(async () => {
     infraredReconnectTimer = null
     if (!infraredStreamUrl.value) {
       infraredReconnecting.value = false
       return
     }
+
+    // 连续失败后主动刷新红外流地址，避免重连反复命中失效 URL。
+    if (infraredReconnectCount >= 3 && infraredReconnectCount % 3 === 0) {
+      const robotId = deviceStore.selectedRobotId || ''
+      if (robotId && !infraredReconnectRefreshRunning) {
+        infraredReconnectRefreshRunning = true
+        try {
+          await initCameraStreams()
+          if (robotId === deviceStore.selectedRobotId) {
+            initInfraredVideo()
+          }
+        } catch (err) {
+          console.warn('[红外重连] 刷新流地址失败:', err)
+        } finally {
+          infraredReconnectRefreshRunning = false
+        }
+      }
+    }
+
     stopInfraredWebRTCPlaybackForReconnect()  // 只关连接，不清 srcObject
     startInfraredPlayback(true)  // keepFrame=true，跳过内部 stop
   }, delay)
@@ -3171,10 +3272,11 @@ const initCameraStreams = async (signal?: AbortSignal) => {
       const streamItem: VideoStream = {
         type,
         url,
-        switchable_video_types: [],
+        switchable_video_types: camera.MainUrl && camera.SubUrl ? ['main', 'sub'] : [],
         device_sn: robotId,
         camera_index: camera.CamKey,
         video_index: camera.CamKey,
+        use_sub_stream: false,
       }
       streamByType[type] = streamItem
 
@@ -3234,6 +3336,7 @@ const startVideoPlayback = () => {
       
       videoElement.value.addEventListener('play', () => {
         isVideoPlaying.value = true
+        hasVisibleVideoFrame.value = true
       })
       
       videoElement.value.addEventListener('pause', () => {
@@ -3395,6 +3498,7 @@ const startWebRTCPlayback = async () => {
 
         // 新流到来时直接替换 srcObject（重连时旧流已保留最后一帧）
         videoEl.srcObject = e.streams[0]
+        hasVisibleVideoFrame.value = true
         clearWebRTCReconnectTimer()
         clearWebRTCStartTimer()
         webrtcReconnecting.value = false  // 隐藏 overlay
@@ -3525,6 +3629,7 @@ const stopWebRTCPlayback = () => {
   }
 
   isPlaying = false
+  hasVisibleVideoFrame.value = false
 }
 
 // 停止视频播放
@@ -3548,6 +3653,7 @@ const stopVideoPlayback = () => {
     videoElement.value.src = ''
     videoElement.value.load()
   }
+  hasVisibleVideoFrame.value = false
 }
 
 // 重新加载视频
@@ -3616,7 +3722,11 @@ const startInfraredPlayback = (keepFrame = false) => {
       })
       infraredVideoPlayer.value.attachMediaElement(videoEl)
       infraredVideoPlayer.value.load()
-      infraredVideoPlayer.value.play().finally(() => {
+      infraredVideoPlayer.value.play().then(() => {
+        hasInfraredVideoFrame.value = true
+      }).catch(() => {
+        hasInfraredVideoFrame.value = false
+      }).finally(() => {
         infraredLoading.value = false
       })
     } else {
@@ -3629,8 +3739,10 @@ const startInfraredPlayback = (keepFrame = false) => {
   videoEl.src = infraredStreamUrl.value
   videoEl.load()
   videoEl.play().then(() => {
+    hasInfraredVideoFrame.value = true
     infraredLoading.value = false
   }).catch(() => {
+    hasInfraredVideoFrame.value = false
     infraredError.value = '红外视频加载失败'
     infraredLoading.value = false
   })
@@ -3674,6 +3786,7 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
       
       // 新流到来，直接替换 srcObject（重连时旧流已保留最后一帧）
       infraredVideoElement.value.srcObject = e.streams[0]
+      hasInfraredVideoFrame.value = true
       clearInfraredReconnectTimer()
       clearInfraredStartTimer()
       infraredReconnecting.value = false  // 隐藏 overlay
@@ -3808,6 +3921,7 @@ const stopInfraredWebRTCPlayback = () => {
   if (infraredVideoElement.value) {
     infraredVideoElement.value.srcObject = null
   }
+  hasInfraredVideoFrame.value = false
 }
 
 const stopInfraredPlayback = () => {
@@ -3827,6 +3941,7 @@ const stopInfraredPlayback = () => {
     infraredVideoElement.value.src = ''
     infraredVideoElement.value.load()
   }
+  hasInfraredVideoFrame.value = false
 }
 
 const reloadInfraredStream = () => {
@@ -3841,6 +3956,139 @@ const reloadInfraredStream = () => {
   nextTick(() => {
     infraredStreamUrl.value = stream.url
   })
+}
+
+const handleManualReconnect = (type: 'visible' | 'infrared') => {
+  if (type === 'visible') {
+    reloadVideo()
+    return
+  }
+  reloadInfraredStream()
+}
+
+const isStreamSwitching = ref({ visible: false, infrared: false })
+
+const getPanelVideoStream = (panel: 'visible' | 'infrared'): VideoStream | null => {
+  const streamType: VideoStream['type'] = panel === 'visible' ? 'drone_visible' : 'drone_infrared'
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (robotId) {
+    return getRobotVideoStreamByType(robotId, streamType)
+  }
+  return getVideoStream(streamType)
+}
+
+const hasSubStreamFromCameraCache = (stream: VideoStream): boolean => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return false
+  try {
+    const raw = localStorage.getItem(getRobotCameraListCacheKey(robotId))
+    if (!raw) return false
+    const cameras = JSON.parse(raw) as CameraInfo[]
+    const camera = cameras.find(item => String(item.CamKey) === String(stream.camera_index))
+    return !!(camera?.MainUrl && camera?.SubUrl)
+  } catch {
+    return false
+  }
+}
+
+const canSwitchVideoStream = (panel: 'visible' | 'infrared') => {
+  const stream = getPanelVideoStream(panel)
+  if (!stream) return false
+  const fromStream = (stream.switchable_video_types?.length ?? 0) > 0
+  return !!stream.camera_index && (fromStream || hasSubStreamFromCameraCache(stream))
+}
+
+const getVideoStreamModeLabel = (panel: 'visible' | 'infrared') => {
+  const stream = getPanelVideoStream(panel)
+  return stream?.use_sub_stream ? '子' : '主'
+}
+
+const handleToggleVideoStream = async (panel: 'visible' | 'infrared') => {
+  const stream = getPanelVideoStream(panel)
+  if (!stream) {
+    showError('未找到视频流缓存信息')
+    return
+  }
+  if (!canSwitchVideoStream(panel)) {
+    showError('当前视频不支持主/子码流切换')
+    return
+  }
+
+  const key = panel === 'visible' ? 'visible' : 'infrared'
+  if (isStreamSwitching.value[key]) return
+  isStreamSwitching.value[key] = true
+
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    isStreamSwitching.value[key] = false
+    showError('未选择机器人，无法切换码流')
+    return
+  }
+  const nextUseSubStream = !(stream.use_sub_stream === true)
+
+  try {
+    // 按后端要求先 stop 再 start，避免沿用旧会话导致切流不生效
+    try {
+      await cameraApi.stopCameraStream(robotId, stream.camera_index)
+    } catch (stopError) {
+      console.warn('切换码流前停止旧流失败，继续尝试启动新流:', stopError)
+    }
+
+    const response = await cameraApi.startCameraStream(robotId, stream.camera_index, nextUseSubStream)
+    if (!response?.stream_url) {
+      throw new Error('切换后未返回有效视频地址')
+    }
+
+    const updatedStream: VideoStream = {
+      ...stream,
+      url: response.stream_url,
+      switchable_video_types: (stream.switchable_video_types?.length ?? 0) > 0 ? stream.switchable_video_types : ['main', 'sub'],
+      use_sub_stream: nextUseSubStream,
+    }
+
+    if (robotId) {
+      const streams = getRobotVideoStreams(robotId)
+      const updated = streams.map(item =>
+        item.type === updatedStream.type ? { ...item, ...updatedStream } : item
+      )
+      setRobotVideoStreams(robotId, updated)
+    } else {
+      const streams = getVideoStreams()
+      const updated = streams.map(item =>
+        item.type === updatedStream.type ? { ...item, ...updatedStream } : item
+      )
+      setVideoStreams(updated)
+    }
+
+    if (panel === 'visible') {
+      stopVideoPlayback()
+      await nextTick()
+      videoStreamUrl.value = response.stream_url
+    } else {
+      stopInfraredPlayback()
+      await nextTick()
+      infraredStreamUrl.value = response.stream_url
+    }
+    showSuccess(`已切换到${nextUseSubStream ? '子码流' : '主码流'}`)
+  } catch (error) {
+    showError(`码流切换失败: ${parseErrorMessage(error)}`)
+  } finally {
+    isStreamSwitching.value[key] = false
+  }
+}
+
+const toggleVideoPanelFullscreen = async (type: 'visible' | 'infrared') => {
+  const panel = type === 'visible' ? visibleVideoWrapper.value : infraredVideoWrapper.value
+  if (!panel) return
+  try {
+    if (document.fullscreenElement === panel) {
+      await document.exitFullscreen()
+      return
+    }
+    await panel.requestFullscreen()
+  } catch (error) {
+    console.error('视频面板全屏切换失败:', error)
+  }
 }
 
 // 航线选择相关
@@ -6100,6 +6348,9 @@ onMounted(async () => {
   window.addEventListener('robot-camera-ready', handleRobotCameraReady)
   window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('focus', handleWindowFocus)
+  window.addEventListener('pageshow', handlePageShow)
 
   // 初始化警报声（使用Web Audio API生成）
   
@@ -6287,6 +6538,13 @@ onUnmounted(() => {
   window.removeEventListener('robot-camera-ready', handleRobotCameraReady)
   window.removeEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('focus', handleWindowFocus)
+  window.removeEventListener('pageshow', handlePageShow)
+  if (foregroundRecoverTimer) {
+    clearTimeout(foregroundRecoverTimer)
+    foregroundRecoverTimer = null
+  }
 
   // robotInfoTimer 已废弃，无需清理
 
@@ -6733,23 +6991,33 @@ const controlButtonLabelMap: Record<RobotControlName, string> = {
 }
 
 const isControlRequesting = ref(false)
+const getBasicStateCode = (): number | null => {
+  const raw = robotStore.motionState?.basic_state
+  if (raw == null) return null
+  const code = Number(raw)
+  return Number.isFinite(code) ? code : null
+}
+
 const standControlLabel = computed(() => {
-  const basicState = robotStore.motionState?.basic_state
+  const basicState = getBasicStateCode()
   return basicState === 2 || basicState === 3 || basicState === 4 || basicState === 16 ? '趴下' : '起立'
 })
 const moveControlLabel = computed(() => {
-  const basicState = robotStore.motionState?.basic_state
+  const basicState = getBasicStateCode()
   return basicState === 4 ? '停止运动' : '开始运动'
 })
 const crawlControlLabel = computed(() => {
   const postureText = robotStore.postureText || ''
   return postureText.includes('匍匐') ? '正常姿态' : '匍匐姿态'
 })
+const isManualMode = computed(() => (robotStore.rcsData?.rcs_state?.[0] ?? 0) === 0)
+const autoModeControlLabel = computed(() => isManualMode.value ? '非手动模式' : '手动模式')
 
 const getControlActionLabel = (controlName: RobotControlName) => {
   if (controlName === 'stand') return standControlLabel.value
   if (controlName === 'startMove') return moveControlLabel.value
   if (controlName === 'crawl') return crawlControlLabel.value
+  if (controlName === 'autoMode') return autoModeControlLabel.value
   return controlButtonLabelMap[controlName]
 }
 
@@ -6766,7 +7034,7 @@ const gaitControlSet = new Set<RobotControlName>([
 ])
 
 const allControlNames = Object.keys(controlCommandNameMap) as RobotControlName[]
-const allowedGaitsWhenCrouch = new Set<RobotControlName>(['walkGait', 'slopeGait'])
+const allowedGaitsWhenCrouch = new Set<RobotControlName>(['walkGait', 'slopeGait', 'lGait', 'mountainGait', 'quietGait'])
 const bodyHeightControlSet = new Set<RobotControlName>(['crawl'])
 
 const canUseStandingControls = (state: number | null) => {
@@ -6777,6 +7045,22 @@ const canUseStandingControls = (state: number | null) => {
 type RobotControlMode = 'manual' | 'navigation' | 'assist'
 type GaitTag = 'walk' | 'slope' | 'obstacle' | 'stair' | 'l' | 'mountain' | 'quiet' | 'unknown'
 
+const getGaitControlNameByState = (gaitState: number | string | null | undefined): RobotControlName | null => {
+  if (gaitState == null) return null
+  const gaitCode = Number(gaitState)
+  if (!Number.isFinite(gaitCode)) return null
+  if (gaitCode === 0) return 'walkGait'
+  if (gaitCode === 1) return 'obstacleGait'
+  if (gaitCode === 2) return 'slopeGait'
+  if (gaitCode === 6) return 'stairGait'
+  if (gaitCode === 7) return 'stairFollowGait'
+  if (gaitCode === 8) return 'stair45Gait'
+  if (gaitCode === 32) return 'lGait'
+  if (gaitCode === 33) return 'mountainGait'
+  if (gaitCode === 34) return 'quietGait'
+  return null
+}
+
 const getCurrentControlMode = (): RobotControlMode => {
   const navEnabled = robotStore.cmdStatus?.nav === 1
   if (navEnabled) return 'navigation'
@@ -6785,6 +7069,15 @@ const getCurrentControlMode = (): RobotControlMode => {
 }
 
 const getCurrentGaitTag = (): GaitTag => {
+  const gaitControlName = getGaitControlNameByState(robotStore.motionState?.gait_state ?? null)
+  if (gaitControlName === 'walkGait') return 'walk'
+  if (gaitControlName === 'slopeGait') return 'slope'
+  if (gaitControlName === 'obstacleGait') return 'obstacle'
+  if (gaitControlName === 'stairGait' || gaitControlName === 'stairFollowGait' || gaitControlName === 'stair45Gait') return 'stair'
+  if (gaitControlName === 'lGait') return 'l'
+  if (gaitControlName === 'mountainGait') return 'mountain'
+  if (gaitControlName === 'quietGait') return 'quiet'
+
   const gaitText = robotStore.gaitText || ''
   if (gaitText.includes('行走')) return 'walk'
   if (gaitText.includes('斜坡')) return 'slope'
@@ -6797,6 +7090,9 @@ const getCurrentGaitTag = (): GaitTag => {
 }
 
 const getCurrentGaitControlName = (): RobotControlName | null => {
+  const gaitControlName = getGaitControlNameByState(robotStore.motionState?.gait_state ?? null)
+  if (gaitControlName) return gaitControlName
+
   const tag = getCurrentGaitTag()
   if (tag === 'walk') return 'walkGait'
   if (tag === 'slope') return 'slopeGait'
@@ -6817,6 +7113,16 @@ const addAllGaitControls = (set: Set<RobotControlName>) => {
   gaitControlSet.forEach(name => set.add(name))
 }
 
+const syncCrouchGaitDisabledState = (set: Set<RobotControlName>) => {
+  gaitControlSet.forEach(name => {
+    if (allowedGaitsWhenCrouch.has(name)) {
+      set.delete(name)
+      return
+    }
+    set.add(name)
+  })
+}
+
 const addCurrentGaitControl = (set: Set<RobotControlName>) => {
   const current = getCurrentGaitControlName()
   if (current) set.add(current)
@@ -6833,7 +7139,7 @@ const disableAllExcept = (...allowed: RobotControlName[]) => {
 }
 
 const getControlStateSnapshot = () => {
-  const basicState = robotStore.motionState?.basic_state ?? null
+  const basicState = getBasicStateCode()
   const mode = getCurrentControlMode()
   const postureText = robotStore.postureText || ''
   const gaitTag = getCurrentGaitTag()
@@ -6866,8 +7172,14 @@ const getDocDisabledControls = (): Set<RobotControlName> => {
   }
 
   if (!state.isForce) {
-    if (state.mode === 'manual' && !state.isCrouch && state.isStandingState) {
-      addAllGaitControls(disabled)
+    if (state.mode === 'manual' && !state.isCrouch && state.isStandingState && !state.isMoving) {
+      const keepGaitSwitchable =
+        state.gaitTag === 'l' ||
+        state.gaitTag === 'mountain' ||
+        state.gaitTag === 'quiet'
+      if (!keepGaitSwitchable) {
+        addAllGaitControls(disabled)
+      }
       disabled.add('stand')
       return disabled
     }
@@ -6932,21 +7244,16 @@ const getDocDisabledControls = (): Set<RobotControlName> => {
     disabled.add('stand')
 
     if (!state.isMoving) {
-      addAllGaitControls(disabled)
+      syncCrouchGaitDisabledState(disabled)
       return disabled
     }
 
-    if (state.gaitTag === 'walk') {
-      addManyControls(disabled, ['walkGait', 'crawl', 'startMove', 'obstacleGait', 'stairGait', 'stairFollowGait', 'stair45Gait'])
-      if (state.chargeActive) {
-        disabled.add('startCharge')
-      }
-      return disabled
-    }
-
-    addAllGaitControls(disabled)
+    syncCrouchGaitDisabledState(disabled)
     disabled.add('crawl')
     disabled.add('startMove')
+    if (state.chargeActive) {
+      disabled.add('startCharge')
+    }
     return disabled
   }
 
@@ -6973,15 +7280,7 @@ const getDocDisabledControls = (): Set<RobotControlName> => {
     }
 
     addManyControls(disabled, ['forceControlMode', 'startCharge', 'endCharge', 'crawl', 'startMove'])
-    addAllGaitControls(disabled)
-
-    if (state.isMoving && state.gaitTag === 'walk') {
-      disabled.clear()
-      addManyControls(disabled, ['forceControlMode', 'walkGait', 'crawl', 'startMove'])
-      if (state.chargeActive) {
-        disabled.add('startCharge')
-      }
-    }
+    syncCrouchGaitDisabledState(disabled)
     return disabled
   }
 
@@ -7041,23 +7340,17 @@ const getDocDisabledControls = (): Set<RobotControlName> => {
   disabled.add('crawl')
 
   if (!state.isMoving) {
-    addAllGaitControls(disabled)
+    syncCrouchGaitDisabledState(disabled)
     disabled.add('startCharge')
     disabled.add('endCharge')
     return disabled
   }
-
-  if (state.gaitTag === 'walk') {
-    disabled.add('walkGait')
-    disabled.add('startMove')
-    if (state.chargeActive) {
-      disabled.add('startCharge')
-    }
-    return disabled
-  }
-
-  addAllGaitControls(disabled)
+  
+  syncCrouchGaitDisabledState(disabled)
   disabled.add('startMove')
+  if (state.chargeActive) {
+    disabled.add('startCharge')
+  }
   return disabled
 }
 
@@ -7066,23 +7359,43 @@ const isControlEnabled = (controlName: RobotControlName) => {
   if (!robotStore.isOnline) return false
   if (!controlCommandNameMap[controlName]) return false
 
-  const basicState = robotStore.motionState?.basic_state ?? null
+  const basicState = getBasicStateCode()
   let baseEnabled = false
 
   if (controlName === 'stand') {
-    baseEnabled = basicState === 0 || basicState === 2 || basicState === 3 || basicState === 4 || basicState === 6 || basicState === 16
+    // 运动中（basic_state=4）禁止趴下，需先停止运动
+    baseEnabled = basicState === 0 || basicState === 2 || basicState === 3 || basicState === 6 || basicState === 16
   } else if (controlName === 'crawl') {
     baseEnabled = canUseStandingControls(basicState)
+    if (baseEnabled && getCurrentControlMode() !== 'manual') {
+      // 匍匐姿态仅允许在手动模式下切换
+      baseEnabled = false
+    }
   } else if (controlName === 'startMove') {
-    baseEnabled = basicState === 2 || basicState === 3 || basicState === 4 || basicState === 16
+    // 开始运动仅允许在力控模式进入；踏步状态下保留“停止运动”可点击
+    baseEnabled = basicState === 3 || basicState === 4
   } else if (controlName === 'forceControlMode') {
-    baseEnabled = canUseStandingControls(basicState)
+    // basic_state=3(力控) 或 4(踏步) 时，力控模式按钮均置灰
+    baseEnabled = canUseStandingControls(basicState) && basicState !== 3 && basicState !== 4
   } else if (controlName === 'autoMode') {
     baseEnabled = basicState === 0 || basicState === 2 || basicState === 3 || basicState === 4 || basicState === 6 || basicState === 16
   } else if (gaitControlSet.has(controlName)) {
     baseEnabled = canUseStandingControls(basicState)
+    const currentGaitControl = getCurrentGaitControlName()
+    const isCrouchHeight = (robotStore.postureText || '').includes('匍匐')
+    if (baseEnabled && !isCrouchHeight && basicState !== 4 && currentGaitControl === controlName) {
+      // 当前步态按钮固定置灰（含 gait_state=0 时行走步态）
+      baseEnabled = false
+    }
   } else if (controlName === 'startCharge' || controlName === 'endCharge' || controlName === 'resetCharge') {
     baseEnabled = basicState !== 1 && basicState !== 5
+    if (controlName === 'startCharge') {
+      // 以电流正负判断是否充电：current>0 视为充电中，此时禁止“开始充电”
+      baseEnabled = baseEnabled && !isRobotCharging.value
+    } else if (controlName === 'endCharge') {
+      // 充电中或电量100%均允许“结束充电”
+      baseEnabled = baseEnabled && (isRobotCharging.value || isRobotBatteryFull.value)
+    }
   } else if (controlName === 'emergencyStop') {
     baseEnabled = basicState !== 6
   } else {
@@ -7090,7 +7403,13 @@ const isControlEnabled = (controlName: RobotControlName) => {
   }
   if (!baseEnabled) return false
 
+  if (controlName === 'startCharge' || controlName === 'endCharge') {
+    // 充电按钮不受文档规则分支额外置灰，统一按电流正负控制
+    return true
+  }
+
   const docDisabledControls = getDocDisabledControls()
+  if (controlName === 'stand') return true
   return !docDisabledControls.has(controlName)
 }
 
@@ -7105,7 +7424,7 @@ const getControlRuleViolationMessage = (controlName: RobotControlName): string |
   const postureText = robotStore.postureText || ''
   const isCrouchHeight = postureText.includes('匍匐')
   if (isCrouchHeight && gaitControlSet.has(controlName) && !allowedGaitsWhenCrouch.has(controlName)) {
-    return '当前为匍匐高度，仅支持行走步态和斜坡步态'
+    return '当前为匍匐高度，仅支持行走步态、斜坡步态、L步态、山地步态、静音步态'
   }
 
   const gaitText = robotStore.gaitText || ''
@@ -7122,7 +7441,9 @@ const handleControlClick = async (controlName: RobotControlName) => {
   const postureText = robotStore.postureText || ''
   const commandName = controlName === 'crawl'
     ? (postureText.includes('匍匐') ? 'height_normal' : 'height_down')
-    : controlCommandNameMap[controlName]
+    : controlName === 'autoMode'
+      ? (isManualMode.value ? 'mode_auto' : 'mode_manual')
+      : controlCommandNameMap[controlName]
   if (!commandName) {
     showError('该控制项暂未接入后端指令')
     return
@@ -7227,56 +7548,7 @@ onActivated(async () => {
   if (deviceStore.selectedRobot) {
     // 重新拉取循迹列表，确保数据最新（接口失败时自动回退到缓存）
     await fetchTrackList()
-
-    // 先清理旧的待执行重连 timer，避免和新的播放流程并发冲突
-    clearWebRTCReconnectTimer()
-    clearInfraredReconnectTimer()
-    clearWebRTCFreezeDetection()
-    clearInfraredFreezeDetection()
-    // 重置重连计数，切回首页视为一次新的播放会话，不应继承上次的失败计数
-    webrtcReconnectCount = 0
-    infraredReconnectCount = 0
-    webrtcReconnecting.value = false
-    infraredReconnecting.value = false
-
-    // 仅根据 WebRTC 连接状态判断是否需要重连
-    // 注意：不检查 video.paused，因为浏览器在页面隐藏时会自动暂停视频，这不代表连接断开
-    const mainConnAlive = pc !== null
-      && (pc.connectionState === 'connected' || pc.connectionState === 'connecting')
-      && videoElement.value !== null
-
-    const infraredConnAlive = infraredPc !== null
-      && (infraredPc.connectionState === 'connected' || infraredPc.connectionState === 'connecting')
-
-    if (!mainConnAlive || !infraredConnAlive) {
-      // 至少有一路断开，重新拉取摄像头流地址
-      const shouldRefreshStreams =
-        !isCameraInitRunning && (Date.now() - lastCameraInitSuccessAt > 3000)
-      if (shouldRefreshStreams) {
-        await initCameraStreams()
-        lastCameraInitSuccessAt = Date.now()
-      }
-    }
-
-    if (!mainConnAlive) {
-      // 连接已断开，重新初始化并建立连接
-      initVideoPlayer()
-      await nextTick()
-      if (videoStreamUrl.value) startVideoPlayback()
-    } else if (videoElement.value && videoElement.value.paused) {
-      // 连接正常，但视频被浏览器切页时暂停了，直接恢复播放
-      videoElement.value.play().catch(() => {})
-    }
-
-    if (!infraredConnAlive) {
-      // 红外连接已断开，重新初始化并建立连接
-      initInfraredVideo()
-      await nextTick()
-      if (infraredStreamUrl.value) startInfraredPlayback()
-    } else if (infraredVideoElement.value && infraredVideoElement.value.paused) {
-      // 红外连接正常，但视频被暂停，直接恢复播放
-      infraredVideoElement.value.play().catch(() => {})
-    }
+    await recoverVideoStreamsOnForeground()
 
     if (selectedMap.value) {
       await nextTick()
@@ -7288,6 +7560,87 @@ onActivated(async () => {
 onDeactivated(() => {
   isHomePageActive.value = false
 })
+
+const recoverVideoStreamsOnForeground = async () => {
+  if (foregroundRecoverRunning) return
+  if (!isHomePageActive.value) return
+  if (document.hidden) return
+  if (!deviceStore.selectedRobot) return
+
+  foregroundRecoverRunning = true
+  try {
+    // 与 onActivated 保持一致：先清理旧重连状态，避免并发冲突。
+    clearWebRTCReconnectTimer()
+    clearInfraredReconnectTimer()
+    clearWebRTCFreezeDetection()
+    clearInfraredFreezeDetection()
+    webrtcReconnectCount = 0
+    infraredReconnectCount = 0
+    webrtcReconnecting.value = false
+    infraredReconnecting.value = false
+
+    const mainConnAlive = pc !== null
+      && (pc.connectionState === 'connected' || pc.connectionState === 'connecting')
+      && videoElement.value !== null
+
+    const infraredConnAlive = infraredPc !== null
+      && (infraredPc.connectionState === 'connected' || infraredPc.connectionState === 'connecting')
+
+    if (!mainConnAlive || !infraredConnAlive) {
+      const shouldRefreshStreams =
+        !isCameraInitRunning && (Date.now() - lastCameraInitSuccessAt > 3000)
+      if (shouldRefreshStreams) {
+        await initCameraStreams()
+        lastCameraInitSuccessAt = Date.now()
+      }
+    }
+
+    if (!mainConnAlive) {
+      initVideoPlayer()
+      await nextTick()
+      if (videoStreamUrl.value) startVideoPlayback()
+    } else if (videoElement.value && videoElement.value.paused) {
+      videoElement.value.play().catch(() => {})
+    }
+
+    if (!infraredConnAlive) {
+      initInfraredVideo()
+      await nextTick()
+      if (infraredStreamUrl.value) startInfraredPlayback()
+    } else if (infraredVideoElement.value && infraredVideoElement.value.paused) {
+      infraredVideoElement.value.play().catch(() => {})
+    }
+  } finally {
+    foregroundRecoverRunning = false
+  }
+}
+
+const scheduleForegroundRecover = () => {
+  if (foregroundRecoverTimer) return
+  // 聚合 visibilitychange/focus/pageshow 的连续触发，避免重复重连。
+  foregroundRecoverTimer = setTimeout(() => {
+    foregroundRecoverTimer = null
+    recoverVideoStreamsOnForeground()
+  }, 250)
+}
+
+const handleVisibilityChange = () => {
+  if (!document.hidden) {
+    scheduleForegroundRecover()
+  }
+}
+
+const handleWindowFocus = () => {
+  if (!document.hidden) {
+    scheduleForegroundRecover()
+  }
+}
+
+const handlePageShow = () => {
+  if (!document.hidden) {
+    scheduleForegroundRecover()
+  }
+}
 
 </script>
 
@@ -9551,7 +9904,7 @@ onDeactivated(() => {
   border-radius: 12px;
   overflow: hidden;
   position: relative;
-  background: #000;
+  background: linear-gradient(180deg, #0e2b40 0%, #0b2235 100%);
   display: flex;
   flex: 1;
 }
@@ -9563,11 +9916,74 @@ onDeactivated(() => {
   display: block;
 }
 
+.video-hidden {
+  display: none !important;
+}
+
+.video-action-group {
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 12;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.video-only-wrapper:hover .video-action-group {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.video-action-btn {
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(129, 211, 242, 0.32);
+  background: rgba(9, 34, 54, 0.62);
+  color: #d7f1ff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-action-btn:hover {
+  border-color: rgba(142, 227, 255, 0.56);
+  background: rgba(14, 46, 70, 0.82);
+}
+
+.video-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.video-action-btn.icon-only svg {
+  width: 13px;
+  height: 13px;
+}
+
+.stream-mode-btn {
+  min-width: 24px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+
 :deep(.video-only-element::-webkit-media-controls-mute-button),
 :deep(.video-only-element::-webkit-media-controls-volume-control-container),
 :deep(.video-only-element::-webkit-media-controls-volume-slider),
 :deep(.video-only-element::-webkit-media-controls-overflow-button),
-:deep(.video-only-element::-webkit-media-controls-toggle-closed-captions-button) {
+:deep(.video-only-element::-webkit-media-controls-toggle-closed-captions-button),
+:deep(.video-only-element::-webkit-media-controls-fullscreen-button) {
   display: none !important;
   -webkit-appearance: none;
 }
@@ -9784,6 +10200,21 @@ onDeactivated(() => {
   align-items: center;
   padding: 0 20px;
   border-radius: 2px;
+}
+
+.video-empty-state {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(204, 225, 236, 0.86);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  z-index: 5;
+  pointer-events: none;
 }
 
 .task-name {

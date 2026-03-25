@@ -11,6 +11,7 @@ export interface VideoStream {
   camera_index: string
   video_index: string
   ai_enabled?: boolean
+  use_sub_stream?: boolean
 }
 
 /**

@@ -319,17 +319,18 @@ const updateRobotPose = (group: THREE.Group | null, pose: RobotPose | null | und
 
   const headingOffset = (group.userData.headingOffset as number | undefined) ?? 0
   const previousWorld = group.userData.previousWorld as THREE.Vector3 | undefined
-  let baseHeading =
-    typeof pose.theta === 'number' && Number.isFinite(pose.theta)
-      ? -pose.theta
-      : ((group.userData.lastBaseHeading as number | undefined) ?? 0)
+  const hasPoseTheta = typeof pose.theta === 'number' && Number.isFinite(pose.theta)
+  let baseHeading = hasPoseTheta
+    ? pose.theta
+    : ((group.userData.lastBaseHeading as number | undefined) ?? 0)
 
-  if (previousWorld) {
+  // Use movement tangent only as fallback when theta is unavailable.
+  // Otherwise tiny positional jitter can make the icon lean sideways.
+  if (!hasPoseTheta && previousWorld) {
     const dx = world.x - previousWorld.x
     const dz = world.z - previousWorld.z
     const movementSq = dx * dx + dz * dz
     if (movementSq > 1e-8) {
-      // Prefer motion tangent so arrow tip always points to actual forward movement.
       baseHeading = Math.atan2(dz, dx)
     } else if (typeof group.userData.lastBaseHeading === 'number') {
       baseHeading = group.userData.lastBaseHeading as number

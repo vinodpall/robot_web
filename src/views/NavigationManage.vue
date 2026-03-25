@@ -195,7 +195,7 @@
 
                   <div class="nav-info-item">
                     <span class="nav-info-label">抱闸:</span>
-                    <span class="nav-info-value">{{ navData.brake }}</span>
+                    <span class="nav-info-value">{{ brakeStatusText }}</span>
                   </div>
 
                   <div class="nav-info-item">
@@ -1430,6 +1430,9 @@ const navData = ref({
   satellite: '未收到',
   msfStatus: '未开启',
   insOrigin: '未初始化'
+})
+const brakeStatusText = computed(() => {
+  return Number(navData.value.brake) === 1 ? '已触发' : '未触发'
 })
 
 const syncNavPoseData = (pose: { x: number; y: number; z: number; theta: number } | null) => {
