@@ -168,7 +168,22 @@ function serveFile(fp, res) {
     }
     const ext  = path.extname(fp).toLowerCase()
     const mime = MIME[ext] || 'application/octet-stream'
-    res.writeHead(200, { 'Content-Type': mime })
+    const headers = { 'Content-Type': mime }
+    const normalizedPath = fp.replace(/\\/g, '/')
+    const isHtml = ext === '.html'
+    const isHashedAsset = /\/assets\/.+-[A-Za-z0-9_-]{8,}\./.test(normalizedPath)
+
+    if (isHtml) {
+      headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+      headers['Pragma'] = 'no-cache'
+      headers['Expires'] = '0'
+    } else if (isHashedAsset) {
+      headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    } else {
+      headers['Cache-Control'] = 'public, max-age=3600'
+    }
+
+    res.writeHead(200, headers)
     res.end(data)
   })
 }

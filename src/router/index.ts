@@ -223,4 +223,35 @@ router.beforeEach((to, _from, next) => {
   next(false)
 })
 
+const DYNAMIC_IMPORT_RETRY_KEY = 'dynamic-import-retried'
+
+router.onError((error, to) => {
+  const message = String((error as Error)?.message || '')
+  const isDynamicImportError =
+    message.includes('Failed to fetch dynamically imported module') ||
+    message.includes('Importing a module script failed')
+
+  if (!isDynamicImportError || typeof window === 'undefined') {
+    console.error('Router error:', error)
+    return
+  }
+
+  const hasRetried = sessionStorage.getItem(DYNAMIC_IMPORT_RETRY_KEY) === '1'
+  if (hasRetried) {
+    sessionStorage.removeItem(DYNAMIC_IMPORT_RETRY_KEY)
+    console.error('Dynamic import failed after retry:', error)
+    return
+  }
+
+  sessionStorage.setItem(DYNAMIC_IMPORT_RETRY_KEY, '1')
+  const hashPath = to?.fullPath || '/login'
+  window.location.replace(`${window.location.pathname}#${hashPath}`)
+})
+
+router.afterEach(() => {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem(DYNAMIC_IMPORT_RETRY_KEY)
+  }
+})
+
 export default router

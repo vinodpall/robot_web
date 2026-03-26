@@ -903,17 +903,6 @@
               <span class="dispatch-switch-label">{{ trackStartDialog.form.wait ? '否' : '是' }}</span>
             </div>
           </div>
-          <div v-if="trackStartDialog.statusText || trackStartDialog.stepLogs.length > 0" class="dispatch-task-row track-process-row">
-            <label>启动流程：</label>
-            <div class="track-process-panel" :class="trackStartDialog.statusType">
-              <div class="track-process-current">{{ trackStartDialog.statusText }}</div>
-              <div v-if="trackStartDialog.stepLogs.length > 0" class="track-process-log">
-                <div v-for="(log, index) in trackStartDialog.stepLogs" :key="`${index}-${log}`" class="track-process-log-item">
-                  {{ index + 1 }}. {{ log }}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
         <div class="dispatch-task-actions">
           <button 
@@ -925,6 +914,12 @@
           <button class="mission-btn mission-btn-cancel" :disabled="trackStartDialog.loading" @click="onTrackStartCancel">取消</button>
         </div>
       </div>
+    </div>
+  </div>
+  <div v-if="trackInitDialog.visible" class="custom-dialog-mask track-init-mask">
+    <div class="track-init-modal">
+      <span class="track-init-spinner"></span>
+      <span class="track-init-text">{{ trackInitDialog.text }}</span>
     </div>
   </div>
 
@@ -4278,6 +4273,11 @@ const trackStartDialog = ref({
   }
 })
 
+const trackInitDialog = ref({
+  visible: false,
+  text: '机器狗初始化中...'
+})
+
 // 多任务组启动弹窗
 const multiTaskStartDialog = ref({
   visible: false,
@@ -5542,6 +5542,9 @@ const onTrackStartConfirm = async () => {
   
   if (trackStartDialog.value.loading) return
   trackStartDialog.value.loading = true
+  trackStartDialog.value.visible = false
+  trackInitDialog.value.text = '机器狗初始化中...'
+  trackInitDialog.value.visible = true
 
   try {
     const robotId = deviceStore.selectedRobotId
@@ -5609,11 +5612,6 @@ const onTrackStartConfirm = async () => {
       if (error_code === 0) {
         pushTrackStartStep((response as any).message || '循迹任务启动成功', 'success')
         await finalizeTrackTaskStart(form.track_name, form.taskpoint_name, (response as any).message || '循迹任务启动成功')
-        window.setTimeout(() => {
-          if (!trackStartDialog.value.loading) {
-            trackStartDialog.value.visible = false
-          }
-        }, 1500)
       } else {
         pushTrackStartStep(`启动失败: ${error_msg || '未知错误'}`, 'error')
         showError(`启动失败: ${error_msg || '未知错误'}`)
@@ -5621,11 +5619,6 @@ const onTrackStartConfirm = async () => {
     } else {
       pushTrackStartStep('循迹任务启动成功', 'success')
       await finalizeTrackTaskStart(form.track_name, form.taskpoint_name)
-      window.setTimeout(() => {
-        if (!trackStartDialog.value.loading) {
-          trackStartDialog.value.visible = false
-        }
-      }, 1500)
     }
   } catch (error) {
     console.error('启动循迹任务失败:', error)
@@ -5633,6 +5626,7 @@ const onTrackStartConfirm = async () => {
     pushTrackStartStep(errorMessage, 'error')
     showError(errorMessage)
   } finally {
+    trackInitDialog.value.visible = false
     trackStartDialog.value.loading = false
   }
 }
@@ -6347,6 +6341,7 @@ watch(() => infraredStreamUrl.value, (newUrl) => {
 onMounted(async () => {
   window.addEventListener('robot-camera-ready', handleRobotCameraReady)
   window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
+  window.addEventListener('robot-track-list-ready', handleRobotTrackListReady)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('focus', handleWindowFocus)
@@ -6499,6 +6494,14 @@ const handleRobotMapListReady = async (event: Event) => {
   }
 }
 
+const handleRobotTrackListReady = async (event: Event) => {
+  const { robotId } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+  await fetchTrackList()
+}
+
 // 切换机器人第三阶段：其余数据就绪，刷新其他下拉和点云
 const handleRobotContextRefreshed = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
@@ -6537,6 +6540,7 @@ onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick)
   window.removeEventListener('robot-camera-ready', handleRobotCameraReady)
   window.removeEventListener('robot-map-list-ready', handleRobotMapListReady)
+  window.removeEventListener('robot-track-list-ready', handleRobotTrackListReady)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('focus', handleWindowFocus)
@@ -7784,6 +7788,39 @@ const handlePageShow = () => {
 
 .track-process-panel.error {
   border-color: rgba(255, 107, 107, 0.45);
+}
+
+.track-init-mask {
+  z-index: 10002;
+}
+
+.track-init-modal {
+  min-width: 260px;
+  max-width: 360px;
+  padding: 24px 28px;
+  border-radius: 10px;
+  background: #172233;
+  border: 1px solid #18344a;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.track-init-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(103, 213, 253, 0.3);
+  border-top-color: #67d5fd;
+  border-radius: 50%;
+  animation: task-btn-spin 0.7s linear infinite;
+}
+
+.track-init-text {
+  color: #d7f5ff;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .track-process-current {

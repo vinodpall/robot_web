@@ -32,6 +32,8 @@ export interface CmdStatusData {
   data_record: number
   slam: number
   msf: number
+  app_nav_pause?: number
+  app_nav_navtrack?: number
   map_name: string
   track_info: CmdStatusTrackInfo
 }
@@ -85,6 +87,13 @@ export interface TaskProgressData {
   task_type: number
   last_task: string
   timestamp: string
+}
+
+export interface SensorStatusData {
+  charge_msg: string
+  lidar_msg: string
+  imu_msg: string
+  gps_msg: string
 }
 
 /** 0x1008 运行状态中的错误位 */
@@ -295,6 +304,11 @@ export function useRobotWebSocket() {
       // ---- 融合定位状态 ----
       case 'msf_status':
         robotStore.setMsfStatus(data as MsfStatusData)
+        break
+
+      // ---- 传感器状态（激光雷达/IMU/GPS） ----
+      case 'sensor_status':
+        robotStore.setSensorStatus(data as SensorStatusData)
         break
 
       // ---- 机器狗 UDP 数据（含心跳） ----

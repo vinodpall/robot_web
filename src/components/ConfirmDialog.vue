@@ -90,14 +90,15 @@ const handleMaskClick = () => {
   bottom: 0;
   background: rgba(0, 0, 0, 0.6);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   z-index: 9999;
   backdrop-filter: blur(4px);
 }
 
 .confirm-dialog {
-  margin-top: 28vh;
+  margin-top: 0;
+  transform: translateY(-8vh);
   background: linear-gradient(135deg, #1a233a 80%, #16213a 100%);
   border-radius: 16px;
   padding: 20px 24px;
@@ -109,6 +110,12 @@ const handleMaskClick = () => {
   width: 86%;
   border: 1px solid rgba(24, 144, 255, 0.25);
   position: relative;
+}
+
+@media (max-height: 800px) {
+  .confirm-dialog {
+    transform: translateY(-4vh);
+  }
 }
 
 .confirm-close-btn {

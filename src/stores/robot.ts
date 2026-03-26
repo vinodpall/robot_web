@@ -13,6 +13,7 @@ import type {
   RcsData,
   MotionStateData,
   BatteryData,
+  SensorStatusData,
   SensorData,
   SystemTelemetryData,
   TerrainModeData,
@@ -40,6 +41,7 @@ export const useRobotStore = defineStore('robot', () => {
 
   // ===== 融合定位状态 =====
   const msfStatus = ref<MsfStatusData | null>(null)
+  const sensorStatus = ref<SensorStatusData | null>(null)
 
   // ===== 机器狗 UDP 原始消息（最新一条） =====
   const latestDogUdpMessage = ref<DogUdpData | null>(null)
@@ -100,6 +102,10 @@ export const useRobotStore = defineStore('robot', () => {
     msfStatus.value = data
   }
 
+  const setSensorStatus = (data: SensorStatusData) => {
+    sensorStatus.value = data
+  }
+
   const setDogUdpMessage = (data: DogUdpData) => {
     latestDogUdpMessage.value = data
   }
@@ -151,6 +157,7 @@ export const useRobotStore = defineStore('robot', () => {
     alerts.value = []
     mappingProgress.value = null
     msfStatus.value = null
+    sensorStatus.value = null
     latestDogUdpMessage.value = null
     rcsData.value = null
     motionState.value = null
@@ -345,6 +352,7 @@ export const useRobotStore = defineStore('robot', () => {
     alerts,
     mappingProgress,
     msfStatus,
+    sensorStatus,
     latestDogUdpMessage,
     rcsData,
     motionState,
@@ -363,6 +371,7 @@ export const useRobotStore = defineStore('robot', () => {
     pushAlert,
     setMappingProgress,
     setMsfStatus,
+    setSensorStatus,
     setDogUdpMessage,
     setRcsData,
     setMotionState,

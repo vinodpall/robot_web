@@ -399,7 +399,7 @@
           <div class="dispatch-task-title">启动循迹任务</div>
           <div class="dispatch-task-form">
             <div class="dispatch-task-row">
-              <label>路线名称：</label>
+              <label>循迹任务：</label>
               <input 
                 v-model="trackStartDialog.form.track_name" 
                 class="dispatch-task-input" 
@@ -407,12 +407,32 @@
               />
             </div>
             <div class="dispatch-task-row">
-              <label>任务组：</label>
-              <input 
-                v-model="trackStartDialog.form.taskpoint_name" 
-                class="dispatch-task-input" 
-                disabled
-              />
+              <label>关键点文件：</label>
+              <div class="custom-select-wrapper">
+                <select 
+                  v-model="trackStartDialog.form.taskpoint_name"
+                  class="mission-select"
+                  :disabled="taskGroupList.length === 0 || trackStartDialog.loading"
+                >
+                  <option v-if="taskGroupList.length === 0" value="">暂无关键点文件</option>
+                  <option 
+                    v-for="taskGroup in taskGroupList"
+                    :key="taskGroup"
+                    :value="taskGroup"
+                  >
+                    {{ taskGroup }}
+                  </option>
+                </select>
+                <span class="custom-select-arrow">
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <polygon points="2,4 6,8 10,4" fill="#fff"/>
+                  </svg>
+                </span>
+              </div>
+            </div>
+            <div v-if="taskGroupList.length === 0" class="dispatch-task-row">
+              <label></label>
+              <div class="time-tip" style="color: #ff6b6b;">提示：当前循迹任务没有关键点文件，请先创建</div>
             </div>
             <div class="dispatch-task-row">
               <label>避障模式：</label>
@@ -430,7 +450,7 @@
               </div>
             </div>
             <div class="dispatch-task-row">
-              <label>步态类型：</label>
+              <label>步态选择：</label>
               <div class="custom-select-wrapper">
                 <select v-model="trackStartDialog.form.gait_type" class="mission-select" :disabled="trackStartDialog.loading">
                   <option :value="0">行走步态</option>
@@ -450,25 +470,39 @@
                 </span>
               </div>
             </div>
-            <div v-if="trackStartDialog.statusText || trackStartDialog.stepLogs.length > 0" class="dispatch-task-row track-process-row">
-              <label>启动流程：</label>
-              <div class="track-process-panel" :class="trackStartDialog.statusType">
-                <div class="track-process-current">{{ trackStartDialog.statusText }}</div>
-                <div v-if="trackStartDialog.stepLogs.length > 0" class="track-process-log">
-                  <div v-for="(log, index) in trackStartDialog.stepLogs" :key="`${index}-${log}`" class="track-process-log-item">
-                    {{ index + 1 }}. {{ log }}
-                  </div>
+            <div class="dispatch-task-row">
+              <label>立即启动：</label>
+              <div class="dispatch-switch-wrapper">
+                <div
+                  class="switch-container"
+                  :class="{ active: !trackStartDialog.form.wait }"
+                  @click="!trackStartDialog.loading && (trackStartDialog.form.wait = trackStartDialog.form.wait ? 0 : 1)"
+                >
+                  <div class="switch-toggle"></div>
                 </div>
+                <span class="dispatch-switch-label">{{ trackStartDialog.form.wait ? '否' : '是' }}</span>
               </div>
             </div>
           </div>
           <div class="dispatch-task-actions">
-            <button class="mission-btn mission-btn-cancel" :disabled="trackStartDialog.loading" @click="onTrackStartCancel">取消</button>
-            <button class="mission-btn mission-btn-pause" :disabled="trackStartDialog.loading" v-permission-click-dialog="'task-tracklist-execute'" @click="onTrackStartConfirm">
+            <button 
+              class="mission-btn mission-btn-pause" 
+              :class="{ disabled: taskGroupList.length === 0 || !trackStartDialog.form.taskpoint_name || trackStartDialog.loading }"
+              :disabled="trackStartDialog.loading || taskGroupList.length === 0 || !trackStartDialog.form.taskpoint_name"
+              v-permission-click-dialog="'task-tracklist-execute'" 
+              @click="onTrackStartConfirm"
+            >
               {{ trackStartDialog.loading ? '启动中...' : '确定' }}
             </button>
+            <button class="mission-btn mission-btn-cancel" :disabled="trackStartDialog.loading" @click="onTrackStartCancel">取消</button>
           </div>
         </div>
+      </div>
+    </div>
+    <div v-if="trackInitDialog.visible" class="custom-dialog-mask track-init-mask">
+      <div class="track-init-modal">
+        <span class="track-init-spinner"></span>
+        <span class="track-init-text">{{ trackInitDialog.text }}</span>
       </div>
     </div>
     <div v-if="dispatchTaskDialog.visible" class="dispatch-task-modal-wrapper">
@@ -535,10 +569,10 @@
             </div>
 
             <!-- 额外事务 -->
-             <div class="simple-form-item">
-               <label class="simple-label">额外事务</label>
+            <div class="simple-form-item">
+               <label class="simple-label">{{ extraConfigFieldMeta.label }}</label>
                <div class="simple-flex-row" style="justify-content: space-between;">
-                  <span style="color: #fff;">{{ addTaskDialog.form.extraConfig || '未配置' }}</span>
+                  <span style="color: #fff;">{{ extraConfigDisplayValue || '未配置' }}</span>
                   <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
                </div>
             </div>
@@ -589,8 +623,22 @@
 
           <!-- Footer -->
           <div class="simple-modal-footer">
-             <button class="mission-btn mission-btn-primary" style="width: 100px;" v-permission-click-dialog="['task-tracklist-create', 'task-tracklist-edit']" @click="confirmAddTask">确定</button>
-             <button class="mission-btn" style="width: 100px; background: transparent; border: 1px solid #606266; color: #fff;" @click="cancelAddTask">取消</button>
+             <button
+               class="mission-btn mission-btn-primary"
+               style="width: 120px; display: flex; align-items: center; justify-content: center; gap: 8px;"
+               :disabled="addTaskSubmitting"
+               v-permission-click-dialog="['task-tracklist-create', 'task-tracklist-edit']"
+               @click="confirmAddTask"
+             >
+               <span v-if="addTaskSubmitting" class="btn-spinner"></span>
+               <span>{{ addTaskSubmitting ? '提交中...' : '确定' }}</span>
+             </button>
+             <button
+               class="mission-btn"
+               style="width: 100px; background: transparent; border: 1px solid #606266; color: #fff;"
+               :disabled="addTaskSubmitting"
+               @click="cancelAddTask"
+             >取消</button>
           </div>
         </div>
       </div>
@@ -691,18 +739,17 @@
       <div v-if="extraConfigDialog.visible" class="custom-dialog-mask" style="z-index: 10001;">
         <div class="simple-modal-card" style="width: 500px; max-width: 95vw;" @click.stop>
           <div class="simple-modal-header">
-            <span>额外配置</span>
+            <span>{{ extraConfigFieldMeta.title }}</span>
             <span class="simple-close-icon" @click="closeExtraConfigDialog">×</span>
           </div>
           <div class="simple-modal-body" style="padding: 30px;">
             <div class="simple-form-item">
-              <label class="simple-label">额外事务</label>
-              <textarea 
+              <label class="simple-label">{{ extraConfigFieldMeta.label }}</label>
+              <input
                 v-model="extraConfigDialog.content" 
-                class="simple-textarea"
-                placeholder="请输入额外事务配置"
-                rows="6"
-              ></textarea>
+                class="simple-input extra-config-input"
+                :placeholder="extraConfigFieldMeta.placeholder"
+              />
             </div>
           </div>
           <div class="simple-modal-footer">
@@ -987,6 +1034,17 @@ const refreshAllTrackTaskListCache = async () => {
   }
 }
 
+const refreshTrackTaskListFromApi = async (robotId: string) => {
+  try {
+    const response = await navigationApi.getAllTrackTaskList(robotId)
+    const taskList = extractTrackTaskList(response?.data)
+    localStorage.setItem('all_track_task_list', JSON.stringify(taskList))
+    taskListRefreshKey.value++
+  } catch (err) {
+    console.warn('从接口刷新循迹任务列表失败:', err)
+  }
+}
+
 // 获取路线列表
 const loadRouteList = async () => {
   try {
@@ -1182,6 +1240,11 @@ const trackStartDialog = ref({
   }
 })
 
+const trackInitDialog = ref({
+  visible: false,
+  text: '机器狗初始化中...'
+})
+
 // 启动循迹任务
 const handleCloseTrack = async () => {
   const robotId = localStorage.getItem('selected_robot_id')
@@ -1189,22 +1252,25 @@ const handleCloseTrack = async () => {
   const runningTrackName = robotStore.cmdStatus?.track_info?.track_name || selectedRouteName.value
   const runningTaskpoint = robotStore.cmdStatus?.track_info?.taskpoint_name || selectedTaskGroupName.value
   if (!runningTrackName || !runningTaskpoint) {
-    alert('未找到运行中的循迹任务参数')
+    showMissionError('未找到运行中的循迹任务参数')
     return
   }
-  try {
-    await navigationApi.cancelTrack(robotId, {
-      action: 0,
-      wait: 0,
-      obs_mode: 1,
-      track_name: runningTrackName,
-      taskpoint_name: runningTaskpoint
-    })
-    alert('关闭指令已发送')
-  } catch (err) {
-    console.error('关闭循迹任务失败', err)
-    alert('关闭失败')
-  }
+
+  showConfirmDialog('确定要关闭当前循迹任务吗？', async () => {
+    try {
+      await navigationApi.cancelTrack(robotId, {
+        action: 0,
+        wait: 0,
+        obs_mode: 1,
+        track_name: runningTrackName,
+        taskpoint_name: runningTaskpoint
+      })
+      showMissionSuccess('关闭指令已发送')
+    } catch (err) {
+      console.error('关闭循迹任务失败', err)
+      showMissionError('关闭失败')
+    }
+  })
 }
 
 const handleStartTrack = async () => {
@@ -1396,6 +1462,23 @@ const handleDeleteTaskGroup = () => {
 const onTrackStartConfirm = async () => {
   const form = trackStartDialog.value.form
   
+  if (!form.track_name || form.track_name.trim() === '') {
+    showMissionError('循迹任务名称不能为空')
+    return
+  }
+  if (!form.taskpoint_name || form.taskpoint_name.trim() === '') {
+    showMissionError('请选择关键点文件')
+    return
+  }
+  if (taskGroupList.value.length === 0) {
+    showMissionError('当前循迹任务没有可用的关键点文件，请先创建关键点文件')
+    return
+  }
+  if (form.obs_mode === null || form.obs_mode === undefined) {
+    showMissionError('请选择避障模式')
+    return
+  }
+
   const gaitConfig = missionTrackGaitConfigMap[form.gait_type]
   if (!gaitConfig) {
     showMissionError('请选择有效的步态')
@@ -1404,6 +1487,10 @@ const onTrackStartConfirm = async () => {
 
   if (trackStartDialog.value.loading) return
   trackStartDialog.value.loading = true
+  selectedTaskGroupName.value = form.taskpoint_name
+  trackStartDialog.value.visible = false
+  trackInitDialog.value.text = '机器狗初始化中...'
+  trackInitDialog.value.visible = true
 
   try {
     const robotId = localStorage.getItem('selected_robot_id')
@@ -1473,11 +1560,6 @@ const onTrackStartConfirm = async () => {
       if (error_code === 0) {
         pushTrackStartStep((response as any).message || '循迹任务启动成功', 'success')
         showMissionSuccess((response as any).message || '循迹任务启动成功')
-        window.setTimeout(() => {
-          if (!trackStartDialog.value.loading) {
-            trackStartDialog.value.visible = false
-          }
-        }, 1500)
       } else {
         pushTrackStartStep(`启动失败: ${error_msg || '未知错误'}`, 'error')
         showMissionError(`启动失败: ${error_msg || '未知错误'}`)
@@ -1485,11 +1567,6 @@ const onTrackStartConfirm = async () => {
     } else {
       pushTrackStartStep('循迹任务启动成功', 'success')
       showMissionSuccess('循迹任务启动成功')
-      window.setTimeout(() => {
-        if (!trackStartDialog.value.loading) {
-          trackStartDialog.value.visible = false
-        }
-      }, 1500)
     }
   } catch (error) {
     console.error('启动循迹任务失败:', error)
@@ -1497,6 +1574,7 @@ const onTrackStartConfirm = async () => {
     pushTrackStartStep(errorMessage, 'error')
     showMissionError(errorMessage)
   } finally {
+    trackInitDialog.value.visible = false
     trackStartDialog.value.loading = false
   }
 }
@@ -2503,6 +2581,7 @@ const addTaskDialog = ref({
 })
 const isEditMode = ref(false)
 const editingTaskItem = ref<any>(null)
+const addTaskSubmitting = ref(false)
 
 const showTypeDropdown = ref(false)
 const closeDropdown = () => { showTypeDropdown.value = false }
@@ -2600,6 +2679,26 @@ const handleAddTask = () => {
   fetchTaskTypeList()
 }
 
+const parseBooleanLike = (value: unknown): boolean | null => {
+  if (value === true || value === 'true' || value === 1 || value === '1') return true
+  if (value === false || value === 'false' || value === 0 || value === '0') return false
+  return null
+}
+
+const resolveStopAtPointFromTask = (task: any): boolean => {
+  // no_switch / nostop 都是“到点不停”的语义，取反后得到“到点停止运动”
+  const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
+  if (noSwitch !== null) return !noSwitch
+
+  const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
+  if (noStop !== null) return !noStop
+
+  const stopAtPoint = parseBooleanLike(task?.stopAtPoint ?? task?.stop_at_point)
+  if (stopAtPoint !== null) return stopAtPoint
+
+  return false
+}
+
 const handleEditTask = (waypoint: any) => {
   // Find the original item from key data if needed, or use waypoint if it has all data
   // waypoint here is the computed object for table display. We might need the raw object.
@@ -2653,7 +2752,7 @@ const handleEditTask = (waypoint: any) => {
   addTaskDialog.value.form.extraConfig = waypoint.extra || waypoint.rawData?.extra || ''
   addTaskDialog.value.form.gait = waypoint.gait || waypoint.rawData?.gait || '1'
   addTaskDialog.value.form.ground = waypoint.ground || waypoint.rawData?.ground || '1'
-  addTaskDialog.value.form.stopAtPoint = !(waypoint.no_switch === 'true' || waypoint.no_switch === true || waypoint.rawData?.no_switch === 'true' || waypoint.rawData?.no_switch === true)
+  addTaskDialog.value.form.stopAtPoint = resolveStopAtPointFromTask(waypoint.rawData || waypoint)
 
   addTaskDialog.value.visible = true
 }
@@ -2663,6 +2762,8 @@ const cancelAddTask = () => {
 }
 
 const confirmAddTask = async () => {
+  if (addTaskSubmitting.value) return
+
   const robotId = localStorage.getItem('selected_robot_id')
   if (!robotId) return
 
@@ -2674,6 +2775,9 @@ const confirmAddTask = async () => {
   const form = addTaskDialog.value.form
   const now = Math.floor(Date.now() / 1000)
   const timestamp = now.toString()
+  const nextTimeValue = isEditMode.value
+    ? Number(editingTaskItem.value?.rawData?.time ?? 0)
+    : waypointsData.value.length
 
   // 处理预置点信息：格式如 "4.测试点123"
   let presetValue = ''
@@ -2702,17 +2806,18 @@ const confirmAddTask = async () => {
     preset: presetValue,
     presetID: presetIDValue,
     remark: form.description || '',
-    time: 0,
+    time: Number.isFinite(nextTimeValue) ? nextTimeValue : 0,
     cam_key: 'cam_rtsp_left',
     track_name: selectedRouteName.value,
     track_point_name: selectedTaskGroupName.value,
     extra: form.extraConfig || '',
-    no_switch: !form.stopAtPoint,
+    no_switch: form.stopAtPoint,
     gait: form.gait,
     ground: form.ground,
     createtime: isEditMode.value ? (editingTaskItem.value?.rawData?.createtime || timestamp) : timestamp
   }
 
+  addTaskSubmitting.value = true
   try {
     let response
     
@@ -2747,23 +2852,27 @@ const confirmAddTask = async () => {
     
     // 触发列表刷新
     taskListRefreshKey.value++
+    if (isEditMode.value) {
+      await refreshTrackTaskListFromApi(robotId)
+    }
     
     successMessage.value = { show: true, text: isEditMode.value ? '编辑成功' : '添加成功' }
     setTimeout(() => {
       successMessage.value.show = false
     }, 2000)
     
+    addTaskDialog.value.visible = false
+    isEditMode.value = false
+    editingTaskItem.value = null
   } catch (err: any) {
     console.error('操作失败', err)
     errorMessage.value = { show: true, text: '操作失败: ' + (err.message || '未知错误') }
     setTimeout(() => {
       errorMessage.value.show = false
     }, 2000)
+  } finally {
+    addTaskSubmitting.value = false
   }
-  
-  addTaskDialog.value.visible = false
-  isEditMode.value = false
-  editingTaskItem.value = null
 }
 
 const handleDeleteTask = (waypoint: any) => {
@@ -2788,7 +2897,7 @@ const handleDeleteTask = (waypoint: any) => {
         preset: rawData.preset || '',
         presetID: rawData.presetID || '',
         remark: rawData.remark || '',
-        time: 0,
+        time: Number(rawData.time ?? 0),
         cam_key: rawData.cam_key || 'cam_rtsp_left',
         track_name: selectedRouteName.value,
         track_point_name: selectedTaskGroupName.value
@@ -2809,6 +2918,7 @@ const handleDeleteTask = (waypoint: any) => {
       
       // 触发列表刷新
       taskListRefreshKey.value++
+      await refreshTrackTaskListFromApi(robotId)
       
       successMessage.value = { show: true, text: '删除成功' }
       setTimeout(() => {
@@ -3126,8 +3236,58 @@ const extraConfigDialog = ref({
   content: ''
 })
 
+const extraConfigFieldMeta = computed(() => {
+  const actionType = String(addTaskDialog.value.form.actionType || addTaskDialog.value.form.typeInput || '').trim()
+
+  if (actionType === '回充' || actionType === '充电结束任务') {
+    return {
+      title: '参数配置',
+      label: '回充时间(秒)',
+      placeholder: '请输入回充时间(秒)',
+      key: 'charge_time'
+    }
+  }
+
+  if (actionType === '设置导航速度') {
+    return {
+      title: '参数配置',
+      label: '速度',
+      placeholder: '请输入速度',
+      key: 'speed'
+    }
+  }
+
+  return {
+    title: '额外配置',
+    label: '额外事务',
+    placeholder: '请输入额外事务配置',
+    key: ''
+  }
+})
+
+const readExtraConfigValue = (rawValue: string, key: string) => {
+  if (!rawValue) return ''
+  if (!key) return rawValue
+
+  try {
+    const parsed = JSON.parse(rawValue)
+    if (parsed && typeof parsed === 'object' && key in parsed) {
+      return String((parsed as Record<string, unknown>)[key] ?? '')
+    }
+  } catch (_) {}
+
+  return rawValue
+}
+
+const extraConfigDisplayValue = computed(() => {
+  return readExtraConfigValue(
+    addTaskDialog.value.form.extraConfig || '',
+    extraConfigFieldMeta.value.key
+  )
+})
+
 const openExtraConfigDialog = () => {
-  extraConfigDialog.value.content = addTaskDialog.value.form.extraConfig || ''
+  extraConfigDialog.value.content = extraConfigDisplayValue.value
   extraConfigDialog.value.visible = true
 }
 
@@ -3136,7 +3296,27 @@ const closeExtraConfigDialog = () => {
 }
 
 const confirmExtraConfig = () => {
-  addTaskDialog.value.form.extraConfig = extraConfigDialog.value.content
+  const key = extraConfigFieldMeta.value.key
+  const inputValue = String(extraConfigDialog.value.content || '').trim()
+
+  if (!key) {
+    addTaskDialog.value.form.extraConfig = inputValue
+    closeExtraConfigDialog()
+    return
+  }
+
+  let payload: Record<string, unknown> = {}
+  const raw = addTaskDialog.value.form.extraConfig || ''
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        payload = parsed as Record<string, unknown>
+      }
+    } catch (_) {}
+  }
+  payload[key] = inputValue
+  addTaskDialog.value.form.extraConfig = JSON.stringify(payload)
   closeExtraConfigDialog()
 }
 // ========== 额外配置相关结束 ==========
@@ -3145,6 +3325,26 @@ const confirmExtraConfig = () => {
 
 <style>
 @import './mission-common.css';
+
+.extra-config-input {
+  height: 34px;
+  line-height: 34px;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 /* 下发任务弹窗样式 */
 .dispatch-task-modal {
@@ -3233,6 +3433,39 @@ const confirmExtraConfig = () => {
   color: rgba(215, 245, 255, 0.82);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.track-init-mask {
+  z-index: 10002;
+}
+
+.track-init-modal {
+  min-width: 260px;
+  max-width: 360px;
+  padding: 24px 28px;
+  border-radius: 10px;
+  background: #172233;
+  border: 1px solid #18344a;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.track-init-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(103, 213, 253, 0.3);
+  border-top-color: #67d5fd;
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+
+.track-init-text {
+  color: #d7f5ff;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .dispatch-task-row label {

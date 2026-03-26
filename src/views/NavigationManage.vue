@@ -108,8 +108,12 @@
                   >
                     {{ navigationEnabled ? '关闭导航' : '开始导航' }}
                   </button>
-                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handlePauseNav">暂停导航</button>
-                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-resumenav'" @click="handleResumeNav">暂停停障</button>
+                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handlePauseNav">
+                    {{ appNavPauseEnabled ? '恢复导航' : '暂停导航' }}
+                  </button>
+                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-resumenav'" @click="handleToggleNavStop">
+                    {{ appNavNavtrackEnabled ? '恢复停障' : '暂停停障' }}
+                  </button>
                   <button 
                     class="map-btn" 
                     :class="insEnabled ? 'map-btn-danger' : 'map-btn-primary'"
@@ -732,7 +736,7 @@ import { navigationApi, mapFileApi } from '../api/services'
 import { useDeviceStore } from '../stores/device'
 import { useTaskExecutionStore } from '../stores/taskExecution'
 import { usePermissionStore } from '@/stores/permission'
-import { getRobotMapCacheKeys, refreshMapCache } from '@/utils/robotBootstrap'
+import { getRobotMapCacheKeys, getRobotContextCacheKeys, refreshMapCache } from '@/utils/robotBootstrap'
 
 const deviceStore = useDeviceStore()
 const robotStore = useRobotStore()
@@ -934,10 +938,17 @@ const allTrackList = ref<string[]>([])
 // 获取所有循迹任务列表
 const fetchAllTrackList = async () => {
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  const contextKeys = robotId ? getRobotContextCacheKeys(robotId) : null
+  const readCachedTrackList = () => {
+    const scoped = contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null
+    if (scoped) return scoped
+    return localStorage.getItem('cached_track_list')
+  }
+
   if (!robotId) {
     console.warn('未选择机器人，无法获取循迹任务列表')
     // 尝试从缓存加载
-    const cached = localStorage.getItem('cached_track_list')
+    const cached = readCachedTrackList()
     if (cached) {
       allTrackList.value = JSON.parse(cached)
       console.log('从缓存加载循迹任务列表:', allTrackList.value)
@@ -950,12 +961,18 @@ const fetchAllTrackList = async () => {
     if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
       allTrackList.value = response.msg.result
       // 缓存到localStorage
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.trackListKey, JSON.stringify(allTrackList.value))
+      }
       localStorage.setItem('cached_track_list', JSON.stringify(allTrackList.value))
       console.log('获取到所有循迹任务列表:', allTrackList.value)
+      window.dispatchEvent(new CustomEvent('robot-track-list-ready', {
+        detail: { robotId }
+      }))
     } else {
       console.warn('循迹任务列表返回格式异常')
       // 尝试从缓存加载
-      const cached = localStorage.getItem('cached_track_list')
+      const cached = readCachedTrackList()
       if (cached) {
         allTrackList.value = JSON.parse(cached)
       }
@@ -963,7 +980,7 @@ const fetchAllTrackList = async () => {
   } catch (error) {
     console.error('获取循迹任务列表失败:', error)
     // 尝试从缓存加载
-    const cached = localStorage.getItem('cached_track_list')
+    const cached = readCachedTrackList()
     if (cached) {
       allTrackList.value = JSON.parse(cached)
       console.log('从缓存加载循迹任务列表:', allTrackList.value)
@@ -991,6 +1008,8 @@ const trackTaskList = ref<string[]>([])
 
 // 监听路线录制地图选择变化 - 同步更新路线和任务组列表
 watch(trackRecordMap, async (newMap) => {
+  if (currentTab.value !== 'track_record') return
+
   if (newMap) {
     // 加载该地图的点云图
     refreshNavPointCloud(newMap)
@@ -1273,6 +1292,9 @@ const handleTrackPreview = async () => {
     console.log('DEBUG: 预览读取的文件内容预览:', text.substring(0, 200))
     
     const lines = text.trim().split('\n')
+    const pointDataLines = lines
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#'))
     
     // 解析轨迹点
     const trajectoryPoints: Array<{x: number, y: number, z: number}> = []
@@ -1316,7 +1338,11 @@ const handleTrackPreview = async () => {
     
     if (trajectoryPoints.length === 0) {
       console.warn('DEBUG: 解析失败，未找到有效的轨迹点。首行内容:', lines[0])
-      showErrorMessage('轨迹文件格式无法识别')
+      if (pointDataLines.length === 0) {
+        showErrorMessage('轨迹文件内部无点位数据')
+      } else {
+        showErrorMessage('轨迹文件格式无法识别')
+      }
       return
     }
     
@@ -1431,6 +1457,12 @@ const navData = ref({
   msfStatus: '未开启',
   insOrigin: '未初始化'
 })
+
+const formatSensorMessageStatus = (value: string | number | null | undefined) => {
+  if (value == null || value === '') return '未收到'
+  return String(value) === '1' ? '收到' : '未收到'
+}
+
 const brakeStatusText = computed(() => {
   return Number(navData.value.brake) === 1 ? '已触发' : '未触发'
 })
@@ -1454,6 +1486,8 @@ watch(
 const navigationEnabled = computed(() => robotStore.cmdStatus?.nav === 1)
 const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
+const appNavPauseEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_nav_pause ?? 0) === 1)
+const appNavNavtrackEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_nav_navtrack ?? 0) === 1)
 /** INS 初始化状态（1=已初始化） */
 const insOriginEnabled = computed(() => robotStore.cmdStatus?.ins_origin === 1)
 
@@ -1466,6 +1500,13 @@ watch(() => robotStore.msfStatus, (msfData) => {
 watch(() => robotStore.cmdStatus?.ins_origin, (val) => {
   navData.value.insOrigin = val === 1 ? '已初始化' : '未初始化'
 }, { immediate: true })
+
+watch(() => robotStore.sensorStatus, (status) => {
+  navData.value.lidar = formatSensorMessageStatus(status?.lidar_msg)
+  navData.value.imu = formatSensorMessageStatus(status?.imu_msg)
+  navData.value.satellite = formatSensorMessageStatus(status?.gps_msg)
+}, { immediate: true, deep: true })
+
 const navigationLoading = ref(false)
 // isMapSelectionLocked 改为使用 taskExecutionStore 统一计算（nav/ins/msf 任一开启则锁定）
 const isMapSelectionLocked = computed(() => taskExecutionStore.isMapSelectionLocked)
@@ -1525,34 +1566,36 @@ const handleStartNav = () => {
 }
 
 const handlePauseNav = async () => {
-  console.log('暂停导航')
+  const nextPauseState = !appNavPauseEnabled.value
+  console.log(nextPauseState ? '暂停导航' : '恢复导航')
   try {
     const robotId = deviceStore.selectedRobotId
     if (!robotId) {
       showErrorMessage('未选择机器人')
       return
     }
-    await navigationApi.pauseNavigation(robotId, { action: 1 })
-    showSuccessMessage('暂停指令已发送')
+    await navigationApi.pauseNavigation(robotId, { action: nextPauseState ? 1 : 0 })
+    showSuccessMessage(nextPauseState ? '暂停指令已发送' : '恢复指令已发送')
   } catch (err) {
-    console.error('暂停导航失败:', err)
-    showErrorMessage('暂停导航失败')
+    console.error(`${nextPauseState ? '暂停导航' : '恢复导航'}失败:`, err)
+    showErrorMessage(`${nextPauseState ? '暂停导航' : '恢复导航'}失败`)
   }
 }
 
-const handleResumeNav = async () => {
-  console.log('暂停恢复')
+const handleToggleNavStop = async () => {
+  const nextPauseState = !appNavNavtrackEnabled.value
+  console.log(nextPauseState ? '暂停停障' : '恢复停障')
   try {
     const robotId = deviceStore.selectedRobotId
     if (!robotId) {
       showErrorMessage('未选择机器人')
       return
     }
-    await navigationApi.pauseNavigation(robotId, { action: 0 })
-    showSuccessMessage('恢复指令已发送')
+    await navigationApi.stopNavStop(robotId, { action: nextPauseState ? 1 : 0 })
+    showSuccessMessage(nextPauseState ? '暂停停障指令已发送' : '恢复停障指令已发送')
   } catch (err) {
-    console.error('恢复导航失败:', err)
-    showErrorMessage('恢复导航失败')
+    console.error(`${nextPauseState ? '暂停停障' : '恢复停障'}失败:`, err)
+    showErrorMessage(`${nextPauseState ? '暂停停障' : '恢复停障'}失败`)
   }
 }
 
@@ -2642,7 +2685,7 @@ const refreshNavPointCloud = async (mapName?: string) => {
 
 // 监听导航地图选择变化
 watch(() => taskExecutionStore.selectedMapName, (newMap) => {
-  if (newMap) {
+  if ((currentTab.value === 'nav' || currentTab.value === 'track_record') && newMap) {
     refreshNavPointCloud(newMap)
   }
 }, { immediate: true })
@@ -3045,7 +3088,7 @@ const confirmGenerateGridMap = async () => {
     })
     
     generateGridMapDialogVisible.value = false
-    showSuccessMessage('生成栅格地图指令已发送')
+    showSuccessMessage('栅格地图生成完成！')
     mappingAutoStopTriggered.value = false
     mapProgress.value = 0
   } catch (err) {
@@ -3231,7 +3274,16 @@ const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promi
 }
 
 // 下载地图文件
+const mapDownloadInFlight = new Map<string, Promise<void>>()
+
 const downloadMapFiles = async (mapName: string) => {
+  const existing = mapDownloadInFlight.get(mapName)
+  if (existing) {
+    await existing
+    return
+  }
+
+  const task = (async () => {
   // 获取机器人 IP
   const robotInfo = deviceStore.selectedRobot
   if (!robotInfo?.ip_address) {
@@ -3246,6 +3298,14 @@ const downloadMapFiles = async (mapName: string) => {
   // 保存文件到 IndexedDB
   for (const [fileName, blob] of files) {
     await saveMapFile(mapName, fileName, blob)
+  }
+  })()
+
+  mapDownloadInFlight.set(mapName, task)
+  try {
+    await task
+  } finally {
+    mapDownloadInFlight.delete(mapName)
   }
 }
 
@@ -3737,19 +3797,18 @@ const handleSaveGridMap = async () => {
           throw new Error('从服务器下载验证失败')
         }
         
-        // 验证文件大小
+        // 服务端可能会对PGM做规范化处理，大小变化不代表失败
         if (downloadedBlob.size !== blob.size) {
-          console.warn(`⚠ 文件大小不匹配: 原始=${blob.size}, 下载=${downloadedBlob.size}`)
-          showErrorMessage(`文件大小不匹配: 原始=${blob.size}bytes, 下载=${downloadedBlob.size}bytes`)
+          console.warn(`⚠ 文件大小不一致（可能被服务端规范化）: 原始=${blob.size}, 下载=${downloadedBlob.size}`)
         } else {
           console.log('✓ 服务器下载验证成功，文件大小一致:', downloadedBlob.size)
-          
-          // 步骤3: 更新IndexedDB中的缓存
-          await saveMapFile(mapName, fileName, downloadedBlob)
-          console.log('✓ IndexedDB缓存已更新')
-          
-          showSuccessMessage('地图保存成功！')
         }
+        
+        // 步骤3: 更新IndexedDB中的缓存（以服务端版本为准）
+        await saveMapFile(mapName, fileName, downloadedBlob)
+        console.log('✓ IndexedDB缓存已更新')
+        
+        showSuccessMessage('地图保存成功！')
         
       } catch (error) {
         console.error('保存地图失败:', error)

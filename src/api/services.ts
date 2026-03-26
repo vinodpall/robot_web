@@ -1254,6 +1254,9 @@ export const navigationApi = {
   pauseNavigation: (robotId: string, data: any = {}) => {
     return apiClient.post(`/navigation/${robotId}/nav_pause`, data)
   },
+  stopNavStop: (robotId: string, data: { action: number }) => {
+    return apiClient.post(`/navigation/${robotId}/stop_nav_stop`, data)
+  },
   getPresets: (robotId: string, deviceName: string) => {
     return apiClient.get<{ list: { id: string | number; presetName: string }[]; code: number }>(`/ptz/${robotId}/presets`, { device_name: deviceName })
   }
@@ -1325,7 +1328,8 @@ export const mapFileApi = {
 
     try {
       const response = await fetch(url, {
-        method: 'GET'
+        method: 'GET',
+        cache: 'no-store'
       })
 
       if (!response.ok) {
