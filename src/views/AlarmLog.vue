@@ -296,7 +296,7 @@ const loadFilterOptions = async () => {
     if (!res.ok) return
     const json = await res.json()
     const payload = json.data || {}
-    const clean = (arr: string[]) => (arr || []).filter((v: string) => v !== '鍏ㄩ儴')
+    const clean = (arr: string[]) => (arr || []).filter((v: string) => v !== '鍏ㄩ儴' && v !== '全部' && v !== '')
     contentList.value = clean(payload.content || [])
     routeList.value = clean(payload.tracking_route || [])
     taskGroupList.value = clean(payload.task_group || [])

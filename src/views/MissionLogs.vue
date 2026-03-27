@@ -99,14 +99,12 @@
           <div class="task-form-row">
             <label class="task-form-label">循迹任务：</label>
             <select v-model="createForm.track_name" class="task-form-select">
-              <option value="">请选择循迹任务</option>
               <option v-for="track in trackList" :key="track" :value="track">{{ track }}</option>
             </select>
           </div>
           <div class="task-form-row">
             <label class="task-form-label">任务组：</label>
             <select v-model="createForm.track_point_name" class="task-form-select" :disabled="!createForm.track_name">
-              <option value="">请选择任务组</option>
               <option v-for="group in createTaskGroupList" :key="group" :value="group">{{ group }}</option>
             </select>
           </div>

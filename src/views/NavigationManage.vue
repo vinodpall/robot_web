@@ -108,10 +108,10 @@
                   >
                     {{ navigationEnabled ? '关闭导航' : '开始导航' }}
                   </button>
-                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handlePauseNav">
+                  <button class="map-btn" :class="appNavPauseEnabled ? 'map-btn-danger' : 'map-btn-secondary'" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handlePauseNav">
                     {{ appNavPauseEnabled ? '恢复导航' : '暂停导航' }}
                   </button>
-                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-resumenav'" @click="handleToggleNavStop">
+                  <button class="map-btn" :class="appNavNavtrackEnabled ? 'map-btn-danger' : 'map-btn-secondary'" v-permission-click-dialog="'nav-navmanage-resumenav'" @click="handleToggleNavStop">
                     {{ appNavNavtrackEnabled ? '恢复停障' : '暂停停障' }}
                   </button>
                   <button 
@@ -1486,8 +1486,8 @@ watch(
 const navigationEnabled = computed(() => robotStore.cmdStatus?.nav === 1)
 const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
-const appNavPauseEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_nav_pause ?? 0) === 1)
-const appNavNavtrackEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_nav_navtrack ?? 0) === 1)
+const appNavPauseEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_nav_pause?.result ?? 0) === 1)
+const appNavNavtrackEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_stop_navtrack?.result ?? 0) === 1)
 /** INS 初始化状态（1=已初始化） */
 const insOriginEnabled = computed(() => robotStore.cmdStatus?.ins_origin === 1)
 
@@ -3183,6 +3183,7 @@ const handleStopMapping = async (autoTriggeredOrEvent: boolean | MouseEvent = fa
     fetchEditMapList()
     fetchTrackMapList()
     fetchFileMapList()
+    window.dispatchEvent(new CustomEvent('robot-map-list-ready', { detail: { robotId } }))
     
     mapProgress.value = 0
     if (autoTriggered) {
@@ -4179,6 +4180,8 @@ const handleDeleteMap = () => {
         await refreshMapListCache()
         // 更新文件管理页面的地图列表（从缓存读取）
         fetchFileMapList()
+        fetchTrackMapList()
+        await fetchAllTrackList()
         window.dispatchEvent(new CustomEvent('robot-map-list-ready', {
           detail: { robotId }
         }))
@@ -4246,6 +4249,8 @@ const handleDelete = (item: any) => {
         })
         showSuccessMessage('删除成功')
         fetchNavigationList()
+        fetchTrackMapList()
+        await fetchAllTrackList()
       } catch (error) {
         console.error('删除失败:', error)
         showErrorMessage('删除失败')

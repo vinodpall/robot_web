@@ -69,6 +69,9 @@ export const useRobotStore = defineStore('robot', () => {
   const taskStatus = ref<TaskStatusData | null>(null)
   const taskProgress = ref<TaskProgressData | null>(null)
 
+  // ===== multitask_status 多任务组运行状态 =====
+  const multitaskStatus = ref<{ status: boolean } | null>(null)
+
   // ===== mutations =====
 
   const setOnlineStatus = (online: boolean) => {
@@ -80,7 +83,11 @@ export const useRobotStore = defineStore('robot', () => {
   }
 
   const setCmdStatus = (data: CmdStatusData) => {
-    cmdStatus.value = data
+    if (!cmdStatus.value) {
+      cmdStatus.value = data
+    } else {
+      cmdStatus.value = { ...cmdStatus.value, ...Object.fromEntries(Object.entries(data as Record<string, any>).filter(([, v]) => v !== undefined)) } as CmdStatusData
+    }
   }
 
   const setTrackInfo = (data: TrackInfoData) => {
@@ -149,6 +156,10 @@ export const useRobotStore = defineStore('robot', () => {
     taskProgress.value = data
   }
 
+  const setMultitaskStatus = (data: { status: boolean }) => {
+    multitaskStatus.value = data
+  }
+
   const resetRuntimeState = () => {
     isOnline.value = false
     pose.value = null
@@ -168,6 +179,7 @@ export const useRobotStore = defineStore('robot', () => {
     systemTelemetry.value = null
     taskStatus.value = null
     taskProgress.value = null
+    multitaskStatus.value = null
   }
 
   // ===== computed =====
@@ -363,6 +375,7 @@ export const useRobotStore = defineStore('robot', () => {
     systemTelemetry,
     taskStatus,
     taskProgress,
+    multitaskStatus,
     // mutations
     setOnlineStatus,
     setPose,
@@ -382,6 +395,7 @@ export const useRobotStore = defineStore('robot', () => {
     setSystemTelemetry,
     setTaskStatus,
     setTaskProgress,
+    setMultitaskStatus,
     resetRuntimeState,
     // computed
     batteryLevel,

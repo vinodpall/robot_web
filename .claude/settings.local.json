@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find E:/Project/robot_web/src -name *nav* -o -name *navigation*)",
+      "Bash(find E:/Project/robot_web/src -name *.vue)"
+    ]
+  }
+}

@@ -37,8 +37,8 @@
               <div style="display: flex; gap: 12px; margin-left: 8px;">
                 <button
                   class="mission-btn"
-                  :class="isMultiTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
-                  :disabled="!canStartMultiTask && !isMultiTaskRunning"
+                  :class="[isMultiTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary', { loading: executeLoading }]"
+                  :disabled="(!canStartMultiTask && !isMultiTaskRunning) || executeLoading"
                   v-permission-click-dialog="'task-multitasklist-execute'"
                   @click="handleExecuteTaskGroup"
                 >
@@ -329,7 +329,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { navigationApi } from '@/api/services'
@@ -394,6 +394,7 @@ const currentTaskGroupList = ref<any[]>([])
 // const taskGroups = ref<any[]>([])
 const taskGroups = computed(() => currentTaskGroupList.value) // For template compatibility logic check
 const exceptionStart = ref(false)
+const executeLoading = ref(false)
 
 const getStatusClass = (status: string) => {
   const statusMap: Record<string, string> = {
@@ -613,12 +614,20 @@ const handleExecuteTaskGroup = async () => {
       return
     }
     try {
-      await navigationApi.cancelMultiTaskGroup(robotId)
+      executeLoading.value = true
+      const res: any = await navigationApi.startMultiTaskGroup(robotId, {
+        multitask_name: '',
+        multitask_id: '',
+        middle_start: 0,
+        action: 0
+      })
       taskExecutionStore.markMultiTaskStopped()
-      showSuccessMessage('关闭指令已发送')
+      showSuccessMessage(res?.message || '关闭指令已发送')
     } catch (e: any) {
       console.error('关闭多任务组失败', e)
       showErrorMessage(e?.message || '关闭多任务组失败')
+    } finally {
+      executeLoading.value = false
     }
     return
   }
@@ -644,18 +653,19 @@ const handleExecuteTaskGroup = async () => {
   }
   
   try {
+    executeLoading.value = true
     const res: any = await navigationApi.startMultiTaskGroup(robotId, {
       multitask_name: selectedGroup.multitask_name,
       multitask_id: selectedGroup.multitask_id,
       middle_start: exceptionStart.value ? 1 : 0,
-      action: 0
+      action: 1
     })
-    
+
     console.log('开始多任务组返回:', res)
-    
-    if (res && ((res.code === 200 || res.error_code === 0) || (res.response && res.response.msg && res.response.msg.result === 1))) {
+
+    if (res && res.message) {
       taskExecutionStore.markMultiTaskStarted()
-      showSuccessMessage('开始执行多任务组成功')
+      showSuccessMessage(res.message || '开始执行多任务组成功')
     } else {
       console.error('开始执行多任务组失败，返回数据:', res)
       showErrorMessage(res?.msg || res?.error_msg || '开始执行多任务组失败')
@@ -663,6 +673,8 @@ const handleExecuteTaskGroup = async () => {
   } catch (e: any) {
     console.error('开始执行多任务组失败', e)
     showErrorMessage(e?.message || '开始执行多任务组失败')
+  } finally {
+    executeLoading.value = false
   }
 }
 
@@ -703,13 +715,21 @@ const handleAddTaskGroup = () => {
     ground: '实心地面',
     originPublish: false
   }
-  
+
   // Load data from cache
   loadMapListFromCache()
   loadTrackListFromCache()
   loadPointTaskListFromCache()
-  
+
   addTaskGroupDialog.value.visible = true
+
+  // 等 watch 执行完后，若任务组仍为空则主动加载
+  nextTick(() => {
+    const trackName = addTaskGroupDialog.value.form.trackName
+    if (trackName && addTaskGroupDialog.value.form.taskMode === 'track' && taskGroupOptions.value.length === 0) {
+      loadTaskGroupList(trackName)
+    }
+  })
 }
 
 const closeAddTaskGroupDialog = () => {
@@ -1773,6 +1793,53 @@ watch(selectedMultiTaskName, (newVal) => {
 
 .add-task-group-body .mtg-task-form-radio-group {
   justify-content: flex-start !important;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mission-btn.loading {
+  pointer-events: none;
+  color: transparent;
+  position: relative;
+  opacity: 0.85;
+}
+
+.mission-btn.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(103, 213, 253, 0.25);
+  border-top-color: #67d5fd;
+  border-radius: 50%;
+  animation: mission-btn-spin 0.7s linear infinite;
+}
+
+.mission-btn.mission-btn-stop.loading::after,
+.mission-btn.mission-btn-primary.loading::after {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+}
+
+@keyframes mission-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
 

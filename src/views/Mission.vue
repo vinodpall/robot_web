@@ -1116,15 +1116,29 @@ const handleCreateTaskGroup = async () => {
     setTimeout(() => {
       successMessage.value.show = false
     }, 2000)
-    
+
     closeCreateTaskGroupDialog()
-    
-    // 更新缓存与本地任务组列表（页面展示只读缓存）
-    const normalizedNewGroup = normalizeTaskPointName(createTaskGroupForm.value.keypoint_name)
-    const mergedGroups = Array.from(new Set([...taskGroupList.value, normalizedNewGroup].filter(Boolean)))
-    taskGroupList.value = mergedGroups
-    setTaskGroupCache(selectedRouteName.value, mergedGroups)
-    selectedTaskGroupName.value = mergedGroups.length > 0 ? mergedGroups[0] : ''
+
+    // 从接口刷新任务组列表
+    try {
+      const res = await navigationApi.getTaskpointList(robotId, selectedRouteName.value)
+      const freshGroups = Array.isArray(res?.msg?.result) ? res.msg.result.map((g: string) => normalizeTaskPointName(g)).filter(Boolean) : []
+      if (freshGroups.length > 0) {
+        taskGroupList.value = freshGroups
+        setTaskGroupCache(selectedRouteName.value, freshGroups)
+      } else {
+        const normalizedNewGroup = normalizeTaskPointName(createTaskGroupForm.value.keypoint_name)
+        const mergedGroups = Array.from(new Set([...taskGroupList.value, normalizedNewGroup].filter(Boolean)))
+        taskGroupList.value = mergedGroups
+        setTaskGroupCache(selectedRouteName.value, mergedGroups)
+      }
+    } catch {
+      const normalizedNewGroup = normalizeTaskPointName(createTaskGroupForm.value.keypoint_name)
+      const mergedGroups = Array.from(new Set([...taskGroupList.value, normalizedNewGroup].filter(Boolean)))
+      taskGroupList.value = mergedGroups
+      setTaskGroupCache(selectedRouteName.value, mergedGroups)
+    }
+    selectedTaskGroupName.value = taskGroupList.value.length > 0 ? taskGroupList.value[0] : ''
   } catch (error: any) {
     console.error('创建任务组失败:', error)
     errorMessage.value = { show: true, text: `创建失败: ${error.message || '网络错误'}` }
@@ -2945,7 +2959,7 @@ const handleArriveTask = async (waypoint: any) => {
     const params = {
       sn: sn,
       action: 1,
-      chargeIndex: waypoint.index.toString()
+      chargeIndex: waypoint.time.toString()
     }
     
     try {

@@ -69,7 +69,7 @@ export const useTaskExecutionStore = defineStore('taskExecution', () => {
 
   const isTrackTaskRunning = computed(() => robotStore.isTracking)
   const isPointTaskRunning = computed(() => robotStore.isPointTaskRunning)
-  const isMultiTaskRunning = computed(() => multiTaskRunning.value)
+  const isMultiTaskRunning = computed(() => robotStore.multitaskStatus?.status === true)
   const isNavigationEnabled = computed(() => robotStore.isNavigating)
   const navPaused = ref(false)
 

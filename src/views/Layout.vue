@@ -64,7 +64,7 @@
           </div>
         </div>
 
-        <span class="stop-btn" :class="{ 'is-active': isStopActive }" @click="toggleStop">
+        <span class="stop-btn" :class="{ 'is-active': isStopActive, 'is-emergency-red': isEmergencyRed }" @click="toggleStop">
           <div class="stop-content">
             <span>{{ isStopActive ? '启动' : '急停' }}</span>
           </div>
@@ -112,6 +112,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useDeviceStore } from '../stores/device'
+import { useRobotStore } from '../stores/robot'
 import { robotApi, userApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { refreshRobotRelatedCache, refreshCameraCache, refreshMapCache } from '../utils/robotBootstrap'
@@ -120,6 +121,7 @@ import titleBg from '/src/assets/source_data/bg_data/title.png'
 const router = useRouter()
 const userStore = useUserStore()
 const deviceStore = useDeviceStore()
+const robotStore = useRobotStore()
 
 const { fetchDeviceStatus, deviceStatus } = useDeviceStatus()
 
@@ -218,6 +220,11 @@ document.addEventListener('click', closeUserMenu)
 
 const isStopActive = computed(() => {
   return deviceStatus.value?.emergency_stop_state || false
+})
+
+const isEmergencyRed = computed(() => {
+  const state = robotStore.motionState?.basic_state
+  return state === 6
 })
 
 const toggleStop = async () => {
@@ -707,6 +714,10 @@ onMounted(async () => {
 
 .stop-btn.is-active {
   background-image: url('/src/assets/source_data/stop_click.png');
+}
+
+.stop-btn.is-emergency-red {
+  filter: hue-rotate(180deg) saturate(3) brightness(1.2);
 }
 
 .stop-content {

@@ -21,6 +21,12 @@ export interface CmdStatusTrackInfo {
   error_msg: string
 }
 
+export interface CmdStatusActionResult {
+  error_code: number
+  error_msg: string
+  result: string
+}
+
 export interface CmdStatusData {
   ins: number
   ins_origin: number   // INS 初始化状态（0: 未初始化, 1: 初始化中/已初始化）
@@ -32,8 +38,8 @@ export interface CmdStatusData {
   data_record: number
   slam: number
   msf: number
-  app_nav_pause?: number
-  app_nav_navtrack?: number
+  app_nav_pause?: CmdStatusActionResult
+  app_stop_navtrack?: CmdStatusActionResult
   map_name: string
   track_info: CmdStatusTrackInfo
 }
@@ -277,6 +283,10 @@ export function useRobotWebSocket() {
       // ---- 任务状态 ----
       case 'cmd_status':
         robotStore.setCmdStatus(data as CmdStatusData)
+        break
+
+      case 'multitask_status':
+        robotStore.setMultitaskStatus(data as { status: boolean })
         break
 
       // ---- 机器人上下线 ----
