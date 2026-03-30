@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="drone-control-main">
     <aside class="sidebar-menu">
       <div class="sidebar-tabs">
@@ -64,6 +64,44 @@
                   <div class="body-params-item">
                     <span class="body-params-label">CPU 频率</span>
                     <span class="body-params-value">{{ cpuFrequency }} MHz</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="body-params-section">
+                <div class="body-params-title">电池信息</div>
+                <div class="body-params-grid">
+                  <div class="body-params-item">
+                    <span class="body-params-label">电量</span>
+                    <span class="body-params-value">{{ batteryLevelText }}</span>
+                  </div>
+                  <div class="body-params-item">
+                    <span class="body-params-label">电压</span>
+                    <span class="body-params-value">{{ batteryVoltageText }}</span>
+                  </div>
+                  <div class="body-params-item">
+                    <span class="body-params-label">电流</span>
+                    <span class="body-params-value">{{ batteryCurrentText }}</span>
+                  </div>
+                  <div class="body-params-item">
+                    <span class="body-params-label">剩余容量</span>
+                    <span class="body-params-value">{{ batteryRemainingText }}</span>
+                  </div>
+                  <div class="body-params-item">
+                    <span class="body-params-label">额定容量</span>
+                    <span class="body-params-value">{{ batteryNominalText }}</span>
+                  </div>
+                  <div class="body-params-item">
+                    <span class="body-params-label">循环次数</span>
+                    <span class="body-params-value">{{ batteryCyclesText }}</span>
+                  </div>
+                  <div class="body-params-item">
+                    <span class="body-params-label">MOS状态</span>
+                    <span class="body-params-value">{{ batteryMosText }}</span>
+                  </div>
+                  <div class="body-params-item">
+                    <span class="body-params-label">电池温度</span>
+                    <span class="body-params-value">{{ batteryTempsText }}</span>
                   </div>
                 </div>
               </div>
@@ -156,6 +194,56 @@ const cpuTempRaw = computed(() => {
 
 const cpuTemp = computed(() => formatTelemetryValue(cpuTempRaw.value))
 const cpuFrequency = computed(() => formatTelemetryValue(robotStore.systemTelemetry?.cpu_info?.frequency, 0))
+
+const formatBatteryField = (value: number | undefined | null, digits = 0) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return digits > 0 ? value.toFixed(digits) : String(Math.round(value))
+}
+
+const batteryLevelText = computed(() => {
+  const value = robotStore.batteryData?.battery_level
+  return value == null ? '--' : `${formatBatteryField(value)}%`
+})
+
+const batteryVoltageText = computed(() => {
+  const value = robotStore.batteryData?.voltage
+  return value == null ? '--' : `${formatBatteryField(value, 1)}V`
+})
+
+const batteryCurrentText = computed(() => {
+  const value = robotStore.batteryData?.current
+  return value == null ? '--' : `${formatBatteryField(value, 1)}A`
+})
+
+const batteryRemainingText = computed(() => {
+  const value = robotStore.batteryData?.remaining_capacity
+  return value == null ? '--' : `${formatBatteryField(value)}mAh`
+})
+
+const batteryNominalText = computed(() => {
+  const value = robotStore.batteryData?.nominal_capacity
+  return value == null ? '--' : `${formatBatteryField(value)}mAh`
+})
+
+const batteryCyclesText = computed(() => {
+  const value = robotStore.batteryData?.cycles
+  return value == null ? '--' : formatBatteryField(value)
+})
+
+const batteryMosText = computed(() => {
+  const value = robotStore.batteryData?.mos_state
+  return value == null ? '--' : formatBatteryField(value)
+})
+
+const batteryTempsText = computed(() => {
+  const temps = robotStore.batteryData?.battery_temperature
+  if (!Array.isArray(temps) || temps.length === 0) return '--'
+  const shown = temps
+    .filter((item) => typeof item === 'number' && Number.isFinite(item) && item > -100 && item < 200)
+    .slice(0, 3)
+    .map((item) => `${item.toFixed(1)}°C`)
+  return shown.length > 0 ? shown.join(' / ') : '--'
+})
 
 const emitPermissionDenied = (permission: string) => {
   if (typeof document !== 'undefined') {

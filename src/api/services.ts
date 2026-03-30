@@ -1197,6 +1197,11 @@ export const navigationApi = {
   }) => {
     return apiClient.post(`/navigation/${robotId}/use_gps`, data)
   },
+  setOriginPoint: (robotId: string, data: {
+    map_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/set_origin_point`, data)
+  },
   getGpsStatus: (robotId: string) => {
     return apiClient.get<{ msg: { error_code: number; error_msg: string; result: number }; request_id: string }>(`/navigation/${robotId}/use_gps`)
   },

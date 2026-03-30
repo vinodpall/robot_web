@@ -59,7 +59,7 @@
                 >
                   {{ isTrackTaskRunning ? '关闭' : '开始' }}
                 </button>
-                <button class="mission-btn mission-btn-secondary" :disabled="!isNavigationEnabled" v-permission-click-dialog="'task-tracklist-pause'" @click="handlePauseTrack">
+                <button class="mission-btn" :class="isNavPaused ? 'mission-btn-stop' : 'mission-btn-secondary'" :disabled="!isNavigationEnabled" v-permission-click-dialog="'task-tracklist-pause'" @click="handlePauseTrack">
                   {{ isNavPaused ? '恢复' : '暂停' }}
                 </button>
                 <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" v-permission-click-dialog="'task-tracklist-create'" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
@@ -394,7 +394,7 @@
     </div>
     <!-- 循迹任务启动弹窗 -->
     <div v-if="trackStartDialog.visible" class="custom-dialog-mask">
-      <div class="dispatch-task-modal">
+      <div class="dispatch-task-modal track-start-modal">
         <div class="dispatch-task-modal-content">
           <div class="dispatch-task-title">启动循迹任务</div>
           <div class="dispatch-task-form">
@@ -423,11 +423,6 @@
                     {{ taskGroup }}
                   </option>
                 </select>
-                <span class="custom-select-arrow">
-                  <svg width="12" height="12" viewBox="0 0 12 12">
-                    <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                  </svg>
-                </span>
               </div>
             </div>
             <div v-if="taskGroupList.length === 0" class="dispatch-task-row">
@@ -442,11 +437,6 @@
                   <option :value="2">停障模式</option>
                   <option :value="3">绕障模式</option>
                 </select>
-                <span class="custom-select-arrow">
-                  <svg width="12" height="12" viewBox="0 0 12 12">
-                    <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                  </svg>
-                </span>
               </div>
             </div>
             <div class="dispatch-task-row">
@@ -463,24 +453,6 @@
                   <option :value="7">山地步态</option>
                   <option :value="8">静音步态</option>
                 </select>
-                <span class="custom-select-arrow">
-                  <svg width="12" height="12" viewBox="0 0 12 12">
-                    <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                  </svg>
-                </span>
-              </div>
-            </div>
-            <div class="dispatch-task-row">
-              <label>立即启动：</label>
-              <div class="dispatch-switch-wrapper">
-                <div
-                  class="switch-container"
-                  :class="{ active: !trackStartDialog.form.wait }"
-                  @click="!trackStartDialog.loading && (trackStartDialog.form.wait = trackStartDialog.form.wait ? 0 : 1)"
-                >
-                  <div class="switch-toggle"></div>
-                </div>
-                <span class="dispatch-switch-label">{{ trackStartDialog.form.wait ? '否' : '是' }}</span>
               </div>
             </div>
           </div>
@@ -511,13 +483,13 @@
     <!-- Add Task Modal -->
     <Teleport to="body">
       <div v-if="addTaskDialog.visible" class="custom-dialog-mask">
-        <div class="simple-modal-card">
+        <div class="simple-modal-card add-task-modal-card">
           <div class="simple-modal-header">
             <span>添加任务</span>
             <span class="simple-close-icon" @click="cancelAddTask">×</span>
           </div>
           
-          <div class="simple-modal-body">
+          <div class="simple-modal-body add-task-modal-body">
             <!-- 任务类型 -->
             <div class="simple-form-item">
               <div class="simple-flex-row" style="margin-bottom: 8px;">
@@ -526,8 +498,8 @@
                  <label class="simple-radio"><input type="radio" v-model="addTaskDialog.form.isMulti" value="1"> <span>多选</span></label>
               </div>
               <div class="simple-flex-row">
-                 <input v-model="addTaskDialog.form.typeInput" class="simple-input" style="flex: 2;">
-                 <div class="custom-select-wrapper" style="flex: 1; position: relative;" @click.stop="showTypeDropdown = !showTypeDropdown">
+                 <input v-model="addTaskDialog.form.typeInput" :class="['simple-input', { 'input-error-border': !!addTaskFieldErrors.taskType }]" style="flex: 2;" readonly>
+                 <div :class="['custom-select-wrapper', { 'input-error-border': !!addTaskFieldErrors.taskType }]" style="flex: 1; position: relative;" @click.stop="showTypeDropdown = !showTypeDropdown">
                     <div class="simple-select" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
                       <span>{{ addTaskDialog.form.actionType || '请选择' }}</span>
                       <span :style="{transform: showTypeDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s', fontSize: '12px', opacity: 0.7}">▼</span>
@@ -539,24 +511,33 @@
                     </div>
                  </div>
               </div>
+              <div v-if="addTaskFieldErrors.taskType" class="input-error-text">{{ addTaskFieldErrors.taskType }}</div>
             </div>
 
             <!-- 坐标 XYZ -->
-            <div class="simple-form-item">
-               <label class="simple-label">X坐标</label>
-               <input v-model="addTaskDialog.form.x" class="simple-input">
+            <div class="simple-form-grid">
+              <div class="simple-form-item">
+                 <label class="simple-label">X坐标</label>
+                 <input v-model="addTaskDialog.form.x" :class="['simple-input', { 'input-error-border': !!addTaskFieldErrors.x }]">
+                 <div v-if="addTaskFieldErrors.x" class="input-error-text">{{ addTaskFieldErrors.x }}</div>
+              </div>
+              <div class="simple-form-item">
+                 <label class="simple-label">Y坐标</label>
+                 <input v-model="addTaskDialog.form.y" :class="['simple-input', { 'input-error-border': !!addTaskFieldErrors.y }]">
+                 <div v-if="addTaskFieldErrors.y" class="input-error-text">{{ addTaskFieldErrors.y }}</div>
+              </div>
             </div>
-            <div class="simple-form-item">
-               <label class="simple-label">Y坐标</label>
-               <input v-model="addTaskDialog.form.y" class="simple-input">
-            </div>
-            <div class="simple-form-item">
-               <label class="simple-label">Z坐标</label>
-               <input v-model="addTaskDialog.form.z" class="simple-input">
-            </div>
-            <div class="simple-form-item">
-               <label class="simple-label">角度</label>
-               <input v-model="addTaskDialog.form.angle" class="simple-input">
+            <div class="simple-form-grid">
+              <div class="simple-form-item">
+                 <label class="simple-label">Z坐标</label>
+                 <input v-model="addTaskDialog.form.z" :class="['simple-input', { 'input-error-border': !!addTaskFieldErrors.z }]">
+                 <div v-if="addTaskFieldErrors.z" class="input-error-text">{{ addTaskFieldErrors.z }}</div>
+              </div>
+              <div class="simple-form-item">
+                 <label class="simple-label">角度</label>
+                 <input v-model="addTaskDialog.form.angle" :class="['simple-input', { 'input-error-border': !!addTaskFieldErrors.angle }]">
+                 <div v-if="addTaskFieldErrors.angle" class="input-error-text">{{ addTaskFieldErrors.angle }}</div>
+              </div>
             </div>
 
             <!-- 预置点 -->
@@ -584,28 +565,30 @@
             </div>
 
             <!-- 步态 & 地形 -->
-             <div class="simple-form-item">
-               <label class="simple-label">步态切换</label>
-                <select v-model="addTaskDialog.form.gait" class="simple-select">
-                  <option value="1">行走步态</option>
-                  <option value="2">斜坡步态</option>
-                  <option value="3">越障步态</option>
-                  <option value="4">楼梯步态</option>
-                  <option value="5">帧楼梯步态</option>
-                  <option value="6">帧45°楼梯步态</option>
-                  <option value="7">L行走步态</option>
-                  <option value="8">山地步态</option>
-                  <option value="9">静音步态</option>
-                </select>
-            </div>
-             <div class="simple-form-item">
-               <label class="simple-label">地形图设置</label>
-                <select v-model="addTaskDialog.form.ground" class="simple-select">
-                  <option value="1">实心地面</option>
-                  <option value="2">镂空地面</option>
-                  <option value="3">无踢面地面</option>
-                  <option value="4">累积帧模式</option>
-                </select>
+             <div class="simple-form-grid">
+               <div class="simple-form-item">
+                 <label class="simple-label">步态切换</label>
+                  <select v-model="addTaskDialog.form.gait" class="simple-select">
+                    <option value="1">行走步态</option>
+                    <option value="2">斜坡步态</option>
+                    <option value="3">越障步态</option>
+                    <option value="4">楼梯步态</option>
+                    <option value="5">帧楼梯步态</option>
+                    <option value="6">帧45°楼梯步态</option>
+                    <option value="7">L行走步态</option>
+                    <option value="8">山地步态</option>
+                    <option value="9">静音步态</option>
+                  </select>
+              </div>
+               <div class="simple-form-item">
+                 <label class="simple-label">地形图设置</label>
+                  <select v-model="addTaskDialog.form.ground" class="simple-select">
+                    <option value="1">实心地面</option>
+                    <option value="2">镂空地面</option>
+                    <option value="3">无踢面地面</option>
+                    <option value="4">累积帧模式</option>
+                  </select>
+              </div>
             </div>
 
              <!-- Switch -->
@@ -1097,6 +1080,29 @@ const handleCreateTaskGroup = async () => {
     errorMessage.value = { show: true, text: '请输入任务组名称' }
     return
   }
+
+  const normalizedNewGroup = normalizeTaskPointName(createTaskGroupForm.value.keypoint_name)
+  if (!normalizedNewGroup) {
+    errorMessage.value = { show: true, text: '请输入有效的任务组名称' }
+    return
+  }
+
+  const normalizedTrackName = normalizeTrackName(selectedRouteName.value)
+  const toComparable = (name: string) => {
+    const normalized = normalizeTaskPointName(name).trim()
+    if (!normalized) return ''
+    // 统一去掉“路线名_”前缀后比较，兼容输入 006 或 MAPRTK02_006 两种形式
+    if (normalizedTrackName && normalized.startsWith(`${normalizedTrackName}_`)) {
+      return normalized.slice(normalizedTrackName.length + 1).toLowerCase()
+    }
+    return normalized.toLowerCase()
+  }
+  const inputComparable = toComparable(normalizedNewGroup)
+  const hasDuplicate = taskGroupList.value.some(group => toComparable(group) === inputComparable)
+  if (hasDuplicate) {
+    errorMessage.value = { show: true, text: '任务组名称已存在' }
+    return
+  }
   
   const robotId = localStorage.getItem('selected_robot_id')
   if (!robotId) {
@@ -1107,7 +1113,7 @@ const handleCreateTaskGroup = async () => {
   try {
     const response = await navigationApi.createTaskpointFile(robotId, {
       track_name: selectedRouteName.value,
-      keypoint_name: createTaskGroupForm.value.keypoint_name
+      keypoint_name: normalizedNewGroup
     })
     
     console.log('创建任务组返回:', response)
@@ -1127,13 +1133,11 @@ const handleCreateTaskGroup = async () => {
         taskGroupList.value = freshGroups
         setTaskGroupCache(selectedRouteName.value, freshGroups)
       } else {
-        const normalizedNewGroup = normalizeTaskPointName(createTaskGroupForm.value.keypoint_name)
         const mergedGroups = Array.from(new Set([...taskGroupList.value, normalizedNewGroup].filter(Boolean)))
         taskGroupList.value = mergedGroups
         setTaskGroupCache(selectedRouteName.value, mergedGroups)
       }
     } catch {
-      const normalizedNewGroup = normalizeTaskPointName(createTaskGroupForm.value.keypoint_name)
       const mergedGroups = Array.from(new Set([...taskGroupList.value, normalizedNewGroup].filter(Boolean)))
       taskGroupList.value = mergedGroups
       setTaskGroupCache(selectedRouteName.value, mergedGroups)
@@ -1380,17 +1384,24 @@ const sendMissionDogCommand = async (robotId: string, commandName: string) => {
 const handlePauseTrack = async () => {
   if (!isNavigationEnabled.value) return
   const robotId = localStorage.getItem('selected_robot_id')
-  if (!robotId) return
-
-  try {
-    const nextPaused = !isNavPaused.value
-    await navigationApi.pauseNavigation(robotId, { action: nextPaused ? 1 : 0 })
-    taskExecutionStore.setNavPaused(nextPaused)
-    alert(nextPaused ? '暂停指令已发送' : '恢复指令已发送')
-  } catch (err) {
-    console.error('暂停失败', err)
-    alert('暂停失败')
+  if (!robotId) {
+    showMissionError('未找到机器人ID')
+    return
   }
+
+  const nextPaused = !isNavPaused.value
+  const actionText = nextPaused ? '暂停' : '恢复'
+  const confirmText = nextPaused ? '确定要暂停导航吗' : '确定要恢复导航吗'
+  showConfirmDialog(confirmText, async () => {
+    try {
+      await navigationApi.pauseNavigation(robotId, { action: nextPaused ? 1 : 0 })
+      taskExecutionStore.setNavPaused(nextPaused)
+      showMissionSuccess(nextPaused ? '暂停指令已发送' : '恢复指令已发送')
+    } catch (err) {
+      console.error('暂停失败', err)
+      showMissionError(`${actionText}失败`)
+    }
+  })
 }
 
 // 删除任务组
@@ -2581,10 +2592,10 @@ const addTaskDialog = ref({
     isMulti: '0',
     typeInput: '',
     actionType: '',
-    x: '0',
-    y: '0',
-    z: '0',
-    angle: '0',
+    x: '',
+    y: '',
+    z: '',
+    angle: '',
     preset: '',
     extraConfig: '',
     description: '',
@@ -2593,6 +2604,43 @@ const addTaskDialog = ref({
     stopAtPoint: false
   }
 })
+const addTaskFieldErrors = ref({
+  taskType: '',
+  x: '',
+  y: '',
+  z: '',
+  angle: ''
+})
+const resetAddTaskFieldErrors = () => {
+  addTaskFieldErrors.value = {
+    taskType: '',
+    x: '',
+    y: '',
+    z: '',
+    angle: ''
+  }
+}
+const validateAddTaskRequiredFields = () => {
+  resetAddTaskFieldErrors()
+
+  const taskTypeText = String(addTaskDialog.value.form.typeInput || '').trim()
+  const xText = String(addTaskDialog.value.form.x || '').trim()
+  const yText = String(addTaskDialog.value.form.y || '').trim()
+  const zText = String(addTaskDialog.value.form.z || '').trim()
+  const angleText = String(addTaskDialog.value.form.angle || '').trim()
+
+  if (!taskTypeText) addTaskFieldErrors.value.taskType = '任务类型不能为空'
+  if (!xText) addTaskFieldErrors.value.x = 'X坐标不能为空'
+  if (!yText) addTaskFieldErrors.value.y = 'Y坐标不能为空'
+  if (!zText) addTaskFieldErrors.value.z = 'Z坐标不能为空'
+  if (!angleText) addTaskFieldErrors.value.angle = '角度不能为空'
+
+  return !addTaskFieldErrors.value.taskType
+    && !addTaskFieldErrors.value.x
+    && !addTaskFieldErrors.value.y
+    && !addTaskFieldErrors.value.z
+    && !addTaskFieldErrors.value.angle
+}
 const isEditMode = ref(false)
 const editingTaskItem = ref<any>(null)
 const addTaskSubmitting = ref(false)
@@ -2660,6 +2708,24 @@ const fetchTaskTypeList = async () => {
 watch(() => addTaskDialog.value.form.isMulti, () => {
   addTaskDialog.value.form.typeInput = ''
 })
+watch(() => addTaskDialog.value.form.typeInput, (val) => {
+  if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
+})
+watch(() => addTaskDialog.value.form.actionType, (val) => {
+  if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
+})
+watch(() => addTaskDialog.value.form.x, (val) => {
+  if (String(val || '').trim()) addTaskFieldErrors.value.x = ''
+})
+watch(() => addTaskDialog.value.form.y, (val) => {
+  if (String(val || '').trim()) addTaskFieldErrors.value.y = ''
+})
+watch(() => addTaskDialog.value.form.z, (val) => {
+  if (String(val || '').trim()) addTaskFieldErrors.value.z = ''
+})
+watch(() => addTaskDialog.value.form.angle, (val) => {
+  if (String(val || '').trim()) addTaskFieldErrors.value.angle = ''
+})
 
 watch(filteredTaskTypes, (list) => {
   if (list && list.length > 0) {
@@ -2670,9 +2736,14 @@ watch(filteredTaskTypes, (list) => {
 }, { immediate: true })
 
 const handleAddTask = () => {
+  resetAddTaskFieldErrors()
   // 重置表单
   addTaskDialog.value.form.typeInput = ''
   addTaskDialog.value.form.actionType = ''
+  addTaskDialog.value.form.x = ''
+  addTaskDialog.value.form.y = ''
+  addTaskDialog.value.form.z = ''
+  addTaskDialog.value.form.angle = ''
   addTaskDialog.value.form.preset = ''
   addTaskDialog.value.form.description = ''
   addTaskDialog.value.form.extraConfig = ''
@@ -2680,13 +2751,7 @@ const handleAddTask = () => {
   addTaskDialog.value.form.ground = '1'
   addTaskDialog.value.form.stopAtPoint = false
   addTaskDialog.value.form.isMulti = '0'
-  
-  if (currentPosition.value) {
-    addTaskDialog.value.form.x = (currentPosition.value.x || '0').toString()
-    addTaskDialog.value.form.y = (currentPosition.value.y || '0').toString()
-    addTaskDialog.value.form.z = (currentPosition.value.z || '0').toString()
-    addTaskDialog.value.form.angle = (currentPosition.value.angle || '0').toString()
-  }
+
   isEditMode.value = false
   editingTaskItem.value = null
   addTaskDialog.value.visible = true
@@ -2700,12 +2765,12 @@ const parseBooleanLike = (value: unknown): boolean | null => {
 }
 
 const resolveStopAtPointFromTask = (task: any): boolean => {
-  // no_switch / nostop 都是“到点不停”的语义，取反后得到“到点停止运动”
+  // 循迹任务接口返回值与UI开关语义保持一致：false=关闭，true=开启
   const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
-  if (noSwitch !== null) return !noSwitch
+  if (noSwitch !== null) return noSwitch
 
   const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
-  if (noStop !== null) return !noStop
+  if (noStop !== null) return noStop
 
   const stopAtPoint = parseBooleanLike(task?.stopAtPoint ?? task?.stop_at_point)
   if (stopAtPoint !== null) return stopAtPoint
@@ -2714,6 +2779,7 @@ const resolveStopAtPointFromTask = (task: any): boolean => {
 }
 
 const handleEditTask = (waypoint: any) => {
+  resetAddTaskFieldErrors()
   // Find the original item from key data if needed, or use waypoint if it has all data
   // waypoint here is the computed object for table display. We might need the raw object.
   // Assuming waypoint (from waypointsData) has necessary fields or we can find it.
@@ -2772,11 +2838,13 @@ const handleEditTask = (waypoint: any) => {
 }
 
 const cancelAddTask = () => {
+  resetAddTaskFieldErrors()
   addTaskDialog.value.visible = false
 }
 
 const confirmAddTask = async () => {
   if (addTaskSubmitting.value) return
+  if (!validateAddTaskRequiredFields()) return
 
   const robotId = localStorage.getItem('selected_robot_id')
   if (!robotId) return
@@ -2900,8 +2968,9 @@ const handleDeleteTask = (waypoint: any) => {
     
     try {
       // 调用删除接口，传递完整的任务数据
-      await navigationApi.deleteTrackPoint(robotId, {
+      const deleteResponse: any = await navigationApi.deleteTrackPoint(robotId, {
         task_id: rawData.task_id || '',
+        createtime: String(rawData.createtime ?? rawData.create_time ?? ''),
         type: rawData.type || rawData.type_text || '',
         type_text: rawData.type_text || rawData.type || '',
         x: parseFloat(rawData.x) || 0,
@@ -2917,22 +2986,26 @@ const handleDeleteTask = (waypoint: any) => {
         track_point_name: selectedTaskGroupName.value
       })
 
-      // 更新本地缓存
-      const cachedData = localStorage.getItem('all_track_task_list')
-      let allTaskList = cachedData ? JSON.parse(cachedData) : []
-
-      // 删除指定任务
-      allTaskList = allTaskList.filter((task: any) => 
-        !(task.task_id === rawData.task_id &&
-          task.track_name === selectedRouteName.value &&
-          task.track_point_name === selectedTaskGroupName.value)
-      )
+      // 删除接口成功后优先使用返回的全量循迹任务列表，避免再请求 alltask_list
+      const responseTaskListRaw = deleteResponse?.response?.msg?.result
+      let allTaskList: any[] = []
+      if (Array.isArray(responseTaskListRaw)) {
+        allTaskList = responseTaskListRaw
+      } else {
+        // 兜底：若接口未返回列表，仍按本地缓存删除指定任务
+        const cachedData = localStorage.getItem('all_track_task_list')
+        allTaskList = cachedData ? JSON.parse(cachedData) : []
+        allTaskList = allTaskList.filter((task: any) =>
+          !(task.task_id === rawData.task_id &&
+            task.track_name === selectedRouteName.value &&
+            task.track_point_name === selectedTaskGroupName.value)
+        )
+      }
 
       localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
       
       // 触发列表刷新
       taskListRefreshKey.value++
-      await refreshTrackTaskListFromApi(robotId)
       
       successMessage.value = { show: true, text: '删除成功' }
       setTimeout(() => {
@@ -3514,6 +3587,88 @@ const confirmExtraConfig = () => {
   border-color: rgba(103, 213, 253, 0.3);
 }
 
+/* 启动循迹任务弹窗下拉框样式与多任务组弹窗保持一致 */
+.track-start-modal .dispatch-task-row {
+  display: grid !important;
+  grid-template-columns: 88px 320px !important;
+  column-gap: 12px !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.track-start-modal .dispatch-task-row label {
+  min-width: 0 !important;
+  margin: 0 !important;
+  text-align: right !important;
+}
+
+.track-start-modal .custom-select-wrapper {
+  flex: none !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  display: block !important;
+  max-width: none !important;
+}
+
+.track-start-modal .dispatch-task-input {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.track-start-modal .mission-select {
+  width: 100% !important;
+  display: block !important;
+  max-width: none !important;
+  height: 36px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(38, 131, 182, 0.4) !important;
+  background: #0c3c56 !important;
+  color: #fff !important;
+  box-shadow: none !important;
+  transition: all 0.2s !important;
+  padding: 0 34px 0 12px !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3e%3cpath fill='%2367d5fd' d='M6 8L0 0h12z'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 12px 8px !important;
+}
+
+.track-start-modal {
+  max-width: 460px !important;
+  width: 88% !important;
+}
+
+.track-start-modal .dispatch-task-modal-content {
+  padding: 22px 26px !important;
+}
+
+.track-start-modal .mission-select:hover {
+  border-color: #67d5fd !important;
+}
+
+.track-start-modal .mission-select:focus {
+  outline: none !important;
+  border-color: #67d5fd !important;
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.1) !important;
+}
+
+.track-start-modal .mission-select:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.track-start-modal .mission-select option {
+  background: #0c3c56 !important;
+  color: #fff !important;
+}
+
+.track-start-modal .custom-select-wrapper::after {
+  display: none !important;
+}
+
 .custom-select-wrapper {
   position: relative;
   display: inline-block;
@@ -3954,10 +4109,14 @@ const confirmExtraConfig = () => {
 /* Add Task Modal Styles */
 .custom-dialog-mask { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; justify-content: center; align-items: center; }
 .simple-modal-card { width: 440px; margin: auto; background: #102a43; border: 1px solid #244f78; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); display: flex; flex-direction: column; max-height: 85vh; overflow: hidden; }
+.add-task-modal-card { width: 760px; max-width: calc(100vw - 40px); max-height: none; }
 .simple-modal-header { height: 48px; background: #163654; border-bottom: 1px solid #244f78; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; color: #fff; font-size: 16px; font-weight: 500; flex-shrink: 0; }
 .simple-close-icon { cursor: pointer; font-size: 20px; color: #909399; }
 .simple-close-icon:hover { color: #fff; }
 .simple-modal-body { padding: 24px; overflow-y: auto; flex: 1; }
+.add-task-modal-body { padding: 18px 24px 14px; overflow-y: visible; }
+.add-task-modal-body .simple-form-item { margin-bottom: 12px; }
+.simple-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .simple-modal-body::-webkit-scrollbar { width: 6px; }
 .simple-modal-body::-webkit-scrollbar-track { background: transparent; }
 .simple-modal-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
@@ -3969,6 +4128,8 @@ const confirmExtraConfig = () => {
 .simple-radio { margin-right: 20px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; color: #fff; }
 .simple-input, .simple-select { width: 100%; height: 34px; background: rgba(30, 60, 90, 0.5); border: 1px solid #244f78; border-radius: 2px; padding: 0 10px; color: #fff; outline: none; font-size: 13px; box-sizing: border-box; }
 .simple-input:focus, .simple-select:focus { border-color: #409eff; background: rgba(30, 60, 90, 0.8); }
+.input-error-border { border-color: #ff6b6b !important; box-shadow: 0 0 0 1px rgba(255, 107, 107, 0.28); }
+.input-error-text { margin-top: 6px; color: #ff8a8a; font-size: 12px; line-height: 1.4; }
 .simple-switch { width: 36px; height: 18px; background: #4c4d4f; border-radius: 10px; position: relative; cursor: pointer; transition: 0.3s; }
 .simple-switch.active { background: #409eff; }
 .simple-switch-dot { width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.3s; }
@@ -3982,6 +4143,12 @@ const confirmExtraConfig = () => {
 .custom-select-dropdown::-webkit-scrollbar-track { background: transparent; }
 .custom-select-dropdown::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
 .custom-select-dropdown::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+@media (max-width: 900px) {
+  .add-task-modal-card { width: calc(100vw - 20px); max-height: 90vh; }
+  .add-task-modal-body { overflow-y: auto; }
+  .simple-form-grid { grid-template-columns: 1fr; gap: 0; }
+}
 
 /* PTZ Buttons */
 .ptz-btn { width: 50px; height: 50px; background: #0099ff; border: none; color: #fff; cursor: pointer; border-radius: 4px; display: flex; justify-content: center; align-items: center; font-size: 24px; transition: 0.2s; }

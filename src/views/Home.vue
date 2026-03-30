@@ -814,7 +814,7 @@
 
   <!-- 循迹任务启动弹窗 -->
   <div v-if="trackStartDialog.visible" class="custom-dialog-mask">
-    <div class="dispatch-task-modal">
+    <div class="dispatch-task-modal track-start-modal">
       <div class="dispatch-task-modal-content">
         <div class="dispatch-task-title">启动循迹任务</div>
         <div class="dispatch-task-form">
@@ -843,11 +843,6 @@
                   {{ taskpoint }}
                 </option>
               </select>
-              <span class="custom-select-arrow">
-                <svg width="12" height="12" viewBox="0 0 12 12">
-                  <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                </svg>
-              </span>
             </div>
           </div>
           <div v-if="taskpointList.length === 0" class="dispatch-task-row">
@@ -862,11 +857,6 @@
                 <option :value="2">停障模式</option>
                 <option :value="3">绕障模式</option>
               </select>
-              <span class="custom-select-arrow">
-                <svg width="12" height="12" viewBox="0 0 12 12">
-                  <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                </svg>
-              </span>
             </div>
           </div>
           <div class="dispatch-task-row">
@@ -883,24 +873,6 @@
                 <option :value="7">山地步态</option>
                 <option :value="8">静音步态</option>
               </select>
-              <span class="custom-select-arrow">
-                <svg width="12" height="12" viewBox="0 0 12 12">
-                  <polygon points="2,4 6,8 10,4" fill="#fff"/>
-                </svg>
-              </span>
-            </div>
-          </div>
-          <div class="dispatch-task-row">
-            <label>立即启动：</label>
-            <div class="dispatch-switch-wrapper">
-              <div
-                class="switch-container"
-                :class="{ active: !trackStartDialog.form.wait }"
-                @click="!trackStartDialog.loading && (trackStartDialog.form.wait = trackStartDialog.form.wait ? 0 : 1)"
-              >
-                <div class="switch-toggle"></div>
-              </div>
-              <span class="dispatch-switch-label">{{ trackStartDialog.form.wait ? '否' : '是' }}</span>
             </div>
           </div>
         </div>
@@ -6342,6 +6314,7 @@ onMounted(async () => {
   window.addEventListener('robot-camera-ready', handleRobotCameraReady)
   window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.addEventListener('robot-track-list-ready', handleRobotTrackListReady)
+  window.addEventListener('multi-task-list-updated', handleMultiTaskListUpdated)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('focus', handleWindowFocus)
@@ -6502,6 +6475,14 @@ const handleRobotTrackListReady = async (event: Event) => {
   await fetchTrackList()
 }
 
+const handleMultiTaskListUpdated = async (event: Event) => {
+  const { robotId } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+  await fetchMultiTaskList()
+}
+
 // 切换机器人第三阶段：其余数据就绪，刷新其他下拉和点云
 const handleRobotContextRefreshed = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
@@ -6541,6 +6522,7 @@ onUnmounted(() => {
   window.removeEventListener('robot-camera-ready', handleRobotCameraReady)
   window.removeEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.removeEventListener('robot-track-list-ready', handleRobotTrackListReady)
+  window.removeEventListener('multi-task-list-updated', handleMultiTaskListUpdated)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('focus', handleWindowFocus)
@@ -7379,8 +7361,10 @@ const isControlEnabled = (controlName: RobotControlName) => {
     // 开始运动仅允许在力控模式进入；踏步状态下保留“停止运动”可点击
     baseEnabled = basicState === 3 || basicState === 4
   } else if (controlName === 'forceControlMode') {
+    const isLGait = getCurrentGaitTag() === 'l'
     // basic_state=3(力控) 或 4(踏步) 时，力控模式按钮均置灰
-    baseEnabled = canUseStandingControls(basicState) && basicState !== 3 && basicState !== 4
+    // L行走步态下允许点击力控模式
+    baseEnabled = canUseStandingControls(basicState) && (isLGait || (basicState !== 3 && basicState !== 4))
   } else if (controlName === 'autoMode') {
     baseEnabled = basicState === 0 || basicState === 2 || basicState === 3 || basicState === 4 || basicState === 6 || basicState === 16
   } else if (gaitControlSet.has(controlName)) {
@@ -7409,6 +7393,9 @@ const isControlEnabled = (controlName: RobotControlName) => {
 
   if (controlName === 'startCharge' || controlName === 'endCharge') {
     // 充电按钮不受文档规则分支额外置灰，统一按电流正负控制
+    return true
+  }
+  if (controlName === 'forceControlMode' && getCurrentGaitTag() === 'l') {
     return true
   }
 
@@ -7874,6 +7861,88 @@ const handlePageShow = () => {
   background: rgba(103, 213, 253, 0.1);
   color: #67d5fd;
   border-color: rgba(103, 213, 253, 0.3);
+}
+
+/* 首页启动循迹任务弹窗：与循迹任务页面保持一致 */
+.track-start-modal {
+  max-width: 460px !important;
+  width: 88% !important;
+}
+
+.track-start-modal .dispatch-task-modal-content {
+  padding: 22px 26px !important;
+}
+
+.track-start-modal .dispatch-task-row {
+  display: grid !important;
+  grid-template-columns: 88px 320px !important;
+  column-gap: 12px !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.track-start-modal .dispatch-task-row label {
+  min-width: 0 !important;
+  margin: 0 !important;
+  text-align: right !important;
+}
+
+.track-start-modal .custom-select-wrapper {
+  flex: none !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  display: block !important;
+  max-width: none !important;
+}
+
+.track-start-modal .dispatch-task-input {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.track-start-modal .mission-select {
+  width: 100% !important;
+  display: block !important;
+  max-width: none !important;
+  height: 36px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(38, 131, 182, 0.4) !important;
+  background: #0c3c56 !important;
+  color: #fff !important;
+  box-shadow: none !important;
+  transition: all 0.2s !important;
+  padding: 0 34px 0 12px !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3e%3cpath fill='%2367d5fd' d='M6 8L0 0h12z'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 12px 8px !important;
+}
+
+.track-start-modal .mission-select:hover {
+  border-color: #67d5fd !important;
+}
+
+.track-start-modal .mission-select:focus {
+  outline: none !important;
+  border-color: #67d5fd !important;
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.1) !important;
+}
+
+.track-start-modal .mission-select:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.track-start-modal .mission-select option {
+  background: #0c3c56 !important;
+  color: #fff !important;
+}
+
+.track-start-modal .custom-select-wrapper::after {
+  display: none !important;
 }
 
 .custom-select-wrapper {

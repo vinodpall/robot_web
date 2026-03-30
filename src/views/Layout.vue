@@ -10,20 +10,20 @@
         <router-link to="/dashboard/home" class="nav-item" :class="{ active: $route.path === '/dashboard/home' }">
           首页
         </router-link>
-        <router-link to="/dashboard/navigation" class="nav-item" :class="{ active: $route.path === '/dashboard/navigation' }">
+        <router-link :to="navigationNavTarget" class="nav-item" :class="{ active: $route.path === '/dashboard/navigation' }">
           导航管理
         </router-link>
         <router-link
-          to="/dashboard/mission"
+          :to="missionNavTarget"
           class="nav-item"
           :class="{ active: $route.path.includes('mission') || $route.path.includes('multi-task-group') }"
         >
           任务管理
         </router-link>
-        <router-link to="/dashboard/alarm-log" class="nav-item" :class="{ active: $route.path === '/dashboard/device-manage' || $route.path === '/dashboard/alarm-log' }">
+        <router-link :to="logNavTarget" class="nav-item" :class="{ active: $route.path === '/dashboard/device-manage' || $route.path === '/dashboard/alarm-log' }">
           日志管理
         </router-link>
-        <router-link to="/dashboard/body-params" class="nav-item" :class="{ active: $route.path.includes('body-params') || $route.path.includes('users') || $route.path.includes('roles') || $route.path.includes('super-admin') }">
+        <router-link :to="systemNavTarget" class="nav-item" :class="{ active: $route.path.includes('body-params') || $route.path.includes('users') || $route.path.includes('roles') || $route.path.includes('super-admin') }">
           系统管理
         </router-link>
       </nav>
@@ -109,21 +109,96 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useDeviceStore } from '../stores/device'
 import { useRobotStore } from '../stores/robot'
-import { robotApi, userApi } from '../api/services'
+import { robotApi, userApi, dogApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { refreshRobotRelatedCache, refreshCameraCache, refreshMapCache } from '../utils/robotBootstrap'
 import titleBg from '/src/assets/source_data/bg_data/title.png'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const deviceStore = useDeviceStore()
 const robotStore = useRobotStore()
 
 const { fetchDeviceStatus, deviceStatus } = useDeviceStatus()
+
+const TASK_MODULE_LAST_PATH_KEY = 'task_module_last_path'
+const TASK_MODULE_DEFAULT_PATH = '/dashboard/mission'
+const TASK_MODULE_PATH_SET = new Set([
+  '/dashboard/mission',
+  '/dashboard/mission-logs',
+  '/dashboard/multi-task-group'
+])
+const NAV_MODULE_LAST_PATH_KEY = 'nav_module_last_path'
+const NAV_MODULE_DEFAULT_PATH = '/dashboard/navigation'
+const NAV_MODULE_PATH_SET = new Set(['/dashboard/navigation'])
+const LOG_MODULE_LAST_PATH_KEY = 'log_module_last_path'
+const LOG_MODULE_DEFAULT_PATH = '/dashboard/alarm-log'
+const LOG_MODULE_PATH_SET = new Set(['/dashboard/alarm-log', '/dashboard/device-manage'])
+const SYSTEM_MODULE_LAST_PATH_KEY = 'system_module_last_path'
+const SYSTEM_MODULE_DEFAULT_PATH = '/dashboard/body-params'
+const SYSTEM_MODULE_PATH_SET = new Set([
+  '/dashboard/body-params',
+  '/dashboard/users',
+  '/dashboard/roles',
+  '/dashboard/super-admin'
+])
+
+const normalizeTaskModulePath = (path: string | null | undefined) => {
+  if (!path) return TASK_MODULE_DEFAULT_PATH
+  return TASK_MODULE_PATH_SET.has(path) ? path : TASK_MODULE_DEFAULT_PATH
+}
+
+const lastTaskModulePath = ref(
+  normalizeTaskModulePath(localStorage.getItem(TASK_MODULE_LAST_PATH_KEY))
+)
+const lastNavModulePath = ref(
+  NAV_MODULE_PATH_SET.has(localStorage.getItem(NAV_MODULE_LAST_PATH_KEY) || '')
+    ? (localStorage.getItem(NAV_MODULE_LAST_PATH_KEY) as string)
+    : NAV_MODULE_DEFAULT_PATH
+)
+const lastLogModulePath = ref(
+  LOG_MODULE_PATH_SET.has(localStorage.getItem(LOG_MODULE_LAST_PATH_KEY) || '')
+    ? (localStorage.getItem(LOG_MODULE_LAST_PATH_KEY) as string)
+    : LOG_MODULE_DEFAULT_PATH
+)
+const lastSystemModulePath = ref(
+  SYSTEM_MODULE_PATH_SET.has(localStorage.getItem(SYSTEM_MODULE_LAST_PATH_KEY) || '')
+    ? (localStorage.getItem(SYSTEM_MODULE_LAST_PATH_KEY) as string)
+    : SYSTEM_MODULE_DEFAULT_PATH
+)
+
+const missionNavTarget = computed(() => lastTaskModulePath.value)
+const navigationNavTarget = computed(() => lastNavModulePath.value)
+const logNavTarget = computed(() => lastLogModulePath.value)
+const systemNavTarget = computed(() => lastSystemModulePath.value)
+
+watch(
+  () => route.path,
+  (path) => {
+    if (TASK_MODULE_PATH_SET.has(path)) {
+      lastTaskModulePath.value = path
+      localStorage.setItem(TASK_MODULE_LAST_PATH_KEY, path)
+    }
+    if (NAV_MODULE_PATH_SET.has(path)) {
+      lastNavModulePath.value = path
+      localStorage.setItem(NAV_MODULE_LAST_PATH_KEY, path)
+    }
+    if (LOG_MODULE_PATH_SET.has(path)) {
+      lastLogModulePath.value = path
+      localStorage.setItem(LOG_MODULE_LAST_PATH_KEY, path)
+    }
+    if (SYSTEM_MODULE_PATH_SET.has(path)) {
+      lastSystemModulePath.value = path
+      localStorage.setItem(SYSTEM_MODULE_LAST_PATH_KEY, path)
+    }
+  },
+  { immediate: true }
+)
 
 const user = computed(() => userStore.user)
 const robots = computed(() => deviceStore.robots)
@@ -219,7 +294,7 @@ const closeUserMenu = () => {
 document.addEventListener('click', closeUserMenu)
 
 const isStopActive = computed(() => {
-  return deviceStatus.value?.emergency_stop_state || false
+  return robotStore.motionState?.basic_state === 6
 })
 
 const isEmergencyRed = computed(() => {
@@ -234,8 +309,9 @@ const toggleStop = async () => {
   }
 
   try {
+    await dogApi.sendCommand(selectedRobotId.value, { command_name: 'stop' })
   } catch (error) {
-    console.error('鎬ュ仠鎿嶄綔澶辫触:', error)
+    console.error('急停操作失败:', error)
   }
 }
 

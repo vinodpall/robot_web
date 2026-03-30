@@ -16,7 +16,7 @@
       </div>
     </aside>
     <!-- 主体内容区 -->
-    <main class="main-content">
+    <main class="main-content" :class="{ 'page-buttons-locked': isPageButtonsLocked }">
       <div class="main-flex">
         <section class="right-panel">
           <!-- 录包建图 -->
@@ -56,7 +56,7 @@
               <div class="map-section">
                 <div class="map-section-title">创建二维地图</div>
                 <div class="map-section-buttons">
-                  <button class="map-btn map-btn-primary" :disabled="isRecording" v-permission-click-dialog="'nav-lbjt-slam'" @click="handleGenerateMap">生成地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording || !canGenerateMap" v-permission-click-dialog="'nav-lbjt-slam'" @click="handleGenerateMap">生成地图</button>
                   <button class="map-btn map-btn-primary" :disabled="isRecording || mappingStopLoading" v-permission-click-dialog="'nav-lbjt-changepcd'" @click="handleGenerateGridMap">生成栅格地图</button>
                   <button class="map-btn map-btn-primary" :disabled="isRecording" v-permission-click-dialog="'nav-lbjt-msfrecord'" @click="handleCreateFusionMap">新建融合地图</button>
                 </div>
@@ -135,7 +135,7 @@
                   </button>
                   <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handleCircleMode">循迹避障模式</button>
                   <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
-                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleSetOrigin">原点设置</button>
+                  <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleSetOrigin">原点设置</button>
                 </div>
               </div>
 
@@ -315,7 +315,7 @@
                         <div class="slider-value">{{ brushSize }}</div>
                       </div>
                       <!-- 保存 -->
-                      <button class="tool-button" :class="{ disabled: !gridImageData }" v-permission-click-dialog="'nav-mapedit-publish'" @click="gridImageData && handleSaveGridMap()" title="保存地图">
+                      <button class="tool-button" :class="{ disabled: !gridImageData, 'upload-ready': !!gridImageData }" v-permission-click-dialog="'nav-mapedit-publish'" @click="gridImageData && handleSaveGridMap()" title="保存地图">
                         <img :src="mapUploadIcon" class="tool-icon-img" alt="保存地图" />
                       </button>
                     </div>
@@ -448,7 +448,7 @@
                 </select>
                 <button
                   class="mission-btn mission-btn-stop"
-                  :disabled="fileMapList.length === 0 || !fileManageMap"
+                  :disabled="fileMapList.length === 0 || !fileManageMap || navigationEnabled"
                   v-permission-click-dialog="'nav-file-delete'"
                   @click="handleDeleteMap"
                 >
@@ -484,7 +484,7 @@
                       <div class="file-table-cell file-table-name">{{ item.name }}</div>
                       <div class="file-table-cell">{{ item.createTime }}</div>
                       <div class="file-table-cell file-table-action">
-                        <button class="action-btn action-btn-delete" v-permission-click-dialog="'nav-file-delete'" @click="handleDelete(item)">
+                        <button class="action-btn action-btn-delete" :disabled="navigationEnabled" v-permission-click-dialog="'nav-file-delete'" @click="handleDelete(item)">
                           <img :src="deleteIcon" alt="删除" />
                           删除
                         </button>
@@ -844,7 +844,23 @@ const sidebarTabs = [
   { key: 'file_manage', label: '文件管理', icon: packageManageIcon, permission: 'nav-file-show' }
 ]
 
-const currentTab = ref('map_record')
+const NAV_MANAGE_TAB_STORAGE_KEY = 'navigation_manage_current_tab'
+const getDefaultNavManageTab = () => {
+  const storedTab = localStorage.getItem(NAV_MANAGE_TAB_STORAGE_KEY) || ''
+  const storedTabConfig = sidebarTabs.find(tab => tab.key === storedTab)
+  if (storedTabConfig && (!storedTabConfig.permission || permissionStore.hasPermission(storedTabConfig.permission))) {
+    return storedTabConfig.key
+  }
+
+  const firstAllowedTab = sidebarTabs.find(tab => !tab.permission || permissionStore.hasPermission(tab.permission))
+  return firstAllowedTab?.key || 'map_record'
+}
+
+const currentTab = ref(getDefaultNavManageTab())
+
+watch(currentTab, (tabKey) => {
+  localStorage.setItem(NAV_MANAGE_TAB_STORAGE_KEY, tabKey)
+})
 
 const emitPermissionDenied = (permission: string) => {
   if (typeof document !== 'undefined') {
@@ -1001,6 +1017,20 @@ const trackLineList = computed(() => {
       const atIndex = track.indexOf('@')
       return atIndex > -1 ? track.substring(0, atIndex) : track
     })
+})
+
+// 路线列表变化时兜底：若当前未选中或选中项已失效，自动选第一条
+watch(trackLineList, (newLines) => {
+  if (currentTab.value !== 'track_record') return
+
+  if (newLines.length === 0) {
+    trackRecordLine.value = ''
+    return
+  }
+
+  if (!trackRecordLine.value || !newLines.includes(trackRecordLine.value)) {
+    trackRecordLine.value = newLines[0]
+  }
 })
 
 // 任务组列表
@@ -1427,7 +1457,28 @@ const handleTrackSmooth = async () => {
     await navigationApi.trajectorySmooth(robotId, {
       track_name: trackRecordLine.value
     })
-    showSuccessMessage('轨迹平滑处理成功')
+
+    // 平滑成功后，强制重新下载当前路线轨迹文件并覆盖本地缓存
+    const robotIp = deviceStore.selectedRobot?.ip_address || ''
+    if (!robotIp) {
+      showErrorMessage('轨迹平滑成功，但未获取到机器人IP，无法刷新轨迹文件')
+      return
+    }
+
+    const blob = await mapFileApi.downloadTrajectoryFile(trackRecordLine.value, robotIp)
+    if (!blob) {
+      showErrorMessage('轨迹平滑成功，但重新下载轨迹文件失败')
+      return
+    }
+
+    const text = await blob.text()
+    if (text.trim().startsWith('<') || text.includes('error_code')) {
+      showErrorMessage('轨迹平滑成功，但下载到的轨迹文件内容异常')
+      return
+    }
+
+    await saveTrajectoryFile(trackRecordLine.value, blob)
+    showSuccessMessage('轨迹平滑处理成功，已更新当前路线轨迹文件')
   } catch (error: any) {
     console.error('轨迹平滑失败:', error)
     showErrorMessage(`轨迹平滑失败: ${error.message || '未知错误'}`)
@@ -1959,8 +2010,37 @@ const handleCloseGPS = () => {
 
 
 const handleSetOrigin = () => {
-  console.log('原点设置')
-  // TODO: 调用原点设置API
+  if (!navigationEnabled.value) {
+    return
+  }
+
+  if (!selectedNavMap.value) {
+    showErrorMessage('请先选择地图')
+    return
+  }
+
+  showConfirmDialog({
+    title: '原点设置',
+    message: '确定将当前位置设置为原点吗',
+    onConfirm: async () => {
+      try {
+        const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+        if (!robotId) {
+          showErrorMessage('未选择机器人')
+          return
+        }
+
+        await navigationApi.setOriginPoint(robotId, {
+          map_name: selectedNavMap.value
+        })
+
+        showSuccessMessage('原点设置成功')
+      } catch (err) {
+        console.error('原点设置失败:', err)
+        showErrorMessage('原点设置失败')
+      }
+    }
+  })
 }
 
 const decreaseSpeed = () => {
@@ -2761,13 +2841,11 @@ onMounted(async () => {
   })
 
   await nextTick()
-  
-  // 如果默认就是导航标签，则初始化
-  if (currentTab.value === 'nav') {
-    await nextTick()
-    fetchMapList()
-    initNavPointCloud()
-    fetchGpsStatus()
+
+  // 根据恢复的子标签执行初始化逻辑
+  const restoredTab = sidebarTabs.find(tab => tab.key === currentTab.value)
+  if (restoredTab && currentTab.value !== 'map_record') {
+    handleTabClick(restoredTab)
   }
 
   // 监听机器人切换事件，刷新各 tab 的列表
@@ -2792,6 +2870,12 @@ onUnmounted(() => {
 
 // 录包建图相关状态
 const isRecording = computed(() => robotStore.cmdStatus?.data_record === 1)
+const canGenerateMap = computed(() => robotStore.cmdStatus?.slam === 0)
+const isPageButtonsLocked = computed(() => {
+  const cmdStatus = robotStore.cmdStatus
+  const hasNavStateLock = cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
+  return currentTab.value === 'map_record' && hasNavStateLock
+})
 const mapProgress = ref(0)
 const mappingStopLoading = ref(false)
 const mappingAutoStopTriggered = ref(false)
@@ -4263,6 +4347,15 @@ const handleDelete = (item: any) => {
 <style scoped>
 @import './mission-common.css';
 
+.main-content.page-buttons-locked button {
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+  opacity: 0.4 !important;
+  filter: grayscale(0.55);
+  box-shadow: none !important;
+  transform: none !important;
+}
+
 .nav-top-card {
   margin-bottom: 4px;
   background: linear-gradient(135deg, #0a2a3a 80%, #0a0f1c 100%);
@@ -4666,6 +4759,12 @@ const handleDelete = (item: any) => {
   font-size: 13px;
   padding: 0 8px;
   min-width: auto;
+}
+
+.action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.45);
 }
 
 .action-btn img {
@@ -5342,6 +5441,9 @@ const handleDelete = (item: any) => {
   backdrop-filter: blur(4px);
   overflow: hidden;
   z-index: 100;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .panel-tools {
@@ -5351,6 +5453,8 @@ const handleDelete = (item: any) => {
   padding: 16px 8px 20px;
   gap: 10px;
   align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .tool-button {
@@ -5365,6 +5469,8 @@ const handleDelete = (item: any) => {
   cursor: pointer;
   transition: all 0.2s ease;
   padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .tool-button:hover:not(.disabled) {
@@ -5380,6 +5486,19 @@ const handleDelete = (item: any) => {
   box-shadow: 0 8px 16px rgba(73, 171, 212, 0.35);
 }
 
+.tool-button.upload-ready {
+  background: #01314f;
+  box-shadow: 0 0 12px #59c0fc33;
+}
+
+.tool-button.upload-ready:hover {
+  background: #01314f;
+}
+
+.tool-button.upload-ready .tool-icon-img {
+  filter: brightness(0) invert(1) drop-shadow(0 0 8px #67d5fd) drop-shadow(0 0 2px #67d5fd);
+}
+
 .tool-button.disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -5390,6 +5509,9 @@ const handleDelete = (item: any) => {
   width: 20px;
   height: 20px;
   filter: brightness(0) saturate(100%) invert(88%) sepia(9%) saturate(748%) hue-rotate(164deg);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .tool-button.active .tool-icon-img {
