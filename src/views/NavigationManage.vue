@@ -352,6 +352,7 @@
                 <button 
                   class="map-btn map-btn-secondary track-btn" 
                   :class="{'map-btn-danger': isTrackRecording}"
+                  :disabled="isTrackRunning"
                   v-permission-click-dialog="'nav-trackrecord-create'"
                   @click="handleTrackRecord"
                 >
@@ -388,7 +389,7 @@
                 <div class="track-toolbar-actions">
                   <button
                     class="map-btn track-btn track-btn-danger"
-                    :disabled="trackLineList.length === 0 || !trackRecordLine"
+                    :disabled="isTrackRunning || trackLineList.length === 0 || !trackRecordLine"
                     v-permission-click-dialog="'nav-trackrecord-delete'"
                     @click="handleTrackDelete"
                   >
@@ -404,7 +405,7 @@
                   </button>
                   <button
                     class="map-btn map-btn-primary track-btn"
-                    :disabled="trackLineList.length === 0 || !trackRecordLine"
+                    :disabled="isTrackRunning || trackLineList.length === 0 || !trackRecordLine"
                     v-permission-click-dialog="'nav-trackrecord-edit'"
                     @click="handleTrackSmooth"
                   >
@@ -736,7 +737,7 @@ import { navigationApi, mapFileApi } from '../api/services'
 import { useDeviceStore } from '../stores/device'
 import { useTaskExecutionStore } from '../stores/taskExecution'
 import { usePermissionStore } from '@/stores/permission'
-import { getRobotMapCacheKeys, getRobotContextCacheKeys, refreshMapCache } from '@/utils/robotBootstrap'
+import { getRobotMapCacheKeys, getRobotContextCacheKeys, refreshMapCache, refreshRobotRelatedCache } from '@/utils/robotBootstrap'
 
 const deviceStore = useDeviceStore()
 const robotStore = useRobotStore()
@@ -1115,7 +1116,7 @@ watch(trackRecordLine, async (newLine) => {
     // 检查缓存中是否已有轨迹文件
     const cachedBlob = await getTrajectoryFile(newLine)
     if (cachedBlob) {
-      console.log('✓ 轨迹文件已在缓存中:', newLine)
+      console.log('? 轨迹文件已在缓存中:', newLine)
       // 缓存命中：若当前正在循迹且地图已加载，立即叠加渲染
       if (robotStore.cmdStatus?.track === 1 && baseNavPointCloudData.value.length > 0) {
         overlayNavTrackTrajectory(newLine)
@@ -1138,14 +1139,14 @@ watch(trackRecordLine, async (newLine) => {
 
       // 保存到IndexedDB
       await saveTrajectoryFile(newLine, blob)
-      console.log('✓ 轨迹文件下载并保存成功:', newLine)
+      console.log('? 轨迹文件下载并保存成功:', newLine)
       
       // 下载完成：若当前正在循迹且地图已加载，立即叠加渲染（解决竞态问题）
       if (robotStore.cmdStatus?.track === 1 && baseNavPointCloudData.value.length > 0) {
         overlayNavTrackTrajectory(newLine)
       }
     } else {
-      console.warn('⚠ 轨迹文件下载失败:', newLine)
+      console.warn('? 轨迹文件下载失败:', newLine)
     }
   } catch (error) {
     console.error('下载轨迹文件失败:', error)
@@ -1157,6 +1158,7 @@ const isTrackRecording = ref(false)
 watch(() => robotStore.cmdStatus?.track_record, (val) => {
   isTrackRecording.value = Number(val) === 1
 }, { immediate: true })
+const isTrackRunning = computed(() => Number(robotStore.cmdStatus?.track ?? 0) === 1)
 const trackRecordDialog = ref({
   visible: false,
   trackName: '',
@@ -1164,6 +1166,10 @@ const trackRecordDialog = ref({
 })
 
 const handleTrackRecord = () => {
+  if (isTrackRunning.value) {
+    return
+  }
+
   if (isTrackRecording.value) {
     // 正在录制 -> 停止录制
     stopTrackRecord()
@@ -1224,8 +1230,23 @@ const stopTrackRecord = () => {
 
 // 确认开始录制
 const confirmTrackRecord = async () => {
-  if (!trackRecordDialog.value.trackName) {
+  if (isTrackRunning.value) {
+    showErrorMessage('当前正在循迹，无法录制路线')
+    return
+  }
+
+  const inputName = trackRecordDialog.value.trackName.trim()
+  if (!inputName) {
     showErrorMessage('请输入路线名称')
+    return
+  }
+
+  const fullTrackName = `${trackRecordMap.value}_${inputName}`
+  const normalizedExistingNames = new Set(
+    trackLineList.value.map(item => normalizeTrackName(String(item || '')))
+  )
+  if (normalizedExistingNames.has(normalizeTrackName(fullTrackName))) {
+    showErrorMessage(`路线名称已存在：${fullTrackName}`)
     return
   }
   
@@ -1237,7 +1258,6 @@ const confirmTrackRecord = async () => {
 
   trackRecordDialog.value.loading = true
   try {
-    const fullTrackName = `${trackRecordMap.value}_${trackRecordDialog.value.trackName}`
     await navigationApi.trackRecord(robotId, {
       action: 1, // 开始
       track_name: fullTrackName
@@ -1259,6 +1279,10 @@ const cancelTrackRecord = () => {
 }
 
 const handleTrackDelete = () => {
+  if (isTrackRunning.value) {
+    return
+  }
+
   if (!trackRecordLine.value) {
     showErrorMessage('请先选择要删除的路线')
     return
@@ -1297,77 +1321,48 @@ const handleTrackDownload = () => {
   console.log('下载路线')
 }
 
-const handleTrackPreview = async () => {
+
+const previewTrackRoute = async (options?: { silentSuccess?: boolean }) => {
+  const silentSuccess = !!options?.silentSuccess
   console.log('预览路线')
   
-  // 检查是否选中了路线
   if (!trackRecordLine.value) {
     showErrorMessage('请先选择路线')
     return
   }
   
   try {
-    // 从IndexedDB获取轨迹文件
     const blob = await getTrajectoryFile(trackRecordLine.value)
-    
     if (!blob) {
       showErrorMessage('未找到轨迹文件，请确认路线是否存在')
       return
     }
-    
-    console.log('✓ 找到轨迹文件，开始解析:', trackRecordLine.value)
-    
-    // 读取轨迹文件内容
+
     const text = await blob.text()
-    console.log('DEBUG: 预览读取的文件内容预览:', text.substring(0, 200))
-    
     const lines = text.trim().split('\n')
     const pointDataLines = lines
       .map(line => line.trim())
       .filter(line => line && !line.startsWith('#'))
-    
-    // 解析轨迹点
-    const trajectoryPoints: Array<{x: number, y: number, z: number}> = []
-    
+
+    const trajectoryPoints: Array<{ x: number; y: number; z: number }> = []
     for (const line of lines) {
       const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue // 跳过空行和注释
-      
-      // 尝试用逗号分隔（CSV格式）或空格分隔
-      let parts: string[]
-      if (trimmed.includes(',')) {
-        parts = trimmed.split(',')
-      } else {
-        parts = trimmed.split(/\s+/)
-      }
-      
-      // 检查数据格式
-      // 格式可能是: index, x, y, z, ...  列数决定 z 轴是否有效
-      const len = parts.length
-
-      // 仅支持两种格式：
-      // 6列：index, x, y, z, ... 取实际 z
-      // 5列：index, x, y, ...    无 z，默认 0
-      if (len === 6) {
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const parts = trimmed.includes(',') ? trimmed.split(',') : trimmed.split(/\s+/)
+      if (parts.length === 6) {
         const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3])
         if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
           trajectoryPoints.push({ x, y, z })
           continue
         }
       }
-      // 5列：index, x, y, ... z 置为 0
-      if (len === 5) {
+      if (parts.length === 5) {
         const x = parseFloat(parts[1]), y = parseFloat(parts[2])
-        if (!isNaN(x) && !isNaN(y)) {
-          trajectoryPoints.push({ x, y, z: 0 })
-          continue
-        }
+        if (!isNaN(x) && !isNaN(y)) trajectoryPoints.push({ x, y, z: 0 })
       }
-      // 其他列数按无效行跳过
     }
-    
+
     if (trajectoryPoints.length === 0) {
-      console.warn('DEBUG: 解析失败，未找到有效的轨迹点。首行内容:', lines[0])
       if (pointDataLines.length === 0) {
         showErrorMessage('轨迹文件内部无点位数据')
       } else {
@@ -1375,27 +1370,15 @@ const handleTrackPreview = async () => {
       }
       return
     }
-    
-    console.log(`✓ 解析到 ${trajectoryPoints.length} 个轨迹点`)
-    
-    // 获取归一化参数
+
     const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
-    
-    // 如果没有地图数据，使用轨迹自身的范围（虽然这不太可能发生，因为已经加载了地图）
-    if (maxRange <= 1e-6) {
-      console.warn('地图归一化参数无效，使用轨迹自身范围')
-      // ... 原有逻辑 ...
-    }
-    
-    // 使用地图参数归一化轨迹点
     const normalizedTrajectoryPoints = trajectoryPoints.map(p => ({
       x: (p.x - centerX) / maxRange,
       y: (p.y - centerY) / maxRange,
       z: (p.z - centerZ) / maxRange,
-      intensity: 2.0 // 使用特殊强度值区分轨迹 (2.0)
+      intensity: 2.0
     }))
 
-    // 从缓存加载该路线的所有任务点
     const previewTaskPoints: Array<{ x: number; y: number; z: number; name: string; intensity: number }> = []
     try {
       const cachedData = localStorage.getItem('all_track_task_list')
@@ -1416,32 +1399,36 @@ const handleTrackPreview = async () => {
               })
             }
           })
-        console.log(`✓ 预览任务点加载成功 (${previewTaskPoints.length} 个)`)
       }
     } catch (e) {
       console.warn('加载预览任务点失败:', e)
     }
-    
-    // 合并地图、轨迹、任务点数据
+
     const base = baseNavPointCloudData.value.length > 0 ? baseNavPointCloudData.value : []
     navPointCloudData.value = [...base, ...normalizedTrajectoryPoints, ...previewTaskPoints]
-    
-    // 锁定预览模式，阻止 WebSocket 任务更新覆盖预览画面
     isNavPreviewMode.value = true
-    
-    // 渲染点云图
     await nextTick()
     scheduleNavPointCloudRender()
-    
-    showSuccessMessage(`轨迹预览加载成功 (${trajectoryPoints.length} 个点，${previewTaskPoints.length} 个任务点)`)
-    console.log('✓ 轨迹预览渲染完成')
+
+    if (!silentSuccess) {
+      showSuccessMessage(`轨迹预览加载成功 (${trajectoryPoints.length} 个点，${previewTaskPoints.length} 个任务点)`)
+    }
   } catch (error) {
     console.error('预览路线失败:', error)
     showErrorMessage('预览路线失败: ' + (error as Error).message)
   }
 }
 
+const handleTrackPreview = async () => {
+  await previewTrackRoute()
+}
+
+
 const handleTrackSmooth = async () => {
+  if (isTrackRunning.value) {
+    return
+  }
+
   if (!trackRecordLine.value) {
     showErrorMessage('请先选择要平滑的路线')
     return
@@ -1465,7 +1452,7 @@ const handleTrackSmooth = async () => {
       return
     }
 
-    const blob = await mapFileApi.downloadTrajectoryFile(trackRecordLine.value, robotIp)
+    const blob = await mapFileApi.downloadTrajectoryFile(trackRecordLine.value, robotIp, true)
     if (!blob) {
       showErrorMessage('轨迹平滑成功，但重新下载轨迹文件失败')
       return
@@ -1478,7 +1465,10 @@ const handleTrackSmooth = async () => {
     }
 
     await saveTrajectoryFile(trackRecordLine.value, blob)
-    showSuccessMessage('轨迹平滑处理成功，已更新当前路线轨迹文件')
+
+    // 平滑完成后立即用最新轨迹文件刷新点云预览
+    await previewTrackRoute({ silentSuccess: true })
+    showSuccessMessage('轨迹平滑处理成功，已更新并重新加载当前路线轨迹文件')
   } catch (error: any) {
     console.error('轨迹平滑失败:', error)
     showErrorMessage(`轨迹平滑失败: ${error.message || '未知错误'}`)
@@ -1493,6 +1483,8 @@ const selectedNavMap = computed({
 })
 const navMapList = ref<string[]>([]) // 地图列表
 
+const MIN_TASK_SPEED = 0.3
+const MAX_TASK_SPEED = 1.2
 const taskSpeed = ref(1.0)
 const navData = ref({
   w: 0,
@@ -2044,14 +2036,45 @@ const handleSetOrigin = () => {
 }
 
 const decreaseSpeed = () => {
-  if (taskSpeed.value > 0.1) {
-    taskSpeed.value = Math.round((taskSpeed.value - 0.1) * 10) / 10
+  if (taskSpeed.value > MIN_TASK_SPEED) {
+    const nextSpeed = Math.round((taskSpeed.value - 0.1) * 10) / 10
+    taskSpeed.value = Math.max(nextSpeed, MIN_TASK_SPEED)
+  }
+}
+
+const refreshRelatedTaskListsAfterDelete = async (robotId?: string) => {
+  const selectedRobotId = robotId || deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!selectedRobotId) return
+
+  try {
+    // 删除地图/文件后同步刷新：循迹路线列表、循迹任务组列表、发布点任务组列表
+    await refreshRobotRelatedCache(selectedRobotId, { skipMapRefresh: true })
+
+    const contextKeys = getRobotContextCacheKeys(selectedRobotId)
+    const cachedTrackList =
+      localStorage.getItem(contextKeys.trackListKey) ||
+      localStorage.getItem('cached_track_list')
+    if (cachedTrackList) {
+      allTrackList.value = JSON.parse(cachedTrackList)
+    } else {
+      allTrackList.value = []
+    }
+
+    window.dispatchEvent(new CustomEvent('robot-track-list-ready', {
+      detail: { robotId: selectedRobotId }
+    }))
+    window.dispatchEvent(new CustomEvent('robot-context-refreshed', {
+      detail: { robotId: selectedRobotId }
+    }))
+  } catch (err) {
+    console.error('刷新循迹/任务组相关缓存失败:', err)
   }
 }
 
 const increaseSpeed = () => {
-  if (taskSpeed.value < 5.0) {
-    taskSpeed.value = Math.round((taskSpeed.value + 0.1) * 10) / 10
+  if (taskSpeed.value < MAX_TASK_SPEED) {
+    const nextSpeed = Math.round((taskSpeed.value + 0.1) * 10) / 10
+    taskSpeed.value = Math.min(nextSpeed, MAX_TASK_SPEED)
   }
 }
 
@@ -3872,7 +3895,7 @@ const handleSaveGridMap = async () => {
         if (!uploadSuccess) {
           throw new Error('上传到服务器失败')
         }
-        console.log('✓ 服务器上传成功')
+        console.log('? 服务器上传成功')
         
         // 步骤2: 从服务器下载验证
         showSuccessMessage('正在从服务器下载验证...')
@@ -3884,14 +3907,14 @@ const handleSaveGridMap = async () => {
         
         // 服务端可能会对PGM做规范化处理，大小变化不代表失败
         if (downloadedBlob.size !== blob.size) {
-          console.warn(`⚠ 文件大小不一致（可能被服务端规范化）: 原始=${blob.size}, 下载=${downloadedBlob.size}`)
+          console.warn(`? 文件大小不一致（可能被服务端规范化）: 原始=${blob.size}, 下载=${downloadedBlob.size}`)
         } else {
-          console.log('✓ 服务器下载验证成功，文件大小一致:', downloadedBlob.size)
+          console.log('? 服务器下载验证成功，文件大小一致:', downloadedBlob.size)
         }
         
         // 步骤3: 更新IndexedDB中的缓存（以服务端版本为准）
         await saveMapFile(mapName, fileName, downloadedBlob)
-        console.log('✓ IndexedDB缓存已更新')
+        console.log('? IndexedDB缓存已更新')
         
         showSuccessMessage('地图保存成功！')
         
@@ -4265,7 +4288,7 @@ const handleDeleteMap = () => {
         // 更新文件管理页面的地图列表（从缓存读取）
         fetchFileMapList()
         fetchTrackMapList()
-        await fetchAllTrackList()
+        await refreshRelatedTaskListsAfterDelete(robotId)
         window.dispatchEvent(new CustomEvent('robot-map-list-ready', {
           detail: { robotId }
         }))
@@ -4334,7 +4357,7 @@ const handleDelete = (item: any) => {
         showSuccessMessage('删除成功')
         fetchNavigationList()
         fetchTrackMapList()
-        await fetchAllTrackList()
+        await refreshRelatedTaskListsAfterDelete()
       } catch (error) {
         console.error('删除失败:', error)
         showErrorMessage('删除失败')
@@ -5188,6 +5211,13 @@ const handleDelete = (item: any) => {
   background: #662626;
 }
 
+.track-btn-danger:disabled {
+  background: rgba(120, 132, 146, 0.35);
+  border-color: rgba(147, 160, 176, 0.35);
+  color: rgba(192, 202, 214, 0.8);
+  box-shadow: none;
+}
+
 .track-record-map {
   flex: 1;
   display: flex;
@@ -5888,3 +5918,6 @@ select.recording-input option {
   grid-template-columns: 100px 360px 1fr 180px 150px !important;
 }
 </style>
+
+
+

@@ -64,7 +64,7 @@
           </div>
         </div>
 
-        <span class="stop-btn" :class="{ 'is-active': isStopActive, 'is-emergency-red': isEmergencyRed }" @click="toggleStop">
+        <span class="stop-btn" :class="{ 'is-active': isStopActive }" @click="toggleStop">
           <div class="stop-content">
             <span>{{ isStopActive ? '启动' : '急停' }}</span>
           </div>
@@ -295,11 +295,6 @@ document.addEventListener('click', closeUserMenu)
 
 const isStopActive = computed(() => {
   return robotStore.motionState?.basic_state === 6
-})
-
-const isEmergencyRed = computed(() => {
-  const state = robotStore.motionState?.basic_state
-  return state === 6
 })
 
 const toggleStop = async () => {
@@ -790,10 +785,6 @@ onMounted(async () => {
 
 .stop-btn.is-active {
   background-image: url('/src/assets/source_data/stop_click.png');
-}
-
-.stop-btn.is-emergency-red {
-  filter: hue-rotate(180deg) saturate(3) brightness(1.2);
 }
 
 .stop-content {

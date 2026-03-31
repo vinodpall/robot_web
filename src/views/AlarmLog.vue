@@ -229,6 +229,12 @@
         </div>
       </div>
     </Teleport>
+
+    <ErrorMessage
+      :show="exportErrorMessage.show"
+      :message="exportErrorMessage.text"
+      @close="exportErrorMessage.show = false"
+    />
   </div>
 </template>
 
@@ -237,6 +243,8 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useDeviceStore } from '@/stores/device'
 import { usePermissionStore } from '@/stores/permission'
+import { navigationApi } from '@/api/services'
+import ErrorMessage from '@/components/ErrorMessage.vue'
 import trackRecordIcon from '@/assets/source_data/svg_data/robot_source/track_record.svg'
 
 const router = useRouter()
@@ -336,6 +344,10 @@ const pagination = ref({
   lastPage: 1
 })
 const jumpPage = ref(1)
+const exportErrorMessage = ref({
+  show: false,
+  text: ''
+})
 
 const pageList = computed(() => {
   const { currentPage, lastPage } = pagination.value
@@ -406,7 +418,132 @@ const handleReset = () => {
   fetchRecords(1)
 }
 const handleDelete = () => console.log('鍒犻櫎')
-const handleExport = () => console.log('瀵煎嚭')
+
+const resolveExportUrls = (payload: any): string[] => {
+  if (!payload) return []
+  if (typeof payload === 'string') return [payload]
+  return [
+    payload?.excel_path,
+    payload?.response?.data?.excel_path,
+    payload?.download_url,
+    payload?.data?.url,
+    payload?.data?.download_url,
+    payload?.data?.file_url,
+    payload?.response?.data?.download_url,
+    payload?.url,
+    payload?.file_url,
+    payload?.msg?.result,
+    payload?.response?.msg?.result
+  ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+}
+
+const normalizeExportUrl = (rawUrl: string): string => {
+  if (!rawUrl) return ''
+  const value = rawUrl.trim()
+  if (!value) return ''
+  if (value.startsWith('//')) return `${window.location.protocol}${value}`
+  if (value.startsWith('/')) return value
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value)
+      return `${parsed.pathname}${parsed.search || ''}`
+    } catch {
+      return value
+    }
+  }
+  return `/${value}`
+}
+
+const triggerDownloadByUrl = async (downloadUrl: string) => {
+  const resp = await fetch(downloadUrl, { method: 'GET' })
+  if (!resp.ok) {
+    throw new Error(`下载失败(HTTP ${resp.status})`)
+  }
+
+  const blob = await resp.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const fileName = downloadUrl.split('?')[0].split('/').pop() || 'track_log.xlsx'
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.setAttribute('download', fileName)
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(blobUrl)
+}
+
+const showExportError = (text: string) => {
+  exportErrorMessage.value = {
+    show: true,
+    text
+  }
+}
+
+const toExportDateTime = (value: string): string => {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+const handleExport = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    showExportError('导出失败：未选择机器人')
+    return
+  }
+
+  try {
+    const payload = {
+      map_name: filterMapName.value || '',
+      content: filterContent.value || '',
+      task_group: filterTaskGroup.value || '',
+      tracking_route: filterTrackRoute.value || '',
+      start_time: toExportDateTime(startTime.value),
+      stoptime: toExportDateTime(endTime.value),
+      relinfo: '',
+      page_size: 100,
+      page: 1
+    }
+
+    const response = await navigationApi.exportTrackLog(robotId, payload)
+    const candidateUrls = resolveExportUrls(response)
+      .map(normalizeExportUrl)
+      .filter((u, idx, arr) => !!u && arr.indexOf(u) === idx)
+
+    if (candidateUrls.length === 0) {
+      throw new Error('接口未返回下载地址')
+    }
+
+    let lastError: any = null
+    for (const url of candidateUrls) {
+      try {
+        await triggerDownloadByUrl(url)
+        return
+      } catch (err) {
+        lastError = err
+      }
+    }
+    throw lastError || new Error('下载失败')
+  } catch (e: any) {
+    const rawMsg =
+      e?.detail ||
+      e?.response?.data?.message ||
+      e?.response?.data?.detail ||
+      e?.response?.data?.msg?.error_msg ||
+      e?.msg?.error_msg ||
+      e?.message ||
+      '未知错误'
+    const msg = String(rawMsg)
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ERR_CONNECTION')) {
+      showExportError('导出失败：下载链接不可访问，请检查设备网络或导出服务地址')
+      return
+    }
+    showExportError(`导出失败：${msg}`)
+  }
+}
 
 const formatTime = (timestamp: number | null): string => {
   if (!timestamp) return '-'

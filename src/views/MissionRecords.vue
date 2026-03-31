@@ -629,6 +629,27 @@ interface PointTask {
 const pointTaskList = ref<PointTask[]>([])
 const selectedPointTaskId = ref('')
 
+const getSelectedPointTaskCacheKey = () => {
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  return robotId ? `selected_point_task_id_${robotId}` : 'selected_point_task_id'
+}
+
+const getCachedSelectedPointTaskId = () => {
+  const key = getSelectedPointTaskCacheKey()
+  return localStorage.getItem(key) || localStorage.getItem('selected_point_task_id') || ''
+}
+
+const persistSelectedPointTaskId = (taskId: string) => {
+  const key = getSelectedPointTaskCacheKey()
+  if (taskId) {
+    localStorage.setItem(key, taskId)
+    localStorage.setItem('selected_point_task_id', taskId)
+    return
+  }
+  localStorage.removeItem(key)
+  localStorage.removeItem('selected_point_task_id')
+}
+
 // 获取发布点任务列表
 const fetchPointTaskList = async () => {
   const robotId = localStorage.getItem('selected_robot_id')
@@ -638,7 +659,11 @@ const fetchPointTaskList = async () => {
     const cached = localStorage.getItem('cached_point_task_list')
     if (cached) {
       pointTaskList.value = JSON.parse(cached)
-      if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
+      const cachedSelectedId = getCachedSelectedPointTaskId()
+      const hasCachedSelection = cachedSelectedId && pointTaskList.value.some(task => task.task_id === cachedSelectedId)
+      if (hasCachedSelection) {
+        selectedPointTaskId.value = cachedSelectedId
+      } else if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
         selectedPointTaskId.value = pointTaskList.value[0].task_id
       }
     }
@@ -655,8 +680,11 @@ const fetchPointTaskList = async () => {
       // 缓存发布点任务列表
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
       
-      // 默认选择第一个
-      if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
+      const cachedSelectedId = getCachedSelectedPointTaskId()
+      const hasCachedSelection = cachedSelectedId && pointTaskList.value.some(task => task.task_id === cachedSelectedId)
+      if (hasCachedSelection) {
+        selectedPointTaskId.value = cachedSelectedId
+      } else if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
         selectedPointTaskId.value = pointTaskList.value[0].task_id
       }
     }
@@ -666,7 +694,11 @@ const fetchPointTaskList = async () => {
     const cached = localStorage.getItem('cached_point_task_list')
     if (cached) {
       pointTaskList.value = JSON.parse(cached)
-      if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
+      const cachedSelectedId = getCachedSelectedPointTaskId()
+      const hasCachedSelection = cachedSelectedId && pointTaskList.value.some(task => task.task_id === cachedSelectedId)
+      if (hasCachedSelection) {
+        selectedPointTaskId.value = cachedSelectedId
+      } else if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
         selectedPointTaskId.value = pointTaskList.value[0].task_id
       }
     }
@@ -688,11 +720,20 @@ const filteredPointTaskList = computed(() => {
 
 // 监听筛选后的发布点任务列表变化，自动选择第一个
 watch(filteredPointTaskList, (newList) => {
-  if (newList.length > 0) {
-    selectedPointTaskId.value = newList[0].task_id
-  } else {
+  if (newList.length === 0) {
     selectedPointTaskId.value = ''
+    return
   }
+
+  // 优先保留当前选择；当前无效时尝试恢复缓存；都无效再选第一个
+  if (newList.some(task => task.task_id === selectedPointTaskId.value)) return
+  const cachedSelectedId = getCachedSelectedPointTaskId()
+  const cachedInCurrentList = cachedSelectedId && newList.some(task => task.task_id === cachedSelectedId)
+  selectedPointTaskId.value = cachedInCurrentList ? cachedSelectedId : newList[0].task_id
+})
+
+watch(selectedPointTaskId, (newVal) => {
+  persistSelectedPointTaskId(newVal || '')
 })
 
 // 监听 WebSocket task_status，运行中时自动选中对应任务

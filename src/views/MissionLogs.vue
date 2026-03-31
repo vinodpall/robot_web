@@ -116,10 +116,12 @@
                 v-model="createForm.start_time"
                 type="time"
                 class="task-form-input"
+                :class="{ 'is-error': createFormErrors.start_time }"
                 placeholder="HH:MM"
               />
             </div>
           </div>
+          <div v-if="createFormErrors.start_time" class="task-form-error-tip">请选择开始时间</div>
         </div>
         <div class="simple-modal-footer">
           <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-plantracklist-create'" @click="handleCreateScheduledTask">确定</button>
@@ -369,6 +371,9 @@ const createForm = ref({
   track_point_name: '',
   start_time: ''
 })
+const createFormErrors = ref({
+  start_time: false
+})
 const createTaskGroupList = ref<string[]>([])
 
 // 时间输入框引用
@@ -529,9 +534,16 @@ watch(() => createForm.value.track_name, async (newVal) => {
   }
 })
 
+watch(() => createForm.value.start_time, (newVal) => {
+  if (newVal) {
+    createFormErrors.value.start_time = false
+  }
+})
+
 // 打开新增弹窗
 const handleOpenCreateDialog = () => {
   showCreateDialog.value = true
+  createFormErrors.value.start_time = false
   // 如果有轨迹列表，默认选择第一个
   if (trackList.value.length > 0) {
     createForm.value.track_name = trackList.value[0]
@@ -553,6 +565,7 @@ const closeCreateDialog = () => {
     track_point_name: '',
     start_time: ''
   }
+  createFormErrors.value.start_time = false
   createTaskGroupList.value = []
 }
 
@@ -568,7 +581,7 @@ const handleCreateScheduledTask = async () => {
     return
   }
   if (!createForm.value.start_time) {
-    errorMessage.value = { show: true, text: '请选择开始时间' }
+    createFormErrors.value.start_time = true
     return
   }
   
@@ -2158,6 +2171,18 @@ const transformLng = (lng: number, lat: number) => {
   cursor: pointer;
   width: 100%;
   flex: 1;
+}
+
+.simple-modal-card .task-form-input.is-error {
+  border-color: #ff6b6b !important;
+  box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.15) !important;
+}
+
+.task-form-error-tip {
+  margin: -8px 0 0 106px;
+  color: #ff6b6b;
+  font-size: 12px;
+  line-height: 1.2;
 }
 </style>
 

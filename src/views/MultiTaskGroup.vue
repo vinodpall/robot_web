@@ -72,9 +72,6 @@
                 <div v-if="loading" class="mission-loading">
                   加载中...
                 </div>
-                <div v-else-if="multiTaskList.length === 0" class="mission-empty">
-                  暂无任务组数据
-                </div>
                 <template v-else>
                 <div class="file-table-row" v-for="(task, index) in currentTaskGroupList" :key="index">
                   <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">
@@ -120,9 +117,19 @@
                     </button>
                   </div>
                 </div>
+                <div v-if="currentTaskGroupList.length === 0" class="file-table-row">
+                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; color: rgba(184, 199, 217, 0.72);">暂无任务组数据</div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;">&nbsp;</div>
+                  <div class="file-table-cell file-table-action" style="min-width: 360px; width: 360px; text-align: center;">&nbsp;</div>
+                </div>
               </template>
               <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
-              <div class="file-table-row" v-for="i in Math.max(0, 10 - currentTaskGroupList.length)" :key="'empty-' + i">
+              <div class="file-table-row" v-for="i in multiTaskEmptyRowCount" :key="'empty-' + i">
                 <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">&nbsp;</div>
                 <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;">&nbsp;</div>
                 <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;">&nbsp;</div>
@@ -394,6 +401,7 @@ const currentTaskGroupList = ref<any[]>([])
 const taskGroups = computed(() => currentTaskGroupList.value) // For template compatibility logic check
 const exceptionStart = ref(false)
 const executeLoading = ref(false)
+const multiTaskEmptyRowCount = computed(() => Math.max(0, 10 - (currentTaskGroupList.value.length > 0 ? currentTaskGroupList.value.length : 1)))
 
 const getStatusClass = (status: string) => {
   const statusMap: Record<string, string> = {
@@ -662,7 +670,7 @@ const handleExecuteTaskGroup = async () => {
     const res: any = await navigationApi.startMultiTaskGroup(robotId, {
       multitask_name: selectedGroup.multitask_name,
       multitask_id: selectedGroup.multitask_id,
-      middle_start: exceptionStart.value ? 1 : 0,
+      middle_start: Number(exceptionStart.value),
       action: 1
     })
 

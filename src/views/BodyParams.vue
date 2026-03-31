@@ -84,12 +84,8 @@
                     <span class="body-params-value">{{ batteryCurrentText }}</span>
                   </div>
                   <div class="body-params-item">
-                    <span class="body-params-label">剩余容量</span>
-                    <span class="body-params-value">{{ batteryRemainingText }}</span>
-                  </div>
-                  <div class="body-params-item">
-                    <span class="body-params-label">额定容量</span>
-                    <span class="body-params-value">{{ batteryNominalText }}</span>
+                    <span class="body-params-label">电池容量</span>
+                    <span class="body-params-value">{{ batteryCapacityText }}</span>
                   </div>
                   <div class="body-params-item">
                     <span class="body-params-label">循环次数</span>
@@ -98,6 +94,10 @@
                   <div class="body-params-item">
                     <span class="body-params-label">MOS状态</span>
                     <span class="body-params-value">{{ batteryMosText }}</span>
+                  </div>
+                  <div class="body-params-item">
+                    <span class="body-params-label">保护状态</span>
+                    <span class="body-params-value">{{ batteryProtectedStateText }}</span>
                   </div>
                   <div class="body-params-item">
                     <span class="body-params-label">电池温度</span>
@@ -215,14 +215,11 @@ const batteryCurrentText = computed(() => {
   return value == null ? '--' : `${formatBatteryField(value, 1)}A`
 })
 
-const batteryRemainingText = computed(() => {
-  const value = robotStore.batteryData?.remaining_capacity
-  return value == null ? '--' : `${formatBatteryField(value)}mAh`
-})
-
-const batteryNominalText = computed(() => {
-  const value = robotStore.batteryData?.nominal_capacity
-  return value == null ? '--' : `${formatBatteryField(value)}mAh`
+const batteryCapacityText = computed(() => {
+  const remaining = robotStore.batteryData?.remaining_capacity
+  const nominal = robotStore.batteryData?.nominal_capacity
+  if (remaining == null || nominal == null) return '--'
+  return `${formatBatteryField(remaining)}/${formatBatteryField(nominal)} mA`
 })
 
 const batteryCyclesText = computed(() => {
@@ -232,17 +229,31 @@ const batteryCyclesText = computed(() => {
 
 const batteryMosText = computed(() => {
   const value = robotStore.batteryData?.mos_state
-  return value == null ? '--' : formatBatteryField(value)
+  if (value == null) return '--'
+  const state = Number(value)
+  if (!Number.isFinite(state)) return '--'
+  if (state === 0) return '关闭'
+  const isChargeOn = (state & 0x01) > 0
+  const isDischargeOn = (state & 0x02) > 0
+  if (isChargeOn && isDischargeOn) return '充放电开启'
+  if (isChargeOn) return '仅充电开启'
+  if (isDischargeOn) return '仅放电开启'
+  return `异常(${formatBatteryField(state)})`
+})
+
+const batteryProtectedStateText = computed(() => {
+  const value = robotStore.batteryData?.protected_state
+  if (value == null) return '--'
+  const state = Number(value)
+  if (!Number.isFinite(state)) return '--'
+  return state === 0 ? '正常' : `触发保护(${formatBatteryField(state)})`
 })
 
 const batteryTempsText = computed(() => {
   const temps = robotStore.batteryData?.battery_temperature
   if (!Array.isArray(temps) || temps.length === 0) return '--'
-  const shown = temps
-    .filter((item) => typeof item === 'number' && Number.isFinite(item) && item > -100 && item < 200)
-    .slice(0, 3)
-    .map((item) => `${item.toFixed(1)}°C`)
-  return shown.length > 0 ? shown.join(' / ') : '--'
+  const firstTemp = temps.find((item) => typeof item === 'number' && Number.isFinite(item) && item > -100 && item < 200)
+  return typeof firstTemp === 'number' ? `${firstTemp.toFixed(1)}°C` : '--'
 })
 
 const emitPermissionDenied = (permission: string) => {

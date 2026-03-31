@@ -1253,6 +1253,19 @@ export const navigationApi = {
   trajectorySmooth: (robotId: string, data: { track_name: string }) => {
     return apiClient.post(`/navigation/${robotId}/trajectory_smooth`, data)
   },
+  exportTrackLog: (robotId: string, data: {
+    map_name?: string;
+    content?: string;
+    task_group?: string;
+    tracking_route?: string;
+    start_time?: string;
+    stoptime?: string;
+    relinfo?: string;
+    page_size?: number;
+    page?: number;
+  }) => {
+    return apiClient.post(`/tracks/${robotId}/export_track_log`, data)
+  },
   oneKeyRecharge: (robotId: string, data: { sn: string; action: number; chargeIndex: string }) => {
     return apiClient.post(`/charging/${robotId}/one_key_recharge`, data)
   },
@@ -1430,10 +1443,25 @@ export const mapFileApi = {
     }
   },
 
-  downloadTrajectoryFile: async (trajectoryName: string, robotIp: string): Promise<Blob | null> => {
-    const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt&robot_ip=${robotIp}`
+  downloadTrajectoryFile: async (
+    trajectoryName: string,
+    robotIp: string,
+    forceNoCache = false
+  ): Promise<Blob | null> => {
+    const querySuffix = forceNoCache ? `&_t=${Date.now()}` : ''
+    const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt&robot_ip=${robotIp}${querySuffix}`
     try {
-      const response = await fetch(url, { method: 'GET' })
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: forceNoCache
+          ? {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              Pragma: 'no-cache',
+              Expires: '0'
+            }
+          : undefined
+      })
       if (!response.ok) {
         console.error(`[轨迹下载] 轨迹文件下载失败: ${trajectoryName}, HTTP ${response.status}`)
         return null

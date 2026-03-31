@@ -239,13 +239,18 @@ router.onError((error, to) => {
   const hasRetried = sessionStorage.getItem(DYNAMIC_IMPORT_RETRY_KEY) === '1'
   if (hasRetried) {
     sessionStorage.removeItem(DYNAMIC_IMPORT_RETRY_KEY)
+    if (typeof window !== 'undefined') {
+      window.alert('页面资源加载失败，请刷新页面或清理浏览器缓存后重试。')
+    }
     console.error('Dynamic import failed after retry:', error)
     return
   }
 
   sessionStorage.setItem(DYNAMIC_IMPORT_RETRY_KEY, '1')
   const hashPath = to?.fullPath || '/login'
-  window.location.replace(`${window.location.pathname}#${hashPath}`)
+  const cacheBust = `__v=${Date.now()}`
+  const targetUrl = `${window.location.pathname}?${cacheBust}#${hashPath}`
+  window.location.replace(targetUrl)
 })
 
 router.afterEach(() => {

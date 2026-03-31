@@ -423,6 +423,11 @@
                     {{ taskGroup }}
                   </option>
                 </select>
+                <span class="custom-select-arrow">
+                  <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 1L6 6L11 1" stroke="#67d5fd" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
               </div>
             </div>
             <div v-if="taskGroupList.length === 0" class="dispatch-task-row">
@@ -437,6 +442,11 @@
                   <option :value="2">停障模式</option>
                   <option :value="3">绕障模式</option>
                 </select>
+                <span class="custom-select-arrow">
+                  <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 1L6 6L11 1" stroke="#67d5fd" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
               </div>
             </div>
             <div class="dispatch-task-row">
@@ -453,6 +463,11 @@
                   <option :value="7">山地步态</option>
                   <option :value="8">静音步态</option>
                 </select>
+                <span class="custom-select-arrow">
+                  <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 1L6 6L11 1" stroke="#67d5fd" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
               </div>
             </div>
           </div>
@@ -3667,6 +3682,11 @@ const confirmExtraConfig = () => {
 
 .track-start-modal .custom-select-wrapper::after {
   display: none !important;
+}
+
+.track-start-modal .custom-select-arrow {
+  right: 12px;
+  z-index: 2;
 }
 
 .custom-select-wrapper {
