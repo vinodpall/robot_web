@@ -573,7 +573,7 @@
                 <div class="button-group">
                   <span 
                     class="span" 
-                    :class="{ disabled: !canDispatchTask }"
+                    :class="{ disabled: !canDispatchTrackTask }"
                     v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchTask"
                   >下发任务</span>
@@ -616,7 +616,7 @@
                 <div class="button-group">
                   <span 
                     class="span" 
-                    :class="{ disabled: !canDispatchTask }"
+                    :class="{ disabled: !canDispatchPointTask }"
                     v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchPointTask"
                   >下发任务</span>
@@ -659,7 +659,7 @@
                 <div class="button-group">
                   <span 
                     class="span" 
-                    :class="{ disabled: !canDispatchTask }"
+                    :class="{ disabled: !canDispatchMultiTask }"
                     v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchMultiTask"
                   >下发任务</span>
@@ -4063,6 +4063,7 @@ const selectedWayline = ref('')
 const selectedMultiTask = ref('')
 const mapList = ref<string[]>([])
 let mapListRequestToken = 0
+const mapListRequestInFlight = new Map<string, Promise<any>>()
 const getCurrentRobotMapKeys = () => {
   const robotId = deviceStore.selectedRobotId || ''
   return robotId ? getRobotMapCacheKeys(robotId) : null
@@ -4610,8 +4611,14 @@ const fetchMapList = async (targetRobotId?: string) => {
   mapUpdateTimeMap.value = cachedTimeMap ? JSON.parse(cachedTimeMap) : {}
 
   if (mapList.value.length === 0) {
+    let requestPromise = mapListRequestInFlight.get(robotId)
+    if (!requestPromise) {
+      requestPromise = navigationApi.getMapList(robotId)
+      mapListRequestInFlight.set(robotId, requestPromise)
+    }
+
     try {
-      const response = await navigationApi.getMapList(robotId)
+      const response = await requestPromise
       if (requestToken !== mapListRequestToken || robotId !== deviceStore.selectedRobotId) {
         return
       }
@@ -4622,6 +4629,10 @@ const fetchMapList = async (targetRobotId?: string) => {
         return
       }
       console.error('[地图列表] 获取地图列表失败:', err)
+    } finally {
+      if (mapListRequestInFlight.get(robotId) === requestPromise) {
+        mapListRequestInFlight.delete(robotId)
+      }
     }
   }
 
@@ -4873,7 +4884,13 @@ const fetchMultiTaskList = async () => {
 
 // 监听 multiTaskList 变化，确保有数据时自动选择第一个
 watch(multiTaskList, (newList) => {
-  if (newList.length > 0 && !selectedMultiTask.value) {
+  if (newList.length === 0) {
+    selectedMultiTask.value = ''
+    return
+  }
+
+  const hasCurrentSelection = newList.some(item => item.multitask_id === selectedMultiTask.value)
+  if (!hasCurrentSelection) {
     selectedMultiTask.value = newList[0].multitask_id
   }
 })
@@ -4939,9 +4956,21 @@ const canDispatchTask = computed(() => {
   return hasNavEnabled && noActiveTask
 })
 
+const canDispatchTrackTask = computed(() => {
+  return canDispatchTask.value && filteredTrackList.value.length > 0
+})
+
+const canDispatchPointTask = computed(() => {
+  return canDispatchTask.value && filteredPointTaskList.value.length > 0
+})
+
+const canDispatchMultiTask = computed(() => {
+  return canDispatchTask.value && multiTaskList.value.length > 0
+})
+
 // 下发任务处理
 const handleDispatchTask = () => {
-  if (!canDispatchTask.value) {
+  if (!canDispatchTrackTask.value) {
     if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
       showError('请先开启导航、INS或MSF')
     } else if (activeTaskType.value) {
@@ -4952,8 +4981,12 @@ const handleDispatchTask = () => {
   
   // 检查是否选择了循迹任务
   if (!selectedTrack.value) {
-    showError('请先选择循迹任务')
-    return
+    if (filteredTrackList.value.length > 0) {
+      selectedTrack.value = filteredTrackList.value[0]
+    } else {
+      showError('请先选择循迹任务')
+      return
+    }
   }
   
   // 打开循迹任务启动弹窗
@@ -5006,7 +5039,7 @@ const dispatchTrackTask = (trackName: string, taskLabel: string) => {
 }
 
 const handleDispatchPointTask = () => {
-  if (!canDispatchTask.value) {
+  if (!canDispatchPointTask.value) {
     if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
       alert('请先开启导航、INS或MSF')
     } else if (activeTaskType.value) {
@@ -5016,8 +5049,12 @@ const handleDispatchPointTask = () => {
   }
   
   if (!selectedPointTask.value) {
-    alert('请先选择一个发布点任务')
-    return
+    if (filteredPointTaskList.value.length > 0) {
+      selectedPointTask.value = filteredPointTaskList.value[0].task_id
+    } else {
+      alert('请先选择一个发布点任务')
+      return
+    }
   }
   
   // 查找选中的任务信息
@@ -5036,7 +5073,7 @@ const handleDispatchPointTask = () => {
 }
 
 const handleDispatchMultiTask = () => {
-  if (!canDispatchTask.value) {
+  if (!canDispatchMultiTask.value) {
     if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
       alert('请先开启导航、INS或MSF')
     } else if (activeTaskType.value) {
@@ -5046,8 +5083,12 @@ const handleDispatchMultiTask = () => {
   }
   
   if (!selectedMultiTask.value) {
-    alert('请先选择一个多任务组')
-    return
+    if (multiTaskList.value.length > 0) {
+      selectedMultiTask.value = multiTaskList.value[0].multitask_id
+    } else {
+      alert('请先选择一个多任务组')
+      return
+    }
   }
   
   // 查找选中的任务组名称
@@ -6315,6 +6356,8 @@ onMounted(async () => {
   window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.addEventListener('robot-track-list-ready', handleRobotTrackListReady)
   window.addEventListener('multi-task-list-updated', handleMultiTaskListUpdated)
+  window.addEventListener('point-task-list-updated', handlePointTaskListUpdated)
+  window.addEventListener('track-task-group-updated', handleTrackTaskGroupUpdated)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('focus', handleWindowFocus)
@@ -6483,6 +6526,27 @@ const handleMultiTaskListUpdated = async (event: Event) => {
   await fetchMultiTaskList()
 }
 
+const handlePointTaskListUpdated = async (event: Event) => {
+  const { robotId } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+  await fetchPointTaskList()
+}
+
+const handleTrackTaskGroupUpdated = async (event: Event) => {
+  const { robotId, trackName } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+  const updatedTrack = normalizeTrackName(String(trackName || ''))
+  const currentTrack = normalizeTrackName(trackStartDialog.value.form.track_name || selectedTrack.value || '')
+  if (!updatedTrack || !currentTrack || updatedTrack !== currentTrack) {
+    return
+  }
+  await fetchTaskpointList(currentTrack)
+}
+
 // 切换机器人第三阶段：其余数据就绪，刷新其他下拉和点云
 const handleRobotContextRefreshed = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
@@ -6523,6 +6587,8 @@ onUnmounted(() => {
   window.removeEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.removeEventListener('robot-track-list-ready', handleRobotTrackListReady)
   window.removeEventListener('multi-task-list-updated', handleMultiTaskListUpdated)
+  window.removeEventListener('point-task-list-updated', handlePointTaskListUpdated)
+  window.removeEventListener('track-task-group-updated', handleTrackTaskGroupUpdated)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('focus', handleWindowFocus)
@@ -7473,9 +7539,10 @@ const handleControlClick = async (controlName: RobotControlName) => {
 // 监听选中的机器人ID变化
 watch(() => deviceStore.selectedRobotId, async (newId, oldId) => {
   if (!newId) return
+  const isRobotSwitched = oldId !== undefined && newId !== oldId
 
   // 切换机器人时，先清空下拉数据，避免短暂显示上一台机器人的缓存
-  if (newId !== oldId) {
+  if (isRobotSwitched) {
     selectedMap.value = ''
     selectedTrack.value = ''
     selectedPointTask.value = ''
@@ -7486,8 +7553,11 @@ watch(() => deviceStore.selectedRobotId, async (newId, oldId) => {
     multiTaskList.value = []
   }
 
-  await fetchDeviceStatus(newId)
-})
+  await Promise.all([
+    fetchDeviceStatus(newId),
+    fetchMapList(newId)
+  ])
+}, { immediate: true })
 
 // 监听 selectedRobot 对象的变化（修复首次登录数据不显示的问题）
 // 当 Layout.vue 加载完机器人列表后，selectedRobot 会从 undefined 变为有值

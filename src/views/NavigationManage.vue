@@ -352,7 +352,7 @@
                 <button 
                   class="map-btn map-btn-secondary track-btn" 
                   :class="{'map-btn-danger': isTrackRecording}"
-                  :disabled="isTrackRunning"
+                  :disabled="isTrackRunning || !navigationEnabled"
                   v-permission-click-dialog="'nav-trackrecord-create'"
                   @click="handleTrackRecord"
                 >
@@ -891,6 +891,7 @@ const handleTabClick = (tab: { key: string; permission?: string }) => {
       fetchMapList() // 获取地图列表
       initNavPointCloud()
       fetchGpsStatus() // 获取GPS状态
+      fetchCurrentTaskSpeed() // 获取当前任务速度
     })
   } else if (key === 'track_record') {
     nextTick(async () => {
@@ -1166,7 +1167,7 @@ const trackRecordDialog = ref({
 })
 
 const handleTrackRecord = () => {
-  if (isTrackRunning.value) {
+  if (isTrackRunning.value || !navigationEnabled.value) {
     return
   }
 
@@ -1486,6 +1487,7 @@ const navMapList = ref<string[]>([]) // 地图列表
 const MIN_TASK_SPEED = 0.3
 const MAX_TASK_SPEED = 1.2
 const taskSpeed = ref(1.0)
+const setSpeedLoading = ref(false)
 const navData = ref({
   w: 0,
   v: '0, 0',
@@ -2035,10 +2037,67 @@ const handleSetOrigin = () => {
   })
 }
 
-const decreaseSpeed = () => {
+const normalizeTaskSpeed = (speed: number) => {
+  const rounded = Math.round(speed * 10) / 10
+  return Math.min(MAX_TASK_SPEED, Math.max(MIN_TASK_SPEED, rounded))
+}
+
+const fetchCurrentTaskSpeed = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  try {
+    const response: any = await navigationApi.getCurrentSpeed(robotId)
+    const rawSpeed = response?.msg?.get_speed
+
+    const speed = parseFloat(String(rawSpeed))
+    if (Number.isNaN(speed)) {
+      console.warn('获取当前任务速度成功，但返回速度值无效:', response)
+      return
+    }
+
+    taskSpeed.value = normalizeTaskSpeed(speed)
+  } catch (error) {
+    console.error('获取当前任务速度失败:', error)
+  }
+}
+
+const submitTaskSpeed = async (previousSpeed: number) => {
+  if (setSpeedLoading.value) return
+
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    taskSpeed.value = previousSpeed
+    showErrorMessage('未选择机器人')
+    return
+  }
+
+  const speed = parseFloat(String(taskSpeed.value))
+  if (Number.isNaN(speed)) {
+    taskSpeed.value = previousSpeed
+    showErrorMessage('速度值无效')
+    return
+  }
+
+  try {
+    setSpeedLoading.value = true
+    await navigationApi.setSpeed(robotId, { speed })
+  } catch (error) {
+    console.error('设置任务速度失败:', error)
+    taskSpeed.value = previousSpeed
+    showErrorMessage('设置任务速度失败')
+  } finally {
+    setSpeedLoading.value = false
+  }
+}
+
+const decreaseSpeed = async () => {
+  if (setSpeedLoading.value) return
   if (taskSpeed.value > MIN_TASK_SPEED) {
+    const previousSpeed = taskSpeed.value
     const nextSpeed = Math.round((taskSpeed.value - 0.1) * 10) / 10
     taskSpeed.value = Math.max(nextSpeed, MIN_TASK_SPEED)
+    await submitTaskSpeed(previousSpeed)
   }
 }
 
@@ -2071,10 +2130,13 @@ const refreshRelatedTaskListsAfterDelete = async (robotId?: string) => {
   }
 }
 
-const increaseSpeed = () => {
+const increaseSpeed = async () => {
+  if (setSpeedLoading.value) return
   if (taskSpeed.value < MAX_TASK_SPEED) {
+    const previousSpeed = taskSpeed.value
     const nextSpeed = Math.round((taskSpeed.value + 0.1) * 10) / 10
     taskSpeed.value = Math.min(nextSpeed, MAX_TASK_SPEED)
+    await submitTaskSpeed(previousSpeed)
   }
 }
 
@@ -5918,6 +5980,3 @@ select.recording-input option {
   grid-template-columns: 100px 360px 1fr 180px 150px !important;
 }
 </style>
-
-
-

@@ -45,7 +45,7 @@
                 <button
                   class="mission-btn"
                   :class="isPointTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
-                  :disabled="!canStartPointTask && !isPointTaskRunning"
+                  :disabled="((!canStartPointTask || filteredPointTaskList.length === 0 || !selectedPointTaskId) && !isPointTaskRunning) || (runningTaskType && runningTaskType !== 'point')"
                   v-permission-click-dialog="'task-tasklist-execute'"
                   @click="handleStartTask"
                 >
@@ -55,8 +55,8 @@
                   {{ isNavPaused ? '恢复' : '暂停' }}
                 </button>
                 <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tasklist-create'" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
-                <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'task-tasklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
-                <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tasklist-create'" @click="handleAddTask">添加任务</button>
+                <button class="mission-btn mission-btn-stop" :disabled="filteredPointTaskList.length === 0 || !selectedPointTaskId" v-permission-click-dialog="'task-tasklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
+                <button class="mission-btn mission-btn-primary" :disabled="filteredPointTaskList.length === 0 || !selectedPointTaskId" v-permission-click-dialog="'task-tasklist-create'" @click="handleAddTask">添加任务</button>
               </div>
             </div>
             <div class="file-table file-table-adaptive">
@@ -601,6 +601,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
 import { useRobotStore } from '@/stores/robot'
 import { usePermissionStore } from '@/stores/permission'
+import { getRobotContextCacheKeys } from '@/utils/robotBootstrap'
 
 const router = useRouter()
 const route = useRoute()
@@ -610,6 +611,7 @@ const robotStore = useRobotStore()
 const {
   isPointTaskRunning,
   canStartPointTask,
+  runningTaskType,
   isNavigationEnabled,
   navPaused: isNavPaused
 } = storeToRefs(taskExecutionStore)
@@ -632,6 +634,11 @@ const selectedPointTaskId = ref('')
 const getSelectedPointTaskCacheKey = () => {
   const robotId = localStorage.getItem('selected_robot_id') || ''
   return robotId ? `selected_point_task_id_${robotId}` : 'selected_point_task_id'
+}
+
+const getCurrentRobotContextKeys = () => {
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  return robotId ? getRobotContextCacheKeys(robotId) : null
 }
 
 const getCachedSelectedPointTaskId = () => {
@@ -678,6 +685,10 @@ const fetchPointTaskList = async () => {
         task_id: String(task.task_id) // 统一转为字符串存储，方便比较
       }))
       // 缓存发布点任务列表
+      const contextKeys = getCurrentRobotContextKeys()
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList.value))
+      }
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
       
       const cachedSelectedId = getCachedSelectedPointTaskId()
@@ -1426,6 +1437,15 @@ const handleAddTask = () => {
     errorMessage.value = { show: true, text: '请先选择任务组' }
     return
   }
+  const cmdStatus = robotStore.cmdStatus
+  const canPrefillPose =
+    Number(cmdStatus?.nav ?? 0) === 1 ||
+    Number(cmdStatus?.ins ?? 0) === 1 ||
+    Number(cmdStatus?.msf ?? 0) === 1
+  const prefillX = canPrefillPose && currentPosition.value.x != null ? String(currentPosition.value.x) : ''
+  const prefillY = canPrefillPose && currentPosition.value.y != null ? String(currentPosition.value.y) : ''
+  const prefillZ = canPrefillPose && currentPosition.value.z != null ? String(currentPosition.value.z) : ''
+  const prefillAngle = canPrefillPose && currentPosition.value.angle != null ? String(currentPosition.value.angle) : ''
   // 重置表单为添加模式
   editingTaskIndex.value = -1
   // 重置表单数据
@@ -1433,10 +1453,10 @@ const handleAddTask = () => {
     isMulti: '0',
     typeInput: '',
     actionType: '',
-    x: '',
-    y: '',
-    z: '',
-    angle: '0',
+    x: prefillX,
+    y: prefillY,
+    z: prefillZ,
+    angle: prefillAngle,
     preset: '',
     extraConfig: '',
     description: '',
@@ -1937,6 +1957,10 @@ const confirmDialog = ref({
 const updateCache = async () => {
   try {
     // 1. 更新本地缓存
+    const contextKeys = getCurrentRobotContextKeys()
+    if (contextKeys) {
+      localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList.value))
+    }
     localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
     
     // 2. 获取 robotId
@@ -1953,8 +1977,15 @@ const updateCache = async () => {
     if (response.response?.data) {
       pointTaskList.value = response.response.data
       // 5. 更新缓存
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList.value))
+      }
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
     }
+
+    window.dispatchEvent(new CustomEvent('point-task-list-updated', {
+      detail: { robotId }
+    }))
   } catch (error) {
     console.error('更新缓存失败:', error)
     errorMessage.value = { show: true, text: '同步数据失败，请重试' }

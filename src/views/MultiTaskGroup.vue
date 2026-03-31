@@ -38,7 +38,7 @@
                 <button
                   class="mission-btn"
                   :class="[isMultiTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary', { loading: executeLoading }]"
-                  :disabled="(!canStartMultiTask && !isMultiTaskRunning) || executeLoading"
+                  :disabled="((!canStartMultiTask || multiTaskList.length === 0 || !selectedMultiTaskName) && !isMultiTaskRunning) || (runningTaskType && runningTaskType !== 'multi') || executeLoading"
                   v-permission-click-dialog="'task-multitasklist-execute'"
                   @click="handleExecuteTaskGroup"
                 >
@@ -48,8 +48,8 @@
                   {{ isNavPaused ? '恢复' : '暂停' }}
                 </button>
                 <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-multitasklist-create'" @click="handleCreateTaskGroup">添加多任务组</button>
-                <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'task-multitasklist-delete'" @click="handleDeleteTaskGroup">删除多任务组</button>
-                <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-multitasklist-create'" @click="handleAddTaskGroup">添加任务组</button>
+                <button class="mission-btn mission-btn-stop" :disabled="multiTaskList.length === 0 || !selectedMultiTaskName" v-permission-click-dialog="'task-multitasklist-delete'" @click="handleDeleteTaskGroup">删除多任务组</button>
+                <button class="mission-btn mission-btn-primary" :disabled="multiTaskList.length === 0 || !selectedMultiTaskName" v-permission-click-dialog="'task-multitasklist-create'" @click="handleAddTaskGroup">添加任务组</button>
               </div>
 
               <label class="mission-toolbar-label" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
@@ -116,16 +116,6 @@
                       下移
                     </button>
                   </div>
-                </div>
-                <div v-if="currentTaskGroupList.length === 0" class="file-table-row">
-                  <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">&nbsp;</div>
-                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;">&nbsp;</div>
-                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center;">&nbsp;</div>
-                  <div class="file-table-cell" style="min-width: 100px; flex: 1; text-align: center; color: rgba(184, 199, 217, 0.72);">暂无任务组数据</div>
-                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;">&nbsp;</div>
-                  <div class="file-table-cell" style="min-width: 160px; width: 160px; text-align: center;">&nbsp;</div>
-                  <div class="file-table-cell" style="min-width: 140px; width: 140px; text-align: center;">&nbsp;</div>
-                  <div class="file-table-cell file-table-action" style="min-width: 360px; width: 360px; text-align: center;">&nbsp;</div>
                 </div>
               </template>
               <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
@@ -362,6 +352,7 @@ const taskExecutionStore = useTaskExecutionStore()
 const {
   isMultiTaskRunning,
   canStartMultiTask,
+  runningTaskType,
   isNavigationEnabled,
   navPaused: isNavPaused
 } = storeToRefs(taskExecutionStore)
@@ -521,6 +512,15 @@ const confirmCreateGroup = async () => {
     showErrorMessage('请输入多任务组名称')
     return
   }
+
+  const normalizedInputName = String(createGroupDialog.value.name || '').trim().toLowerCase()
+  const duplicated = multiTaskList.value.some(item =>
+    String(item.multitask_name || '').trim().toLowerCase() === normalizedInputName
+  )
+  if (duplicated) {
+    showErrorMessage('多任务组名称已存在')
+    return
+  }
   
   const robotId = localStorage.getItem('selected_robot_id')
   if (!robotId) return
@@ -606,7 +606,10 @@ const confirmDeleteGroup = async () => {
       currentTaskGroupList.value = []
       closeDeleteGroupDialog()
       // Refresh list
-      fetchMultiTaskList()
+      await fetchMultiTaskList()
+      window.dispatchEvent(new CustomEvent('multi-task-list-updated', {
+        detail: { robotId }
+      }))
     } else {
       console.error('删除任务组失败，返回:', res)
       showErrorMessage('删除失败')
@@ -1997,4 +2000,3 @@ watch(selectedMultiTaskName, (newVal) => {
   }
 }
 </style>
-
