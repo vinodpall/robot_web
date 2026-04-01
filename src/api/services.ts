@@ -1068,6 +1068,12 @@ export const navigationApi = {
   }) => {
     return apiClient.post(`/speed/${robotId}/nav_stop`, data)
   },
+  setSpeed: (robotId: string, data: { speed: number }) => {
+    return apiClient.post(`/speed/${robotId}/set_speed`, data)
+  },
+  getCurrentSpeed: (robotId: string) => {
+    return apiClient.get(`/speed/${robotId}/current_speed`)
+  },
   startMultiTaskGroup: (robotId: string, data: {
     multitask_name: string;
     multitask_id: string;
@@ -1474,5 +1480,3 @@ export const mapFileApi = {
   }
 
 }
-
-

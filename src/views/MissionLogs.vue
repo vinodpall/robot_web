@@ -30,8 +30,8 @@
 
               <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">循迹任务名称：</span>
               <select v-model="selectedTrackName" class="mission-toolbar-select" style="min-width: 180px;">
-                <option value="">全部</option>
-                <option v-for="track in trackList" :key="track" :value="track">{{ track }}</option>
+                <option value="">{{ filteredTrackList.length === 0 ? '暂无循迹任务' : '全部' }}</option>
+                <option v-for="track in filteredTrackList" :key="track" :value="track">{{ track }}</option>
               </select>
 
               <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">任务组名称：</span>
@@ -99,7 +99,8 @@
           <div class="task-form-row">
             <label class="task-form-label">循迹任务：</label>
             <select v-model="createForm.track_name" class="task-form-select">
-              <option v-for="track in trackList" :key="track" :value="track">{{ track }}</option>
+              <option v-if="filteredTrackList.length === 0" value="">暂无循迹任务</option>
+              <option v-for="track in filteredTrackList" :key="track" :value="track">{{ track }}</option>
             </select>
           </div>
           <div class="task-form-row">
@@ -306,6 +307,7 @@ const buildImageFetchUrl = (path: string) => {
 }
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
+import { useTaskExecutionStore } from '@/stores/taskExecution'
 import type { VisionAlert } from '@/types'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
@@ -316,6 +318,7 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const permissionStore = usePermissionStore()
+const taskExecutionStore = useTaskExecutionStore()
 
 const sidebarTabs = [
   { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission', permission: 'task-tracklist-show' },
@@ -395,12 +398,12 @@ const taskToDelete = ref<any>(null)
 
 // 从缓存读取选中的地图名称
 const selectedMap = computed(() => {
-  return localStorage.getItem('selected_map_name') || ''
+  return taskExecutionStore.selectedMapName
 })
 
 // 过滤后的轨迹列表（根据缓存的地图筛选）
 const filteredTrackList = computed(() => {
-  if (!selectedMap.value) return trackList.value
+  if (!selectedMap.value) return []
   return trackList.value.filter(track => track.startsWith(selectedMap.value + '_'))
 })
 
@@ -429,11 +432,15 @@ const loadTrackList = async () => {
 
 // 监听筛选后的轨迹列表变化
 watch(filteredTrackList, (newList) => {
-  // 不自动选择，保持为空
-  if (newList.length === 0) {
+  if (newList.length === 0 || !newList.includes(selectedTrackName.value)) {
     selectedTrackName.value = ''
   }
-})
+  if (!newList.includes(createForm.value.track_name)) {
+    createForm.value.track_name = ''
+    createForm.value.track_point_name = ''
+    createTaskGroupList.value = []
+  }
+}, { immediate: true })
 
 // 监听轨迹选择变化，加载任务组列表
 watch(selectedTrackName, async (newVal) => {
@@ -545,8 +552,8 @@ const handleOpenCreateDialog = () => {
   showCreateDialog.value = true
   createFormErrors.value.start_time = false
   // 如果有轨迹列表，默认选择第一个
-  if (trackList.value.length > 0) {
-    createForm.value.track_name = trackList.value[0]
+  if (filteredTrackList.value.length > 0) {
+    createForm.value.track_name = filteredTrackList.value[0]
   }
 }
 

@@ -48,6 +48,11 @@ export interface RobotStatusData {
   status: 'online' | 'offline'
 }
 
+export interface HeartbeatData {
+  status: 'online' | 'offline'
+  timestamp?: string
+}
+
 export interface TrackInfoData {
   taskpoint_name: string
   obs_mode: string
@@ -92,6 +97,7 @@ export interface TaskProgressData {
   task_name: string
   task_type: number
   last_task: string
+  track_start_time?: string
   timestamp: string
 }
 
@@ -247,6 +253,16 @@ export function useRobotWebSocket() {
   let shouldReconnect = true
   let subscribedRobotId = ''
 
+  const syncRobotItemStatus = (robotId: string, status: 'online' | 'offline') => {
+    if (!robotId) return
+    const currentList = deviceStore.robots
+    const idx = currentList.findIndex(item => String(item.robot_id) === String(robotId))
+    if (idx < 0) return
+    const next = [...currentList]
+    next[idx] = { ...next[idx], status }
+    deviceStore.setRobots(next as any)
+  }
+
   // ===== 心跳超时（wifi_error 方案B） =====
   const resetHeartbeatTimer = () => {
     if (heartbeatTimer) clearTimeout(heartbeatTimer)
@@ -293,6 +309,17 @@ export function useRobotWebSocket() {
       case 'robot_status': {
         const s = (data as RobotStatusData).status
         robotStore.setOnlineStatus(s === 'online')
+        syncRobotItemStatus(robot_id, s)
+        break
+      }
+
+      // ---- 心跳 ----
+      case 'heartbeat': {
+        const s = (data as HeartbeatData)?.status
+        if (s === 'online' || s === 'offline') {
+          robotStore.setOnlineStatus(s === 'online')
+          syncRobotItemStatus(robot_id, s)
+        }
         break
       }
 

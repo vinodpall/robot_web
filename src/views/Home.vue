@@ -528,7 +528,7 @@
                   class="task-btn" 
                   :class="{ 
                     'active': insEnabled, 
-                    'disabled': navigationEnabled || msfEnabled,
+                    'disabled': navigationEnabled || msfEnabled || !hasRobotRtk,
                     'loading': insLoading
                   }"
                   v-permission-click-dialog="'main-taskdispatch'"
@@ -538,7 +538,7 @@
                   class="task-btn" 
                   :class="{ 
                     'active': msfEnabled, 
-                    'disabled': navigationEnabled || insEnabled,
+                    'disabled': navigationEnabled || insEnabled || !hasRobotRtk,
                     'loading': msfLoading
                   }"
                   v-permission-click-dialog="'main-taskdispatch'"
@@ -573,7 +573,7 @@
                 <div class="button-group">
                   <span 
                     class="span" 
-                    :class="{ disabled: !canDispatchTask }"
+                    :class="{ disabled: !canDispatchTrackTask }"
                     v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchTask"
                   >下发任务</span>
@@ -616,7 +616,7 @@
                 <div class="button-group">
                   <span 
                     class="span" 
-                    :class="{ disabled: !canDispatchTask }"
+                    :class="{ disabled: !canDispatchPointTask }"
                     v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchPointTask"
                   >下发任务</span>
@@ -639,7 +639,7 @@
                   <select 
                     v-model="selectedMultiTask" 
                     class="wayline-select"
-                    :disabled="activeTaskType === 'multi'"
+                    :disabled="activeTaskType === 'multi' || robotStore.multitaskStatus?.status === true"
                   >
                     <option v-if="multiTaskList.length === 0" value="">暂无多任务组</option>
                     <option 
@@ -659,13 +659,13 @@
                 <div class="button-group">
                   <span 
                     class="span" 
-                    :class="{ disabled: !canDispatchTask }"
+                    :class="{ disabled: !canDispatchMultiTask || activeTaskType === 'multi' || robotStore.multitaskStatus?.status === true }"
                     v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleDispatchMultiTask"
                   >下发任务</span>
                   <span 
                     class="span1" 
-                    :class="{ disabled: activeTaskType !== 'multi', active: activeTaskType === 'multi' }"
+                    :class="{ disabled: activeTaskType !== 'multi' && !robotStore.multitaskStatus?.status, active: activeTaskType === 'multi' || robotStore.multitaskStatus?.status }"
                     v-permission-click-dialog="'main-taskdispatch'"
                     @click="handleCancelTask"
                   >
@@ -910,16 +910,16 @@
             />
           </div>
           <div class="dispatch-task-row">
-            <label>循环执行：</label>
+            <label>异常时原地启动：</label>
             <div class="dispatch-switch-wrapper">
               <div
                 class="switch-container"
-                :class="{ active: multiTaskStartDialog.form.loop }"
-                @click="multiTaskStartDialog.form.loop = !multiTaskStartDialog.form.loop"
+                :class="{ active: multiTaskStartDialog.form.exception_start }"
+                @click="multiTaskStartDialog.form.exception_start = !multiTaskStartDialog.form.exception_start"
               >
                 <div class="switch-toggle"></div>
               </div>
-              <span class="dispatch-switch-label">{{ multiTaskStartDialog.form.loop ? '是' : '否' }}</span>
+              <span class="dispatch-switch-label">{{ multiTaskStartDialog.form.exception_start ? '是' : '否' }}</span>
             </div>
           </div>
         </div>
@@ -1248,6 +1248,28 @@ const isRobotBatteryFull = computed(() => {
 const navigationEnabled = ref(robotStore.cmdStatus?.nav === 1)
 const insEnabled = ref(robotStore.cmdStatus?.ins === 1)
 const msfEnabled = ref(robotStore.cmdStatus?.msf === 1)
+const hasRobotRtk = computed(() => {
+  const robot = deviceStore.selectedRobot as any
+  const extraRaw = robot?.extra ?? robot?.extra_data ?? null
+  if (extraRaw == null) return false
+
+  let extraObj: any = extraRaw
+  if (typeof extraRaw === 'string') {
+    const trimmed = extraRaw.trim()
+    if (!trimmed) return false
+    try {
+      extraObj = JSON.parse(trimmed)
+    } catch {
+      return false
+    }
+  }
+
+  if (!extraObj || typeof extraObj !== 'object' || Array.isArray(extraObj)) {
+    return false
+  }
+
+  return extraObj.rtk === true
+})
 const navigationLoading = ref(false)
 const insLoading = ref(false)
 const msfLoading = ref(false)
@@ -1300,6 +1322,7 @@ const extractTrackTaskList = (payload: any): any[] => {
 }
 
 const activeOverlayTrackName = ref('')
+const activeOverlayPointTaskId = ref('')
 
 // cmd_status.track 同步 activeTaskType：WebSocket 反馈 track=1 时标记循迹任务运行中
 watch(() => robotStore.cmdStatus?.track, (val) => {
@@ -1312,6 +1335,15 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
       overlayTrackTrajectory(trackName)
     }
   } else if (val === 0 && activeTaskType.value === 'track') {
+    activeTaskType.value = null
+  }
+})
+
+// multitask_status 同步 activeTaskType：WebSocket 反馈多任务组运行状态
+watch(() => robotStore.multitaskStatus?.status, (running) => {
+  if (running === true) {
+    activeTaskType.value = 'multi'
+  } else if (running === false && activeTaskType.value === 'multi') {
     activeTaskType.value = null
   }
 })
@@ -1394,19 +1426,6 @@ watch(() => robotStore.isTracking, (tracking) => {
     }
   }
 })
-
-// task_status.task_name 同步发布点任务下拉：找到同名任务并选中
-watch(() => robotStore.taskStatus, (ts) => {
-  if (!ts?.is_running || !ts.task_name) return
-  const matched = pointTaskList.value.find(t => t.task_name === ts.task_name)
-  if (matched) {
-    selectedPointTask.value = matched.task_id
-  }
-}, { deep: true })
-
-
-
-
 
 // 麦克风开关状态
 const isMicOn = ref(false)
@@ -1723,6 +1742,15 @@ const refreshPointCloud = async () => {
     if (robotStore.isTracking && currentTrackName) {
       activeOverlayTrackName.value = currentTrackName
       await overlayTrackTrajectory(currentTrackName)
+    } else if (robotStore.isPointTaskRunning) {
+      const runningTaskName = String(robotStore.taskStatus?.task_name || '').trim()
+      const matchedTask =
+        pointTaskList.value.find(task => String(task.task_id) === String(activeOverlayPointTaskId.value))
+        || pointTaskList.value.find(task => String(task.task_name || '').trim() === runningTaskName)
+      if (matchedTask) {
+        activeOverlayPointTaskId.value = matchedTask.task_id
+        await overlayPointTaskWaypoints(matchedTask.task_id, matchedTask.task_name)
+      }
     }
   } catch (error) {
     console.error('[点云] 加载失败:', error)
@@ -2113,6 +2141,10 @@ const waylineTaskName = computed(() => {
 
 const waylineTaskStartTime = computed(() => {
   if (!hasActiveTaskStatistics.value) return '--'
+  const wsTrackStartTime = wsTaskProgress.value?.track_start_time
+  if (wsTrackStartTime && String(wsTrackStartTime).trim()) {
+    return String(wsTrackStartTime).trim()
+  }
   const wsTimestamp = wsTaskProgress.value?.timestamp
   if (wsTimestamp) {
     const ts = new Date(wsTimestamp).getTime()
@@ -4112,6 +4144,7 @@ const selectedWayline = ref('')
 const selectedMultiTask = ref('')
 const mapList = ref<string[]>([])
 let mapListRequestToken = 0
+const mapListRequestInFlight = new Map<string, Promise<any>>()
 const getCurrentRobotMapKeys = () => {
   const robotId = deviceStore.selectedRobotId || ''
   return robotId ? getRobotMapCacheKeys(robotId) : null
@@ -4174,17 +4207,10 @@ const fallAlertDialogVisible = ref(false)
 const fallAlertAcknowledged = ref(false)
 let fallAlertTimer: number | null = null
 
-const FALL_ANGLE_THRESHOLD = 45
 const FALL_DETECTION_DELAY_MS = 1200
 
-const isFallAngleExceeded = computed(() => {
-  const roll = Math.abs(robotStore.imuRoll ?? 0)
-  const pitch = Math.abs(robotStore.imuPitch ?? 0)
-  return roll >= FALL_ANGLE_THRESHOLD || pitch >= FALL_ANGLE_THRESHOLD
-})
-
 const isFallDetected = computed(() => {
-  return robotStore.motionState?.basic_state === 6 && isFallAngleExceeded.value
+  return robotStore.motionState?.basic_state === 6
 })
 
 const acknowledgeFallAlert = () => {
@@ -4310,7 +4336,7 @@ const multiTaskStartDialog = ref({
   visible: false,
   form: {
     group_name: '',
-    loop: false
+    exception_start: false
   }
 })
 
@@ -4388,16 +4414,63 @@ const loadWaylineFiles = async () => {
       if (!selectedWayline.value) {
         selectedWayline.value = firstId
       }
-      if (!selectedPointTask.value) {
-        selectedPointTask.value = firstId
-      }
-      if (!selectedMultiTask.value) {
-        selectedMultiTask.value = firstId
-      }
     }
   } catch (err) {
     // 静默处理错误
   }
+}
+
+const resolvePointTaskCurrentIndex = (taskName: string, totalCount: number) => {
+  if (totalCount <= 0) return -1
+  const progress = robotStore.taskProgress
+  if (!progress) return 0
+  const progressTaskName = String(progress.task_name || '').trim()
+  if (!progressTaskName || progressTaskName !== String(taskName || '').trim()) {
+    return 0
+  }
+  const finished = Math.max(0, Math.floor(Number(progress.finished_points ?? 0)))
+  return Math.min(finished, totalCount - 1)
+}
+
+const overlayPointTaskWaypoints = async (taskId: string, taskName?: string) => {
+  if (!taskId || basePointCloudData.value.length === 0) return
+
+  const targetTask = pointTaskList.value.find(task => String(task.task_id) === String(taskId))
+  if (!targetTask) return
+
+  const taskContent = Array.isArray(targetTask.taskcontent) ? targetTask.taskcontent : []
+  if (taskContent.length === 0) {
+    pointCloudData.value = [...basePointCloudData.value]
+    return
+  }
+
+  const currentTaskIndex = resolvePointTaskCurrentIndex(taskName || targetTask.task_name, taskContent.length)
+  const { centerX, centerY, centerZ, maxRange } = pointCloudNormalizationParams.value
+  if (!maxRange || !Number.isFinite(maxRange)) return
+
+  const normalizedTaskPoints: PointCloudPoint[] = []
+  taskContent.forEach((task: any, idx: number) => {
+    const tx = parseFloat(task?.x)
+    const ty = parseFloat(task?.y)
+    const tz = parseFloat(task?.z ?? '0')
+    if (!Number.isFinite(tx) || !Number.isFinite(ty) || !Number.isFinite(tz)) return
+
+    const isCurrent = idx === currentTaskIndex
+    normalizedTaskPoints.push({
+      x: (tx - centerX) / maxRange,
+      y: (ty - centerY) / maxRange,
+      z: (tz - centerZ) / maxRange,
+      intensity: isCurrent ? 2.2 : 1.8,
+      name: isCurrent
+        ? `当前任务点${idx + 1}`
+        : (task?.type_text || task?.preset || `任务点${idx + 1}`)
+    })
+  })
+
+  pointCloudData.value = [
+    ...basePointCloudData.value,
+    ...normalizedTaskPoints
+  ]
 }
 
 // 地图文件缓存 - 使用 IndexedDB 存储大文件
@@ -4657,8 +4730,14 @@ const fetchMapList = async (targetRobotId?: string) => {
   mapUpdateTimeMap.value = cachedTimeMap ? JSON.parse(cachedTimeMap) : {}
 
   if (mapList.value.length === 0) {
+    let requestPromise = mapListRequestInFlight.get(robotId)
+    if (!requestPromise) {
+      requestPromise = navigationApi.getMapList(robotId)
+      mapListRequestInFlight.set(robotId, requestPromise)
+    }
+
     try {
-      const response = await navigationApi.getMapList(robotId)
+      const response = await requestPromise
       if (requestToken !== mapListRequestToken || robotId !== deviceStore.selectedRobotId) {
         return
       }
@@ -4669,6 +4748,10 @@ const fetchMapList = async (targetRobotId?: string) => {
         return
       }
       console.error('[地图列表] 获取地图列表失败:', err)
+    } finally {
+      if (mapListRequestInFlight.get(robotId) === requestPromise) {
+        mapListRequestInFlight.delete(robotId)
+      }
     }
   }
 
@@ -4847,13 +4930,6 @@ const fetchPointTaskList = async () => {
   }
 }
 
-// 监听 pointTaskList 变化，确保有数据时自动选择第一个
-watch(pointTaskList, (newList) => {
-  if (newList.length > 0 && !selectedPointTask.value) {
-    selectedPointTask.value = newList[0].task_id
-  }
-})
-
 // 过滤后的发布点任务列表（根据当前地图筛选）
 const filteredPointTaskList = computed(() => {
   if (!selectedMap.value) return []
@@ -4871,6 +4947,35 @@ watch(filteredPointTaskList, (newList) => {
   } else {
     selectedPointTask.value = ''
   }
+}, { immediate: true })
+
+// task_status.task_name 同步发布点任务下拉，并叠加发布点到点云
+watch(() => robotStore.taskStatus, (ts) => {
+  if (!ts?.is_running || !ts.task_name) {
+    activeOverlayPointTaskId.value = ''
+    if (!robotStore.isTracking && basePointCloudData.value.length > 0) {
+      pointCloudData.value = basePointCloudData.value
+    }
+    return
+  }
+  if (!selectedMap.value) {
+    selectedPointTask.value = ''
+    return
+  }
+  const matched = filteredPointTaskList.value.find(t => t.task_name === ts.task_name)
+  if (matched) {
+    selectedPointTask.value = matched.task_id
+    activeOverlayPointTaskId.value = matched.task_id
+    overlayPointTaskWaypoints(matched.task_id, matched.task_name)
+  }
+}, { deep: true })
+
+watch(() => selectedPointTask.value, (taskId) => {
+  if (!robotStore.isPointTaskRunning || !taskId) return
+  const matched = pointTaskList.value.find(task => String(task.task_id) === String(taskId))
+  if (!matched) return
+  activeOverlayPointTaskId.value = matched.task_id
+  overlayPointTaskWaypoints(matched.task_id, matched.task_name)
 })
 
 // 多任务组列表
@@ -4920,7 +5025,13 @@ const fetchMultiTaskList = async () => {
 
 // 监听 multiTaskList 变化，确保有数据时自动选择第一个
 watch(multiTaskList, (newList) => {
-  if (newList.length > 0 && !selectedMultiTask.value) {
+  if (newList.length === 0) {
+    selectedMultiTask.value = ''
+    return
+  }
+
+  const hasCurrentSelection = newList.some(item => item.multitask_id === selectedMultiTask.value)
+  if (!hasCurrentSelection) {
     selectedMultiTask.value = newList[0].multitask_id
   }
 })
@@ -4982,13 +5093,33 @@ const canDispatchTask = computed(() => {
   // 必须开启导航、INS或MSF中的至少一个
   const hasNavEnabled = navigationEnabled.value || insEnabled.value || msfEnabled.value
   // 没有活动任务（直接读 WebSocket 状态，避免 watch 时序问题）
-  const noActiveTask = activeTaskType.value === null && !robotStore.isTracking && !robotStore.isPointTaskRunning
+  const noActiveTask =
+    activeTaskType.value === null &&
+    !robotStore.isTracking &&
+    !robotStore.isPointTaskRunning &&
+    robotStore.multitaskStatus?.status !== true
   return hasNavEnabled && noActiveTask
+})
+
+const canDispatchTrackTask = computed(() => {
+  return canDispatchTask.value && filteredTrackList.value.length > 0
+})
+
+const canDispatchPointTask = computed(() => {
+  return canDispatchTask.value && filteredPointTaskList.value.length > 0
+})
+
+const canDispatchMultiTask = computed(() => {
+  return (
+    taskExecutionStore.canStartMultiTask &&
+    robotStore.multitaskStatus?.status !== true &&
+    multiTaskList.value.length > 0
+  )
 })
 
 // 下发任务处理
 const handleDispatchTask = () => {
-  if (!canDispatchTask.value) {
+  if (!canDispatchTrackTask.value) {
     if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
       showError('请先开启导航、INS或MSF')
     } else if (activeTaskType.value) {
@@ -4999,8 +5130,12 @@ const handleDispatchTask = () => {
   
   // 检查是否选择了循迹任务
   if (!selectedTrack.value) {
-    showError('请先选择循迹任务')
-    return
+    if (filteredTrackList.value.length > 0) {
+      selectedTrack.value = filteredTrackList.value[0]
+    } else {
+      showError('请先选择循迹任务')
+      return
+    }
   }
   
   // 打开循迹任务启动弹窗
@@ -5053,7 +5188,7 @@ const dispatchTrackTask = (trackName: string, taskLabel: string) => {
 }
 
 const handleDispatchPointTask = () => {
-  if (!canDispatchTask.value) {
+  if (!canDispatchPointTask.value) {
     if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
       alert('请先开启导航、INS或MSF')
     } else if (activeTaskType.value) {
@@ -5063,8 +5198,12 @@ const handleDispatchPointTask = () => {
   }
   
   if (!selectedPointTask.value) {
-    alert('请先选择一个发布点任务')
-    return
+    if (filteredPointTaskList.value.length > 0) {
+      selectedPointTask.value = filteredPointTaskList.value[0].task_id
+    } else {
+      alert('请先选择一个发布点任务')
+      return
+    }
   }
   
   // 查找选中的任务信息
@@ -5083,36 +5222,51 @@ const handleDispatchPointTask = () => {
 }
 
 const handleDispatchMultiTask = () => {
-  if (!canDispatchTask.value) {
-    if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
-      alert('请先开启导航、INS或MSF')
-    } else if (activeTaskType.value) {
-      alert('已有任务在执行中，请先取消当前任务')
+  if (!canDispatchMultiTask.value) {
+    if (!taskExecutionStore.canStartMultiTask) {
+      showError('当前有其他任务正在运行')
+    } else if (robotStore.multitaskStatus?.status === true || activeTaskType.value === 'multi') {
+      showError('多任务组任务正在运行，请先关闭')
+    } else if (multiTaskList.value.length === 0) {
+      showError('请先选择一个多任务组')
     }
     return
   }
   
   if (!selectedMultiTask.value) {
-    alert('请先选择一个多任务组')
-    return
+    if (multiTaskList.value.length > 0) {
+      selectedMultiTask.value = multiTaskList.value[0].multitask_id
+    } else {
+      showError('请先选择一个多任务组')
+      return
+    }
   }
   
   // 查找选中的任务组名称
   const selectedTask = multiTaskList.value.find(task => task.multitask_id === selectedMultiTask.value)
   if (!selectedTask) {
-    alert('未找到选中的多任务组')
+    showError('未找到选中的多任务组')
     return
   }
   
   // 打开弹窗并设置表单数据
   multiTaskStartDialog.value.form.group_name = selectedTask.multitask_name
-  multiTaskStartDialog.value.form.loop = false
+  multiTaskStartDialog.value.form.exception_start = false
   multiTaskStartDialog.value.visible = true
 }
 
 // 取消任务
+const resolveActiveTaskTypeForCancel = (): 'wayline' | 'point' | 'multi' | 'track' | null => {
+  if (activeTaskType.value) return activeTaskType.value
+  if (robotStore.isTracking) return 'track'
+  if (robotStore.isPointTaskRunning) return 'point'
+  if (robotStore.multitaskStatus?.status === true) return 'multi'
+  return null
+}
+
 const handleCancelTask = async () => {
-  if (activeTaskType.value === null && !robotStore.isTracking) {
+  const effectiveTaskType = resolveActiveTaskTypeForCancel()
+  if (effectiveTaskType === null) {
     showError('当前没有正在执行的任务')
     return
   }
@@ -5124,7 +5278,7 @@ const handleCancelTask = async () => {
     track: '循迹任务'
   }
   
-  const taskName = (activeTaskType.value ? taskTypeMap[activeTaskType.value] : null) || '任务'
+  const taskName = taskTypeMap[effectiveTaskType] || '任务'
   
   showConfirmDialog(`确定要取消当前${taskName}吗？`, async () => {
     try {
@@ -5135,14 +5289,29 @@ const handleCancelTask = async () => {
       }
       
       // 根据任务类型调用不同的取消接口
-      if (activeTaskType.value === 'track') {
+      if (effectiveTaskType === 'track') {
+        const trackName =
+          normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
+          || activeTrackInfo.value.track_name
+          || normalizeTrackName(selectedTrack.value)
+        const taskpointName =
+          normalizeTaskPointName(robotStore.cmdStatus?.track_info?.taskpoint_name || '')
+          || activeTrackInfo.value.taskpoint_name
+          || trackStartDialog.value.form.taskpoint_name
+          || ''
+
+        if (!trackName) {
+          showError('未获取到正在执行的循迹任务名称')
+          return
+        }
+
         // 取消循迹任务，使用启动时保存的任务参数
         const response = await navigationApi.cancelTrack(robotId, {
           action: 0,
           wait: 0,
           obs_mode: 1,
-          track_name: activeTrackInfo.value.track_name,
-          taskpoint_name: activeTrackInfo.value.taskpoint_name
+          track_name: trackName,
+          taskpoint_name: taskpointName
         })
   // ...
         
@@ -5160,9 +5329,15 @@ const handleCancelTask = async () => {
           activeTaskType.value = null
           activeTrackInfo.value = { track_name: '', taskpoint_name: '' }
         }
-      } else if (activeTaskType.value === 'point') {
+      } else if (effectiveTaskType === 'point') {
         // 停止发布点任务
-        const taskId = selectedPointTask.value
+        let taskId = selectedPointTask.value
+        if (!taskId && robotStore.taskStatus?.task_name) {
+          const matched = pointTaskList.value.find(task => task.task_name === robotStore.taskStatus?.task_name)
+          if (matched) {
+            taskId = matched.task_id
+          }
+        }
         if (!taskId) {
           showError('未找到任务ID')
           return
@@ -5186,25 +5361,17 @@ const handleCancelTask = async () => {
           showSuccess('发布点任务已停止')
           activeTaskType.value = null
         }
-      } else if (activeTaskType.value === 'multi') {
-        // 取消多任务组
-        const response = await navigationApi.cancelMultiTaskGroup(robotId)
-  // ...
-        
-        if (response && (response as any).response && (response as any).response.msg) {
-          const { error_code, error_msg } = (response as any).response.msg
-          if (error_code === 0) {
-            taskExecutionStore.markMultiTaskStopped()
-            showSuccess((response as any).message || '多任务组已取消')
-            activeTaskType.value = null
-          } else {
-            showError(`取消失败: ${error_msg || '未知错误'}`)
-          }
-        } else {
-          taskExecutionStore.markMultiTaskStopped()
-          showSuccess('多任务组已取消')
-          activeTaskType.value = null
-        }
+      } else if (effectiveTaskType === 'multi') {
+        // 关闭多任务组（与多任务组任务页面一致，action=0）
+        const response = await navigationApi.startMultiTaskGroup(robotId, {
+          multitask_name: '',
+          multitask_id: '',
+          middle_start: 0,
+          action: 0
+        })
+        taskExecutionStore.markMultiTaskStopped()
+        activeTaskType.value = null
+        showSuccess((response as any)?.message || '关闭指令已发送')
       } else {
         // 其他任务类型的取消逻辑（暂时只清除状态）
         activeTaskType.value = null
@@ -5249,6 +5416,10 @@ const handleEnableNavigation = () => {
 }
 
 const handleEnableIns = () => {
+  if (!hasRobotRtk.value) {
+    showError('当前机器人未配置RTK，无法操作INS')
+    return
+  }
   // 检查是否被禁用
   if (navigationEnabled.value || msfEnabled.value) {
     return
@@ -5274,6 +5445,10 @@ const handleEnableIns = () => {
 }
 
 const handleEnableMsf = () => {
+  if (!hasRobotRtk.value) {
+    showError('当前机器人未配置RTK，无法操作MSF')
+    return
+  }
   // 检查是否被禁用
   if (navigationEnabled.value || insEnabled.value) {
     return
@@ -5514,6 +5689,58 @@ const sendDogCommand = async (robotId: string, commandName: string) => {
   await dogApi.sendCommand(robotId, { command_name: commandName })
 }
 
+const prepareRobotForTaskStart = async (
+  robotId: string,
+  options?: {
+    gaitConfig?: { command: string; label: string }
+    stepLogger?: (message: string) => void
+  }
+) => {
+  const log = options?.stepLogger ?? (() => {})
+
+  if (robotStore.robotStatusText === 'RL状态') {
+    log('检测到 RL状态，先切换到行走步态')
+    await sendDogCommand(robotId, 'foot_walk')
+  }
+
+  log('发送非手动模式指令')
+  await sendDogCommand(robotId, 'mode_auto')
+  log('设置地形为实心地面')
+  await sendDogCommand(robotId, 'ground_1')
+
+  log('等待机器人进入非手动模式')
+  await waitForRobotState(
+    () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
+    8000,
+    '等待机器人切换到非手动模式超时'
+  )
+
+  log('发送导航模块非手动模式指令')
+  await sendDogCommand(robotId, 'mode_auto_2')
+
+  if (robotStore.motionState?.basic_state !== 4) {
+    log('机器人当前未处于踏步状态，发送踏步指令')
+    await sendDogCommand(robotId, 'action')
+    log('等待机器人进入踏步状态')
+    await waitForRobotState(
+      () => robotStore.motionState?.basic_state === 4,
+      10000,
+      '等待机器人进入踏步状态超时'
+    )
+  }
+
+  if (options?.gaitConfig) {
+    log(`切换目标步态为${options.gaitConfig.label}`)
+    await sendDogCommand(robotId, options.gaitConfig.command)
+    log(`等待机器人切换到${options.gaitConfig.label}`)
+    await waitForRobotState(
+      () => robotStore.gaitText === options.gaitConfig?.label,
+      10000,
+      `等待机器人切换到${options.gaitConfig.label}超时`
+    )
+  }
+}
+
 const finalizeTrackTaskStart = async (trackName: string, taskpointName: string, successMessage?: string) => {
   const normalizedTrackName = normalizeTrackName(trackName)
   activeTaskType.value = 'track'
@@ -5575,45 +5802,10 @@ const onTrackStartConfirm = async () => {
     resetTrackStartProgress()
     pushTrackStartStep('开始准备循迹任务启动流程')
 
-    if (robotStore.robotStatusText === 'RL状态') {
-      pushTrackStartStep('检测到 RL状态，先切换到行走步态')
-      await sendDogCommand(robotId, 'foot_walk')
-    }
-
-    pushTrackStartStep('发送非手动模式指令')
-    await sendDogCommand(robotId, 'mode_auto')
-    pushTrackStartStep('设置地形为实心地面')
-    await sendDogCommand(robotId, 'ground_1')
-
-    pushTrackStartStep('等待机器人进入非手动模式')
-    await waitForRobotState(
-      () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
-      8000,
-      '等待机器人切换到非手动模式超时'
-    )
-
-    pushTrackStartStep('发送导航模块非手动模式指令')
-    await sendDogCommand(robotId, 'mode_auto_2')
-
-    if (robotStore.motionState?.basic_state !== 4) {
-      pushTrackStartStep('机器人当前未处于踏步状态，发送踏步指令')
-      await sendDogCommand(robotId, 'action')
-      pushTrackStartStep('等待机器人进入踏步状态')
-      await waitForRobotState(
-        () => robotStore.motionState?.basic_state === 4,
-        10000,
-        '等待机器人进入踏步状态超时'
-      )
-    }
-
-    pushTrackStartStep(`切换目标步态为${gaitConfig.label}`)
-    await sendDogCommand(robotId, gaitConfig.command)
-    pushTrackStartStep(`等待机器人切换到${gaitConfig.label}`)
-    await waitForRobotState(
-      () => robotStore.gaitText === gaitConfig.label,
-      10000,
-      `等待机器人切换到${gaitConfig.label}超时`
-    )
+    await prepareRobotForTaskStart(robotId, {
+      gaitConfig,
+      stepLogger: pushTrackStartStep
+    })
 
     pushTrackStartStep('发送循迹任务启动指令')
     // 调用启动循迹任务API
@@ -5673,15 +5865,30 @@ const onMultiTaskStartConfirm = async () => {
       showError('未找到机器人ID')
       return
     }
+
+    if (!taskExecutionStore.canStartMultiTask) {
+      showError('当前有其他任务正在运行')
+      return
+    }
+    if (robotStore.multitaskStatus?.status === true || activeTaskType.value === 'multi') {
+      showError('多任务组任务正在运行，请先关闭')
+      return
+    }
+
+    const selectedGroup = multiTaskList.value.find(task => task.multitask_id === selectedMultiTask.value)
+    if (!selectedGroup || !selectedGroup.multitask_id) {
+      showError('无效的多任务组')
+      return
+    }
     
     // 点击确定立即关闭弹窗
     multiTaskStartDialog.value.visible = false
     
     // 调用启动多任务组API
     const response = await navigationApi.startMultiTaskGroup(robotId, {
-      multitask_name: form.group_name,
-      multitask_id: selectedMultiTask.value || '',
-      middle_start: 0,
+      multitask_name: selectedGroup.multitask_name,
+      multitask_id: selectedGroup.multitask_id,
+      middle_start: Number(form.exception_start),
       action: 1
     })
     
@@ -5728,8 +5935,27 @@ const onPointTaskStartConfirm = async () => {
       return
     }
 
+    if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
+      showError('请先开启导航、INS或MSF')
+      return
+    }
+    if (activeTaskType.value && activeTaskType.value !== 'point') {
+      showError('当前有其他任务正在运行')
+      return
+    }
+    if (robotStore.isTracking || robotStore.multitaskStatus?.status === true) {
+      showError('当前有其他任务正在运行')
+      return
+    }
+
     // 点击确定立即关闭弹窗
     pointTaskStartDialog.value.visible = false
+    trackInitDialog.value.text = '机器狗初始化中...'
+    trackInitDialog.value.visible = true
+
+    await prepareRobotForTaskStart(robotId, {
+      gaitConfig: trackGaitConfigMap[0]
+    })
 
     // 调用启动发布点任务API
     const response = await navigationApi.startPointTask(robotId, {
@@ -5743,6 +5969,8 @@ const onPointTaskStartConfirm = async () => {
       if (error_code === 0) {
         activeTaskType.value = 'point'
         taskExecutionStore.markMultiTaskStopped()
+        activeOverlayPointTaskId.value = form.task_id
+        await overlayPointTaskWaypoints(form.task_id, form.task_name)
         showSuccess('发布点任务启动成功')
       } else {
         showError(`启动失败: ${error_msg || '未知错误'}`)
@@ -5750,11 +5978,15 @@ const onPointTaskStartConfirm = async () => {
     } else {
       activeTaskType.value = 'point'
       taskExecutionStore.markMultiTaskStopped()
+      activeOverlayPointTaskId.value = form.task_id
+      await overlayPointTaskWaypoints(form.task_id, form.task_name)
       showSuccess('发布点任务启动成功')
     }
   } catch (error) {
     console.error('启动发布点任务失败:', error)
-    showError('启动发布点任务失败，请稍后重试')
+    showError(parseErrorMessage(error) || '启动发布点任务失败，请稍后重试')
+  } finally {
+    trackInitDialog.value.visible = false
   }
 }
 
@@ -6362,6 +6594,8 @@ onMounted(async () => {
   window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.addEventListener('robot-track-list-ready', handleRobotTrackListReady)
   window.addEventListener('multi-task-list-updated', handleMultiTaskListUpdated)
+  window.addEventListener('point-task-list-updated', handlePointTaskListUpdated)
+  window.addEventListener('track-task-group-updated', handleTrackTaskGroupUpdated)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('focus', handleWindowFocus)
@@ -6530,6 +6764,27 @@ const handleMultiTaskListUpdated = async (event: Event) => {
   await fetchMultiTaskList()
 }
 
+const handlePointTaskListUpdated = async (event: Event) => {
+  const { robotId } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+  await fetchPointTaskList()
+}
+
+const handleTrackTaskGroupUpdated = async (event: Event) => {
+  const { robotId, trackName } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+  const updatedTrack = normalizeTrackName(String(trackName || ''))
+  const currentTrack = normalizeTrackName(trackStartDialog.value.form.track_name || selectedTrack.value || '')
+  if (!updatedTrack || !currentTrack || updatedTrack !== currentTrack) {
+    return
+  }
+  await fetchTaskpointList(currentTrack)
+}
+
 // 切换机器人第三阶段：其余数据就绪，刷新其他下拉和点云
 const handleRobotContextRefreshed = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
@@ -6570,6 +6825,8 @@ onUnmounted(() => {
   window.removeEventListener('robot-map-list-ready', handleRobotMapListReady)
   window.removeEventListener('robot-track-list-ready', handleRobotTrackListReady)
   window.removeEventListener('multi-task-list-updated', handleMultiTaskListUpdated)
+  window.removeEventListener('point-task-list-updated', handlePointTaskListUpdated)
+  window.removeEventListener('track-task-group-updated', handleTrackTaskGroupUpdated)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('focus', handleWindowFocus)
@@ -7520,9 +7777,10 @@ const handleControlClick = async (controlName: RobotControlName) => {
 // 监听选中的机器人ID变化
 watch(() => deviceStore.selectedRobotId, async (newId, oldId) => {
   if (!newId) return
+  const isRobotSwitched = oldId !== undefined && newId !== oldId
 
   // 切换机器人时，先清空下拉数据，避免短暂显示上一台机器人的缓存
-  if (newId !== oldId) {
+  if (isRobotSwitched) {
     selectedMap.value = ''
     selectedTrack.value = ''
     selectedPointTask.value = ''
@@ -7533,8 +7791,11 @@ watch(() => deviceStore.selectedRobotId, async (newId, oldId) => {
     multiTaskList.value = []
   }
 
-  await fetchDeviceStatus(newId)
-})
+  await Promise.all([
+    fetchDeviceStatus(newId),
+    fetchMapList(newId)
+  ])
+}, { immediate: true })
 
 // 监听 selectedRobot 对象的变化（修复首次登录数据不显示的问题）
 // 当 Layout.vue 加载完机器人列表后，selectedRobot 会从 undefined 变为有值

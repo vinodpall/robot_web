@@ -352,7 +352,43 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
       if (px < -100 || px > rect.width + 100 || py < -100 || py > rect.height + 100) continue
 
       // intensity区分：轨迹绿色、任务点黄色、机器人品红色
-      if (point.intensity >= 1.9) {
+      if (point.intensity >= 2.1) {
+        // 当前任务点 -> 红色高亮
+        ctx.fillStyle = 'rgba(255, 77, 79, 0.98)'
+        ctx.beginPath()
+        ctx.arc(px, py, 4.2, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#FFD1D1'
+        ctx.lineWidth = 1.6
+        ctx.stroke()
+        if (point.name) {
+          const lbl = point.name
+          ctx.font = `bold ${10 * dpr}px Arial`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          const tw = ctx.measureText(lbl).width
+          const padX = 4 * dpr, tagH = 14 * dpr, rr = 3 * dpr, tagW = tw + padX * 2
+          const tx = px - tagW / 2, ty = py - 18 * dpr - tagH / 2
+          ctx.beginPath()
+          ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
+          ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
+          ctx.lineTo(tx + tagW, ty + tagH - rr)
+          ctx.quadraticCurveTo(tx + tagW, ty + tagH, tx + tagW - rr, ty + tagH)
+          ctx.lineTo(tx + rr, ty + tagH)
+          ctx.quadraticCurveTo(tx, ty + tagH, tx, ty + tagH - rr)
+          ctx.lineTo(tx, ty + rr)
+          ctx.quadraticCurveTo(tx, ty, tx + rr, ty)
+          ctx.closePath()
+          ctx.fillStyle = 'rgba(5, 15, 35, 0.60)'
+          ctx.fill()
+          ctx.strokeStyle = 'rgba(255, 92, 92, 0.72)'
+          ctx.lineWidth = 0.8 * dpr
+          ctx.stroke()
+          ctx.fillStyle = '#FF6B6B'
+          ctx.shadowBlur = 0
+          ctx.fillText(lbl, px, ty + tagH / 2)
+        }
+      } else if (point.intensity >= 1.9) {
         // 轨迹点 → 绿色
         ctx.fillStyle = 'rgba(0, 255, 0, 0.9)'
         ctx.beginPath()

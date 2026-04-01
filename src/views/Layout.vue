@@ -104,6 +104,62 @@
         </div>
       </div>
     </transition>
+
+    <div v-if="changePasswordDialogVisible" class="password-dialog-mask" @click="closeChangePasswordDialog">
+      <div class="password-dialog" @click.stop>
+        <div class="password-dialog-title">修改密码</div>
+        <div class="password-dialog-body">
+          <div class="password-form-row">
+            <label>新密码</label>
+            <input
+              v-model.trim="changePasswordForm.password"
+              type="password"
+              class="password-input"
+              placeholder="请输入新密码"
+            />
+          </div>
+          <div class="password-form-row">
+            <label>确认密码</label>
+            <input
+              v-model.trim="changePasswordForm.confirmPassword"
+              type="password"
+              class="password-input"
+              placeholder="请再次输入新密码"
+            />
+          </div>
+        </div>
+        <div class="password-dialog-actions">
+          <button class="password-btn password-btn-primary" :disabled="changePasswordSubmitting" @click="submitChangePassword">
+            {{ changePasswordSubmitting ? '提交中...' : '确定' }}
+          </button>
+          <button class="password-btn password-btn-secondary" :disabled="changePasswordSubmitting" @click="closeChangePasswordDialog">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <ErrorMessage
+      :show="passwordError.show"
+      :message="passwordError.text"
+      @close="passwordError.show = false"
+    />
+
+    <SuccessMessage
+      :show="passwordSuccess.show"
+      :message="passwordSuccess.text"
+      @close="passwordSuccess.show = false"
+    />
+
+    <ConfirmDialog
+      :show="passwordConfirmVisible"
+      title="确认操作"
+      message="确定要修改密码吗？"
+      confirm-text="确认"
+      cancel-text="取消"
+      type="warning"
+      @confirm="confirmChangePassword"
+      @cancel="passwordConfirmVisible = false"
+      @close="passwordConfirmVisible = false"
+    />
   </div>
 </template>
 
@@ -116,6 +172,9 @@ import { useRobotStore } from '../stores/robot'
 import { robotApi, userApi, dogApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { refreshRobotRelatedCache, refreshCameraCache, refreshMapCache } from '../utils/robotBootstrap'
+import ErrorMessage from '../components/ErrorMessage.vue'
+import SuccessMessage from '../components/SuccessMessage.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import titleBg from '/src/assets/source_data/bg_data/title.png'
 
 const router = useRouter()
@@ -247,9 +306,71 @@ const isRobotItemOnline = (robot: any) => {
 
 const isSelectActive = ref(false)
 const robotSwitching = ref(false)
+const loadingRobotList = ref(false)
 
-const toggleSelect = () => {
-  isSelectActive.value = !isSelectActive.value
+const loadRobotList = async () => {
+  if (loadingRobotList.value) return
+  loadingRobotList.value = true
+
+  try {
+    const userId = Number(user.value?.id)
+    let robotList: any[] = []
+    let fromUserBinding = false
+
+    if (!Number.isNaN(userId) && userId > 0) {
+      const res = await userApi.getUserRobots(userId)
+      robotList = Array.isArray(res) ? res : (Array.isArray((res as any)?.items) ? (res as any).items : [])
+      fromUserBinding = true
+    } else {
+      const res = await robotApi.getRobots()
+      robotList = Array.isArray(res?.items) ? res.items : []
+    }
+
+    if (fromUserBinding && robotList.length > 0) {
+      const hasMissingIp = robotList.some(robot => !robot?.ip_address)
+      if (hasMissingIp) {
+        try {
+          const full = await robotApi.getRobots({ skip: 0, limit: 100 })
+          const fullList = Array.isArray(full?.items) ? full.items : []
+          const fullByRobotId = new Map(fullList.map(robot => [String(robot.robot_id), robot]))
+          robotList = robotList.map(robot => {
+            const key = String(robot?.robot_id ?? '')
+            const fullRobot = fullByRobotId.get(key)
+            return fullRobot ? { ...fullRobot, ...robot } : robot
+          })
+        } catch (mergeError) {
+          console.warn('Failed to enrich user robots with ip_address:', mergeError)
+        }
+      }
+    }
+
+    if (robotList.length > 0) {
+      deviceStore.setRobots(robotList as any)
+
+      const stillExists = robotList.some(robot => String(robot.robot_id) === String(deviceStore.selectedRobotId))
+      if (!stillExists) {
+        deviceStore.setSelectedRobot(robotList[0].robot_id)
+      }
+
+      if (deviceStore.selectedRobotId) {
+        await enrichSelectedRobotDetail(deviceStore.selectedRobotId)
+      }
+    } else {
+      deviceStore.setRobots([])
+    }
+  } catch (e) {
+    console.error('Failed to fetch robot list:', e)
+  } finally {
+    loadingRobotList.value = false
+  }
+}
+
+const toggleSelect = async () => {
+  const nextVisible = !isSelectActive.value
+  isSelectActive.value = nextVisible
+  if (nextVisible) {
+    await loadRobotList()
+  }
 }
 
 const selectRobot = (id: string) => {
@@ -271,6 +392,32 @@ const closeSelect = (event: Event) => {
 document.addEventListener('click', closeSelect)
 
 const isUserMenuVisible = ref(false)
+const changePasswordDialogVisible = ref(false)
+const changePasswordSubmitting = ref(false)
+const changePasswordForm = ref({
+  password: '',
+  confirmPassword: ''
+})
+const passwordError = ref({
+  show: false,
+  text: ''
+})
+const passwordSuccess = ref({
+  show: false,
+  text: ''
+})
+const passwordConfirmVisible = ref(false)
+
+const showPasswordError = (text: string) => {
+  passwordError.value = { show: true, text }
+}
+
+const showPasswordSuccess = (text: string) => {
+  passwordSuccess.value = { show: true, text }
+  setTimeout(() => {
+    passwordSuccess.value.show = false
+  }, 1800)
+}
 
 const toggleUserMenu = (e: Event) => {
   e.stopPropagation()
@@ -279,6 +426,81 @@ const toggleUserMenu = (e: Event) => {
 
 const handleChangePassword = () => {
   isUserMenuVisible.value = false
+  changePasswordForm.value.password = ''
+  changePasswordForm.value.confirmPassword = ''
+  passwordError.value = { show: false, text: '' }
+  passwordSuccess.value = { show: false, text: '' }
+  changePasswordDialogVisible.value = true
+}
+
+const closeChangePasswordDialog = () => {
+  if (changePasswordSubmitting.value) return
+  changePasswordDialogVisible.value = false
+}
+
+const submitChangePassword = async () => {
+  const password = changePasswordForm.value.password.trim()
+  const confirmPassword = changePasswordForm.value.confirmPassword.trim()
+
+  if (!password || !confirmPassword) {
+    showPasswordError('请输入新密码并确认')
+    return
+  }
+  if (password !== confirmPassword) {
+    showPasswordError('两次输入的密码不一致')
+    return
+  }
+
+  passwordConfirmVisible.value = true
+}
+
+const confirmChangePassword = async () => {
+  passwordConfirmVisible.value = false
+  const password = changePasswordForm.value.password.trim()
+  const confirmPassword = changePasswordForm.value.confirmPassword.trim()
+  if (!password || !confirmPassword) {
+    showPasswordError('请输入新密码并确认')
+    return
+  }
+  if (password !== confirmPassword) {
+    showPasswordError('两次输入的密码不一致')
+    return
+  }
+
+  const currentUser = user.value
+  const userId = currentUser?.id
+  if (!userId) {
+    showPasswordError('未获取到用户信息，无法修改密码')
+    return
+  }
+
+  const isActive = typeof currentUser?.is_active === 'boolean'
+    ? currentUser.is_active
+    : String(currentUser?.is_activate ?? 'true') === 'true'
+
+  try {
+    changePasswordSubmitting.value = true
+    await userApi.updateUser(userId, {
+      email: currentUser?.email || '',
+      full_name: currentUser?.full_name || currentUser?.userfullname || '',
+      password,
+      is_active: isActive
+    })
+    changePasswordDialogVisible.value = false
+    changePasswordForm.value.password = ''
+    changePasswordForm.value.confirmPassword = ''
+    showPasswordSuccess('密码修改成功，即将退出登录')
+    setTimeout(() => {
+      userStore.logout()
+      router.push('/login')
+      isUserMenuVisible.value = false
+    }, 1000)
+  } catch (error: any) {
+    console.error('修改密码失败:', error)
+    showPasswordError(error?.detail || error?.message || '修改密码失败')
+  } finally {
+    changePasswordSubmitting.value = false
+  }
 }
 
 const handleLogout = () => {
@@ -361,52 +583,7 @@ watch(
 onMounted(async () => {
   const hadSelectedRobotBeforeMount = !!deviceStore.selectedRobotId
 
-  try {
-    const userId = Number(user.value?.id)
-    let robotList: any[] = []
-    let fromUserBinding = false
-
-    if (!Number.isNaN(userId) && userId > 0) {
-      const res = await userApi.getUserRobots(userId)
-      robotList = Array.isArray(res) ? res : (Array.isArray((res as any)?.items) ? (res as any).items : [])
-      fromUserBinding = true
-    } else {
-      const res = await robotApi.getRobots()
-      robotList = Array.isArray(res?.items) ? res.items : []
-    }
-
-    if (fromUserBinding && robotList.length > 0) {
-      const hasMissingIp = robotList.some(robot => !robot?.ip_address)
-      if (hasMissingIp) {
-        try {
-          const full = await robotApi.getRobots({ skip: 0, limit: 100 })
-          const fullList = Array.isArray(full?.items) ? full.items : []
-          const fullByRobotId = new Map(fullList.map(robot => [String(robot.robot_id), robot]))
-          robotList = robotList.map(robot => {
-            const key = String(robot?.robot_id ?? '')
-            const fullRobot = fullByRobotId.get(key)
-            return fullRobot ? { ...fullRobot, ...robot } : robot
-          })
-        } catch (mergeError) {
-          console.warn('Failed to enrich user robots with ip_address:', mergeError)
-        }
-      }
-    }
-
-    if (robotList.length > 0) {
-      deviceStore.setRobots(robotList as any)
-      if (!selectedRobotId.value) {
-        deviceStore.setSelectedRobot(robotList[0].robot_id)
-      }
-      if (deviceStore.selectedRobotId) {
-        await enrichSelectedRobotDetail(deviceStore.selectedRobotId)
-      }
-    } else {
-      deviceStore.setRobots([])
-    }
-  } catch (e) {
-    console.error('Failed to fetch robot list:', e)
-  }
+  await loadRobotList()
 
   if (hadSelectedRobotBeforeMount && deviceStore.selectedRobotId) {
     await refreshRobotContext(deviceStore.selectedRobotId)
@@ -1064,5 +1241,100 @@ onMounted(async () => {
     box-shadow: 0 0 4px #52c41a;
     opacity: 0.7;
   }
+}
+
+.password-dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+}
+
+.password-dialog {
+  width: 420px;
+  max-width: 92vw;
+  background: linear-gradient(135deg, #102a43 0%, #172a3a 100%);
+  border: 1px solid rgba(103, 213, 253, 0.28);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.password-dialog-title {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.16);
+  background: linear-gradient(to right, rgba(103, 213, 253, 0.1), transparent);
+}
+
+.password-dialog-body {
+  padding: 20px 24px 6px;
+}
+
+.password-form-row {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.password-form-row label {
+  color: #b8c7d9;
+  font-size: 13px;
+}
+
+.password-input {
+  height: 38px;
+  border: 1px solid #244f78;
+  border-radius: 6px;
+  background: rgba(7, 20, 32, 0.65);
+  color: #fff;
+  padding: 0 10px;
+  outline: none;
+}
+
+.password-input:focus {
+  border-color: #67d5fd;
+  box-shadow: 0 0 0 1px rgba(103, 213, 253, 0.25);
+}
+
+.password-dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 20px 20px;
+}
+
+.password-btn {
+  min-width: 110px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.password-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.password-btn-primary {
+  color: #fff;
+  background: linear-gradient(90deg, #137bb8 0%, #0ea5c6 100%);
+  border-color: rgba(103, 213, 253, 0.45);
+}
+
+.password-btn-secondary {
+  color: #d9e4f1;
+  background: rgba(80, 93, 116, 0.45);
+  border-color: rgba(149, 167, 194, 0.42);
 }
 </style>

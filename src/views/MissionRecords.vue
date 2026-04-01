@@ -45,7 +45,7 @@
                 <button
                   class="mission-btn"
                   :class="isPointTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
-                  :disabled="!canStartPointTask && !isPointTaskRunning"
+                  :disabled="((!canStartPointTask || filteredPointTaskList.length === 0 || !selectedPointTaskId) && !isPointTaskRunning) || (runningTaskType != null && runningTaskType !== 'point')"
                   v-permission-click-dialog="'task-tasklist-execute'"
                   @click="handleStartTask"
                 >
@@ -55,8 +55,8 @@
                   {{ isNavPaused ? '恢复' : '暂停' }}
                 </button>
                 <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tasklist-create'" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
-                <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'task-tasklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
-                <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tasklist-create'" @click="handleAddTask">添加任务</button>
+                <button class="mission-btn mission-btn-stop" :disabled="filteredPointTaskList.length === 0 || !selectedPointTaskId" v-permission-click-dialog="'task-tasklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
+                <button class="mission-btn mission-btn-primary" :disabled="filteredPointTaskList.length === 0 || !selectedPointTaskId" v-permission-click-dialog="'task-tasklist-create'" @click="handleAddTask">添加任务</button>
               </div>
             </div>
             <div class="file-table file-table-adaptive">
@@ -601,6 +601,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
 import { useRobotStore } from '@/stores/robot'
 import { usePermissionStore } from '@/stores/permission'
+import { getRobotContextCacheKeys } from '@/utils/robotBootstrap'
 
 const router = useRouter()
 const route = useRoute()
@@ -610,6 +611,7 @@ const robotStore = useRobotStore()
 const {
   isPointTaskRunning,
   canStartPointTask,
+  runningTaskType,
   isNavigationEnabled,
   navPaused: isNavPaused
 } = storeToRefs(taskExecutionStore)
@@ -634,6 +636,11 @@ const getSelectedPointTaskCacheKey = () => {
   return robotId ? `selected_point_task_id_${robotId}` : 'selected_point_task_id'
 }
 
+const getCurrentRobotContextKeys = () => {
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  return robotId ? getRobotContextCacheKeys(robotId) : null
+}
+
 const getCachedSelectedPointTaskId = () => {
   const key = getSelectedPointTaskCacheKey()
   return localStorage.getItem(key) || localStorage.getItem('selected_point_task_id') || ''
@@ -650,6 +657,25 @@ const persistSelectedPointTaskId = (taskId: string) => {
   localStorage.removeItem('selected_point_task_id')
 }
 
+const pickValidPointTaskSelection = (list: PointTask[]) => {
+  const mapName = selectedMap.value
+  if (!mapName) {
+    selectedPointTaskId.value = ''
+    return
+  }
+
+  const visibleList = list.filter(task => String(task.task_name || '').startsWith(mapName + '_'))
+  if (visibleList.length === 0) {
+    selectedPointTaskId.value = ''
+    return
+  }
+
+  if (visibleList.some(task => task.task_id === selectedPointTaskId.value)) return
+  const cachedSelectedId = getCachedSelectedPointTaskId()
+  const cachedInCurrentList = cachedSelectedId && visibleList.some(task => task.task_id === cachedSelectedId)
+  selectedPointTaskId.value = cachedInCurrentList ? cachedSelectedId : visibleList[0].task_id
+}
+
 // 获取发布点任务列表
 const fetchPointTaskList = async () => {
   const robotId = localStorage.getItem('selected_robot_id')
@@ -659,13 +685,7 @@ const fetchPointTaskList = async () => {
     const cached = localStorage.getItem('cached_point_task_list')
     if (cached) {
       pointTaskList.value = JSON.parse(cached)
-      const cachedSelectedId = getCachedSelectedPointTaskId()
-      const hasCachedSelection = cachedSelectedId && pointTaskList.value.some(task => task.task_id === cachedSelectedId)
-      if (hasCachedSelection) {
-        selectedPointTaskId.value = cachedSelectedId
-      } else if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
-        selectedPointTaskId.value = pointTaskList.value[0].task_id
-      }
+      pickValidPointTaskSelection(pointTaskList.value)
     }
     return
   }
@@ -678,15 +698,13 @@ const fetchPointTaskList = async () => {
         task_id: String(task.task_id) // 统一转为字符串存储，方便比较
       }))
       // 缓存发布点任务列表
-      localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
-      
-      const cachedSelectedId = getCachedSelectedPointTaskId()
-      const hasCachedSelection = cachedSelectedId && pointTaskList.value.some(task => task.task_id === cachedSelectedId)
-      if (hasCachedSelection) {
-        selectedPointTaskId.value = cachedSelectedId
-      } else if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
-        selectedPointTaskId.value = pointTaskList.value[0].task_id
+      const contextKeys = getCurrentRobotContextKeys()
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList.value))
       }
+      localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
+
+      pickValidPointTaskSelection(pointTaskList.value)
     }
   } catch (error) {
     console.error('获取发布点任务列表失败:', error)
@@ -694,13 +712,7 @@ const fetchPointTaskList = async () => {
     const cached = localStorage.getItem('cached_point_task_list')
     if (cached) {
       pointTaskList.value = JSON.parse(cached)
-      const cachedSelectedId = getCachedSelectedPointTaskId()
-      const hasCachedSelection = cachedSelectedId && pointTaskList.value.some(task => task.task_id === cachedSelectedId)
-      if (hasCachedSelection) {
-        selectedPointTaskId.value = cachedSelectedId
-      } else if (pointTaskList.value.length > 0 && !selectedPointTaskId.value) {
-        selectedPointTaskId.value = pointTaskList.value[0].task_id
-      }
+      pickValidPointTaskSelection(pointTaskList.value)
     }
   }
 }
@@ -710,7 +722,8 @@ const selectedMap = computed(() => taskExecutionStore.selectedMapName)
 
 // 过滤后的发布点任务列表（根据缓存的地图筛选）
 const filteredPointTaskList = computed(() => {
-  if (!selectedMap.value) return pointTaskList.value // 如果没有缓存的地图，显示所有任务组
+  // 未选择地图时不展示历史任务组，避免出现跨地图残留数据
+  if (!selectedMap.value) return []
   
   // 根据地图名称筛选：task_name 以 "地图名称_" 开头
   return pointTaskList.value.filter(task => {
@@ -730,7 +743,7 @@ watch(filteredPointTaskList, (newList) => {
   const cachedSelectedId = getCachedSelectedPointTaskId()
   const cachedInCurrentList = cachedSelectedId && newList.some(task => task.task_id === cachedSelectedId)
   selectedPointTaskId.value = cachedInCurrentList ? cachedSelectedId : newList[0].task_id
-})
+}, { immediate: true })
 
 watch(selectedPointTaskId, (newVal) => {
   persistSelectedPointTaskId(newVal || '')
@@ -1183,11 +1196,11 @@ const handleStartTask = async () => {
   if (isPointTaskRunning.value) {
     const robotId = localStorage.getItem('selected_robot_id')
     if (!robotId) {
-      alert('未找到机器人ID')
+      errorMessage.value = { show: true, text: '未找到机器人ID' }
       return
     }
     if (!selectedPointTaskId.value) {
-      alert('请先选择任务组')
+      errorMessage.value = { show: true, text: '请先选择任务组' }
       return
     }
     try {
@@ -1195,32 +1208,35 @@ const handleStartTask = async () => {
         id: selectedPointTaskId.value,
         sn: robotId
       })
-      alert('关闭指令已发送')
+      successMessage.value = { show: true, text: '关闭指令已发送' }
+      setTimeout(() => {
+        successMessage.value.show = false
+      }, 2000)
     } catch (error: any) {
       console.error('关闭任务失败:', error)
-      alert(`关闭任务失败: ${error.message || '未知错误'}`)
+      errorMessage.value = { show: true, text: `关闭任务失败: ${error.message || '未知错误'}` }
     }
     return
   }
   if (!canStartPointTask.value) {
-    alert('当前有其他任务正在运行')
+    errorMessage.value = { show: true, text: '当前有其他任务正在运行' }
     return
   }
   // 必须开启导航、INS或MSF中的至少一个
   const cmdStatus = robotStore.cmdStatus
   const hasNavEnabled = cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
   if (!hasNavEnabled) {
-    alert('请先开启导航、INS或MSF')
+    errorMessage.value = { show: true, text: '请先开启导航、INS或MSF' }
     return
   }
   if (!selectedPointTaskId.value) {
-    alert('请先选择任务组')
+    errorMessage.value = { show: true, text: '请先选择任务组' }
     return
   }
   
   const robotId = localStorage.getItem('selected_robot_id')
   if (!robotId) {
-    alert('未找到机器人ID')
+    errorMessage.value = { show: true, text: '未找到机器人ID' }
     return
   }
   
@@ -1231,13 +1247,14 @@ const handleStartTask = async () => {
       sn: robotId
     })
     
-    // 检查响应 - 假设 API 返回成功会有正常的响应结构
-    // 这里简单弹窗提示
-    alert('任务启动指令已发送')
+    successMessage.value = { show: true, text: '任务启动指令已发送' }
+    setTimeout(() => {
+      successMessage.value.show = false
+    }, 2000)
     console.log('启动任务响应:', response)
   } catch (error: any) {
     console.error('启动任务失败:', error)
-    alert(`启动任务失败: ${error.message || '未知错误'}`)
+    errorMessage.value = { show: true, text: `启动任务失败: ${error.message || '未知错误'}` }
   }
 }
 
@@ -1426,6 +1443,15 @@ const handleAddTask = () => {
     errorMessage.value = { show: true, text: '请先选择任务组' }
     return
   }
+  const cmdStatus = robotStore.cmdStatus
+  const canPrefillPose =
+    Number(cmdStatus?.nav ?? 0) === 1 ||
+    Number(cmdStatus?.ins ?? 0) === 1 ||
+    Number(cmdStatus?.msf ?? 0) === 1
+  const prefillX = canPrefillPose && currentPosition.value.x != null ? String(currentPosition.value.x) : ''
+  const prefillY = canPrefillPose && currentPosition.value.y != null ? String(currentPosition.value.y) : ''
+  const prefillZ = canPrefillPose && currentPosition.value.z != null ? String(currentPosition.value.z) : ''
+  const prefillAngle = canPrefillPose && currentPosition.value.angle != null ? String(currentPosition.value.angle) : ''
   // 重置表单为添加模式
   editingTaskIndex.value = -1
   // 重置表单数据
@@ -1433,10 +1459,10 @@ const handleAddTask = () => {
     isMulti: '0',
     typeInput: '',
     actionType: '',
-    x: '',
-    y: '',
-    z: '',
-    angle: '0',
+    x: prefillX,
+    y: prefillY,
+    z: prefillZ,
+    angle: prefillAngle,
     preset: '',
     extraConfig: '',
     description: '',
@@ -1937,6 +1963,10 @@ const confirmDialog = ref({
 const updateCache = async () => {
   try {
     // 1. 更新本地缓存
+    const contextKeys = getCurrentRobotContextKeys()
+    if (contextKeys) {
+      localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList.value))
+    }
     localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
     
     // 2. 获取 robotId
@@ -1953,8 +1983,15 @@ const updateCache = async () => {
     if (response.response?.data) {
       pointTaskList.value = response.response.data
       // 5. 更新缓存
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList.value))
+      }
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
     }
+
+    window.dispatchEvent(new CustomEvent('point-task-list-updated', {
+      detail: { robotId }
+    }))
   } catch (error) {
     console.error('更新缓存失败:', error)
     errorMessage.value = { show: true, text: '同步数据失败，请重试' }

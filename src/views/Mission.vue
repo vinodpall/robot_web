@@ -53,7 +53,7 @@
                 <button
                   class="mission-btn"
                   :class="isTrackTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
-                  :disabled="!canStartTrackTask && !isTrackTaskRunning"
+                  :disabled="((!canStartTrackTask || filteredRouteList.length === 0 || taskGroupList.length === 0 || !selectedRouteName || !selectedTaskGroupName) && !isTrackTaskRunning) || (runningTaskType != null && runningTaskType !== 'track')"
                   v-permission-click-dialog="'task-tracklist-execute'"
                   @click="handleStartTrack"
                 >
@@ -63,8 +63,8 @@
                   {{ isNavPaused ? '恢复' : '暂停' }}
                 </button>
                 <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" v-permission-click-dialog="'task-tracklist-create'" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
-                <button class="mission-btn mission-btn-stop" :disabled="isTrackTaskRunning" v-permission-click-dialog="'task-tracklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
-                <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" v-permission-click-dialog="'task-tracklist-create'" @click="handleAddTask">添加任务</button>
+                <button class="mission-btn mission-btn-stop" :disabled="isTrackTaskRunning || taskGroupList.length === 0 || !selectedRouteName || !selectedTaskGroupName" v-permission-click-dialog="'task-tracklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
+                <button class="mission-btn mission-btn-primary" :disabled="taskGroupList.length === 0 || !selectedRouteName || !selectedTaskGroupName" v-permission-click-dialog="'task-tracklist-create'" @click="handleAddTask">添加任务</button>
                 <button class="mission-btn mission-btn-secondary" v-permission-click-dialog="'task-tracklist-show'" @click="openPreviewDialog">预览</button>
               </div>
             </div>
@@ -824,7 +824,7 @@ import ThreePointCloudPreview from '@/components/ThreePointCloudPreview.vue'
 import { getTrajectoryFile } from '@/utils/trajectoryDB'
 import { load3MF } from '@/utils/threemfParser'
 import { usePermissionStore } from '@/stores/permission'
-import { getRobotMapCacheKeys } from '@/utils/robotBootstrap'
+import { getRobotMapCacheKeys, getRobotContextCacheKeys } from '@/utils/robotBootstrap'
 
 const router = useRouter()
 const route = useRoute()
@@ -838,6 +838,7 @@ const taskExecutionStore = useTaskExecutionStore()
 const {
   isTrackTaskRunning,
   canStartTrackTask,
+  runningTaskType,
   isNavigationEnabled,
   navPaused: isNavPaused
 } = storeToRefs(taskExecutionStore)
@@ -885,6 +886,17 @@ const selectedRouteName = ref('')
 const taskGroupList = ref<string[]>([])
 const selectedTaskGroupName = ref('')
 let taskGroupRequestToken = 0
+
+const clearRouteAndTaskGroupState = (clearRoutes = true) => {
+  // 递增 token 使进行中的任务组请求结果失效，避免旧数据回填
+  taskGroupRequestToken++
+  if (clearRoutes) {
+    routeList.value = []
+  }
+  selectedRouteName.value = ''
+  taskGroupList.value = []
+  selectedTaskGroupName.value = ''
+}
 
 // 预览弹窗点云
 const previewDialog = ref({
@@ -964,6 +976,11 @@ const normalizeTaskPointName = (raw: string) => {
 const runningTrackName = computed(() => normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || ''))
 const runningTaskGroupName = computed(() => normalizeTaskPointName(robotStore.cmdStatus?.track_info?.taskpoint_name || ''))
 
+const getCurrentRobotContextKeys = () => {
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  return robotId ? getRobotContextCacheKeys(robotId) : null
+}
+
 const extractTrackTaskList = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
@@ -975,7 +992,10 @@ const getTaskGroupListFromCache = (trackName: string): string[] => {
   const normalizedTrack = normalizeTrackName(trackName)
   const groupSet = new Set<string>()
 
-  const cachedGroupMapRaw = localStorage.getItem('cached_taskpoint_group_map')
+  const contextKeys = getCurrentRobotContextKeys()
+  const cachedGroupMapRaw = contextKeys
+    ? localStorage.getItem(contextKeys.taskpointGroupMapKey) || localStorage.getItem('cached_taskpoint_group_map')
+    : localStorage.getItem('cached_taskpoint_group_map')
   if (cachedGroupMapRaw) {
     try {
       const groupMap = JSON.parse(cachedGroupMapRaw) as Record<string, string[]>
@@ -1016,9 +1036,15 @@ const setTaskGroupCache = (trackName: string, groups: string[]) => {
   const normalizedGroups = Array.from(
     new Set((groups || []).map(group => normalizeTaskPointName(String(group || ''))).filter(Boolean))
   )
-  const cachedGroupMapRaw = localStorage.getItem('cached_taskpoint_group_map')
+  const contextKeys = getCurrentRobotContextKeys()
+  const cachedGroupMapRaw = contextKeys
+    ? localStorage.getItem(contextKeys.taskpointGroupMapKey) || localStorage.getItem('cached_taskpoint_group_map')
+    : localStorage.getItem('cached_taskpoint_group_map')
   const groupMap = cachedGroupMapRaw ? JSON.parse(cachedGroupMapRaw) : {}
   groupMap[normalizedTrack] = normalizedGroups
+  if (contextKeys) {
+    localStorage.setItem(contextKeys.taskpointGroupMapKey, JSON.stringify(groupMap))
+  }
   localStorage.setItem('cached_taskpoint_group_map', JSON.stringify(groupMap))
 }
 
@@ -1104,10 +1130,21 @@ const refreshTrackTaskListFromApi = async (robotId: string) => {
 // 获取路线列表
 const loadRouteList = async () => {
   try {
-    const cachedTrackListRaw = localStorage.getItem('cached_track_list')
+    // 地图为空时，禁止继续使用历史路线/任务组缓存
+    if (!selectedMap.value) {
+      clearRouteAndTaskGroupState(true)
+      return
+    }
+
+    const contextKeys = getCurrentRobotContextKeys()
+    const cachedTrackListRaw =
+      (contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null)
+      || localStorage.getItem('cached_track_list')
     let rawList: string[] = cachedTrackListRaw ? JSON.parse(cachedTrackListRaw) : []
     if (rawList.length === 0) {
-      const cachedTaskListRaw = localStorage.getItem('all_track_task_list')
+      const cachedTaskListRaw =
+        (contextKeys ? localStorage.getItem(contextKeys.allTrackTaskListKey) : null)
+        || localStorage.getItem('all_track_task_list')
       if (cachedTaskListRaw) {
         const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
         rawList = allTaskList.map((task: any) => String(task.track_name || '')).filter(Boolean)
@@ -1123,16 +1160,11 @@ const loadRouteList = async () => {
     if (routeList.value.length > 0) {
       selectedRouteName.value = routeList.value[0]
     } else {
-      selectedRouteName.value = ''
-      selectedTaskGroupName.value = ''
-      taskGroupList.value = []
+      clearRouteAndTaskGroupState(false)
     }
   } catch (err) {
     console.error('读取路线缓存失败:', err)
-    routeList.value = []
-    selectedRouteName.value = ''
-    selectedTaskGroupName.value = ''
-    taskGroupList.value = []
+    clearRouteAndTaskGroupState(true)
   }
 }
 
@@ -1223,6 +1255,13 @@ const handleCreateTaskGroup = async () => {
       setTaskGroupCache(selectedRouteName.value, mergedGroups)
     }
     selectedTaskGroupName.value = taskGroupList.value.length > 0 ? taskGroupList.value[0] : ''
+
+    window.dispatchEvent(new CustomEvent('track-task-group-updated', {
+      detail: {
+        robotId,
+        trackName: normalizeTrackName(selectedRouteName.value)
+      }
+    }))
   } catch (error: any) {
     console.error('创建任务组失败:', error)
     errorMessage.value = { show: true, text: `创建失败: ${error.message || '网络错误'}` }
@@ -1286,7 +1325,7 @@ watch(filteredRouteList, (newList) => {
   if (newList.length > 0) {
     selectedRouteName.value = newList[0]
   } else {
-    selectedRouteName.value = ''
+    clearRouteAndTaskGroupState(false)
   }
 }, { immediate: true })
 
@@ -1561,6 +1600,13 @@ const handleDeleteTaskGroup = () => {
 
         // 同步更新任务组缓存映射
         setTaskGroupCache(selectedRouteName.value, taskGroupList.value)
+
+        window.dispatchEvent(new CustomEvent('track-task-group-updated', {
+          detail: {
+            robotId,
+            trackName: normalizeTrackName(selectedRouteName.value)
+          }
+        }))
 
         // 触发列表刷新
         taskListRefreshKey.value++
@@ -2834,13 +2880,22 @@ watch(filteredTaskTypes, (list) => {
 
 const handleAddTask = () => {
   resetAddTaskFieldErrors()
+  const cmdStatus = robotStore.cmdStatus
+  const canPrefillPose =
+    Number(cmdStatus?.nav ?? 0) === 1 ||
+    Number(cmdStatus?.ins ?? 0) === 1 ||
+    Number(cmdStatus?.msf ?? 0) === 1
+  const prefillX = canPrefillPose && currentPosition.value.x != null ? String(currentPosition.value.x) : ''
+  const prefillY = canPrefillPose && currentPosition.value.y != null ? String(currentPosition.value.y) : ''
+  const prefillZ = canPrefillPose && currentPosition.value.z != null ? String(currentPosition.value.z) : ''
+  const prefillAngle = canPrefillPose && currentPosition.value.angle != null ? String(currentPosition.value.angle) : ''
   // 重置表单
   addTaskDialog.value.form.typeInput = ''
   addTaskDialog.value.form.actionType = ''
-  addTaskDialog.value.form.x = ''
-  addTaskDialog.value.form.y = ''
-  addTaskDialog.value.form.z = ''
-  addTaskDialog.value.form.angle = ''
+  addTaskDialog.value.form.x = prefillX
+  addTaskDialog.value.form.y = prefillY
+  addTaskDialog.value.form.z = prefillZ
+  addTaskDialog.value.form.angle = prefillAngle
   addTaskDialog.value.form.preset = ''
   addTaskDialog.value.form.description = ''
   addTaskDialog.value.form.extraConfig = ''
@@ -2998,7 +3053,7 @@ const confirmAddTask = async () => {
 
   addTaskSubmitting.value = true
   try {
-    let response
+    let response: any
     
     if (isEditMode.value) {
       // 编辑模式：调用更新接口
@@ -3008,31 +3063,50 @@ const confirmAddTask = async () => {
       response = await navigationApi.addTrackPoint(robotId, taskData)
     }
 
-    // 重新获取任务列表更新缓存
-    const cachedData = localStorage.getItem('all_track_task_list')
-    let allTaskList = cachedData ? JSON.parse(cachedData) : []
+    const effectiveMsg = response?.msg ?? response?.response?.msg ?? null
+    const isAddPointSuccess = Number(effectiveMsg?.error_code ?? -1) === 0
+    const shouldRefreshListFromApi =
+      !isEditMode.value &&
+      !isAddPointSuccess &&
+      (!effectiveMsg || response?.response === null)
 
-    if (isEditMode.value && editingTaskItem.value?.rawData) {
-      // 编辑模式：查找并更新本地缓存
-      const index = allTaskList.findIndex((task: any) => 
-        task.task_id === editingTaskItem.value.rawData.task_id &&
-        task.track_name === selectedRouteName.value &&
-        task.track_point_name === selectedTaskGroupName.value
-      )
-      if (index !== -1) {
-        allTaskList[index] = taskData
-      }
-    } else {
-      // 添加模式：追加到本地缓存
-      allTaskList.push(taskData)
-    }
-
-    localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
-    
-    // 触发列表刷新
-    taskListRefreshKey.value++
-    if (isEditMode.value) {
+    if (shouldRefreshListFromApi) {
       await refreshTrackTaskListFromApi(robotId)
+      addTaskDialog.value.visible = false
+      isEditMode.value = false
+      editingTaskItem.value = null
+      errorMessage.value = { show: true, text: '任务点添加失败' }
+      setTimeout(() => {
+        errorMessage.value.show = false
+      }, 2000)
+      return
+    } else {
+      // 重新获取任务列表更新缓存
+      const cachedData = localStorage.getItem('all_track_task_list')
+      let allTaskList = cachedData ? JSON.parse(cachedData) : []
+
+      if (isEditMode.value && editingTaskItem.value?.rawData) {
+        // 编辑模式：查找并更新本地缓存
+        const index = allTaskList.findIndex((task: any) => 
+          task.task_id === editingTaskItem.value.rawData.task_id &&
+          task.track_name === selectedRouteName.value &&
+          task.track_point_name === selectedTaskGroupName.value
+        )
+        if (index !== -1) {
+          allTaskList[index] = taskData
+        }
+      } else {
+        // 添加模式：追加到本地缓存
+        allTaskList.push(taskData)
+      }
+
+      localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
+    
+      // 触发列表刷新
+      taskListRefreshKey.value++
+      if (isEditMode.value) {
+        await refreshTrackTaskListFromApi(robotId)
+      }
     }
     
     successMessage.value = { show: true, text: isEditMode.value ? '编辑成功' : '添加成功' }

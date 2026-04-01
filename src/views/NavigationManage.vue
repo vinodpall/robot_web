@@ -102,32 +102,32 @@
                   <button 
                     class="map-btn" 
                     :class="[navigationEnabled ? 'map-btn-danger' : 'map-btn-primary', { loading: navigationLoading }]"
-                    :disabled="insEnabled || msfEnabled || navigationLoading"
+                    :disabled="navMapList.length === 0 || insEnabled || msfEnabled || navigationLoading"
                     v-permission-click-dialog="'nav-navmanage-startnav'"
                     @click="handleStartNav"
                   >
                     {{ navigationEnabled ? '关闭导航' : '开始导航' }}
                   </button>
-                  <button class="map-btn" :class="appNavPauseEnabled ? 'map-btn-danger' : 'map-btn-secondary'" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handlePauseNav">
+                  <button class="map-btn" :class="appNavPauseEnabled ? 'map-btn-danger' : 'map-btn-secondary'" :disabled="navMapList.length === 0" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handlePauseNav">
                     {{ appNavPauseEnabled ? '恢复导航' : '暂停导航' }}
                   </button>
-                  <button class="map-btn" :class="appNavNavtrackEnabled ? 'map-btn-danger' : 'map-btn-secondary'" v-permission-click-dialog="'nav-navmanage-resumenav'" @click="handleToggleNavStop">
+                  <button class="map-btn" :class="appNavNavtrackEnabled ? 'map-btn-danger' : 'map-btn-secondary'" :disabled="navMapList.length === 0" v-permission-click-dialog="'nav-navmanage-resumenav'" @click="handleToggleNavStop">
                     {{ appNavNavtrackEnabled ? '恢复停障' : '暂停停障' }}
                   </button>
                   <button 
                     class="map-btn" 
                     :class="insEnabled ? 'map-btn-danger' : 'map-btn-primary'"
-                    :disabled="navigationEnabled || msfEnabled"
+                    :disabled="navigationEnabled || msfEnabled || !hasRobotRtk"
                     v-permission-click-dialog="'nav-navmanage-startnav'"
                     @click="handleStartINS"
                   >
                     {{ insEnabled ? '关闭INS' : '开始INS' }}
                   </button>
-                  <button class="map-btn map-btn-primary" :disabled="navigationEnabled || msfEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleInitINS">INS初始化</button>
+                  <button class="map-btn map-btn-primary" :disabled="navigationEnabled || msfEnabled || !hasRobotRtk" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleInitINS">INS初始化</button>
                   <button 
                     class="map-btn" 
                     :class="msfEnabled ? 'map-btn-danger' : 'map-btn-primary'"
-                    :disabled="navigationEnabled || insEnabled"
+                    :disabled="navigationEnabled || insEnabled || !hasRobotRtk"
                     v-permission-click-dialog="'nav-navmanage-startnav'"
                     @click="handleStartMSF"
                   >
@@ -147,6 +147,7 @@
                   <div class="nav-info-item">
                     <label class="nav-label">地图：</label>
                     <select v-model="selectedNavMap" class="nav-select" :disabled="isMapSelectionLocked">
+                      <option v-if="navMapList.length === 0" value="">暂无地图</option>
                       <option v-for="map in navMapList" :key="map" :value="map">{{ map }}</option>
                     </select>
                   </div>
@@ -263,6 +264,7 @@
                   <div class="toolbar-left">
                     <span class="toolbar-label">地图：</span>
                     <select v-model="selectedEditMap" class="map-edit-select">
+                      <option v-if="editMapList.length === 0" value="">暂无地图</option>
                       <option v-for="map in editMapList" :key="map" :value="map">{{ map }}</option>
                     </select>
                   </div>
@@ -277,7 +279,7 @@
                 <div ref="gridmapContainerEl" class="gridmap-container">
                   <canvas ref="gridMapCanvas" class="grid-canvas"></canvas>
                   <div v-if="gridMapLoading" class="map-overlay loading">地图加载中...</div>
-                  <div v-else-if="gridMapError" class="map-overlay error">{{ gridMapError }}</div>
+                  <div v-else-if="gridMapError" :class="['map-overlay', isGridMapEmptyState ? 'empty' : 'error']">{{ gridMapError }}</div>
                   <div v-show="isEditMode" class="edit-panel-right">
                     <div class="panel-tools">
                       <!-- 拖动模式 -->
@@ -352,7 +354,7 @@
                 <button 
                   class="map-btn map-btn-secondary track-btn" 
                   :class="{'map-btn-danger': isTrackRecording}"
-                  :disabled="isTrackRunning"
+                  :disabled="isTrackRunning || !navigationEnabled"
                   v-permission-click-dialog="'nav-trackrecord-create'"
                   @click="handleTrackRecord"
                 >
@@ -573,6 +575,7 @@
           <div class="form-item">
             <label class="form-label">选择地图：</label>
             <select v-model="selectedMapForGrid" class="recording-input">
+              <option v-if="gridMapList.length === 0" value="">暂无地图</option>
               <option v-for="map in gridMapList" :key="map" :value="map">
                 {{ normalizeMapName(map) }}
               </option>
@@ -891,6 +894,7 @@ const handleTabClick = (tab: { key: string; permission?: string }) => {
       fetchMapList() // 获取地图列表
       initNavPointCloud()
       fetchGpsStatus() // 获取GPS状态
+      fetchCurrentTaskSpeed() // 获取当前任务速度
     })
   } else if (key === 'track_record') {
     nextTick(async () => {
@@ -911,6 +915,10 @@ const handleTabClick = (tab: { key: string; permission?: string }) => {
     if (selectedEditMap.value) {
       nextTick(() => {
         loadGridMap(selectedEditMap.value)
+      })
+    } else {
+      nextTick(() => {
+        clearGridMapDisplay()
       })
     }
   } else if (key === 'file_manage') {
@@ -1166,7 +1174,7 @@ const trackRecordDialog = ref({
 })
 
 const handleTrackRecord = () => {
-  if (isTrackRunning.value) {
+  if (isTrackRunning.value || !navigationEnabled.value) {
     return
   }
 
@@ -1486,6 +1494,7 @@ const navMapList = ref<string[]>([]) // 地图列表
 const MIN_TASK_SPEED = 0.3
 const MAX_TASK_SPEED = 1.2
 const taskSpeed = ref(1.0)
+const setSpeedLoading = ref(false)
 const navData = ref({
   w: 0,
   v: '0, 0',
@@ -1529,6 +1538,28 @@ watch(
 const navigationEnabled = computed(() => robotStore.cmdStatus?.nav === 1)
 const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
+const hasRobotRtk = computed(() => {
+  const robot = deviceStore.selectedRobot as any
+  const extraRaw = robot?.extra ?? robot?.extra_data ?? null
+  if (extraRaw == null) return false
+
+  let extraObj: any = extraRaw
+  if (typeof extraRaw === 'string') {
+    const trimmed = extraRaw.trim()
+    if (!trimmed) return false
+    try {
+      extraObj = JSON.parse(trimmed)
+    } catch {
+      return false
+    }
+  }
+
+  if (!extraObj || typeof extraObj !== 'object' || Array.isArray(extraObj)) {
+    return false
+  }
+
+  return extraObj.rtk === true
+})
 const appNavPauseEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_nav_pause?.result ?? 0) === 1)
 const appNavNavtrackEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_stop_navtrack?.result ?? 0) === 1)
 /** INS 初始化状态（1=已初始化） */
@@ -1798,7 +1829,8 @@ const fetchMapList = () => {
     const keys = getCurrentRobotMapKeys()
     const cached = keys ? localStorage.getItem(keys.mapListKey) : null
     if (cached) {
-      navMapList.value = JSON.parse(cached)
+      const parsed = JSON.parse(cached)
+      navMapList.value = Array.isArray(parsed) ? parsed : []
       
       // 尝试恢复选中的地图（store 已持久化，直接读取）
       const storedMapName = taskExecutionStore.selectedMapName
@@ -1806,11 +1838,17 @@ const fetchMapList = () => {
         taskExecutionStore.setSelectedMapName(storedMapName)
       } else if (navMapList.value.length > 0 && !taskExecutionStore.selectedMapName) {
         taskExecutionStore.setSelectedMapName(navMapList.value[0])
+      } else if (navMapList.value.length === 0) {
+        taskExecutionStore.setSelectedMapName('')
       }
     } else {
+      navMapList.value = []
+      taskExecutionStore.setSelectedMapName('')
       console.warn('缓存中没有地图列表数据')
     }
   } catch (err) {
+    navMapList.value = []
+    taskExecutionStore.setSelectedMapName('')
     console.error('读取地图列表缓存失败:', err)
   }
 }
@@ -1833,18 +1871,25 @@ const fetchEditMapList = () => {
     const keys = getCurrentRobotMapKeys()
     const cached = keys ? localStorage.getItem(keys.mapListKey) : null
     if (cached) {
-      editMapList.value = JSON.parse(cached)
+      const parsed = JSON.parse(cached)
+      editMapList.value = Array.isArray(parsed) ? parsed : []
       
       const storedMapName = taskExecutionStore.selectedMapName
       if (storedMapName && editMapList.value.includes(storedMapName)) {
         taskExecutionStore.setSelectedMapName(storedMapName)
       } else if (editMapList.value.length > 0 && !taskExecutionStore.selectedMapName) {
         taskExecutionStore.setSelectedMapName(editMapList.value[0])
+      } else if (editMapList.value.length === 0) {
+        taskExecutionStore.setSelectedMapName('')
       }
     } else {
+      editMapList.value = []
+      taskExecutionStore.setSelectedMapName('')
       console.warn('缓存中没有地图列表数据')
     }
   } catch (err) {
+    editMapList.value = []
+    taskExecutionStore.setSelectedMapName('')
     console.error('读取地图编辑列表缓存失败:', err)
   }
 }
@@ -2035,10 +2080,67 @@ const handleSetOrigin = () => {
   })
 }
 
-const decreaseSpeed = () => {
+const normalizeTaskSpeed = (speed: number) => {
+  const rounded = Math.round(speed * 10) / 10
+  return Math.min(MAX_TASK_SPEED, Math.max(MIN_TASK_SPEED, rounded))
+}
+
+const fetchCurrentTaskSpeed = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  try {
+    const response: any = await navigationApi.getCurrentSpeed(robotId)
+    const rawSpeed = response?.msg?.get_speed
+
+    const speed = parseFloat(String(rawSpeed))
+    if (Number.isNaN(speed)) {
+      console.warn('获取当前任务速度成功，但返回速度值无效:', response)
+      return
+    }
+
+    taskSpeed.value = normalizeTaskSpeed(speed)
+  } catch (error) {
+    console.error('获取当前任务速度失败:', error)
+  }
+}
+
+const submitTaskSpeed = async (previousSpeed: number) => {
+  if (setSpeedLoading.value) return
+
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    taskSpeed.value = previousSpeed
+    showErrorMessage('未选择机器人')
+    return
+  }
+
+  const speed = parseFloat(String(taskSpeed.value))
+  if (Number.isNaN(speed)) {
+    taskSpeed.value = previousSpeed
+    showErrorMessage('速度值无效')
+    return
+  }
+
+  try {
+    setSpeedLoading.value = true
+    await navigationApi.setSpeed(robotId, { speed })
+  } catch (error) {
+    console.error('设置任务速度失败:', error)
+    taskSpeed.value = previousSpeed
+    showErrorMessage('设置任务速度失败')
+  } finally {
+    setSpeedLoading.value = false
+  }
+}
+
+const decreaseSpeed = async () => {
+  if (setSpeedLoading.value) return
   if (taskSpeed.value > MIN_TASK_SPEED) {
+    const previousSpeed = taskSpeed.value
     const nextSpeed = Math.round((taskSpeed.value - 0.1) * 10) / 10
     taskSpeed.value = Math.max(nextSpeed, MIN_TASK_SPEED)
+    await submitTaskSpeed(previousSpeed)
   }
 }
 
@@ -2071,10 +2173,13 @@ const refreshRelatedTaskListsAfterDelete = async (robotId?: string) => {
   }
 }
 
-const increaseSpeed = () => {
+const increaseSpeed = async () => {
+  if (setSpeedLoading.value) return
   if (taskSpeed.value < MAX_TASK_SPEED) {
+    const previousSpeed = taskSpeed.value
     const nextSpeed = Math.round((taskSpeed.value + 0.1) * 10) / 10
     taskSpeed.value = Math.min(nextSpeed, MAX_TASK_SPEED)
+    await submitTaskSpeed(previousSpeed)
   }
 }
 
@@ -2878,6 +2983,9 @@ onMounted(async () => {
 const handleRobotContextRefreshed = () => {
   fetchMapList()
   fetchEditMapList()
+  if (currentTab.value === 'map_edit' && !selectedEditMap.value) {
+    clearGridMapDisplay()
+  }
   fetchTrackMapList()
   fetchFileMapList()
   // 循迹列表从已更新的缓存中加载
@@ -3324,6 +3432,7 @@ const editMapList = ref<string[]>([]) // 地图编辑页面的地图列表
 const gridMapCanvas = ref<HTMLCanvasElement | null>(null)
 const gridMapLoading = ref(false)
 const gridMapError = ref('')
+const isGridMapEmptyState = computed(() => gridMapError.value === '暂无栅格图')
 const isEditMode = ref(false)
 const navMode = ref<'pan' | 'edit'>('pan')
 const activeTool = ref<'pen' | 'eraser'>('pen')
@@ -3589,10 +3698,36 @@ const loadGridMap = async (mapName: string) => {
   }
 }
 
+const clearGridMapDisplay = (message = '暂无栅格图') => {
+  gridMapLoading.value = false
+  gridMapError.value = message
+  missionGridImageData = null
+  gridImageData = null
+  editHistory.value = []
+  if (canvasEventsController) {
+    canvasEventsController.abort()
+    canvasEventsController = null
+  }
+
+  const canvas = gridMapCanvas.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+  }
+  canvas.width = 0
+  canvas.height = 0
+  canvas.style.width = ''
+  canvas.style.height = ''
+  canvas.style.transform = ''
+}
+
 // 监听地图编辑选择变化（store setter 已持久化，无需手动写 localStorage）
 watch(selectedEditMap, (newMap) => {
   if (newMap) {
     loadGridMap(newMap)
+  } else {
+    clearGridMapDisplay()
   }
 })
 
@@ -4153,11 +4288,11 @@ const setupCanvasEvents = () => {
 watch(currentTab, async (newTab) => {
   if (newTab === 'map_edit') {
     await nextTick()
-    // 如果已经选中了地图，加载该地图；否则加载默认地图
+    // 如果已经选中了地图，加载该地图；否则清空画布并显示提示
     if (selectedEditMap.value) {
       loadGridMap(selectedEditMap.value)
     } else {
-      loadAndRenderGridMap()
+      clearGridMapDisplay()
     }
   }
 })
@@ -5456,6 +5591,15 @@ const handleDelete = (item: any) => {
   color: #67d5fd;
 }
 
+.map-overlay.empty {
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #5f7890;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
 /* 右侧编辑面板 */
 .edit-panel-right {
   position: absolute;
@@ -5918,6 +6062,3 @@ select.recording-input option {
   grid-template-columns: 100px 360px 1fr 180px 150px !important;
 }
 </style>
-
-
-
