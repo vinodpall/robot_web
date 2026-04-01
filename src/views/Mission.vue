@@ -37,7 +37,7 @@
               <!-- 任务组选择 -->
               <span class="mission-toolbar-label" style="margin-right: -8px;">路线名称：</span>
               <select v-model="selectedRouteName" class="mission-toolbar-select" style="min-width: 180px;" :disabled="isTrackTaskRunning">
-                <option v-if="filteredRouteList.length === 0" value="">暂无路线</option>
+                <option value="">{{ filteredRouteList.length === 0 ? '暂无路线' : '请选择路线' }}</option>
                 <option v-for="route in filteredRouteList" :key="route" :value="route">{{ route }}</option>
               </select>
               
@@ -824,6 +824,7 @@ import ThreePointCloudPreview from '@/components/ThreePointCloudPreview.vue'
 import { getTrajectoryFile } from '@/utils/trajectoryDB'
 import { load3MF } from '@/utils/threemfParser'
 import { usePermissionStore } from '@/stores/permission'
+import { getRobotMapCacheKeys } from '@/utils/robotBootstrap'
 
 const router = useRouter()
 const route = useRoute()
@@ -883,6 +884,7 @@ const routeList = ref<string[]>([])
 const selectedRouteName = ref('')
 const taskGroupList = ref<string[]>([])
 const selectedTaskGroupName = ref('')
+let taskGroupRequestToken = 0
 
 // 预览弹窗点云
 const previewDialog = ref({
@@ -1020,6 +1022,62 @@ const setTaskGroupCache = (trackName: string, groups: string[]) => {
   localStorage.setItem('cached_taskpoint_group_map', JSON.stringify(groupMap))
 }
 
+const applyTaskGroupSelection = (groups: string[]) => {
+  taskGroupList.value = groups
+  if (isTrackTaskRunning.value && runningTaskGroupName.value) {
+    const normalizedRunningGroup = normalizeTaskPointName(runningTaskGroupName.value)
+    const matchedGroup = groups.find(group => normalizeTaskPointName(group) === normalizedRunningGroup)
+    if (matchedGroup) {
+      selectedTaskGroupName.value = matchedGroup
+    } else if (groups.length > 0) {
+      selectedTaskGroupName.value = groups[0]
+    } else {
+      selectedTaskGroupName.value = ''
+    }
+  } else if (groups.length > 0) {
+    selectedTaskGroupName.value = groups[0]
+  } else {
+    selectedTaskGroupName.value = ''
+  }
+}
+
+const fetchTaskGroupListByRoute = async (routeName: string) => {
+  const normalizedRouteName = normalizeTrackName(routeName)
+  if (!normalizedRouteName) {
+    applyTaskGroupSelection([])
+    return
+  }
+
+  const cachedGroups = getTaskGroupListFromCache(normalizedRouteName)
+  applyTaskGroupSelection(cachedGroups)
+
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (!robotId) {
+    await refreshAllTrackTaskListCache()
+    return
+  }
+
+  const requestToken = ++taskGroupRequestToken
+  try {
+    const response = await navigationApi.getTaskpointList(robotId, normalizedRouteName)
+    if (requestToken !== taskGroupRequestToken) return
+    if (normalizeTrackName(selectedRouteName.value) !== normalizedRouteName) return
+
+    const remoteGroups = Array.isArray(response?.msg?.result)
+      ? response.msg.result.map((group: string) => normalizeTaskPointName(group)).filter(Boolean)
+      : []
+
+    setTaskGroupCache(normalizedRouteName, remoteGroups)
+    applyTaskGroupSelection(remoteGroups)
+  } catch (err) {
+    if (requestToken !== taskGroupRequestToken) return
+    if (normalizeTrackName(selectedRouteName.value) !== normalizedRouteName) return
+    console.warn('获取任务组列表失败:', err)
+  }
+
+  await refreshAllTrackTaskListCache()
+}
+
 // 仅从本地缓存刷新全量任务点列表依赖
 const refreshAllTrackTaskListCache = async () => {
   try {
@@ -1064,10 +1122,17 @@ const loadRouteList = async () => {
 
     if (routeList.value.length > 0) {
       selectedRouteName.value = routeList.value[0]
+    } else {
+      selectedRouteName.value = ''
+      selectedTaskGroupName.value = ''
+      taskGroupList.value = []
     }
   } catch (err) {
     console.error('读取路线缓存失败:', err)
     routeList.value = []
+    selectedRouteName.value = ''
+    selectedTaskGroupName.value = ''
+    taskGroupList.value = []
   }
 }
 
@@ -1167,9 +1232,40 @@ const handleCreateTaskGroup = async () => {
 // selectedMap 从 store 读取，实现多页面同步
 const selectedMap = computed(() => taskExecutionStore.selectedMapName)
 
+const syncSelectedMapWithCache = () => {
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const mapKeys = robotId ? getRobotMapCacheKeys(robotId) : null
+  const cachedMapListRaw =
+    (mapKeys ? localStorage.getItem(mapKeys.mapListKey) : null)
+    || localStorage.getItem('cached_map_list')
+
+  let cachedMapList: string[] = []
+  if (cachedMapListRaw) {
+    try {
+      const parsed = JSON.parse(cachedMapListRaw)
+      if (Array.isArray(parsed)) {
+        cachedMapList = parsed.map(item => String(item || '').trim()).filter(Boolean)
+      }
+    } catch {
+      cachedMapList = []
+    }
+  }
+
+  if (cachedMapList.length === 0) {
+    if (taskExecutionStore.selectedMapName) {
+      taskExecutionStore.setSelectedMapName('')
+    }
+    return
+  }
+
+  if (!cachedMapList.includes(taskExecutionStore.selectedMapName)) {
+    taskExecutionStore.setSelectedMapName(cachedMapList[0])
+  }
+}
+
 // 过滤后的路线列表（根据缓存的地图筛选）
 const filteredRouteList = computed(() => {
-  if (!selectedMap.value) return routeList.value // 如果没有缓存的地图，显示所有路线
+  if (!selectedMap.value) return []
   
   // 根据地图名称筛选：路线名 以 "地图名称_" 开头
   return routeList.value.filter(route => {
@@ -1192,28 +1288,15 @@ watch(filteredRouteList, (newList) => {
   } else {
     selectedRouteName.value = ''
   }
-})
+}, { immediate: true })
 
 // 监听路线选择变化
 watch(selectedRouteName, async (newVal) => {
-  taskGroupList.value = []
-  selectedTaskGroupName.value = ''
-  if (!newVal) return
-
-  const groups = getTaskGroupListFromCache(newVal)
-  taskGroupList.value = groups
-  if (isTrackTaskRunning.value && runningTaskGroupName.value) {
-    const normalizedRunningGroup = normalizeTaskPointName(runningTaskGroupName.value)
-    const matchedGroup = groups.find(group => normalizeTaskPointName(group) === normalizedRunningGroup)
-    if (matchedGroup) {
-      selectedTaskGroupName.value = matchedGroup
-    } else if (groups.length > 0) {
-      selectedTaskGroupName.value = groups[0]
-    }
-  } else if (groups.length > 0) {
-    selectedTaskGroupName.value = groups[0]
+  if (!newVal) {
+    applyTaskGroupSelection([])
+    return
   }
-  await refreshAllTrackTaskListCache()
+  await fetchTaskGroupListByRoute(newVal)
 })
 
 watch(
@@ -2568,28 +2651,27 @@ function onDispatchTaskCancel() {
 
 // 切换机器人后刷新循迹路线列表
 const handleRobotContextRefreshed = async () => {
+  syncSelectedMapWithCache()
   await loadRouteList()  // 刷新路线列表并更新 selectedRouteName
   // 强制刷新任务组列表：即使 selectedRouteName 没有改变（watch 不会触发），
-  // 缓存中已经是新机器人的数据，需要主动读取
+  // 也要在切换机器人后主动请求当前路线的任务组
   if (selectedRouteName.value) {
-    taskGroupList.value = getTaskGroupListFromCache(selectedRouteName.value)
-    if (taskGroupList.value.length > 0) {
-      selectedTaskGroupName.value = taskGroupList.value[0]
-    } else {
-      selectedTaskGroupName.value = ''
-    }
+    await fetchTaskGroupListByRoute(selectedRouteName.value)
   } else {
-    taskGroupList.value = []
-    selectedTaskGroupName.value = ''
+    applyTaskGroupSelection([])
   }
-  refreshAllTrackTaskListCache()
 }
 
 // 页面加载时获取数据
 // 页面加载时获取数据
 onMounted(async () => {
   await loadWaylineFiles()
+  syncSelectedMapWithCache()
+  await loadRouteList()
   await refreshAllTrackTaskListCache()
+  if (selectedRouteName.value) {
+    await fetchTaskGroupListByRoute(selectedRouteName.value)
+  }
   window.addEventListener('click', closeDropdown)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 })

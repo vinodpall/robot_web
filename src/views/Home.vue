@@ -132,7 +132,7 @@
                 <div class="task-name">任务名称：{{ waylineTaskName }}</div>
                 <div class="time-item">
                   <span class="label">任务开始时间：<em class="time-value">{{ waylineTaskStartTime }}</em></span>
-                  <span v-if="hasActiveTaskStatistics" class="label">当前巡检点：<em class="time-value">第{{ waylineCurrentWaypoint }}个</em></span>
+                  <span v-if="hasActiveTaskStatistics" class="label">当前巡检点：<em class="time-value">{{ waylineInspectionProgressText }}</em></span>
                 </div>
               </div>
               <div class="task-status">
@@ -2122,14 +2122,12 @@ const waylineTaskStartTime = computed(() => {
   return formatTimestamp(new Date(waylineJobDetail.value.begin_time).getTime())
 })
 
-const waylineCurrentWaypoint = computed(() => {
+const waylineInspectionProgressText = computed(() => {
   const ws = wsTaskMeta.value
   if (ws) {
-    if (!ws.started) return 0
-    if (ws.completed) return ws.total || ws.finished
-    return ws.total > 0 ? Math.min(ws.finished + 1, ws.total) : ws.finished
+    return `${ws.finished}/${ws.total}`
   }
-  return waylineProgress.value?.ext?.current_waypoint_index || 0
+  return '0/0'
 })
 
 const waylineTaskStatus = computed(() => {
@@ -2838,6 +2836,8 @@ let infraredBootstrapRetryCount = 0
 let hasHomeActivatedOnce = false
 let foregroundRecoverTimer: ReturnType<typeof setTimeout> | null = null
 let foregroundRecoverRunning = false
+let visibleManualReconnectRunning = false
+let infraredManualReconnectRunning = false
 
 // ---------- 主视频重连辅助函数 ----------
 const clearWebRTCReconnectTimer = () => {
@@ -2880,7 +2880,9 @@ const scheduleVisibleStreamBootstrapRetry = (robotId: string) => {
       return
     }
 
-    await initCameraStreams()
+    if (!hasCameraStreamUrl(robotId, 'drone_visible')) {
+      await initCameraStreams()
+    }
     if (!deviceStore.selectedRobotId || deviceStore.selectedRobotId !== robotId) {
       webrtcReconnecting.value = false
       return
@@ -2929,7 +2931,9 @@ const scheduleWebRTCReconnect = () => {
       if (robotId && !visibleReconnectRefreshRunning) {
         visibleReconnectRefreshRunning = true
         try {
-          await initCameraStreams()
+          if (!hasCameraStreamUrl(robotId, 'drone_visible')) {
+            await initCameraStreams()
+          }
           if (robotId === deviceStore.selectedRobotId) {
             initVideoPlayer()
           }
@@ -2998,7 +3002,9 @@ const scheduleInfraredStreamBootstrapRetry = (robotId: string) => {
       return
     }
 
-    await initCameraStreams()
+    if (!hasCameraStreamUrl(robotId, 'drone_infrared')) {
+      await initCameraStreams()
+    }
     if (!deviceStore.selectedRobotId || deviceStore.selectedRobotId !== robotId) {
       infraredReconnecting.value = false
       return
@@ -3046,7 +3052,9 @@ const scheduleInfraredReconnect = () => {
       if (robotId && !infraredReconnectRefreshRunning) {
         infraredReconnectRefreshRunning = true
         try {
-          await initCameraStreams()
+          if (!hasCameraStreamUrl(robotId, 'drone_infrared')) {
+            await initCameraStreams()
+          }
           if (robotId === deviceStore.selectedRobotId) {
             initInfraredVideo()
           }
@@ -3191,6 +3199,7 @@ let cameraInitAbortController: AbortController | null = null
 let isCameraInitRunning = false
 let cameraInitRunningRobotId = ''
 let lastCameraInitSuccessAt = 0
+const CAMERA_STREAM_REFRESH_COOLDOWN_MS = 15000
 
 // 初始化摄像头流
 const initCameraStreams = async (signal?: AbortSignal) => {
@@ -3453,6 +3462,12 @@ const startWebRTCPlayback = async () => {
         const videoEl = videoElement.value
         const tryPlayVisible = () => {
           videoEl.play().catch(err => {
+            const name = (err as any)?.name || ''
+            const message = String((err as any)?.message || '')
+            // play() 被后续 load/srcObject 切换中断属于重连过程中的常见瞬态，不触发错误重连
+            if (name === 'AbortError' || /interrupted by a new load request/i.test(message)) {
+              return
+            }
             console.error('[WebRTC播放] ❌ 可见光视频播放失败:', err)
             scheduleWebRTCReconnect()
           })
@@ -3473,7 +3488,11 @@ const startWebRTCPlayback = async () => {
         // 强制设置WebRTC视频播放器样式
         videoEl.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
         
-        videoEl.addEventListener('error', (e) => console.error('[WebRTC播放] 事件: error', e))
+        // 避免重复 addEventListener 造成错误日志风暴
+        videoEl.onerror = () => {
+          if (pc !== currentPc || sessionId !== webrtcSessionId) return
+          scheduleWebRTCReconnect()
+        }
 
         // 立即尝试一次，覆盖 metadata 事件触发过快或不触发的场景
         tryPlayVisible()
@@ -3625,12 +3644,31 @@ const stopVideoPlayback = () => {
 
 // 重新加载视频
 const reloadVideo = () => {
+  if (visibleManualReconnectRunning) return
+  visibleManualReconnectRunning = true
   webrtcReconnectCount = 0  // 手动重载，重置重连计数
-  stopVideoPlayback()
-  // 增加延迟确保资源完全清理
-  setTimeout(() => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  const stream = robotId ? getRobotVideoStreamByType(robotId, 'drone_visible') : getVideoStream('drone_visible')
+  const streamUrl = stream?.url || videoStreamUrl.value
+  if (!streamUrl) {
+    visibleManualReconnectRunning = false
+    showError('未找到可见光视频流')
+    return
+  }
+
+  clearWebRTCReconnectTimer()
+  clearWebRTCStartTimer()
+  clearWebRTCFreezeDetection()
+  clearVisibleBootstrapRetryTimer()
+  visibleBootstrapRetryCount = 0
+  webrtcReconnecting.value = true
+  stopWebRTCPlaybackForReconnect()
+  videoStreamUrl.value = streamUrl
+
+  nextTick(() => {
     startVideoPlayback()
-  }, 500)
+    visibleManualReconnectRunning = false
+  })
 }
 
 const initInfraredVideo = () => {
@@ -3912,16 +3950,27 @@ const stopInfraredPlayback = () => {
 }
 
 const reloadInfraredStream = () => {
-  const stream = getVideoStream('drone_infrared')
+  if (infraredManualReconnectRunning) return
+  infraredManualReconnectRunning = true
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  const stream = robotId ? getRobotVideoStreamByType(robotId, 'drone_infrared') : getVideoStream('drone_infrared')
   if (!stream) {
     infraredError.value = '未找到红外视频流'
+    infraredManualReconnectRunning = false
     return
   }
   infraredReconnectCount = 0  // 手动重载，重置重连计数
-  stopInfraredPlayback()
-  infraredStreamUrl.value = ''
+  clearInfraredReconnectTimer()
+  clearInfraredStartTimer()
+  clearInfraredFreezeDetection()
+  clearInfraredBootstrapRetryTimer()
+  infraredBootstrapRetryCount = 0
+  infraredReconnecting.value = true
+  stopInfraredWebRTCPlaybackForReconnect()
+  infraredStreamUrl.value = stream.url
   nextTick(() => {
-    infraredStreamUrl.value = stream.url
+    startInfraredPlayback(true)
+    infraredManualReconnectRunning = false
   })
 }
 
@@ -4087,6 +4136,12 @@ const getRobotVideoStreamByType = (robotId: string, type: VideoStream['type']): 
   const streams = getRobotVideoStreams(robotId)
   return streams.find(stream => stream.type === type) || null
 }
+const hasCameraStreamUrl = (robotId: string, type: 'drone_visible' | 'drone_infrared') => {
+  const stream = getRobotVideoStreamByType(robotId, type)
+  return Boolean(stream?.url)
+}
+const hasBothCameraStreamUrls = (robotId: string) =>
+  hasCameraStreamUrl(robotId, 'drone_visible') && hasCameraStreamUrl(robotId, 'drone_infrared')
 const setRobotVideoStreams = (robotId: string, streams: VideoStream[]) => {
   localStorage.setItem(getRobotVideoStreamsCacheKey(robotId), JSON.stringify(streams))
   setVideoStreams(streams)
@@ -4272,56 +4327,48 @@ const pointTaskStartDialog = ref({
 
 // 关键点文件列表（用于循迹任务启动弹窗）
 const taskpointList = ref<string[]>([])
+let taskpointRequestToken = 0
 
 // 获取关键点文件列表
 const fetchTaskpointList = async (trackName: string) => {
   if (!trackName) {
     taskpointList.value = []
+    trackStartDialog.value.form.taskpoint_name = ''
     return
   }
 
+  const robotId = deviceStore.selectedRobotId
+  if (!robotId) {
+    taskpointList.value = []
+    trackStartDialog.value.form.taskpoint_name = ''
+    return
+  }
+
+  const requestToken = ++taskpointRequestToken
   const normalizedTrack = normalizeTrackName(trackName)
-  const groupSet = new Set<string>()
 
-  // 优先使用登录阶段缓存的任务组映射
-  const contextKeys = getCurrentRobotContextKeys()
-  const cachedGroupMapRaw = contextKeys
-    ? localStorage.getItem(contextKeys.taskpointGroupMapKey)
-    : null
-  if (cachedGroupMapRaw) {
-    try {
-      const groupMap = JSON.parse(cachedGroupMapRaw) as Record<string, string[]>
-      const groups = groupMap[normalizedTrack] || groupMap[trackName] || []
-      groups.forEach(group => {
-        const normalizedGroup = normalizeTaskPointName(String(group || ''))
-        if (normalizedGroup) groupSet.add(normalizedGroup)
-      })
-    } catch (err) {
-      console.warn('[任务组缓存] 解析失败:', err)
+  try {
+    const response = await navigationApi.getTaskpointList(robotId, normalizedTrack)
+    if (requestToken !== taskpointRequestToken || robotId !== deviceStore.selectedRobotId) {
+      return
     }
+    const groups = Array.isArray(response?.msg?.result) ? response.msg.result : []
+    const normalizedGroups = Array.from(
+      new Set(
+        groups
+          .map((group: string) => normalizeTaskPointName(String(group || '')))
+          .filter(Boolean)
+      )
+    )
+    taskpointList.value = normalizedGroups
+  } catch (err) {
+    if (requestToken !== taskpointRequestToken || robotId !== deviceStore.selectedRobotId) {
+      return
+    }
+    console.error('[任务组列表] 获取失败:', err)
+    taskpointList.value = []
   }
 
-  // 次级回退：从 all_track_task_list 推导
-  if (groupSet.size === 0) {
-    const cachedTaskListRaw = contextKeys
-      ? localStorage.getItem(contextKeys.allTrackTaskListKey)
-      : null
-    if (cachedTaskListRaw) {
-      try {
-        const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
-        allTaskList.forEach((task: any) => {
-          const taskTrack = normalizeTrackName(String(task.track_name || ''))
-          if (taskTrack !== normalizedTrack) return
-          const taskGroup = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
-          if (taskGroup) groupSet.add(taskGroup)
-        })
-      } catch (err) {
-        console.warn('[任务组缓存] 从 all_track_task_list 推导失败:', err)
-      }
-    }
-  }
-
-  taskpointList.value = Array.from(groupSet)
   trackStartDialog.value.form.taskpoint_name = taskpointList.value.length > 0 ? taskpointList.value[0] : ''
 }
 
@@ -7578,8 +7625,12 @@ const recoverVideoStreamsOnForeground = async () => {
       && (infraredPc.connectionState === 'connected' || infraredPc.connectionState === 'connecting')
 
     if (!mainConnAlive || !infraredConnAlive) {
+      const robotId = deviceStore.selectedRobot.robot_id
+      const hasCachedStreamUrls = hasBothCameraStreamUrls(robotId)
       const shouldRefreshStreams =
-        !isCameraInitRunning && (Date.now() - lastCameraInitSuccessAt > 3000)
+        !isCameraInitRunning
+        && !hasCachedStreamUrls
+        && (Date.now() - lastCameraInitSuccessAt > CAMERA_STREAM_REFRESH_COOLDOWN_MS)
       if (shouldRefreshStreams) {
         await initCameraStreams()
         lastCameraInitSuccessAt = Date.now()

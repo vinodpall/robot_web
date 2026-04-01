@@ -1,4 +1,4 @@
-import { cameraApi, navigationApi } from '../api/services'
+﻿import { cameraApi, navigationApi } from '../api/services'
 
 const normalizeTrackName = (raw: string) => {
   const name = (raw || '').trim()
@@ -46,7 +46,7 @@ export const getRobotContextCacheKeys = (robotId: string) => ({
   multiTaskListKey: `cached_multi_task_list_${robotId}`,
 })
 
-// 第一阶段：仅获取摄像头列表并写入缓存，供主界面尽快启动视频流
+// 绗竴闃舵锛氫粎鑾峰彇鎽勫儚澶村垪琛ㄥ苟鍐欏叆缂撳瓨锛屼緵涓荤晫闈㈠敖蹇惎鍔ㄨ棰戞祦
 export const refreshCameraCache = async (robotId: string, signal?: AbortSignal) => {
   if (!robotId) return
   try {
@@ -60,7 +60,7 @@ export const refreshCameraCache = async (robotId: string, signal?: AbortSignal) 
     }
   } catch (cameraErr) {
     if (isAbortError(cameraErr)) return
-    console.error('获取摄像头列表失败:', cameraErr)
+    console.error('鑾峰彇鎽勫儚澶村垪琛ㄥけ璐?', cameraErr)
   }
 }
 
@@ -104,7 +104,7 @@ export const refreshMapCache = async (
       || localStorage.getItem('selected_map_name')
       || ''
     const isCurrentMapValid = currentSelectedMap && mapList.includes(currentSelectedMap)
-    // nav_confirmed_map 由 syncMapFromNavigation 写入，表示 WebSocket 已确认的地图，优先级最高
+    // nav_confirmed_map 由 syncMapFromNavigation 写入，表示 WebSocket 确认的地图，优先级最高
     const navConfirmedMap = localStorage.getItem('nav_confirmed_map') || ''
 
     if (mapList.length > 0) {
@@ -127,7 +127,7 @@ export const refreshMapCache = async (
     }
   } catch (mapErr) {
     if (isAbortError(mapErr)) return
-    console.error('获取地图列表失败:', mapErr)
+    console.error('鑾峰彇鍦板浘鍒楄〃澶辫触:', mapErr)
   }
 }
 
@@ -139,7 +139,7 @@ export const refreshRobotRelatedCache = async (
   if (!robotId) return
   const contextKeys = getRobotContextCacheKeys(robotId)
 
-  // 摄像头列表已由 refreshCameraCache 单独处理，此处不重复请求
+  // 鎽勫儚澶村垪琛ㄥ凡鐢?refreshCameraCache 鍗曠嫭澶勭悊锛屾澶勪笉閲嶅璇锋眰
   if (!options.skipMapRefresh) {
     await refreshMapCache(robotId, options, signal)
     if (signal?.aborted) return
@@ -155,7 +155,7 @@ export const refreshRobotRelatedCache = async (
     }
   } catch (trackErr) {
     if (isAbortError(trackErr)) return
-    console.error('获取循迹任务点列表失败:', trackErr)
+    console.error('鑾峰彇寰抗浠诲姟鐐瑰垪琛ㄥけ璐?', trackErr)
   }
 
   try {
@@ -168,7 +168,7 @@ export const refreshRobotRelatedCache = async (
     }
   } catch (trackListErr) {
     if (isAbortError(trackListErr)) return
-    console.error('获取循迹列表失败:', trackListErr)
+    console.error('鑾峰彇寰抗鍒楄〃澶辫触:', trackListErr)
   }
 
   try {
@@ -186,28 +186,11 @@ export const refreshRobotRelatedCache = async (
       }
     }
   } catch (deriveTrackErr) {
-    console.error('从任务点缓存推导循迹列表失败:', deriveTrackErr)
+    console.error('浠庝换鍔＄偣缂撳瓨鎺ㄥ寰抗鍒楄〃澶辫触:', deriveTrackErr)
   }
 
   try {
-    const cachedTrackListRaw = localStorage.getItem(contextKeys.trackListKey)
-    const trackList: string[] = cachedTrackListRaw ? JSON.parse(cachedTrackListRaw) : []
-    const trackSet = Array.from(new Set(trackList.map(item => normalizeTrackName(item)).filter(Boolean)))
     const taskGroupMap: Record<string, string[]> = {}
-
-    for (const trackName of trackSet) {
-      if (signal?.aborted) return
-      try {
-        const resp = await navigationApi.getTaskpointList(robotId, trackName, signal)
-        if (signal?.aborted) return
-        const groups = Array.isArray(resp?.msg?.result) ? resp.msg.result : []
-        taskGroupMap[trackName] = Array.from(new Set(groups.map((g: string) => normalizeTaskGroupName(g)).filter(Boolean)))
-      } catch (err) {
-        if (isAbortError(err)) return
-        console.error(`获取任务组列表失败 ${trackName}`, err)
-        taskGroupMap[trackName] = []
-      }
-    }
 
     const cachedAllTaskListRaw = localStorage.getItem(contextKeys.allTrackTaskListKey)
     if (cachedAllTaskListRaw) {
@@ -229,7 +212,7 @@ export const refreshRobotRelatedCache = async (
     }
   } catch (taskGroupErr) {
     if (isAbortError(taskGroupErr)) return
-    console.error('构建任务组缓存失败:', taskGroupErr)
+    console.error('鏋勫缓浠诲姟缁勭紦瀛樺け璐?', taskGroupErr)
   }
 
   try {
@@ -242,7 +225,7 @@ export const refreshRobotRelatedCache = async (
     }
   } catch (pointTaskErr) {
     if (isAbortError(pointTaskErr)) return
-    console.error('获取发布点任务列表失败:', pointTaskErr)
+    console.error('鑾峰彇鍙戝竷鐐逛换鍔″垪琛ㄥけ璐?', pointTaskErr)
   }
 
   try {
@@ -255,6 +238,6 @@ export const refreshRobotRelatedCache = async (
     }
   } catch (multiTaskErr) {
     if (isAbortError(multiTaskErr)) return
-    console.error('获取多任务组列表失败:', multiTaskErr)
+    console.error('鑾峰彇澶氫换鍔＄粍鍒楄〃澶辫触:', multiTaskErr)
   }
 }
