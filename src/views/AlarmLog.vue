@@ -423,13 +423,13 @@ const resolveExportUrls = (payload: any): string[] => {
   if (!payload) return []
   if (typeof payload === 'string') return [payload]
   return [
-    payload?.excel_path,
-    payload?.response?.data?.excel_path,
     payload?.download_url,
+    payload?.response?.data?.download_url,
     payload?.data?.url,
     payload?.data?.download_url,
     payload?.data?.file_url,
-    payload?.response?.data?.download_url,
+    payload?.excel_path,
+    payload?.response?.data?.excel_path,
     payload?.url,
     payload?.file_url,
     payload?.msg?.result,
@@ -441,17 +441,26 @@ const normalizeExportUrl = (rawUrl: string): string => {
   if (!rawUrl) return ''
   const value = rawUrl.trim()
   if (!value) return ''
-  if (value.startsWith('//')) return `${window.location.protocol}${value}`
-  if (value.startsWith('/')) return value
+  if (value.startsWith('/robot81/')) return value
+  if (value.startsWith('//')) {
+    return normalizeExportUrl(`${window.location.protocol}${value}`)
+  }
   if (/^https?:\/\//i.test(value)) {
     try {
       const parsed = new URL(value)
-      return `${parsed.pathname}${parsed.search || ''}`
+      const qs = parsed.search ? `${parsed.search}&robot_ip=${encodeURIComponent(parsed.hostname)}` : `?robot_ip=${encodeURIComponent(parsed.hostname)}`
+      return `/robot81${parsed.pathname}${qs}`
     } catch {
       return value
     }
   }
-  return `/${value}`
+  const selectedIp = deviceStore.selectedRobot?.ip_address
+  const normalizedPath = value.startsWith('/') ? value : `/${value}`
+  if (selectedIp) {
+    const qs = normalizedPath.includes('?') ? '&' : '?'
+    return `/robot81${normalizedPath}${qs}robot_ip=${encodeURIComponent(selectedIp)}`
+  }
+  return normalizedPath
 }
 
 const triggerDownloadByUrl = async (downloadUrl: string) => {

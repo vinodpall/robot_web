@@ -37,7 +37,7 @@
               <!-- 任务组选择 -->
               <span class="mission-toolbar-label" style="margin-right: -8px;">路线名称：</span>
               <select v-model="selectedRouteName" class="mission-toolbar-select" style="min-width: 180px;" :disabled="isTrackTaskRunning">
-                <option value="">{{ filteredRouteList.length === 0 ? '暂无路线' : '请选择路线' }}</option>
+                <option v-if="filteredRouteList.length === 0" value="">暂无路线</option>
                 <option v-for="route in filteredRouteList" :key="route" :value="route">{{ route }}</option>
               </select>
               
@@ -438,9 +438,9 @@
               <label>避障模式：</label>
               <div class="custom-select-wrapper">
                 <select v-model="trackStartDialog.form.obs_mode" class="mission-select" :disabled="trackStartDialog.loading">
+                  <option :value="0">无避障</option>
                   <option :value="1">近障模式</option>
-                  <option :value="2">停障模式</option>
-                  <option :value="3">绕障模式</option>
+                  <option :value="2">绕障模式</option>
                 </select>
                 <span class="custom-select-arrow">
                   <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -606,15 +606,24 @@
               </div>
             </div>
 
-             <!-- Switch -->
-             <div class="simple-form-item">
-               <label class="simple-label">到点停止运动</label>
-               <div class="simple-flex-row" style="justify-content: flex-start;">
-                 <div class="simple-switch" @click="addTaskDialog.form.stopAtPoint = !addTaskDialog.form.stopAtPoint" :class="{active: addTaskDialog.form.stopAtPoint}">
-                    <div class="simple-switch-dot"></div>
+             <div class="simple-form-grid">
+               <div class="simple-form-item stop-switch-item">
+                 <label class="simple-label">到点停止运动</label>
+                 <div class="simple-flex-row stop-switch-row">
+                   <div class="simple-switch" @click="addTaskDialog.form.stopAtPoint = !addTaskDialog.form.stopAtPoint" :class="{active: addTaskDialog.form.stopAtPoint}">
+                      <div class="simple-switch-dot"></div>
+                   </div>
+                   <img :src="addTaskDialog.form.stopAtPoint ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
                  </div>
-                 <img :src="addTaskDialog.form.stopAtPoint ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
-               </div>
+              </div>
+               <div class="simple-form-item">
+                 <label class="simple-label">避障模式</label>
+                  <select v-model="addTaskDialog.form.obsMode" class="simple-select">
+                    <option value="无避障">无避障</option>
+                    <option value="近障模式">近障模式</option>
+                    <option value="绕障模式">绕障模式</option>
+                  </select>
+              </div>
             </div>
 
           </div>
@@ -758,19 +767,19 @@
       </div>
     </Teleport>
 
-  <!-- 成功提示 -->
-  <SuccessMessage 
-    :show="successMessage.show" 
-    :message="successMessage.text"
-    @close="successMessage.show = false"
-  />
-
-  <!-- 错误提示 -->
-  <ErrorMessage 
-    :show="errorMessage.show" 
-    :message="errorMessage.text"
-    @close="errorMessage.show = false"
-  />
+  <!-- 成功/错误提示（挂载到 body，避免被弹窗遮挡） -->
+  <Teleport to="body">
+    <SuccessMessage 
+      :show="successMessage.show" 
+      :message="successMessage.text"
+      @close="successMessage.show = false"
+    />
+    <ErrorMessage 
+      :show="errorMessage.show" 
+      :message="errorMessage.text"
+      @close="errorMessage.show = false"
+    />
+  </Teleport>
 
   <ConfirmDialog
     :show="deleteTaskGroupDialog.show"
@@ -868,7 +877,8 @@ const syncCurrentPositionFromPose = (pose: { x: number; y: number; z: number; th
     x: Number(pose.x.toFixed(3)),
     y: Number(pose.y.toFixed(3)),
     z: Number(pose.z.toFixed(3)),
-    angle: Number((pose.theta * 180 / Math.PI).toFixed(1))
+    // 与首页机器人状态保持一致：显示 pose_update.theta 原始值
+    angle: Number(pose.theta.toFixed(3))
   }
 }
 
@@ -954,11 +964,25 @@ const showMissionError = (text: string, duration = 3000) => {
 }
 
 const parseMissionErrorMessage = (error: any) => {
-  const message = error?.response?.data?.message
+  const message = error?.detail
+    || error?.response?.detail
+    || error?.response?.data?.detail
+    || error?.data?.detail
+    || error?.response?._data?.detail
+    || error?.response?.data?.message
     || error?.response?.data?.msg?.error_msg
+    || error?.data?.message
     || error?.message
     || error?.msg
-  return typeof message === 'string' && message.trim() ? message.trim() : '未知错误'
+  if (typeof message === 'string' && message.trim()) return message.trim()
+  // 某些请求库会把响应对象直接挂到 error 上
+  if (error && typeof error === 'object') {
+    try {
+      const raw = JSON.stringify(error)
+      if (raw && raw !== '{}') return raw
+    } catch {}
+  }
+  return '未知错误'
 }
 
 const normalizeTrackName = (raw: string) => {
@@ -1388,7 +1412,7 @@ const trackStartDialog = ref({
   form: {
     action: 1, // 固定为1，表示启动
     wait: 0, // 0=立即启动, 1=不立即启动
-    obs_mode: 1, // 1=近障模式, 2=停障模式, 3=绕障模式
+    obs_mode: 1, // 0=无避障, 1=近障模式, 2=绕障模式
     track_name: '',
     taskpoint_name: '',
     gait_type: 0 // 0=行走步态, 1=斜坡步态, 2=越障步态, 3=楼梯步态, 4=帧楼梯步态, 5=帧45°楼梯步态, 6=L行走步态, 7=山地步态, 8=静音步态
@@ -2714,6 +2738,7 @@ onMounted(async () => {
   await loadWaylineFiles()
   syncSelectedMapWithCache()
   await loadRouteList()
+  await fetchTaskTypeList()
   await refreshAllTrackTaskListCache()
   if (selectedRouteName.value) {
     await fetchTaskGroupListByRoute(selectedRouteName.value)
@@ -2742,6 +2767,7 @@ const addTaskDialog = ref({
     preset: '',
     extraConfig: '',
     description: '',
+    obsMode: '近障模式',
     gait: '1',
     ground: '1',
     stopAtPoint: false
@@ -2762,6 +2788,17 @@ const resetAddTaskFieldErrors = () => {
     z: '',
     angle: ''
   }
+}
+
+const normalizeTrackTaskObsModeText = (rawValue: any) => {
+  const text = String(rawValue ?? '').trim()
+  if (!text) return '近障模式'
+  if (text === '0') return '无避障'
+  if (text === '1') return '近障模式'
+  if (text === '2') return '绕障模式'
+  if (text === '无障碍') return '无避障'
+  if (text === '无避障' || text === '近障模式' || text === '绕障模式') return text
+  return text
 }
 const validateAddTaskRequiredFields = () => {
   resetAddTaskFieldErrors()
@@ -2791,12 +2828,65 @@ const addTaskSubmitting = ref(false)
 const showTypeDropdown = ref(false)
 const closeDropdown = () => { showTypeDropdown.value = false }
 
+const splitTaskTypeNames = (value: unknown): string[] => {
+  return String(value ?? '')
+    .split(/[，,]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+const buildTaskTypeCacheKey = (robotId: string) => `cached_task_type_list_${robotId}`
+
+const findTaskTypeMeta = (rawName: unknown) => {
+  const name = String(rawName ?? '').trim()
+  if (!name) return null
+  return taskTypeList.value.find(item => {
+    const cnName = String(item?.cn_name ?? '').trim()
+    const typeText = String(item?.type_text ?? '').trim()
+    const type = String(item?.type ?? '').trim()
+    const enName = String(item?.en_name ?? '').trim()
+    return [cnName, typeText, type, enName].includes(name)
+  }) || null
+}
+
+const normalizeTaskTypeNameToCn = (rawName: unknown) => {
+  const meta = findTaskTypeMeta(rawName)
+  return String(meta?.cn_name ?? rawName ?? '').trim()
+}
+
+const resolveTaskTypeSubmitPayload = (rawValue: unknown) => {
+  const names = splitTaskTypeNames(rawValue)
+  const metas = names.map(name => findTaskTypeMeta(name)).filter(Boolean)
+  const resolvedTypeNames = metas
+    .map(item => String((item as any)?.type ?? (item as any)?.en_name ?? '').trim())
+    .filter(Boolean)
+  const resolvedTypeIds = metas
+    .map(item => (item as any)?.iType)
+    .filter(item => item !== undefined && item !== null && String(item).trim() !== '')
+
+  const typeText = names.join(',')
+  const type = resolvedTypeNames.length > 0 ? resolvedTypeNames.join(',') : typeText
+
+  let typeId = ''
+  if (resolvedTypeIds.length === 1) {
+    typeId = String(resolvedTypeIds[0])
+  } else if (resolvedTypeIds.length > 1) {
+    typeId = resolvedTypeIds.map(item => String(item)).join(',')
+  }
+
+  return {
+    type,
+    type_text: typeText,
+    type_id: typeId
+  }
+}
+
 const selectTaskType = (item: any) => {
   addTaskDialog.value.form.actionType = item.cn_name
   
   const isMulti = addTaskDialog.value.form.isMulti === '1'
   if (isMulti) {
-    let list = addTaskDialog.value.form.typeInput ? addTaskDialog.value.form.typeInput.split(',') : []
+    let list = splitTaskTypeNames(addTaskDialog.value.form.typeInput)
     // Remove if exists (toggle)
     if (list.includes(item.cn_name)) {
       list = list.filter((name: string) => name !== item.cn_name)
@@ -2813,11 +2903,12 @@ const selectTaskType = (item: any) => {
 const isSelected = (item: any) => {
   const current = addTaskDialog.value.form.typeInput
   if (!current) return false
-  const list = current.split(',')
+  const list = splitTaskTypeNames(current)
   return list.includes(item.cn_name)
 }
 
 const taskTypeList = ref<any[]>([])
+let skipNextIsMultiReset = false
 
 const filteredTaskTypes = computed(() => {
   const isSingle = addTaskDialog.value.form.isMulti === '0'
@@ -2828,20 +2919,26 @@ const fetchTaskTypeList = async () => {
   const robotId = localStorage.getItem('selected_robot_id') || ''
   if (!robotId) return
 
-  const cached = localStorage.getItem('cached_task_type_list')
+  const cacheKey = buildTaskTypeCacheKey(robotId)
+  const cached = localStorage.getItem(cacheKey)
   if (cached) {
     try {
-      taskTypeList.value = JSON.parse(cached)
+      const parsed = JSON.parse(cached)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        taskTypeList.value = parsed
+        return
+      }
     } catch (e) {
       console.error('解析任务类型缓存失败', e)
+      localStorage.removeItem(cacheKey)
     }
   }
 
   try {
     const res = await navigationApi.getTaskTypeList(robotId)
-    if (res && res.data) {
+    if (res && Array.isArray(res.data)) {
       taskTypeList.value = res.data
-      localStorage.setItem('cached_task_type_list', JSON.stringify(res.data))
+      localStorage.setItem(cacheKey, JSON.stringify(res.data))
     }
   } catch (err) {
     console.error('获取任务类型列表失败', err)
@@ -2849,6 +2946,10 @@ const fetchTaskTypeList = async () => {
 }
 
 watch(() => addTaskDialog.value.form.isMulti, () => {
+  if (skipNextIsMultiReset) {
+    skipNextIsMultiReset = false
+    return
+  }
   addTaskDialog.value.form.typeInput = ''
 })
 watch(() => addTaskDialog.value.form.typeInput, (val) => {
@@ -2871,11 +2972,17 @@ watch(() => addTaskDialog.value.form.angle, (val) => {
 })
 
 watch(filteredTaskTypes, (list) => {
-  if (list && list.length > 0) {
-    addTaskDialog.value.form.actionType = list[0].cn_name
-  } else {
+  if (!list || list.length === 0) {
     addTaskDialog.value.form.actionType = ''
+    return
   }
+
+  const currentAction = String(addTaskDialog.value.form.actionType || '').trim()
+  if (currentAction && list.some(item => item.cn_name === currentAction)) {
+    return
+  }
+
+  addTaskDialog.value.form.actionType = list[0].cn_name
 }, { immediate: true })
 
 const handleAddTask = () => {
@@ -2899,6 +3006,7 @@ const handleAddTask = () => {
   addTaskDialog.value.form.preset = ''
   addTaskDialog.value.form.description = ''
   addTaskDialog.value.form.extraConfig = ''
+  addTaskDialog.value.form.obsMode = '近障模式'
   addTaskDialog.value.form.gait = '1'
   addTaskDialog.value.form.ground = '1'
   addTaskDialog.value.form.stopAtPoint = false
@@ -2930,7 +3038,7 @@ const resolveStopAtPointFromTask = (task: any): boolean => {
   return false
 }
 
-const handleEditTask = (waypoint: any) => {
+const handleEditTask = async (waypoint: any) => {
   resetAddTaskFieldErrors()
   // Find the original item from key data if needed, or use waypoint if it has all data
   // waypoint here is the computed object for table display. We might need the raw object.
@@ -2971,10 +3079,30 @@ const handleEditTask = (waypoint: any) => {
   } else if (rawPreset) {
     presetDisplay = rawPreset
   }
-  
-  addTaskDialog.value.form.isMulti = '0' // Edit is always single
-  addTaskDialog.value.form.typeInput = waypoint.type || ''
-  addTaskDialog.value.form.actionType = waypoint.type || ''
+
+  await fetchTaskTypeList()
+
+  const rawTypeText = waypoint.rawData?.type_text || waypoint.rawData?.type || waypoint.type || ''
+  const typeNames = splitTaskTypeNames(rawTypeText).map(normalizeTaskTypeNameToCn)
+  const normalizedTypeText = typeNames.join(',')
+  const matchedTypeMeta = taskTypeList.value.filter(item => typeNames.includes(String(item?.cn_name || '')))
+  const hasSingleType = matchedTypeMeta.some(item => item?.single === true)
+  const hasMultiType = matchedTypeMeta.some(item => item?.single === false)
+
+  let targetIsMulti: '0' | '1'
+  if (hasSingleType && !hasMultiType) {
+    targetIsMulti = '0'
+  } else if (!hasSingleType && hasMultiType) {
+    targetIsMulti = '1'
+  } else {
+    targetIsMulti = typeNames.length > 1 ? '1' : '0'
+  }
+
+  skipNextIsMultiReset = true
+  addTaskDialog.value.form.isMulti = targetIsMulti
+  addTaskDialog.value.form.typeInput = normalizedTypeText
+  addTaskDialog.value.form.actionType = typeNames[0] || ''
+
   addTaskDialog.value.form.x = (waypoint.coordinates?.x || '0').toString()
   addTaskDialog.value.form.y = (waypoint.coordinates?.y || '0').toString()
   addTaskDialog.value.form.z = (waypoint.coordinates?.z || '0').toString()
@@ -2982,6 +3110,7 @@ const handleEditTask = (waypoint: any) => {
   addTaskDialog.value.form.preset = presetDisplay
   addTaskDialog.value.form.description = waypoint.description || ''
   addTaskDialog.value.form.extraConfig = waypoint.extra || waypoint.rawData?.extra || ''
+  addTaskDialog.value.form.obsMode = normalizeTrackTaskObsModeText(waypoint.rawData?.obs_mode)
   addTaskDialog.value.form.gait = waypoint.gait || waypoint.rawData?.gait || '1'
   addTaskDialog.value.form.ground = waypoint.ground || waypoint.rawData?.ground || '1'
   addTaskDialog.value.form.stopAtPoint = resolveStopAtPointFromTask(waypoint.rawData || waypoint)
@@ -3031,8 +3160,7 @@ const confirmAddTask = async () => {
 
   const taskData: any = {
     task_id: isEditMode.value ? (editingTaskItem.value?.rawData?.task_id || `track_${timestamp}`) : `track_${timestamp}`,
-    type: form.typeInput || '',
-    type_text: form.typeInput || '',
+    ...resolveTaskTypeSubmitPayload(form.typeInput || ''),
     x: parseFloat(form.x) || 0,
     y: parseFloat(form.y) || 0,
     z: parseFloat(form.z) || 0,
@@ -3045,6 +3173,7 @@ const confirmAddTask = async () => {
     track_name: selectedRouteName.value,
     track_point_name: selectedTaskGroupName.value,
     extra: form.extraConfig || '',
+    obs_mode: form.obsMode || '近障模式',
     no_switch: form.stopAtPoint,
     gait: form.gait,
     ground: form.ground,
@@ -3119,7 +3248,7 @@ const confirmAddTask = async () => {
     editingTaskItem.value = null
   } catch (err: any) {
     console.error('操作失败', err)
-    errorMessage.value = { show: true, text: '操作失败: ' + (err.message || '未知错误') }
+    errorMessage.value = { show: true, text: `操作失败: ${parseMissionErrorMessage(err)}` }
     setTimeout(() => {
       errorMessage.value.show = false
     }, 2000)
@@ -3184,7 +3313,7 @@ const handleDeleteTask = (waypoint: any) => {
       }, 2000)
     } catch (err) {
       console.error('删除异常', err)
-      errorMessage.value = { show: true, text: '删除失败' }
+      errorMessage.value = { show: true, text: `删除失败: ${parseMissionErrorMessage(err)}` }
       setTimeout(() => {
         errorMessage.value.show = false
       }, 2000)
@@ -4306,6 +4435,8 @@ const confirmExtraConfig = () => {
 .simple-input:focus, .simple-select:focus { border-color: #409eff; background: rgba(30, 60, 90, 0.8); }
 .input-error-border { border-color: #ff6b6b !important; box-shadow: 0 0 0 1px rgba(255, 107, 107, 0.28); }
 .input-error-text { margin-top: 6px; color: #ff8a8a; font-size: 12px; line-height: 1.4; }
+.stop-switch-item .simple-label { margin-bottom: 2px; }
+.stop-switch-row { height: 34px; justify-content: flex-start; align-items: center; }
 .simple-switch { width: 36px; height: 18px; background: #4c4d4f; border-radius: 10px; position: relative; cursor: pointer; transition: 0.3s; }
 .simple-switch.active { background: #409eff; }
 .simple-switch-dot { width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.3s; }

@@ -89,7 +89,7 @@
     </main>
 
     <!-- 新增定时任务弹窗 -->
-    <div v-if="showCreateDialog" class="custom-dialog-mask" @click="closeCreateDialog">
+    <div v-if="showCreateDialog" class="custom-dialog-mask">
       <div class="simple-modal-card" style="width: 500px;" @click.stop>
         <div class="simple-modal-header">
           <span>新增定时任务</span>
@@ -2178,6 +2178,12 @@ const transformLng = (lng: number, lat: number) => {
   cursor: pointer;
   width: 100%;
   flex: 1;
+}
+
+.simple-modal-card .time-input-wrapper .task-form-input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.8);
+  opacity: 0.95;
+  cursor: pointer;
 }
 
 .simple-modal-card .task-form-input.is-error {

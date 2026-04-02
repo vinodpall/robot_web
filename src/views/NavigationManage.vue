@@ -58,7 +58,7 @@
                 <div class="map-section-buttons">
                   <button class="map-btn map-btn-primary" :disabled="isRecording || !canGenerateMap" v-permission-click-dialog="'nav-lbjt-slam'" @click="handleGenerateMap">生成地图</button>
                   <button class="map-btn map-btn-primary" :disabled="isRecording || mappingStopLoading" v-permission-click-dialog="'nav-lbjt-changepcd'" @click="handleGenerateGridMap">生成栅格地图</button>
-                  <button class="map-btn map-btn-primary" :disabled="isRecording" v-permission-click-dialog="'nav-lbjt-msfrecord'" @click="handleCreateFusionMap">新建融合地图</button>
+                  <button class="map-btn map-btn-primary" :disabled="isRecording || !hasRobotRtk" v-permission-click-dialog="'nav-lbjt-msfrecord'" @click="handleCreateFusionMap">新建融合地图</button>
                 </div>
               </div>
 
@@ -199,11 +199,6 @@
                   </div>
 
                   <div class="nav-info-item">
-                    <span class="nav-info-label">抱闸:</span>
-                    <span class="nav-info-value">{{ brakeStatusText }}</span>
-                  </div>
-
-                  <div class="nav-info-item">
                     <span class="nav-info-label">激光雷达数据:</span>
                     <span class="nav-info-value">{{ navData.lidar }}</span>
                   </div>
@@ -213,17 +208,17 @@
                     <span class="nav-info-value">{{ navData.imu }}</span>
                   </div>
 
-                  <div class="nav-info-item">
+                  <div class="nav-info-item" :class="{ 'rtk-disabled': !hasRobotRtk }">
                     <span class="nav-info-label">卫星数据:</span>
                     <span class="nav-info-value">{{ navData.satellite }}</span>
                   </div>
 
-                  <div class="nav-info-item">
+                  <div class="nav-info-item" :class="{ 'rtk-disabled': !hasRobotRtk }">
                     <span class="nav-info-label">MSF状态:</span>
                     <span class="nav-info-value">{{ navData.msfStatus }}</span>
                   </div>
 
-                  <div class="nav-info-item">
+                  <div class="nav-info-item" :class="{ 'rtk-disabled': !hasRobotRtk }">
                     <span class="nav-info-label">INS初始化:</span>
                     <span class="nav-info-value">{{ navData.insOrigin }}</span>
                   </div>
@@ -471,37 +466,94 @@
                   删除数据包
                 </button>
               </div>
-              <div class="file-table file-manage-table file-table-adaptive">
-                <div class="file-table-header" style="grid-template-columns: 100px 360px 1fr 180px 150px;">
-                  <div class="file-table-cell">序号</div>
-                  <div class="file-table-cell">类型</div>
-                  <div class="file-table-cell file-table-name">名称</div>
-                  <div class="file-table-cell">创建时间</div>
-                  <div class="file-table-cell file-table-action">操作</div>
-                </div>
-                <div class="file-table-body">
-                  <template v-if="fileManageList.length > 0">
-                    <div class="file-table-row" v-for="(item, index) in fileManageList" :key="item.id" style="grid-template-columns: 100px 360px 1fr 180px 150px;">
-                      <div class="file-table-cell">{{ index + 1 }}</div>
-                      <div class="file-table-cell">{{ item.type }}</div>
-                      <div class="file-table-cell file-table-name">{{ item.name }}</div>
-                      <div class="file-table-cell">{{ item.createTime }}</div>
-                      <div class="file-table-cell file-table-action">
-                        <button class="action-btn action-btn-delete" :disabled="navigationEnabled" v-permission-click-dialog="'nav-file-delete'" @click="handleDelete(item)">
+              <div class="file-card-board">
+                <template v-if="fileManageRouteCardList.length > 0 || fileManageOtherFileList.length > 0">
+                  <div
+                    v-for="group in fileManageRouteCardList"
+                    :key="`route-group-${group.routeKey}`"
+                    class="file-group-card"
+                  >
+                    <div class="file-group-card-header">
+                      <div class="file-group-card-title">
+                        <span class="file-group-dot"></span>
+                        <span>{{ getFileManageGroupTitle(group) }}：{{ group.routeName }}</span>
+                        <button
+                          v-if="group.routeItem"
+                          class="action-btn action-btn-delete file-group-delete-btn"
+                          :disabled="navigationEnabled"
+                          v-permission-click-dialog="'nav-file-delete'"
+                          @click="handleDelete(group.routeItem)"
+                        >
                           <img :src="deleteIcon" alt="删除" />
                           删除
                         </button>
                       </div>
+                      <div class="file-group-card-meta">
+                        <span>{{ group.displayItems.length }} 个文件</span>
+                        <span v-if="group.latestCreateTime">最近：{{ group.latestCreateTime }}</span>
+                      </div>
                     </div>
-                  </template>
-                  <div class="file-table-row" v-for="i in Math.max(0, 10 - fileManageList.length)" :key="'empty-' + i" style="grid-template-columns: 100px 360px 1fr 180px 150px;">
-                    <div class="file-table-cell"></div>
-                    <div class="file-table-cell"></div>
-                    <div class="file-table-cell file-table-name"></div>
-                    <div class="file-table-cell"></div>
-                    <div class="file-table-cell file-table-action"></div>
+                    <div class="file-group-card-body">
+                      <div class="file-group-item" v-for="(item, itemIndex) in group.displayItems" :key="`${getFileManageItemKey(item)}-${itemIndex}`">
+                        <div class="file-group-item-main">
+                          <span
+                            class="file-group-item-type"
+                            :class="getFileManageTypeClass(item)"
+                          >{{ getFileManageTypeLabel(item) }}</span>
+                          <span class="file-group-item-name" :title="item.name">{{ item.name }}</span>
+                        </div>
+                        <div class="file-group-item-side">
+                          <span class="file-group-item-time">{{ item.createTime }}</span>
+                          <button
+                            class="action-btn action-btn-delete"
+                            :disabled="navigationEnabled"
+                            v-permission-click-dialog="'nav-file-delete'"
+                            @click="handleDelete(item)"
+                          >
+                            <img :src="deleteIcon" alt="删除" />
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+
+                  <div v-if="fileManageOtherFileList.length > 0" class="file-group-card file-group-card-other">
+                    <div class="file-group-card-header">
+                      <div class="file-group-card-title">
+                        <span class="file-group-dot"></span>
+                        <span>其他文件</span>
+                      </div>
+                      <div class="file-group-card-meta">
+                        <span>{{ fileManageOtherFileList.length }} 个文件</span>
+                      </div>
+                    </div>
+                    <div class="file-group-card-body">
+                      <div class="file-group-item" v-for="(item, itemIndex) in fileManageOtherFileList" :key="`${getFileManageItemKey(item)}-other-${itemIndex}`">
+                        <div class="file-group-item-main">
+                          <span
+                            class="file-group-item-type"
+                            :class="getFileManageTypeClass(item)"
+                          >{{ getFileManageTypeLabel(item) }}</span>
+                          <span class="file-group-item-name" :title="item.name">{{ item.name }}</span>
+                        </div>
+                        <div class="file-group-item-side">
+                          <span class="file-group-item-time">{{ item.createTime }}</span>
+                          <button
+                            class="action-btn action-btn-delete"
+                            :disabled="navigationEnabled"
+                            v-permission-click-dialog="'nav-file-delete'"
+                            @click="handleDelete(item)"
+                          >
+                            <img :src="deleteIcon" alt="删除" />
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="file-card-empty">暂无文件</div>
               </div>
             </div>
           </template>
@@ -515,7 +567,12 @@
       <div class="recording-dialog-card card">
         <div class="recording-dialog-header">开始录包 - 输入数据包名称</div>
         <div class="recording-dialog-body">
-          <input v-model="recordingName" placeholder="请输入数据包名称" class="recording-input" />
+          <input
+            v-model="recordingName"
+            placeholder="请输入数据包名称"
+            class="recording-input"
+            @input="handleRecordingNameInput"
+          />
         </div>
         <div class="recording-dialog-actions">
           <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-lbjt-startrecord'" @click="confirmStartRecording" :disabled="recordingLoading">
@@ -625,19 +682,19 @@
           <div class="obs-mode-options">
             <label 
               class="obs-mode-option" 
-              :class="{ 'active': selectedObsMode === 0 }"
-              @click="selectedObsMode = 0"
-            >
-              <input type="radio" name="obs_mode" :value="0" v-model="selectedObsMode" />
-              <span>近障模式</span>
-            </label>
-            <label 
-              class="obs-mode-option" 
               :class="{ 'active': selectedObsMode === 1 }"
               @click="selectedObsMode = 1"
             >
               <input type="radio" name="obs_mode" :value="1" v-model="selectedObsMode" />
-              <span>停障模式</span>
+              <span>近障模式</span>
+            </label>
+            <label 
+              class="obs-mode-option" 
+              :class="{ 'active': selectedObsMode === 0 }"
+              @click="selectedObsMode = 0"
+            >
+              <input type="radio" name="obs_mode" :value="0" v-model="selectedObsMode" />
+              <span>无避障</span>
             </label>
             <label 
               class="obs-mode-option" 
@@ -1524,7 +1581,8 @@ const syncNavPoseData = (pose: { x: number; y: number; z: number; theta: number 
   navData.value.x = Number(pose.x.toFixed(3))
   navData.value.y = Number(pose.y.toFixed(3))
   navData.value.z = Number(pose.z.toFixed(3))
-  navData.value.theta = Number((pose.theta * 180 / Math.PI).toFixed(1))
+  // 与首页机器人状态保持一致：theta 显示 pose_update 原始值
+  navData.value.theta = Number(pose.theta.toFixed(3))
 }
 
 watch(
@@ -1596,7 +1654,7 @@ const gpsEnabled = ref(false)
 
 // 循迹避障模式对话框状态
 const obsHandleDialogVisible = ref(false)
-const selectedObsMode = ref(0) // 0: 近障, 1: 停障, 2: 绕障
+const selectedObsMode = ref(1) // 0: 无避障, 1: 近障模式, 2: 绕障模式
 const obsHandleLoading = ref(false)
 
 
@@ -1767,13 +1825,14 @@ const handleStartMSF = () => {
 
 const handleCircleMode = () => {
   // 显示循迹避障模式选择对话框
+  selectedObsMode.value = 1
   obsHandleDialogVisible.value = true
 }
 
 // 取消循迹避障模式对话框
 const cancelObsHandleDialog = () => {
   obsHandleDialogVisible.value = false
-  selectedObsMode.value = 0
+  selectedObsMode.value = 1
 }
 
 // 确认循迹避障模式设置
@@ -1792,7 +1851,7 @@ const confirmObsHandleDialog = async () => {
       action: selectedObsMode.value
     })
 
-    const modeNames = ['近障模式', '停障模式', '绕障模式']
+    const modeNames = ['无避障', '近障模式', '绕障模式']
     showSuccessMessage(`已设置为${modeNames[selectedObsMode.value]}`)
     obsHandleDialogVisible.value = false
   } catch (err) {
@@ -3078,7 +3137,21 @@ const handleStartRecording = () => {
   recordingDialogVisible.value = true
 }
 
+const handleRecordingNameInput = (event: Event) => {
+  const target = event.target as HTMLInputElement | null
+  if (!target) return
+  const sanitized = (target.value || '').replace(/\s+/g, '')
+  if (sanitized !== target.value) {
+    target.value = sanitized
+  }
+  recordingName.value = sanitized
+}
+
 const confirmStartRecording = async () => {
+  if (/\s/.test(recordingName.value)) {
+    showErrorMessage('数据包名称不能包含空格')
+    return
+  }
   const name = recordingName.value.trim()
   if (!name) {
     showErrorMessage('请输入数据包名称')
@@ -3321,6 +3394,7 @@ const cancelGenerateGridMap = () => {
 const handleCreateFusionMap = () => {
   if (!ensureNotRecordingForMapActions()) return
   if (!ensureNavigationClosedForMapping()) return
+  if (!hasRobotRtk.value) return
   // 弹出对话框，输入融合地图名称
   fusionMapName.value = ''
   createFusionMapDialogVisible.value = true
@@ -4339,6 +4413,171 @@ const fileMapList = ref<string[]>([]) // 文件管理页面的地图列表
 const fileManagePackage = ref('')
 const fileManageList = ref<any[]>([])
 
+const normalizeFileManageName = (rawName: string) => {
+  const source = String(rawName || '').trim()
+  if (!source) return ''
+
+  // 去除前缀符号（如 “|- ”、“||- ”）
+  const withoutPrefix = source.replace(/^[|\-_\s]+/, '')
+  const baseName = withoutPrefix.split('/').pop() || withoutPrefix
+
+  // 去扩展名（.txt/.json/.csv 等），统一比较“主名”
+  return baseName.replace(/\.[^.]+$/, '').trim()
+}
+
+const getFileManageRouteFamilyKey = (rawName: string) => {
+  const normalized = normalizeFileManageName(rawName)
+  if (!normalized) return ''
+  return normalized.endsWith('_origin')
+    ? normalized.slice(0, -'_origin'.length)
+    : normalized
+}
+
+const extractLastPathSegment = (rawPath: string) => {
+  const source = String(rawPath || '').trim().replace(/\\/g, '/')
+  if (!source) return ''
+  const segments = source.split('/').filter(Boolean)
+  return segments.length > 0 ? segments[segments.length - 1] : ''
+}
+
+const extractParentPathSegment = (rawPath: string) => {
+  const source = String(rawPath || '').trim().replace(/\\/g, '/')
+  if (!source) return ''
+  const segments = source.split('/').filter(Boolean)
+  return segments.length > 1 ? segments[segments.length - 2] : ''
+}
+
+const getFileManageRouteKeyByPath = (item: any) => {
+  const rawType = String(item?.type || '').trim()
+  const pwd = String(item?.pwd || '')
+  const isFile = Number(item?.is_file ?? 0) === 1
+
+  if (!pwd) return ''
+  if (rawType.includes('循迹路线') || (!isFile && rawType.includes('循迹任务组') === false)) {
+    return extractLastPathSegment(pwd)
+  }
+  return extractParentPathSegment(pwd)
+}
+
+const trackBaseNameSet = computed(() => {
+  const set = new Set<string>()
+  allTrackList.value.forEach((track) => {
+    const normalizedTrackName = normalizeTrackName(String(track || ''))
+    if (normalizedTrackName) {
+      set.add(normalizedTrackName)
+    }
+  })
+  return set
+})
+
+const getFileManageTypeLabel = (item: any) => {
+  const rawType = String(item?.type || '').trim()
+  if (rawType !== '循迹任务组') return rawType
+
+  const normalizedName = normalizeFileManageName(item?.name ?? '')
+  if (!normalizedName) return rawType
+
+  // 优先按当前文件所属路线目录（pwd）判定：
+  // 名称与路线名一致，或 名称=路线名_origin，都视为循迹路线文件
+  const routeKeyByPath = getFileManageRouteKeyByPath(item)
+  if (routeKeyByPath && (normalizedName === routeKeyByPath || normalizedName === `${routeKeyByPath}_origin`)) {
+    return '循迹路线文件'
+  }
+
+  for (const trackName of trackBaseNameSet.value) {
+    if (normalizedName === trackName || normalizedName === `${trackName}_origin`) {
+      return '循迹路线文件'
+    }
+  }
+
+  return rawType
+}
+
+const getFileManageTypeClass = (item: any) => {
+  const typeLabel = getFileManageTypeLabel(item)
+  if (typeLabel === '循迹路线') return 'is-route'
+  if (typeLabel === '循迹路线文件') return 'is-route-file'
+  if (typeLabel === '发布点任务组') return 'is-publish-group'
+  if (typeLabel === '循迹任务组') return 'is-task-group'
+  return 'is-other'
+}
+
+const getFileManageGroupTitle = (group: any) => {
+  const rootType = String(group?.rootType || '').trim()
+  if (rootType) return rootType
+  return '文件组'
+}
+
+const getFileManageItemKey = (item: any) => {
+  const id = String(item?.id ?? '')
+  if (id) return id
+  return `${String(item?.name ?? '')}__${String(item?.createTime ?? '')}`
+}
+
+const fileManageRouteCardList = computed(() => {
+  const source = Array.isArray(fileManageList.value) ? fileManageList.value : []
+  if (source.length === 0) return [] as Array<{
+    routeKey: string
+    routeName: string
+    rootType: string
+    items: any[]
+    displayItems: any[]
+    routeItem: any | null
+    latestCreateTime: string
+  }>
+
+  const routeGroups = new Map<string, { routeKey: string; routeName: string; rootType: string; items: any[] }>()
+
+  // 先根据顶层目录建立分组（is_file=0），例如循迹路线、发布点任务组
+  source.forEach((item) => {
+    const isFile = Number(item?.is_file ?? 0) === 1
+    if (isFile) return
+    const routeKey = getFileManageRouteKeyByPath(item)
+    if (!routeKey) return
+    const rootType = getFileManageTypeLabel(item) || String(item?.type || '').trim() || '文件组'
+    const routeName = String(item?.name || '').trim() || routeKey
+    if (!routeGroups.has(routeKey)) {
+      routeGroups.set(routeKey, { routeKey, routeName, rootType, items: [] })
+    }
+  })
+
+  // 再把同一路径归属（pwd 的父目录是路线名）的文件挂到对应分组
+  source.forEach((item) => {
+    const routeKey = getFileManageRouteKeyByPath(item)
+    if (!routeKey || !routeGroups.has(routeKey)) return
+    routeGroups.get(routeKey)!.items.push(item)
+  })
+
+  return Array.from(routeGroups.values())
+    .map((group) => {
+      const routeItem = group.items.find((item: any) => Number(item?.is_file ?? 0) === 0) || null
+      const routeItemKey = routeItem ? getFileManageItemKey(routeItem) : ''
+      const displayItems = routeItemKey
+        ? group.items.filter((item: any) => getFileManageItemKey(item) !== routeItemKey)
+        : [...group.items]
+      const latestCreateTime = group.items.reduce((latest, item) => {
+        const current = String(item?.createTime ?? '')
+        return current > latest ? current : latest
+      }, '')
+      return { ...group, routeItem, displayItems, latestCreateTime }
+    })
+    .filter(group => group.routeItem || group.displayItems.length > 0)
+})
+
+const fileManageGroupedItemKeySet = computed(() => {
+  const set = new Set<string>()
+  fileManageRouteCardList.value.forEach(group => {
+    group.items.forEach(item => set.add(getFileManageItemKey(item)))
+  })
+  return set
+})
+
+const fileManageOtherFileList = computed(() => {
+  const source = Array.isArray(fileManageList.value) ? fileManageList.value : []
+  if (source.length === 0) return []
+  return source.filter(item => !fileManageGroupedItemKeySet.value.has(getFileManageItemKey(item)))
+})
+
 // 获取文件列表
 const fetchNavigationList = async () => {
   if (!fileManageMap.value) {
@@ -4370,7 +4609,7 @@ const fetchNavigationList = async () => {
       fileManageList.value = response.data.map((item: any) => ({
         ...item, // 保留所有原始字段（包括可能存在的path）
         id: item.name + item.time, // 生成唯一ID
-        name: (item.prefix || '') + item.name, // 加上前缀
+        name: item.name, // 仅显示原始名称，不拼接前缀
         createTime: item.time,
       }))
     } else {
@@ -5065,7 +5304,7 @@ const handleDelete = (item: any) => {
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   flex-shrink: 0;
   overflow-y: auto;
   /* 高度和点云图一致 */
@@ -5077,7 +5316,13 @@ const handleDelete = (item: any) => {
 .nav-info-item {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
+}
+
+.nav-info-item.rtk-disabled {
+  opacity: 0.52;
+  filter: saturate(0.35);
+  pointer-events: none;
 }
 
 .nav-label {
@@ -5181,7 +5426,7 @@ const handleDelete = (item: any) => {
 
 .nav-info-row {
   display: flex;
-  gap: 16px;
+  gap: 18px;
 }
 
 .nav-info-col {
@@ -5195,12 +5440,22 @@ const handleDelete = (item: any) => {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.75);
   white-space: nowrap;
+  line-height: 1.35;
+}
+
+.nav-info-item.rtk-disabled .nav-info-label {
+  color: rgba(255, 255, 255, 0.54);
 }
 
 .nav-info-value {
   font-size: 14px;
   color: #67d5fd;
   font-weight: 500;
+  line-height: 1.35;
+}
+
+.nav-info-item.rtk-disabled .nav-info-value {
+  color: rgba(174, 194, 210, 0.58);
 }
 
 .nav-map-container {
@@ -5958,6 +6213,201 @@ select.recording-input option {
   margin-left: auto;
 }
 
+.file-card-board {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.5) transparent;
+}
+
+.file-card-board::-webkit-scrollbar {
+  width: 4px;
+}
+
+.file-card-board::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-card-board::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(103, 213, 253, 0.42), rgba(103, 213, 253, 0.68));
+  border-radius: 999px;
+}
+
+.file-card-board::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(103, 213, 253, 0.56), rgba(103, 213, 253, 0.82));
+}
+
+.file-card-empty {
+  height: 100%;
+  min-height: 220px;
+  border: 1px dashed rgba(103, 213, 253, 0.25);
+  border-radius: 10px;
+  background: rgba(10, 42, 58, 0.32);
+  color: rgba(184, 220, 245, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-group-card {
+  border: 1px solid rgba(103, 213, 253, 0.20);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(10, 42, 58, 0.60), rgba(8, 34, 52, 0.52));
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.14);
+  overflow: visible;
+}
+
+.file-group-card-other {
+  border-color: rgba(103, 213, 253, 0.16);
+  background: linear-gradient(180deg, rgba(10, 42, 58, 0.42), rgba(12, 60, 86, 0.22));
+}
+
+.file-group-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px 9px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.16);
+}
+
+.file-group-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #67d5fd;
+  font-weight: 600;
+}
+
+.file-group-delete-btn {
+  margin-left: 8px;
+  padding: 0 8px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.file-group-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #67d5fd;
+  box-shadow: 0 0 8px rgba(103, 213, 253, 0.8);
+}
+
+.file-group-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(184, 220, 245, 0.78);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.file-group-card-body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow: visible;
+}
+
+.file-group-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(5, 26, 48, 0.42);
+  border: 1px solid rgba(103, 213, 253, 0.12);
+  min-height: 44px;
+}
+
+.file-group-item-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-group-item-type {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #67d5fd;
+  background: rgba(103, 213, 253, 0.14);
+  border: 1px solid rgba(103, 213, 253, 0.3);
+  font-size: 12px;
+}
+
+.file-group-item-type.is-route {
+  color: #75e0ff;
+  background: rgba(103, 213, 253, 0.18);
+  border-color: rgba(103, 213, 253, 0.34);
+}
+
+.file-group-item-type.is-route-file {
+  color: #83f3d2;
+  background: rgba(67, 203, 165, 0.16);
+  border-color: rgba(67, 203, 165, 0.36);
+}
+
+.file-group-item-type.is-task-group {
+  color: #ffd18b;
+  background: rgba(255, 172, 70, 0.16);
+  border-color: rgba(255, 172, 70, 0.34);
+}
+
+.file-group-item-type.is-publish-group {
+  color: #f4b6ff;
+  background: rgba(193, 108, 255, 0.16);
+  border-color: rgba(193, 108, 255, 0.34);
+}
+
+.file-group-item-type.is-other {
+  color: #b8cfe6;
+  background: rgba(126, 160, 196, 0.16);
+  border-color: rgba(126, 160, 196, 0.32);
+}
+
+.file-group-item-name {
+  color: #d9ecff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
+.file-group-item-side {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.file-group-item-time {
+  color: rgba(184, 220, 245, 0.78);
+  font-size: 12px;
+}
+
+@media (max-width: 1500px) {
+  .file-group-item {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .file-group-item-side {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .file-table {
   flex: 1;
   background: rgba(10, 42, 58, 0.6);
@@ -5979,24 +6429,26 @@ select.recording-input option {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.5) transparent;
 }
 
 /* 滚动条样式 */
 .file-table-body::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 .file-table-body::-webkit-scrollbar-track {
-  background: rgba(10, 42, 58, 0.3);
+  background: transparent;
 }
 
 .file-table-body::-webkit-scrollbar-thumb {
-  background: rgba(103, 213, 253, 0.3);
-  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(103, 213, 253, 0.42), rgba(103, 213, 253, 0.68));
+  border-radius: 999px;
 }
 
 .file-table-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(103, 213, 253, 0.5);
+  background: linear-gradient(180deg, rgba(103, 213, 253, 0.56), rgba(103, 213, 253, 0.82));
 }
 
 .file-table-row {
@@ -6053,12 +6505,4 @@ select.recording-input option {
 }
 
 
-</style>
-
-<!-- 非 scoped 全局覆写：确保文件管理表格列宽不被 @import 覆盖 -->
-<style>
-.file-manage-table .file-table-header,
-.file-manage-table .file-table-row {
-  grid-template-columns: 100px 360px 1fr 180px 150px !important;
-}
 </style>

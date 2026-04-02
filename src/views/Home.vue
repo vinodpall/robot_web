@@ -1,12 +1,6 @@
 ﻿
 <template>
   <div class="home-container">
-    <div v-if="fallAlertActive" class="fall-alert-frame" aria-hidden="true">
-      <div class="fall-alert-edge top"></div>
-      <div class="fall-alert-edge right"></div>
-      <div class="fall-alert-edge bottom"></div>
-      <div class="fall-alert-edge left"></div>
-    </div>
     <!-- 左侧状态栏 -->
     <div class="left-box">
       <!-- 可见光视频 -->
@@ -853,9 +847,9 @@
             <label>避障模式：</label>
             <div class="custom-select-wrapper">
               <select v-model="trackStartDialog.form.obs_mode" class="mission-select" :disabled="trackStartDialog.loading">
+                <option :value="0">无避障</option>
                 <option :value="1">近障模式</option>
-                <option :value="2">停障模式</option>
-                <option :value="3">绕障模式</option>
+                <option :value="2">绕障模式</option>
               </select>
             </div>
           </div>
@@ -1020,22 +1014,6 @@
     <SuccessMessage :show="successToast.show" :message="successToast.message" @close="successToast.show = false" />
     <ErrorMessage :show="errorToast.show" :message="errorToast.message" @close="errorToast.show = false" />
 
-    <div v-if="fallAlertDialogVisible" class="custom-dialog-mask fall-alert-mask">
-      <div class="fall-alert-dialog">
-        <div class="fall-alert-title">机器狗摔倒告警</div>
-        <div class="fall-alert-body">
-          <div class="fall-alert-message">检测到机器狗可能已摔倒，请立即检查现场状态并及时处理。</div>
-          <div class="fall-alert-metrics">
-            <span>当前状态：{{ robotStore.robotStatusText }}</span>
-            <span>横滚角：{{ formatFallAngle(robotStore.imuRoll) }}</span>
-            <span>俯仰角：{{ formatFallAngle(robotStore.imuPitch) }}</span>
-          </div>
-        </div>
-        <div class="fall-alert-actions">
-          <button class="confirm-btn confirm-btn-ok" @click="acknowledgeFallAlert">我知道了</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -1529,8 +1507,6 @@ const formatRobotYaw = () => {
 
 // 格式化姿态（来自 robotStore.postureText: 0x11050f08 body_height_state.state）
 const formatPosture = () => robotStore.postureText
-const formatFallAngle = (value: number | null) => typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}°` : '--'
-
 const pointCloudData = ref<PointCloudPoint[]>([])
 const basePointCloudData = ref<PointCloudPoint[]>([])
 const threePointCloudRef = ref<InstanceType<typeof ThreePointCloudPreview> | null>(null)
@@ -4202,45 +4178,6 @@ const selectedMap = computed({
 })
 const showWaylineDropdown = ref(false)
 
-const fallAlertActive = ref(false)
-const fallAlertDialogVisible = ref(false)
-const fallAlertAcknowledged = ref(false)
-let fallAlertTimer: number | null = null
-
-const FALL_DETECTION_DELAY_MS = 1200
-
-const isFallDetected = computed(() => {
-  return robotStore.motionState?.basic_state === 6
-})
-
-const acknowledgeFallAlert = () => {
-  fallAlertAcknowledged.value = true
-  fallAlertDialogVisible.value = false
-}
-
-watch(isFallDetected, (detected) => {
-  if (detected) {
-    if (fallAlertActive.value || fallAlertTimer !== null) return
-    fallAlertTimer = window.setTimeout(() => {
-      fallAlertTimer = null
-      if (!isFallDetected.value) return
-      fallAlertActive.value = true
-      if (!fallAlertAcknowledged.value) {
-        fallAlertDialogVisible.value = true
-      }
-    }, FALL_DETECTION_DELAY_MS)
-    return
-  }
-
-  if (fallAlertTimer !== null) {
-    window.clearTimeout(fallAlertTimer)
-    fallAlertTimer = null
-  }
-  fallAlertActive.value = false
-  fallAlertDialogVisible.value = false
-  fallAlertAcknowledged.value = false
-})
-
 // 当前活动任务类型：'wayline' | 'point' | 'multi' | null
 const activeTaskType = ref<'wayline' | 'point' | 'multi' | 'track' | null>(null)
 // 当前运行中的循迹任务参数（取消时需要）
@@ -4319,7 +4256,7 @@ const trackStartDialog = ref({
   form: {
     action: 1, // 固定为1，表示启动
     wait: 0, // 0=立即启动, 1=不立即启动
-    obs_mode: 1, // 1=近障模式, 2=停障模式, 3=绕障模式
+    obs_mode: 1, // 0=无避障, 1=近障模式, 2=绕障模式
     track_name: '',
     taskpoint_name: '',
     gait_type: 0 // 0=行走步态, 1=斜坡步态, 2=越障步态, 3=楼梯步态, 4=帧楼梯步态, 5=帧45°楼梯步态, 6=L行走步态, 7=山地步态, 8=静音步态
@@ -7650,6 +7587,7 @@ const isControlEnabled = (controlName: RobotControlName) => {
   if (!controlCommandNameMap[controlName]) return false
 
   const basicState = getBasicStateCode()
+  const isRobotStatusStateMissing = basicState == null
   let baseEnabled = false
 
   if (controlName === 'stand') {
@@ -7680,6 +7618,9 @@ const isControlEnabled = (controlName: RobotControlName) => {
       baseEnabled = false
     }
   } else if (controlName === 'startCharge' || controlName === 'endCharge' || controlName === 'resetCharge') {
+    if (isRobotStatusStateMissing && (controlName === 'startCharge' || controlName === 'resetCharge')) {
+      return false
+    }
     baseEnabled = basicState !== 1 && basicState !== 5
     if (controlName === 'startCharge') {
       // 以电流正负判断是否充电：current>0 视为充电中，此时禁止“开始充电”
@@ -7689,6 +7630,9 @@ const isControlEnabled = (controlName: RobotControlName) => {
       baseEnabled = baseEnabled && (isRobotCharging.value || isRobotBatteryFull.value)
     }
   } else if (controlName === 'emergencyStop') {
+    if (isRobotStatusStateMissing) {
+      return false
+    }
     baseEnabled = basicState !== 6
   } else {
     baseEnabled = false

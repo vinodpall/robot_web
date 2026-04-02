@@ -1,5 +1,11 @@
 ﻿<template>
   <div class="layout-container">
+    <div v-if="globalFallAlertActive" class="global-fall-alert-frame" aria-hidden="true">
+      <div class="global-fall-alert-edge top"></div>
+      <div class="global-fall-alert-edge right"></div>
+      <div class="global-fall-alert-edge bottom"></div>
+      <div class="global-fall-alert-edge left"></div>
+    </div>
     <div class="header">
       <div class="header-left">
         <img src="/src/assets/source_data/dog_logo.svg" alt="logo" class="logo" />
@@ -105,7 +111,7 @@
       </div>
     </transition>
 
-    <div v-if="changePasswordDialogVisible" class="password-dialog-mask" @click="closeChangePasswordDialog">
+    <div v-if="changePasswordDialogVisible" class="password-dialog-mask">
       <div class="password-dialog" @click.stop>
         <div class="password-dialog-title">修改密码</div>
         <div class="password-dialog-body">
@@ -160,11 +166,28 @@
       @cancel="passwordConfirmVisible = false"
       @close="passwordConfirmVisible = false"
     />
+
+    <div v-if="globalFallAlertDialogVisible" class="global-fall-alert-mask">
+      <div class="global-fall-alert-dialog">
+        <div class="global-fall-alert-title">机器狗摔倒告警</div>
+        <div class="global-fall-alert-body">
+          <div class="global-fall-alert-message">检测到机器狗可能已摔倒，请立即检查现场状态并及时处理。</div>
+          <div class="global-fall-alert-metrics">
+            <span>当前状态：{{ robotStore.robotStatusText }}</span>
+            <span>横滚角：{{ formatFallAngle(robotStore.imuRoll) }}</span>
+            <span>俯仰角：{{ formatFallAngle(robotStore.imuPitch) }}</span>
+          </div>
+        </div>
+        <div class="global-fall-alert-actions">
+          <button class="global-fall-alert-btn" @click="acknowledgeGlobalFallAlert">我知道了</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useDeviceStore } from '../stores/device'
@@ -190,6 +213,7 @@ const TASK_MODULE_DEFAULT_PATH = '/dashboard/mission'
 const TASK_MODULE_PATH_SET = new Set([
   '/dashboard/mission',
   '/dashboard/mission-logs',
+  '/dashboard/mission-records',
   '/dashboard/multi-task-group'
 ])
 const NAV_MODULE_LAST_PATH_KEY = 'nav_module_last_path'
@@ -519,6 +543,49 @@ const isStopActive = computed(() => {
   return robotStore.motionState?.basic_state === 6
 })
 
+const globalFallAlertActive = ref(false)
+const globalFallAlertDialogVisible = ref(false)
+const globalFallAlertAcknowledged = ref(false)
+let globalFallAlertTimer: number | null = null
+
+const GLOBAL_FALL_DETECTION_DELAY_MS = 1200
+
+const isGlobalFallDetected = computed(() => {
+  return robotStore.motionState?.basic_state === 6
+})
+
+const formatFallAngle = (value: number | null) => {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}°` : '--'
+}
+
+const acknowledgeGlobalFallAlert = () => {
+  globalFallAlertAcknowledged.value = true
+  globalFallAlertDialogVisible.value = false
+}
+
+watch(isGlobalFallDetected, (detected) => {
+  if (detected) {
+    if (globalFallAlertActive.value || globalFallAlertTimer !== null) return
+    globalFallAlertTimer = window.setTimeout(() => {
+      globalFallAlertTimer = null
+      if (!isGlobalFallDetected.value) return
+      globalFallAlertActive.value = true
+      if (!globalFallAlertAcknowledged.value) {
+        globalFallAlertDialogVisible.value = true
+      }
+    }, GLOBAL_FALL_DETECTION_DELAY_MS)
+    return
+  }
+
+  if (globalFallAlertTimer !== null) {
+    window.clearTimeout(globalFallAlertTimer)
+    globalFallAlertTimer = null
+  }
+  globalFallAlertActive.value = false
+  globalFallAlertDialogVisible.value = false
+  globalFallAlertAcknowledged.value = false
+}, { immediate: true })
+
 const toggleStop = async () => {
   if (!selectedRobotId.value) {
     console.warn('No robot selected')
@@ -589,6 +656,13 @@ onMounted(async () => {
     await refreshRobotContext(deviceStore.selectedRobotId)
   }
 })
+
+onUnmounted(() => {
+  if (globalFallAlertTimer !== null) {
+    window.clearTimeout(globalFallAlertTimer)
+    globalFallAlertTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -598,6 +672,127 @@ onMounted(async () => {
   font-weight: normal;
   font-style: normal;
   font-display: swap;
+}
+
+.global-fall-alert-frame {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2100;
+}
+
+.global-fall-alert-edge {
+  position: absolute;
+  background: linear-gradient(90deg, rgba(255, 84, 84, 0) 0%, rgba(255, 84, 84, 0.95) 50%, rgba(255, 84, 84, 0) 100%);
+  box-shadow: 0 0 18px rgba(255, 60, 60, 0.65);
+  animation: global-fall-alert-pulse 0.9s ease-in-out infinite;
+}
+
+.global-fall-alert-edge.top,
+.global-fall-alert-edge.bottom {
+  left: 0;
+  width: 100%;
+  height: 12px;
+}
+
+.global-fall-alert-edge.left,
+.global-fall-alert-edge.right {
+  top: 0;
+  width: 12px;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(255, 84, 84, 0) 0%, rgba(255, 84, 84, 0.95) 50%, rgba(255, 84, 84, 0) 100%);
+}
+
+.global-fall-alert-edge.top { top: 0; }
+.global-fall-alert-edge.right { right: 0; }
+.global-fall-alert-edge.bottom { bottom: 0; }
+.global-fall-alert-edge.left { left: 0; }
+
+.global-fall-alert-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 0, 0, 0.48);
+}
+
+.global-fall-alert-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border-radius: 14px;
+  border: 1px solid rgba(255, 107, 107, 0.45);
+  background: linear-gradient(180deg, rgba(52, 10, 10, 0.98) 0%, rgba(24, 9, 9, 0.98) 100%);
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.45), 0 0 36px rgba(255, 80, 80, 0.18);
+  overflow: hidden;
+}
+
+.global-fall-alert-title {
+  padding: 18px 22px 10px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #ff8d8d;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.global-fall-alert-body {
+  padding: 0 22px 10px;
+}
+
+.global-fall-alert-message {
+  color: #ffe5e5;
+  font-size: 15px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.global-fall-alert-metrics {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 8px;
+  color: rgba(255, 230, 230, 0.88);
+  font-size: 13px;
+}
+
+.global-fall-alert-actions {
+  display: flex;
+  justify-content: center;
+  padding: 0 22px 22px;
+}
+
+.global-fall-alert-btn {
+  min-width: 132px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #ff6f6f 0%, #e34747 100%);
+  box-shadow: 0 10px 24px rgba(227, 71, 71, 0.28);
+}
+
+.global-fall-alert-btn:hover {
+  filter: brightness(1.05);
+}
+
+.global-fall-alert-btn:active {
+  transform: translateY(1px);
+}
+
+@keyframes global-fall-alert-pulse {
+  0%, 100% {
+    opacity: 0.35;
+    filter: saturate(0.85);
+  }
+  50% {
+    opacity: 1;
+    filter: saturate(1.2);
+  }
 }
 
 .robot-switching-overlay {
