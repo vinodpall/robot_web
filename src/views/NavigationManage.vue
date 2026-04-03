@@ -133,7 +133,7 @@
                   >
                     {{ msfEnabled ? '关闭MSF' : '开始MSF' }}
                   </button>
-                  <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handleCircleMode">循迹避障模式</button>
+                  <button class="map-btn" :class="isTrackTaskRunning ? 'map-btn-primary' : 'map-btn-secondary'" :disabled="!isTrackTaskRunning" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handleCircleMode">循迹避障模式</button>
                   <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
                   <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleSetOrigin">原点设置</button>
                 </div>
@@ -273,6 +273,18 @@
               <div class="map-edit-grid-main">
                 <div ref="gridmapContainerEl" class="gridmap-container">
                   <canvas ref="gridMapCanvas" class="grid-canvas"></canvas>
+                  <div
+                    v-if="eraserPreview.visible"
+                    :class="['eraser-range-preview', `tool-${eraserPreview.tool}`]"
+                    :style="{
+                      left: `${eraserPreview.left}px`,
+                      top: `${eraserPreview.top}px`,
+                      width: `${eraserPreview.diameter}px`,
+                      height: `${eraserPreview.diameter}px`
+                    }"
+                  >
+                    <span class="eraser-range-preview-label">{{ eraserPreview.label }}</span>
+                  </div>
                   <div v-if="gridMapLoading" class="map-overlay loading">地图加载中...</div>
                   <div v-else-if="gridMapError" :class="['map-overlay', isGridMapEmptyState ? 'empty' : 'error']">{{ gridMapError }}</div>
                   <div v-show="isEditMode" class="edit-panel-right">
@@ -476,7 +488,9 @@
                     <div class="file-group-card-header">
                       <div class="file-group-card-title">
                         <span class="file-group-dot"></span>
-                        <span>{{ getFileManageGroupTitle(group) }}：{{ group.routeName }}</span>
+                        <span class="file-group-title-text">
+                          {{ getFileManageGroupTitle(group) }}：<span class="file-group-route-name">{{ group.routeName }}</span>
+                        </span>
                         <button
                           v-if="group.routeItem"
                           class="action-btn action-btn-delete file-group-delete-btn"
@@ -1102,6 +1116,32 @@ watch(trackLineList, (newLines) => {
 // 任务组列表
 const trackTaskList = ref<string[]>([])
 
+const clearTrackPreviewFromPointCloud = async () => {
+  if (!isNavPreviewMode.value) return
+
+  isNavPreviewMode.value = false
+
+  const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
+  if (robotStore.cmdStatus?.track === 1 && trackNameFromStatus) {
+    activeNavOverlayTrackName.value = trackNameFromStatus
+    activeNavTrackInfo.value = {
+      track_name: trackNameFromStatus,
+      taskpoint_name:
+        robotStore.cmdStatus?.track_info?.taskpoint_name ||
+        activeNavTrackInfo.value.taskpoint_name ||
+        ''
+    }
+    await overlayNavTrackTrajectory(trackNameFromStatus)
+    return
+  }
+
+  navPointCloudData.value = baseNavPointCloudData.value.length > 0
+    ? [...baseNavPointCloudData.value]
+    : []
+  await nextTick()
+  scheduleNavPointCloudRender()
+}
+
 // 监听路线录制地图选择变化 - 同步更新路线和任务组列表
 watch(trackRecordMap, async (newMap) => {
   if (currentTab.value !== 'track_record') return
@@ -1130,8 +1170,8 @@ watch(trackRecordMap, async (newMap) => {
 
 // 监听路线选择变化 - 获取该路线的任务组列表（关键点文件列表）
 watch(trackRecordLine, async (newLine) => {
-  // 路线切换时退出预览模式，恢复 WebSocket 任务状态的正常更新
-  isNavPreviewMode.value = false
+  // 路线切换时清理预览轨迹，恢复点云基线（或实时循迹叠加）
+  await clearTrackPreviewFromPointCloud()
   // 清空任务组选择
   trackRecordTask.value = ''
   trackTaskList.value = []
@@ -1594,6 +1634,7 @@ watch(
 )
 
 const navigationEnabled = computed(() => robotStore.cmdStatus?.nav === 1)
+const isTrackTaskRunning = computed(() => taskExecutionStore.isTrackTaskRunning)
 const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
 const hasRobotRtk = computed(() => {
@@ -1656,6 +1697,11 @@ const gpsEnabled = ref(false)
 const obsHandleDialogVisible = ref(false)
 const selectedObsMode = ref(1) // 0: 无避障, 1: 近障模式, 2: 绕障模式
 const obsHandleLoading = ref(false)
+const resolveCurrentObsMode = () => {
+  const rawMode = (robotStore.cmdStatus as any)?.track_info?.obs_mode
+  const mode = Number(rawMode)
+  return [0, 1, 2].includes(mode) ? mode : 1
+}
 
 
 // 导航相关方法
@@ -1824,15 +1870,23 @@ const handleStartMSF = () => {
 }
 
 const handleCircleMode = () => {
+  if (!isTrackTaskRunning.value) {
+    showErrorMessage('请先启动循迹任务')
+    return
+  }
+  if (!navigationEnabled.value) {
+    showErrorMessage('请先开启导航')
+    return
+  }
   // 显示循迹避障模式选择对话框
-  selectedObsMode.value = 1
+  selectedObsMode.value = resolveCurrentObsMode()
   obsHandleDialogVisible.value = true
 }
 
 // 取消循迹避障模式对话框
 const cancelObsHandleDialog = () => {
   obsHandleDialogVisible.value = false
-  selectedObsMode.value = 1
+  selectedObsMode.value = resolveCurrentObsMode()
 }
 
 // 确认循迹避障模式设置
@@ -3069,6 +3123,21 @@ const isPageButtonsLocked = computed(() => {
 const mapProgress = ref(0)
 const mappingStopLoading = ref(false)
 const mappingAutoStopTriggered = ref(false)
+const MAPPING_AUTO_STOP_OWNER_KEY = 'nav_mapping_auto_stop_owner'
+
+const hasMappingAutoStopOwnership = () => {
+  if (typeof window === 'undefined') return false
+  return sessionStorage.getItem(MAPPING_AUTO_STOP_OWNER_KEY) === '1'
+}
+
+const setMappingAutoStopOwnership = (owned: boolean) => {
+  if (typeof window === 'undefined') return
+  if (owned) {
+    sessionStorage.setItem(MAPPING_AUTO_STOP_OWNER_KEY, '1')
+  } else {
+    sessionStorage.removeItem(MAPPING_AUTO_STOP_OWNER_KEY)
+  }
+}
 
 // 对接 WebSocket 实时建图进度（mapping_progress 消息）
 watch(() => robotStore.mappingProgress?.progress, (progress) => {
@@ -3076,6 +3145,7 @@ watch(() => robotStore.mappingProgress?.progress, (progress) => {
     const normalizedProgress = Math.min(100, Math.max(0, Number(progress) || 0))
     mapProgress.value = normalizedProgress
     if (normalizedProgress >= 100) {
+      if (!hasMappingAutoStopOwnership()) return
       void handleStopMapping(true)
     }
   }
@@ -3303,6 +3373,7 @@ const confirmGenerateMap = async () => {
     currentMappingDataName.value = dataName
     currentMappingMapName.value = mapName
     mappingAutoStopTriggered.value = false
+    setMappingAutoStopOwnership(true)
     
     generateMapDialogVisible.value = false
     showSuccessMessage('生成地图指令已发送')
@@ -3484,6 +3555,7 @@ const handleStopMapping = async (autoTriggeredOrEvent: boolean | MouseEvent = fa
     // 清空保存的参数
     currentMappingDataName.value = ''
     currentMappingMapName.value = ''
+    setMappingAutoStopOwnership(false)
   } catch (err) {
     if (autoTriggered) {
       mappingAutoStopTriggered.value = false
@@ -3538,13 +3610,40 @@ const openMapDB = (): Promise<IDBDatabase> => {
   })
 }
 
+const normalizeMapCacheFileName = (fileName: string) => {
+  const text = String(fileName || '').trim()
+  if (!text) return ''
+  const segments = text.split('/').filter(Boolean)
+  return segments.length > 0 ? segments[segments.length - 1] : text
+}
+
+const buildMapCacheKey = (mapName: string, fileName: string) => {
+  return `${mapName}/${normalizeMapCacheFileName(fileName)}`
+}
+
 const getMapFile = async (mapName: string, fileName: string): Promise<Blob | null> => {
   try {
     const db = await openMapDB()
     return new Promise((resolve) => {
       const tx = db.transaction([MAP_STORE_NAME], 'readonly')
-      const request = tx.objectStore(MAP_STORE_NAME).get(`${mapName}/${fileName}`)
-      request.onsuccess = () => resolve(request.result?.blob || null)
+      const normalizedKey = buildMapCacheKey(mapName, fileName)
+      const legacyKey = `${mapName}/${fileName}`
+      const store = tx.objectStore(MAP_STORE_NAME)
+      const request = store.get(normalizedKey)
+      request.onsuccess = () => {
+        const blob = request.result?.blob || null
+        if (blob) {
+          resolve(blob)
+          return
+        }
+        if (legacyKey !== normalizedKey) {
+          const fallbackRequest = store.get(legacyKey)
+          fallbackRequest.onsuccess = () => resolve(fallbackRequest.result?.blob || null)
+          fallbackRequest.onerror = () => resolve(null)
+          return
+        }
+        resolve(null)
+      }
       request.onerror = () => resolve(null)
     })
   } catch {
@@ -3558,7 +3657,7 @@ const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promi
   return new Promise((resolve, reject) => {
     const tx = db.transaction([MAP_STORE_NAME], 'readwrite')
     const store = tx.objectStore(MAP_STORE_NAME)
-    store.put({ id: `${mapName}/${fileName}`, blob })
+    store.put({ id: buildMapCacheKey(mapName, fileName), blob })
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
@@ -3794,6 +3893,8 @@ const clearGridMapDisplay = (message = '暂无栅格图') => {
   canvas.style.width = ''
   canvas.style.height = ''
   canvas.style.transform = ''
+  lastPointerCanvasCoords = null
+  hideEraserPreview()
 }
 
 // 监听地图编辑选择变化（store setter 已持久化，无需手动写 localStorage）
@@ -3805,6 +3906,14 @@ watch(selectedEditMap, (newMap) => {
   }
 })
 
+watch(brushSize, () => {
+  refreshEraserPreview()
+})
+
+watch([isEditMode, navMode, activeTool, gridMapLoading, gridMapError], () => {
+  refreshEraserPreview()
+})
+
 
 
 let isDragging = false
@@ -3814,6 +3923,82 @@ let drawing = false
 let editLastX = 0
 let editLastY = 0
 let canvasEventsController: AbortController | null = null
+let lastPointerCanvasCoords: { x: number; y: number } | null = null
+let lastPointerClientPos: { x: number; y: number } | null = null
+
+const eraserPreview = ref({
+  visible: false,
+  left: 0,
+  top: 0,
+  diameter: 0,
+  label: '',
+  tool: 'eraser',
+})
+
+const shouldShowEraserPreview = () => {
+  return Boolean(
+    isEditMode.value
+      && navMode.value === 'edit'
+      && !gridMapLoading.value
+      && gridMapCanvas.value
+  )
+}
+
+const hideEraserPreview = () => {
+  eraserPreview.value.visible = false
+}
+
+const updateEraserPreviewAtCanvasCoords = (
+  coords: { x: number; y: number },
+  clientPos?: { x: number; y: number } | null
+) => {
+  const canvas = gridMapCanvas.value
+  const container = gridmapContainerEl.value
+  if (!canvas || !container || !shouldShowEraserPreview()) {
+    hideEraserPreview()
+    return
+  }
+
+  const canvasRect = canvas.getBoundingClientRect()
+  const containerRect = container.getBoundingClientRect()
+  if (canvasRect.width <= 0 || canvasRect.height <= 0) {
+    hideEraserPreview()
+    return
+  }
+
+  const pixelToScreenX = canvasRect.width / canvas.width
+  const pixelToScreenY = canvasRect.height / canvas.height
+  const fallbackCenterClientX = canvasRect.left + (coords.x + 0.5) * pixelToScreenX
+  const fallbackCenterClientY = canvasRect.top + (coords.y + 0.5) * pixelToScreenY
+  const centerClientX = clientPos?.x ?? fallbackCenterClientX
+  const centerClientY = clientPos?.y ?? fallbackCenterClientY
+
+  const radiusPx = Math.max(1, Math.floor(brushSize.value / 2))
+  const radiusScreen = Math.max(4, radiusPx * Math.max(pixelToScreenX, pixelToScreenY))
+  const diameter = radiusScreen * 2
+  const half = diameter / 2
+  const rawLeft = centerClientX - containerRect.left
+  const rawTop = centerClientY - containerRect.top
+  const clampedLeft = Math.max(half + 2, Math.min(containerRect.width - half - 2, rawLeft))
+  const clampedTop = Math.max(half + 2, Math.min(containerRect.height - half - 2, rawTop))
+
+  eraserPreview.value = {
+    visible: true,
+    left: clampedLeft,
+    top: clampedTop,
+    diameter,
+    label: activeTool.value === 'pen' ? '画笔' : '橡皮擦',
+    tool: activeTool.value,
+  }
+}
+
+const refreshEraserPreview = () => {
+  if (!lastPointerCanvasCoords || !shouldShowEraserPreview()) {
+    hideEraserPreview()
+    return
+  }
+  updateEraserPreviewAtCanvasCoords(lastPointerCanvasCoords, lastPointerClientPos)
+}
 
 // 编辑模式切换
 const toggleEditMode = () => {
@@ -3823,13 +4008,21 @@ const toggleEditMode = () => {
   }
   const canvas = gridMapCanvas.value
   if (canvas) {
-    canvas.style.cursor = isEditMode.value ? 'crosshair' : 'grab'
+    canvas.style.cursor = getCanvasCursor()
   }
+  refreshEraserPreview()
 }
 
 // 获取橡皮擦光标样式
 const getEraserCursor = () => {
-  return `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23ff6b6b' stroke='%23333' stroke-width='1.5' d='M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.6-10.6c.79-.78 2.05-.78 2.83 0'/%3E%3Cpath fill='white' stroke='%23333' stroke-width='1' d='M4.22 15.58l3.54 3.53c.78.79 2.04.79 2.83 0l3.53-3.53-6.36-6.36z'/%3E%3C/svg%3E") 12 12, auto`
+  return 'none'
+}
+
+const getCanvasCursor = () => {
+  if (!isEditMode.value || navMode.value === 'pan') {
+    return 'grab'
+  }
+  return getEraserCursor()
 }
 
 // 设置导航模式
@@ -3837,13 +4030,9 @@ const setNavMode = (mode: 'pan' | 'edit') => {
   navMode.value = mode
   const canvas = gridMapCanvas.value
   if (canvas) {
-    if (mode === 'pan') {
-      canvas.style.cursor = 'grab'
-    } else {
-      // 编辑模式下根据当前工具设置光标
-      canvas.style.cursor = activeTool.value === 'pen' ? 'crosshair' : getEraserCursor()
-    }
+    canvas.style.cursor = getCanvasCursor()
   }
+  refreshEraserPreview()
 }
 
 // 设置工具
@@ -3852,8 +4041,9 @@ const setTool = (tool: 'pen' | 'eraser') => {
   navMode.value = 'edit'
   const canvas = gridMapCanvas.value
   if (canvas) {
-    canvas.style.cursor = tool === 'pen' ? 'crosshair' : getEraserCursor()
+    canvas.style.cursor = getCanvasCursor()
   }
+  refreshEraserPreview()
 }
 
 // 缩放和导航方法
@@ -3892,6 +4082,7 @@ const applyTransform = () => {
   const centerY = (sh - canvas.height * finalScale) / 2 + currentOffsetY
   
   canvas.style.transform = `translate(${centerX}px, ${centerY}px)`
+  refreshEraserPreview()
 }
 
 // 获取canvas坐标
@@ -4043,6 +4234,7 @@ const clearGridEdit = () => {
   ctx.putImageData(missionGridImageData, 0, 0)
   gridImageData = null
   editHistory.value = []
+  refreshEraserPreview()
 }
 
 // 保存编辑后的地图
@@ -4124,6 +4316,15 @@ const handleSaveGridMap = async () => {
         // 步骤3: 更新IndexedDB中的缓存（以服务端版本为准）
         await saveMapFile(mapName, fileName, downloadedBlob)
         console.log('? IndexedDB缓存已更新')
+
+        // 上传成功后，更新“初始化”基准为当前已保存版本
+        // 否则 clearGridEdit 仍会回到编辑前的旧 missionGridImageData
+        const savedSnapshot = ctx.createImageData(currentImageData.width, currentImageData.height)
+        savedSnapshot.data.set(currentImageData.data)
+        missionGridImageData = savedSnapshot
+        gridImageData = null
+        editHistory.value = []
+        refreshEraserPreview()
         
         showSuccessMessage('地图保存成功！')
         
@@ -4289,15 +4490,24 @@ const setupCanvasEvents = () => {
   
   // 鼠标按下事件
   const onMouseDown = (e: MouseEvent) => {
+    lastPointerClientPos = { x: e.clientX, y: e.clientY }
+
+    const coords = getCanvasCoords(e)
+    lastPointerCanvasCoords = coords
+
     // 编辑模式下且为编辑导航模式的左键编辑
     if (isEditMode.value && navMode.value === 'edit' && e.button === 0 && !e.ctrlKey) {
       if (!drawing) {
         saveToHistory()
       }
       drawing = true
-      const coords = getCanvasCoords(e)
       editLastX = coords.x
       editLastY = coords.y
+      if (shouldShowEraserPreview()) {
+        updateEraserPreviewAtCanvasCoords(coords, lastPointerClientPos)
+      } else {
+        hideEraserPreview()
+      }
       editGridPixel(coords.x, coords.y)
       e.preventDefault()
       return
@@ -4315,13 +4525,24 @@ const setupCanvasEvents = () => {
   
   // 鼠标移动事件
   const onMouseMove = (e: MouseEvent) => {
+    lastPointerClientPos = { x: e.clientX, y: e.clientY }
+
+    const coords = getCanvasCoords(e)
+    lastPointerCanvasCoords = coords
+
     // 处理编辑绘制
     if (drawing && isEditMode.value) {
-      const coords = getCanvasCoords(e)
+      if (shouldShowEraserPreview()) {
+        updateEraserPreviewAtCanvasCoords(coords, lastPointerClientPos)
+      }
       drawLine(editLastX, editLastY, coords.x, coords.y)
       editLastX = coords.x
       editLastY = coords.y
       return
+    }
+
+    if (shouldShowEraserPreview()) {
+      updateEraserPreviewAtCanvasCoords(coords, lastPointerClientPos)
     }
     
     // 处理拖动
@@ -4333,6 +4554,11 @@ const setupCanvasEvents = () => {
       applyTransform()
       lastX = e.clientX
       lastY = e.clientY
+      if (shouldShowEraserPreview()) {
+        const movedCoords = getCanvasCoords(e)
+        lastPointerCanvasCoords = movedCoords
+        updateEraserPreviewAtCanvasCoords(movedCoords, lastPointerClientPos)
+      }
     }
   }
   
@@ -4340,11 +4566,22 @@ const setupCanvasEvents = () => {
   const endDrag = () => {
     isDragging = false
     drawing = false
-    if (isEditMode.value) {
-      // 编辑模式下根据当前工具恢复光标
-      canvas.style.cursor = activeTool.value === 'pen' ? 'crosshair' : getEraserCursor()
-    } else {
-      canvas.style.cursor = 'grab'
+    canvas.style.cursor = getCanvasCursor()
+    refreshEraserPreview()
+  }
+
+  const onMouseLeave = () => {
+    hideEraserPreview()
+    endDrag()
+  }
+
+  const onMouseEnter = (e: MouseEvent) => {
+    const coords = getCanvasCoords(e)
+    lastPointerCanvasCoords = coords
+    lastPointerClientPos = { x: e.clientX, y: e.clientY }
+    canvas.style.cursor = getCanvasCursor()
+    if (shouldShowEraserPreview()) {
+      updateEraserPreviewAtCanvasCoords(coords, lastPointerClientPos)
     }
   }
   
@@ -4352,9 +4589,10 @@ const setupCanvasEvents = () => {
   const container = gridmapContainerEl.value ?? canvas
   container.addEventListener('wheel', onWheel, { passive: false, signal })
   canvas.addEventListener('mousedown', onMouseDown, { signal })
+  canvas.addEventListener('mouseenter', onMouseEnter, { signal })
   canvas.addEventListener('mousemove', onMouseMove, { signal })
   canvas.addEventListener('mouseup', endDrag, { signal })
-  canvas.addEventListener('mouseleave', endDrag, { signal })
+  canvas.addEventListener('mouseleave', onMouseLeave, { signal })
   canvas.addEventListener('contextmenu', (e) => e.preventDefault(), { signal })
 }
 
@@ -4514,6 +4752,18 @@ const getFileManageItemKey = (item: any) => {
   return `${String(item?.name ?? '')}__${String(item?.createTime ?? '')}`
 }
 
+const getFileManageCreateTimeTs = (item: any) => {
+  const raw = String(item?.createTime ?? '').trim()
+  if (!raw) return 0
+  const normalized = raw.replace(' ', 'T')
+  const time = new Date(normalized).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+const compareFileManageByCreateTimeDesc = (a: any, b: any) => {
+  return getFileManageCreateTimeTs(b) - getFileManageCreateTimeTs(a)
+}
+
 const fileManageRouteCardList = computed(() => {
   const source = Array.isArray(fileManageList.value) ? fileManageList.value : []
   if (source.length === 0) return [] as Array<{
@@ -4524,6 +4774,7 @@ const fileManageRouteCardList = computed(() => {
     displayItems: any[]
     routeItem: any | null
     latestCreateTime: string
+    latestCreateTimeTs: number
   }>
 
   const routeGroups = new Map<string, { routeKey: string; routeName: string; rootType: string; items: any[] }>()
@@ -4552,16 +4803,24 @@ const fileManageRouteCardList = computed(() => {
     .map((group) => {
       const routeItem = group.items.find((item: any) => Number(item?.is_file ?? 0) === 0) || null
       const routeItemKey = routeItem ? getFileManageItemKey(routeItem) : ''
-      const displayItems = routeItemKey
+      const displayItems = (routeItemKey
         ? group.items.filter((item: any) => getFileManageItemKey(item) !== routeItemKey)
-        : [...group.items]
+        : [...group.items])
+        .sort(compareFileManageByCreateTimeDesc)
       const latestCreateTime = group.items.reduce((latest, item) => {
         const current = String(item?.createTime ?? '')
         return current > latest ? current : latest
       }, '')
-      return { ...group, routeItem, displayItems, latestCreateTime }
+      return {
+        ...group,
+        routeItem,
+        displayItems,
+        latestCreateTime,
+        latestCreateTimeTs: Math.max(...group.items.map(getFileManageCreateTimeTs), 0),
+      }
     })
     .filter(group => group.routeItem || group.displayItems.length > 0)
+    .sort((a, b) => b.latestCreateTimeTs - a.latestCreateTimeTs)
 })
 
 const fileManageGroupedItemKeySet = computed(() => {
@@ -4575,7 +4834,9 @@ const fileManageGroupedItemKeySet = computed(() => {
 const fileManageOtherFileList = computed(() => {
   const source = Array.isArray(fileManageList.value) ? fileManageList.value : []
   if (source.length === 0) return []
-  return source.filter(item => !fileManageGroupedItemKeySet.value.has(getFileManageItemKey(item)))
+  return source
+    .filter(item => !fileManageGroupedItemKeySet.value.has(getFileManageItemKey(item)))
+    .sort(compareFileManageByCreateTimeDesc)
 })
 
 // 获取文件列表
@@ -5837,6 +6098,56 @@ const handleDelete = (item: any) => {
   z-index: 10;
 }
 
+.eraser-range-preview {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px dashed rgba(255, 104, 104, 0.95);
+  background: rgba(255, 104, 104, 0.18);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22) inset;
+  pointer-events: none;
+  z-index: 9;
+}
+
+.eraser-range-preview.tool-pen {
+  border: 2px solid rgb(34, 197, 126);
+  background: rgb(34, 197, 126);
+  box-shadow: 0 0 0 1px rgba(147, 247, 206, 0.2) inset;
+  opacity: 0.8;
+}
+
+.eraser-range-preview.tool-eraser {
+  border: 2px solid rgb(239, 68, 68);
+  background: rgb(239, 68, 68);
+  box-shadow: 0 0 0 1px rgba(255, 176, 176, 0.2) inset;
+  opacity: 0.8;
+}
+
+.eraser-range-preview-label {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 125, 125, 0.65);
+  background: rgba(10, 25, 41, 0.88);
+  color: #ffc2c2;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.eraser-range-preview.tool-pen .eraser-range-preview-label {
+  border-color: rgba(88, 224, 166, 0.8);
+  color: #bfffe4;
+}
+
+.eraser-range-preview.tool-eraser .eraser-range-preview-label {
+  border-color: rgba(255, 120, 120, 0.75);
+  color: #ffd3d3;
+}
+
 .map-overlay.error {
   background: rgba(255, 77, 79, 0.2);
   color: #ff6b6b;
@@ -6284,6 +6595,17 @@ select.recording-input option {
   font-weight: 600;
 }
 
+.file-group-title-text {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.file-group-route-name {
+  color: #9fe4ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .file-group-delete-btn {
   margin-left: 8px;
   padding: 0 8px;
@@ -6377,10 +6699,12 @@ select.recording-input option {
 
 .file-group-item-name {
   color: #d9ecff;
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.35;
+  line-height: 1.25;
 }
 
 .file-group-item-side {

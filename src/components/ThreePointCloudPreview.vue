@@ -23,6 +23,7 @@ const props = defineProps<{
   loading?: boolean
   error?: string
   normalizationParams: NormalizationParams
+  navigationOrigin?: { x: number; y: number; z: number } | null
   robotPose?: RobotPose | null
   robotMesh?: MeshData | null
 }>()
@@ -239,10 +240,15 @@ const createOriginMarker = () => {
   const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
   if (maxRange <= 1e-6) return null
 
+  const navOrigin = props.navigationOrigin
+  const ox = Number.isFinite(navOrigin?.x as number) ? (navOrigin as { x: number }).x : 0
+  const oy = Number.isFinite(navOrigin?.y as number) ? (navOrigin as { y: number }).y : 0
+  const oz = Number.isFinite(navOrigin?.z as number) ? (navOrigin as { z: number }).z : 0
+
   const origin = toWorldPosition(
-    (0 - centerX) / maxRange,
-    (0 - centerY) / maxRange,
-    (0 - centerZ) / maxRange
+    (ox - centerX) / maxRange,
+    (oy - centerY) / maxRange,
+    (oz - centerZ) / maxRange
   )
 
   const group = new THREE.Group()

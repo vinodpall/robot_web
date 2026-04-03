@@ -83,7 +83,7 @@
               <div class="file-table-body">
                 <!-- 显示实际数据行 -->
                 <template v-if="waypointsData.length > 0">
-                <div class="file-table-row" v-for="waypoint in waypointsData" :key="waypoint.index">
+                <div class="file-table-row" :class="{ 'task-last-row-active': isLastTaskRow(waypoint) }" v-for="waypoint in waypointsData" :key="waypoint.index">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">
                     <span class="ms-seq-num">{{ waypoint.index + 1 }}</span>
                   </div>
@@ -565,8 +565,8 @@
             </div>
 
             <!-- 额外事务 -->
-            <div class="simple-form-item">
-               <label class="simple-label">{{ extraConfigFieldMeta.label }}</label>
+             <div class="simple-form-item">
+               <label class="simple-label">额外事务</label>
                <div class="simple-flex-row" style="justify-content: space-between;">
                   <span style="color: #fff;">{{ extraConfigDisplayValue || '未配置' }}</span>
                   <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
@@ -661,18 +661,43 @@
             </div>
             <div class="simple-modal-body" style="display: flex; gap: 20px; padding: 20px; overflow: hidden; height: 100%;">
                <!-- Left Video -->
-               <div style="flex: 0 0 800px; height: 450px; background: #000; position: relative; border: 1px solid #244f78; display: flex; align-items: center; justify-content: center; color: #aaa; overflow: hidden;">
+               <div ref="presetVideoWrapper" class="video-only-wrapper" style="flex: 0 0 800px; height: 450px; border: 1px solid #244f78; border-radius: 0;">
                    <video 
                      ref="videoElement"
-                     controls
+                     :class="['video-only-element', { 'video-hidden': !isPlaying }]"
+                     :controls="isPlaying"
+                     controlsList="noremoteplayback nodownload"
+                     disablePictureInPicture
                      muted
+                     autoplay
                      playsinline
                      webkit-playsinline
-                     style="width: 100%; height: 100%; object-fit: fill; background: #000;"
+                     style="width: 100%; height: 100%; border-radius: 0;"
                    >
                      您的浏览器不支持视频播放
                    </video>
-                   <div v-if="!isPlaying" style="position: absolute; pointer-events: none;">Visible Light Stream</div>
+                   <div v-if="!isPlaying" class="video-empty-state">Visible Light Stream</div>
+                   <div class="video-action-group">
+                     <button
+                       class="video-action-btn stream-mode-btn"
+                       :disabled="isPresetStreamSwitching || !canSwitchPresetVideoStream"
+                       :title="`切换到${presetVideoStreamModeLabel === '主' ? '子码流' : '主码流'}`"
+                       @click.stop="handleTogglePresetVideoStream"
+                     >
+                       {{ isPresetStreamSwitching ? '...' : presetVideoStreamModeLabel }}
+                     </button>
+                     <button class="video-action-btn icon-only" title="手动重连" @click.stop="handlePresetManualReconnect">
+                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                         <path d="M20 12A8 8 0 1 1 17.66 6.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                         <path d="M20 4V9H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                       </svg>
+                     </button>
+                     <button class="video-action-btn icon-only" title="全屏" @click.stop="togglePresetVideoPanelFullscreen">
+                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                         <path d="M8 3H3V8M16 3H21V8M8 21H3V16M16 21H21V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                       </svg>
+                     </button>
+                   </div>
                </div>
                
                <!-- Right Controls -->
@@ -746,17 +771,29 @@
       <div v-if="extraConfigDialog.visible" class="custom-dialog-mask" style="z-index: 10001;">
         <div class="simple-modal-card" style="width: 500px; max-width: 95vw;" @click.stop>
           <div class="simple-modal-header">
-            <span>{{ extraConfigFieldMeta.title }}</span>
+            <span>参数配置</span>
             <span class="simple-close-icon" @click="closeExtraConfigDialog">×</span>
           </div>
           <div class="simple-modal-body" style="padding: 30px;">
-            <div class="simple-form-item">
-              <label class="simple-label">{{ extraConfigFieldMeta.label }}</label>
+            <div v-if="activeExtraConfigFields.length === 0" class="simple-form-item">
+              <label class="simple-label">额外事务</label>
               <input
-                v-model="extraConfigDialog.content" 
+                v-model="extraConfigDialog.rawExtra"
                 class="simple-input extra-config-input"
-                :placeholder="extraConfigFieldMeta.placeholder"
+                placeholder="请输入额外事务"
               />
+            </div>
+            <div v-for="field in activeExtraConfigFields" :key="field.field" class="simple-form-item">
+              <label class="simple-label">
+                <span v-if="field.required" class="required-star">*</span>{{ field.title }}
+              </label>
+              <input
+                v-model="extraConfigDialog.formValues[field.field]"
+                class="simple-input extra-config-input"
+                :class="{ 'input-error-border': !!extraConfigDialog.errors[field.field] }"
+                :placeholder="field.default !== undefined && field.default !== null ? `默认值：${field.default}` : '请输入'"
+              />
+              <div v-if="extraConfigDialog.errors[field.field]" class="input-error-text">{{ extraConfigDialog.errors[field.field] }}</div>
             </div>
           </div>
           <div class="simple-modal-footer">
@@ -804,7 +841,7 @@ import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.s
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
 import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
-import { waylineApi, navigationApi, dogApi } from '@/api/services'
+import { waylineApi, navigationApi, dogApi, cameraApi } from '@/api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import icon360Photo from '@/assets/source_data/svg_data/task_line_svg/360_photo.svg'
 import iconAbsPhoto from '@/assets/source_data/svg_data/task_line_svg/abs_photo.svg'
@@ -834,6 +871,8 @@ import { getTrajectoryFile } from '@/utils/trajectoryDB'
 import { load3MF } from '@/utils/threemfParser'
 import { usePermissionStore } from '@/stores/permission'
 import { getRobotMapCacheKeys, getRobotContextCacheKeys } from '@/utils/robotBootstrap'
+import { getVideoStream, getVideoStreams, setVideoStreams } from '@/utils/videoCache'
+import type { VideoStream } from '@/utils/videoCache'
 
 const router = useRouter()
 const route = useRoute()
@@ -1005,6 +1044,27 @@ const getCurrentRobotContextKeys = () => {
   return robotId ? getRobotContextCacheKeys(robotId) : null
 }
 
+const getAllTrackTaskListCacheRaw = () => {
+  const contextKeys = getCurrentRobotContextKeys()
+  return (contextKeys ? localStorage.getItem(contextKeys.allTrackTaskListKey) : null)
+    || localStorage.getItem('all_track_task_list')
+}
+
+const setAllTrackTaskListCache = (taskList: any[]) => {
+  const normalizedTaskList = extractTrackTaskList(taskList)
+  const serialized = JSON.stringify(normalizedTaskList)
+  const contextKeys = getCurrentRobotContextKeys()
+  if (contextKeys) {
+    localStorage.setItem(contextKeys.allTrackTaskListKey, serialized)
+  }
+  localStorage.setItem('all_track_task_list', serialized)
+
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  window.dispatchEvent(new CustomEvent('track-task-list-updated', {
+    detail: { robotId }
+  }))
+}
+
 const extractTrackTaskList = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
@@ -1131,9 +1191,9 @@ const fetchTaskGroupListByRoute = async (routeName: string) => {
 // 仅从本地缓存刷新全量任务点列表依赖
 const refreshAllTrackTaskListCache = async () => {
   try {
-    const cachedData = localStorage.getItem('all_track_task_list')
+    const cachedData = getAllTrackTaskListCacheRaw()
     const taskList = cachedData ? extractTrackTaskList(JSON.parse(cachedData)) : []
-    localStorage.setItem('all_track_task_list', JSON.stringify(taskList))
+    setAllTrackTaskListCache(taskList)
     taskListRefreshKey.value++
   } catch (err) {
     console.error('刷新循迹任务点缓存失败:', err)
@@ -1144,7 +1204,7 @@ const refreshTrackTaskListFromApi = async (robotId: string) => {
   try {
     const response = await navigationApi.getAllTrackTaskList(robotId)
     const taskList = extractTrackTaskList(response?.data)
-    localStorage.setItem('all_track_task_list', JSON.stringify(taskList))
+    setAllTrackTaskListCache(taskList)
     taskListRefreshKey.value++
   } catch (err) {
     console.warn('从接口刷新循迹任务列表失败:', err)
@@ -1453,6 +1513,10 @@ const handleCloseTrack = async () => {
 }
 
 const handleStartTrack = async () => {
+  if (isNavPaused.value) {
+    showMissionError('请先关闭导航暂停')
+    return
+  }
   if (isTrackTaskRunning.value) {
     await handleCloseTrack()
     return
@@ -1608,7 +1672,7 @@ const handleDeleteTaskGroup = () => {
         }
 
         // 从缓存中删除该任务组的所有任务
-        const cachedData = localStorage.getItem('all_track_task_list')
+        const cachedData = getAllTrackTaskListCacheRaw()
         if (cachedData) {
           let allTaskList = JSON.parse(cachedData)
           const selectedTrack = normalizeTrackName(selectedRouteName.value)
@@ -1619,7 +1683,7 @@ const handleDeleteTaskGroup = () => {
               normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || '')) === selectedGroup
             )
           )
-          localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
+          setAllTrackTaskListCache(allTaskList)
         }
 
         // 同步更新任务组缓存映射
@@ -1868,7 +1932,7 @@ const resolvePreviewMapName = (trackName: string): string => {
 
 const getPreviewTaskPoints = (trackName: string, taskGroupName: string) => {
   const taskPoints: Array<{ x: number; y: number; z: number; name: string }> = []
-  const cachedData = localStorage.getItem('all_track_task_list')
+  const cachedData = getAllTrackTaskListCacheRaw()
   if (!cachedData) return taskPoints
   try {
     const allTaskList = extractTrackTaskList(JSON.parse(cachedData))
@@ -2133,7 +2197,7 @@ const waypointsData = computed(() => {
   taskListRefreshKey.value
   
   // 从 localStorage 获取所有循迹任务点列表
-  const cachedData = localStorage.getItem('all_track_task_list')
+  const cachedData = getAllTrackTaskListCacheRaw()
   if (!cachedData) {
     return []
   }
@@ -2185,6 +2249,60 @@ const waypointsData = computed(() => {
 })
 
 const missionEmptyRowCount = computed(() => Math.max(0, 10 - waypointsData.value.length))
+
+const getTaskProgressLastTask = computed<Record<string, any> | null>(() => {
+  const raw = (robotStore.taskProgress as any)?.last_task
+  if (!raw) return null
+  if (typeof raw === 'object' && raw !== null) return raw as Record<string, any>
+
+  const text = String(raw).trim()
+  if (!text || text === '[object Object]') return null
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, any>
+    }
+  } catch {}
+  return null
+})
+
+const normalizeCompareValue = (value: unknown) => String(value ?? '').trim()
+
+const isSameNumericValue = (a: unknown, b: unknown) => {
+  const na = Number(a)
+  const nb = Number(b)
+  if (Number.isFinite(na) && Number.isFinite(nb)) {
+    return Math.abs(na - nb) < 1e-6
+  }
+  return normalizeCompareValue(a) === normalizeCompareValue(b)
+}
+
+const isLastTaskRow = (waypoint: any) => {
+  if (!isTrackTaskRunning.value) return false
+
+  const lastTask = getTaskProgressLastTask.value
+  const rowTask = waypoint?.rawData
+  if (!lastTask || !rowTask) return false
+
+  const lastTaskId = normalizeCompareValue(lastTask.task_id)
+  const rowTaskId = normalizeCompareValue(rowTask.task_id)
+  if (lastTaskId && rowTaskId) {
+    return lastTaskId === rowTaskId
+  }
+
+  const sameX = isSameNumericValue(lastTask.x, rowTask.x)
+  const sameY = isSameNumericValue(lastTask.y, rowTask.y)
+  const sameTheta = isSameNumericValue(lastTask.theta, rowTask.theta)
+  const sameType =
+    normalizeCompareValue(lastTask.type_text || lastTask.type) ===
+    normalizeCompareValue(rowTask.type_text || rowTask.type)
+  const sameCreateTime =
+    normalizeCompareValue(lastTask.createtime) &&
+    normalizeCompareValue(rowTask.createtime) &&
+    normalizeCompareValue(lastTask.createtime) === normalizeCompareValue(rowTask.createtime)
+
+  return (sameX && sameY && sameTheta && sameType) || (sameCreateTime && sameX && sameY)
+}
 
 // 获取当前航线名称
 const getCurrentWaylineName = () => {
@@ -2955,8 +3073,13 @@ watch(() => addTaskDialog.value.form.isMulti, () => {
 watch(() => addTaskDialog.value.form.typeInput, (val) => {
   if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
 })
-watch(() => addTaskDialog.value.form.actionType, (val) => {
+watch(() => addTaskDialog.value.form.actionType, (val, oldVal) => {
   if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
+  const nextType = String(val || '').trim()
+  const prevType = String(oldVal || '').trim()
+  if (nextType !== prevType) {
+    addTaskDialog.value.form.extraConfig = ''
+  }
 })
 watch(() => addTaskDialog.value.form.x, (val) => {
   if (String(val || '').trim()) addTaskFieldErrors.value.x = ''
@@ -3211,7 +3334,7 @@ const confirmAddTask = async () => {
       return
     } else {
       // 重新获取任务列表更新缓存
-      const cachedData = localStorage.getItem('all_track_task_list')
+      const cachedData = getAllTrackTaskListCacheRaw()
       let allTaskList = cachedData ? JSON.parse(cachedData) : []
 
       if (isEditMode.value && editingTaskItem.value?.rawData) {
@@ -3229,7 +3352,7 @@ const confirmAddTask = async () => {
         allTaskList.push(taskData)
       }
 
-      localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
+      setAllTrackTaskListCache(allTaskList)
     
       // 触发列表刷新
       taskListRefreshKey.value++
@@ -3293,7 +3416,7 @@ const handleDeleteTask = (waypoint: any) => {
         allTaskList = responseTaskListRaw
       } else {
         // 兜底：若接口未返回列表，仍按本地缓存删除指定任务
-        const cachedData = localStorage.getItem('all_track_task_list')
+        const cachedData = getAllTrackTaskListCacheRaw()
         allTaskList = cachedData ? JSON.parse(cachedData) : []
         allTaskList = allTaskList.filter((task: any) =>
           !(task.task_id === rawData.task_id &&
@@ -3302,7 +3425,7 @@ const handleDeleteTask = (waypoint: any) => {
         )
       }
 
-      localStorage.setItem('all_track_task_list', JSON.stringify(allTaskList))
+      setAllTrackTaskListCache(allTaskList)
       
       // 触发列表刷新
       taskListRefreshKey.value++
@@ -3326,28 +3449,23 @@ const handleArriveTask = async (waypoint: any) => {
     const robotId = localStorage.getItem('selected_robot_id')
     if (!robotId) return
 
-    const { droneSns } = getCachedDeviceSns()
-    const sn = (droneSns && droneSns.length > 0) ? droneSns[0] : '123'
-    
-    const params = {
-      sn: sn,
-      action: 1,
-      chargeIndex: waypoint.time.toString()
+    const chargeIndex = Number(waypoint?.rawData?.time ?? waypoint?.time)
+    if (!Number.isFinite(chargeIndex)) {
+      errorMessage.value = { show: true, text: '当前任务点缺少有效的 time 字段' }
+      setTimeout(() => {
+        errorMessage.value.show = false
+      }, 2000)
+      return
     }
     
-    try {
-       await navigationApi.oneKeyRecharge(robotId, params)
-       successMessage.value = { show: true, text: '到点指令下发成功' }
-       setTimeout(() => {
-         successMessage.value.show = false
-       }, 2000)
-    } catch (err) {
-       console.error('到点指令失败', err)
-       errorMessage.value = { show: true, text: '到点指令失败' }
-       setTimeout(() => {
-         errorMessage.value.show = false
-       }, 2000)
-    }
+    successMessage.value = { show: true, text: '到点指令已发送' }
+    setTimeout(() => {
+      successMessage.value.show = false
+    }, 2000)
+
+    navigationApi.oneKeyRecharge(robotId, { chargeIndex }).catch((err) => {
+      console.error('到点指令发送失败', err)
+    })
   })
 }
 
@@ -3399,9 +3517,143 @@ watch(isPresetDropdownOpen, (isOpen) => {
 
 // Video Playback Logic
 const videoElement = ref<HTMLVideoElement | null>(null)
+const presetVideoWrapper = ref<HTMLElement | null>(null)
 let pc: RTCPeerConnection | null = null
 const isPlaying = ref(false)
 const videoStreamUrl = ref('')
+const isPresetStreamSwitching = ref(false)
+
+const getRobotCameraListCacheKey = (robotId: string) => `camera_list_${robotId}`
+const getRobotVideoStreamsCacheKey = (robotId: string) => `video_streams_${robotId}`
+
+const getRobotVideoStreams = (robotId: string): VideoStream[] => {
+  try {
+    const cached = localStorage.getItem(getRobotVideoStreamsCacheKey(robotId))
+    if (cached) return JSON.parse(cached)
+  } catch {}
+  return getVideoStreams()
+}
+
+const getRobotVideoStreamByType = (robotId: string, type: VideoStream['type']): VideoStream | null => {
+  const streams = getRobotVideoStreams(robotId)
+  return streams.find(stream => stream.type === type) || null
+}
+
+const setRobotVideoStreams = (robotId: string, streams: VideoStream[]) => {
+  localStorage.setItem(getRobotVideoStreamsCacheKey(robotId), JSON.stringify(streams))
+  setVideoStreams(streams)
+}
+
+const getPresetVisibleStream = (): VideoStream | null => {
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  if (robotId) {
+    return getRobotVideoStreamByType(robotId, 'drone_visible')
+  }
+  return getVideoStream('drone_visible')
+}
+
+const hasSubStreamFromCameraCache = (stream: VideoStream): boolean => {
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  try {
+    const raw = robotId
+      ? (localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list'))
+      : localStorage.getItem('camera_list')
+    if (!raw) return false
+    const cameras = JSON.parse(raw) as any[]
+    const camera = cameras.find(item => String(item?.CamKey) === String(stream.camera_index))
+    return !!(camera?.MainUrl && camera?.SubUrl)
+  } catch {
+    return false
+  }
+}
+
+const canSwitchPresetVideoStream = computed(() => {
+  const stream = getPresetVisibleStream()
+  if (!stream) return false
+  const fromStream = (stream.switchable_video_types?.length ?? 0) > 0
+  return !!stream.camera_index && (fromStream || hasSubStreamFromCameraCache(stream))
+})
+
+const presetVideoStreamModeLabel = computed(() => {
+  const stream = getPresetVisibleStream()
+  return stream?.use_sub_stream ? '子' : '主'
+})
+
+const handleTogglePresetVideoStream = async () => {
+  const stream = getPresetVisibleStream()
+  if (!stream) {
+    showMissionError('未找到视频流缓存信息')
+    return
+  }
+  if (!canSwitchPresetVideoStream.value) {
+    showMissionError('当前视频不支持主/子码流切换')
+    return
+  }
+  if (isPresetStreamSwitching.value) return
+
+  isPresetStreamSwitching.value = true
+  const robotId = localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    isPresetStreamSwitching.value = false
+    showMissionError('未选择机器人，无法切换码流')
+    return
+  }
+
+  const nextUseSubStream = !(stream.use_sub_stream === true)
+
+  try {
+    try {
+      await cameraApi.stopCameraStream(robotId, stream.camera_index)
+    } catch (stopError) {
+      console.warn('切换码流前停止旧流失败，继续尝试启动新流:', stopError)
+    }
+
+    const response = await cameraApi.startCameraStream(robotId, stream.camera_index, nextUseSubStream)
+    if (!response?.stream_url) {
+      throw new Error('切换后未返回有效视频地址')
+    }
+
+    const updatedStream: VideoStream = {
+      ...stream,
+      url: response.stream_url,
+      switchable_video_types: (stream.switchable_video_types?.length ?? 0) > 0 ? stream.switchable_video_types : ['main', 'sub'],
+      use_sub_stream: nextUseSubStream,
+    }
+
+    const streams = getRobotVideoStreams(robotId)
+    const updated = streams.map(item =>
+      item.type === updatedStream.type ? { ...item, ...updatedStream } : item
+    )
+    setRobotVideoStreams(robotId, updated)
+
+    await startWebRTCPlayback(response.stream_url)
+    showMissionSuccess(`已切换到${nextUseSubStream ? '子码流' : '主码流'}`)
+  } catch (error) {
+    showMissionError(`码流切换失败: ${parseMissionErrorMessage(error)}`)
+  } finally {
+    isPresetStreamSwitching.value = false
+  }
+}
+
+const handlePresetManualReconnect = async () => {
+  if (!videoStreamUrl.value) return
+  await startWebRTCPlayback(videoStreamUrl.value)
+}
+
+const togglePresetVideoPanelFullscreen = async () => {
+  const wrapper = presetVideoWrapper.value
+  if (!wrapper) return
+
+  try {
+    if (document.fullscreenElement === wrapper) {
+      await document.exitFullscreen()
+      return
+    }
+    await wrapper.requestFullscreen()
+  } catch (error) {
+    console.error('预置点视频全屏切换失败:', error)
+  }
+}
 
 const buildApiUrl = (webrtcUrl: string) => {
   try {
@@ -3563,23 +3815,12 @@ const openPresetDialog = async () => {
   // Start Video
   nextTick(() => {
       try {
-        const streamsStr = localStorage.getItem('video_streams')
-        if (streamsStr) {
-            const streams = JSON.parse(streamsStr)
-            // Retrieve the first stream as requested or specific visible stream
-            // User said: take first video, type is 'drone_visible'
-            // Structure: [{"type":"drone_visible", ...}, ...]
-            // I'll look for drone_visible first, or fallback to index 0
-            const visibleStream = streams.find((s: any) => s.type === 'drone_visible') || streams[0]
-            
-            if (visibleStream && visibleStream.url) {
-                console.log('Starting video stream:', visibleStream.url)
-                startWebRTCPlayback(visibleStream.url)
-            } else {
-                console.warn('No suitable video stream found')
-            }
+        const visibleStream = getPresetVisibleStream()
+        if (visibleStream && visibleStream.url) {
+          console.log('Starting video stream:', visibleStream.url)
+          startWebRTCPlayback(visibleStream.url)
         } else {
-            console.warn('No video_streams in localStorage')
+          console.warn('No suitable video stream found')
         }
       } catch (e) {
           console.error('Failed to load video streams', e)
@@ -3618,63 +3859,134 @@ const handleGotoPreset = () => { console.log('Goto Preset') }
 // const handleSpeed = () => { console.log('Set Speed') }
 
 // ========== 额外配置相关 ==========
+interface ExtraConfigFieldDef {
+  type?: string
+  title: string
+  field: string
+  required?: boolean
+  default?: string | number | boolean | null
+}
+
 const extraConfigDialog = ref({
   visible: false,
-  content: ''
+  rawExtra: '',
+  formValues: {} as Record<string, string>,
+  errors: {} as Record<string, string>
 })
 
-const extraConfigFieldMeta = computed(() => {
+const parseTaskTypeFieldname = (raw: unknown): ExtraConfigFieldDef[] => {
+  if (!raw) return []
+  const text = String(raw).trim()
+  if (!text || text === '[]') return []
+  try {
+    const parsed = JSON.parse(text)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map(item => ({
+        type: String(item?.type ?? ''),
+        title: String(item?.title ?? item?.field ?? ''),
+        field: String(item?.field ?? ''),
+        required: Boolean(item?.required),
+        default: item?.default
+      }))
+      .filter(item => !!item.field && !!item.title)
+  } catch (_) {
+    return []
+  }
+}
+
+const currentActionTypeMeta = computed(() => {
   const actionType = String(addTaskDialog.value.form.actionType || addTaskDialog.value.form.typeInput || '').trim()
-
-  if (actionType === '回充' || actionType === '充电结束任务') {
-    return {
-      title: '参数配置',
-      label: '回充时间(秒)',
-      placeholder: '请输入回充时间(秒)',
-      key: 'charge_time'
-    }
-  }
-
-  if (actionType === '设置导航速度') {
-    return {
-      title: '参数配置',
-      label: '速度',
-      placeholder: '请输入速度',
-      key: 'speed'
-    }
-  }
-
-  return {
-    title: '额外配置',
-    label: '额外事务',
-    placeholder: '请输入额外事务配置',
-    key: ''
-  }
+  return findTaskTypeMeta(actionType)
 })
 
-const readExtraConfigValue = (rawValue: string, key: string) => {
-  if (!rawValue) return ''
-  if (!key) return rawValue
+const activeExtraConfigFields = computed<ExtraConfigFieldDef[]>(() => {
+  return parseTaskTypeFieldname(currentActionTypeMeta.value?.fieldname)
+})
+
+const parseExtraConfigPayload = (rawValue: string): Record<string, string> => {
+  if (!rawValue) return {}
 
   try {
     const parsed = JSON.parse(rawValue)
-    if (parsed && typeof parsed === 'object' && key in parsed) {
-      return String((parsed as Record<string, unknown>)[key] ?? '')
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const result: Record<string, string> = {}
+      Object.entries(parsed as Record<string, unknown>).forEach(([key, value]) => {
+        result[key] = value == null ? '' : String(value)
+      })
+      return result
     }
   } catch (_) {}
 
-  return rawValue
+  return {}
 }
 
 const extraConfigDisplayValue = computed(() => {
-  return readExtraConfigValue(
-    addTaskDialog.value.form.extraConfig || '',
-    extraConfigFieldMeta.value.key
-  )
+  const fields = activeExtraConfigFields.value
+  const raw = addTaskDialog.value.form.extraConfig || ''
+  if (!raw) return ''
+  if (fields.length === 0) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'extra' in parsed) {
+        return String((parsed as Record<string, unknown>).extra ?? '')
+      }
+    } catch (_) {}
+    return raw
+  }
+
+  const payload = parseExtraConfigPayload(raw)
+  return fields
+    .map(field => {
+      const value = payload[field.field]
+      const resolved = value !== undefined && value !== '' ? value : (field.default ?? '')
+      return `${field.title}: ${resolved}`
+    })
+    .join('，')
 })
 
 const openExtraConfigDialog = () => {
-  extraConfigDialog.value.content = extraConfigDisplayValue.value
+  const fields = activeExtraConfigFields.value
+  if (fields.length === 0) {
+    const raw = addTaskDialog.value.form.extraConfig || ''
+    let rawExtra = ''
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'extra' in parsed) {
+          rawExtra = String((parsed as Record<string, unknown>).extra ?? '')
+        } else {
+          rawExtra = raw
+        }
+      } catch (_) {
+        rawExtra = raw
+      }
+    }
+    extraConfigDialog.value.rawExtra = rawExtra
+    extraConfigDialog.value.formValues = {}
+    extraConfigDialog.value.errors = {}
+    extraConfigDialog.value.visible = true
+    return
+  }
+
+  const existingPayload = parseExtraConfigPayload(addTaskDialog.value.form.extraConfig || '')
+  const nextFormValues: Record<string, string> = {}
+  const nextErrors: Record<string, string> = {}
+
+  fields.forEach(field => {
+    const existingValue = existingPayload[field.field]
+    if (existingValue !== undefined) {
+      nextFormValues[field.field] = existingValue
+    } else if (field.default !== undefined && field.default !== null) {
+      nextFormValues[field.field] = String(field.default)
+    } else {
+      nextFormValues[field.field] = ''
+    }
+    nextErrors[field.field] = ''
+  })
+
+  extraConfigDialog.value.formValues = nextFormValues
+  extraConfigDialog.value.errors = nextErrors
   extraConfigDialog.value.visible = true
 }
 
@@ -3683,26 +3995,36 @@ const closeExtraConfigDialog = () => {
 }
 
 const confirmExtraConfig = () => {
-  const key = extraConfigFieldMeta.value.key
-  const inputValue = String(extraConfigDialog.value.content || '').trim()
-
-  if (!key) {
-    addTaskDialog.value.form.extraConfig = inputValue
+  const fields = activeExtraConfigFields.value
+  if (fields.length === 0) {
+    addTaskDialog.value.form.extraConfig = JSON.stringify({
+      extra: String(extraConfigDialog.value.rawExtra ?? '')
+    })
     closeExtraConfigDialog()
     return
   }
 
-  let payload: Record<string, unknown> = {}
-  const raw = addTaskDialog.value.form.extraConfig || ''
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        payload = parsed as Record<string, unknown>
-      }
-    } catch (_) {}
+  const payload: Record<string, string> = {}
+  const nextErrors: Record<string, string> = {}
+
+  for (const field of fields) {
+    const rawValue = extraConfigDialog.value.formValues[field.field]
+    const inputValue = String(rawValue ?? '').trim()
+    const hasDefault = field.default !== undefined && field.default !== null
+    const finalValue = inputValue || (hasDefault ? String(field.default) : '')
+
+    if (field.required && !finalValue) {
+      nextErrors[field.field] = `${field.title}不能为空`
+      continue
+    }
+
+    nextErrors[field.field] = ''
+    payload[field.field] = finalValue
   }
-  payload[key] = inputValue
+
+  extraConfigDialog.value.errors = nextErrors
+  if (Object.values(nextErrors).some(Boolean)) return
+
   addTaskDialog.value.form.extraConfig = JSON.stringify(payload)
   closeExtraConfigDialog()
 }
@@ -4464,6 +4786,104 @@ const confirmExtraConfig = () => {
 .mission-btn-blue { background: #0099ff; color: #fff; border: none; height: 40px; border-radius: 4px; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
 .mission-btn-blue:hover { background: #0077cc; }
 
+.video-only-wrapper {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(180deg, #0e2b40 0%, #0b2235 100%);
+  display: flex;
+}
+
+.video-only-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.video-hidden {
+  display: none !important;
+}
+
+.video-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(220, 236, 255, 0.7);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.video-action-group {
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 12;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.video-only-wrapper:hover .video-action-group {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.video-action-btn {
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(129, 211, 242, 0.32);
+  background: rgba(9, 34, 54, 0.62);
+  color: #d7f1ff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-action-btn:hover {
+  border-color: rgba(142, 227, 255, 0.56);
+  background: rgba(14, 46, 70, 0.82);
+}
+
+.video-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.video-action-btn.icon-only svg {
+  width: 13px;
+  height: 13px;
+}
+
+.stream-mode-btn {
+  min-width: 24px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.video-only-element::-webkit-media-controls-mute-button,
+.video-only-element::-webkit-media-controls-volume-control-container,
+.video-only-element::-webkit-media-controls-volume-slider,
+.video-only-element::-webkit-media-controls-overflow-button,
+.video-only-element::-webkit-media-controls-toggle-closed-captions-button,
+.video-only-element::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+
 /* 列表操作按钮样式 */
 .action-btn {
   display: inline-flex;
@@ -4510,6 +4930,16 @@ const confirmExtraConfig = () => {
 /* 行 hover 效果 */
 .file-table-row:hover {
   background: rgba(103, 213, 253, 0.05);
+}
+
+.file-table-row.task-last-row-active {
+  background: rgba(103, 213, 253, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(103, 213, 253, 0.85);
+}
+
+.file-table-row.task-last-row-active .ms-seq-num {
+  border-color: rgba(103, 213, 253, 0.8);
+  background: rgba(103, 213, 253, 0.22);
 }
 /* 序号圆圈 */
 .ms-seq-num {

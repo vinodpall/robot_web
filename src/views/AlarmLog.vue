@@ -41,23 +41,119 @@
               </div>
               <div class="track-toolbar-group">
                 <span class="mission-toolbar-label">开始时间：</span>
-                <input
-                  v-model="startTime"
-                  type="datetime-local"
-                  class="mission-toolbar-select track-time-input"
-                  ref="startTimeInput"
-                  @click="openStartTimePicker"
-                />
+                <div class="track-time-picker-wrap">
+                  <button class="track-time-trigger" type="button" @click.stop="openTimePicker('start')">
+                    <span class="track-time-trigger-text">{{ formatToolbarTime(startTime) }}</span>
+                    <span class="track-time-trigger-icon">🗓</span>
+                  </button>
+                  <div v-if="activeTimePicker === 'start'" class="track-time-popover" @click.stop>
+                    <div class="track-time-popover-title">选择开始时间</div>
+                    <div class="track-time-calendar-head">
+                      <button class="track-time-nav-btn" type="button" @click="shiftDisplayMonth(-1)">‹</button>
+                      <div class="track-time-calendar-title">
+                        <select v-model.number="displayYear" class="track-time-mini-select">
+                          <option v-for="year in yearOptions" :key="year" :value="year">{{ year }}年</option>
+                        </select>
+                        <select v-model.number="displayMonth" class="track-time-mini-select">
+                          <option v-for="month in monthOptions" :key="month" :value="month">{{ month }}月</option>
+                        </select>
+                      </div>
+                      <button class="track-time-nav-btn" type="button" @click="shiftDisplayMonth(1)">›</button>
+                    </div>
+                    <div class="track-time-week-row">
+                      <span v-for="w in weekLabels" :key="`sw-${w}`">{{ w }}</span>
+                    </div>
+                    <div class="track-time-day-grid">
+                      <button
+                        v-for="cell in calendarCells"
+                        :key="`sd-${cell.year}-${cell.month}-${cell.day}`"
+                        type="button"
+                        class="track-time-day-cell"
+                        :class="{
+                          'is-muted': !cell.inCurrentMonth,
+                          'is-today': cell.isToday,
+                          'is-active': cell.isSelected
+                        }"
+                        @click="selectCalendarDay(cell)"
+                      >
+                        {{ cell.day }}
+                      </button>
+                    </div>
+                    <div class="track-time-hm-row">
+                      <label>时间</label>
+                      <select v-model.number="pickerHour" class="track-time-mini-select hm">
+                        <option v-for="h in hourOptions" :key="`sh-${h}`" :value="h">{{ String(h).padStart(2, '0') }} 时</option>
+                      </select>
+                      <select v-model.number="pickerMinute" class="track-time-mini-select hm">
+                        <option v-for="m in minuteOptions" :key="`sm-${m}`" :value="m">{{ String(m).padStart(2, '0') }} 分</option>
+                      </select>
+                    </div>
+                    <div class="track-time-popover-actions">
+                      <button class="track-time-btn ghost" type="button" @click="clearTimePicker('start')">清空</button>
+                      <button class="track-time-btn ghost" type="button" @click="setTimeNow('start')">现在</button>
+                      <button class="track-time-btn ghost" type="button" @click="cancelTimePicker">取消</button>
+                      <button class="track-time-btn" type="button" @click="confirmTimePicker('start')">确定</button>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div class="track-toolbar-group">
                 <span class="mission-toolbar-label">结束时间：</span>
-                <input
-                  v-model="endTime"
-                  type="datetime-local"
-                  class="mission-toolbar-select track-time-input"
-                  ref="endTimeInput"
-                  @click="openEndTimePicker"
-                />
+                <div class="track-time-picker-wrap">
+                  <button class="track-time-trigger" type="button" @click.stop="openTimePicker('end')">
+                    <span class="track-time-trigger-text">{{ formatToolbarTime(endTime) }}</span>
+                    <span class="track-time-trigger-icon">🗓</span>
+                  </button>
+                  <div v-if="activeTimePicker === 'end'" class="track-time-popover" @click.stop>
+                    <div class="track-time-popover-title">选择结束时间</div>
+                    <div class="track-time-calendar-head">
+                      <button class="track-time-nav-btn" type="button" @click="shiftDisplayMonth(-1)">‹</button>
+                      <div class="track-time-calendar-title">
+                        <select v-model.number="displayYear" class="track-time-mini-select">
+                          <option v-for="year in yearOptions" :key="year" :value="year">{{ year }}年</option>
+                        </select>
+                        <select v-model.number="displayMonth" class="track-time-mini-select">
+                          <option v-for="month in monthOptions" :key="month" :value="month">{{ month }}月</option>
+                        </select>
+                      </div>
+                      <button class="track-time-nav-btn" type="button" @click="shiftDisplayMonth(1)">›</button>
+                    </div>
+                    <div class="track-time-week-row">
+                      <span v-for="w in weekLabels" :key="`ew-${w}`">{{ w }}</span>
+                    </div>
+                    <div class="track-time-day-grid">
+                      <button
+                        v-for="cell in calendarCells"
+                        :key="`ed-${cell.year}-${cell.month}-${cell.day}`"
+                        type="button"
+                        class="track-time-day-cell"
+                        :class="{
+                          'is-muted': !cell.inCurrentMonth,
+                          'is-today': cell.isToday,
+                          'is-active': cell.isSelected
+                        }"
+                        @click="selectCalendarDay(cell)"
+                      >
+                        {{ cell.day }}
+                      </button>
+                    </div>
+                    <div class="track-time-hm-row">
+                      <label>时间</label>
+                      <select v-model.number="pickerHour" class="track-time-mini-select hm">
+                        <option v-for="h in hourOptions" :key="`eh-${h}`" :value="h">{{ String(h).padStart(2, '0') }} 时</option>
+                      </select>
+                      <select v-model.number="pickerMinute" class="track-time-mini-select hm">
+                        <option v-for="m in minuteOptions" :key="`em-${m}`" :value="m">{{ String(m).padStart(2, '0') }} 分</option>
+                      </select>
+                    </div>
+                    <div class="track-time-popover-actions">
+                      <button class="track-time-btn ghost" type="button" @click="clearTimePicker('end')">清空</button>
+                      <button class="track-time-btn ghost" type="button" @click="setTimeNow('end')">现在</button>
+                      <button class="track-time-btn ghost" type="button" @click="cancelTimePicker">取消</button>
+                      <button class="track-time-btn" type="button" @click="confirmTimePicker('end')">确定</button>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div class="track-toolbar-actions track-toolbar-actions-right">
                 <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'log-tracklog-query'" @click="handleSearch">查询</button>
@@ -319,10 +415,209 @@ const filterTrackRoute = ref('')
 const filterTaskGroup = ref('')
 const startTime = ref('')
 const endTime = ref('')
-const startTimeInput = ref<HTMLInputElement | null>(null)
-const endTimeInput = ref<HTMLInputElement | null>(null)
-const openStartTimePicker = () => { startTimeInput.value?.showPicker?.(); startTimeInput.value?.focus() }
-const openEndTimePicker = () => { endTimeInput.value?.showPicker?.(); endTimeInput.value?.focus() }
+const activeTimePicker = ref<'start' | 'end' | null>(null)
+const displayYear = ref(new Date().getFullYear())
+const displayMonth = ref(new Date().getMonth() + 1)
+const pickerYear = ref(new Date().getFullYear())
+const pickerMonth = ref(new Date().getMonth() + 1)
+const pickerDay = ref(new Date().getDate())
+const pickerHour = ref(new Date().getHours())
+const pickerMinute = ref(new Date().getMinutes())
+const weekLabels = ['一', '二', '三', '四', '五', '六', '日']
+const yearOptions = computed(() => {
+  const currentYear = new Date().getFullYear()
+  const startYear = currentYear - 10
+  const endYear = currentYear + 10
+  const years: number[] = []
+  for (let y = startYear; y <= endYear; y += 1) years.push(y)
+  return years
+})
+const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
+const hourOptions = Array.from({ length: 24 }, (_, i) => i)
+const minuteOptions = Array.from({ length: 60 }, (_, i) => i)
+
+interface CalendarCell {
+  year: number
+  month: number
+  day: number
+  inCurrentMonth: boolean
+  isToday: boolean
+  isSelected: boolean
+}
+
+const splitDateTimeLocal = (value: string) => {
+  if (!value) return { date: '', time: '' }
+  const [datePart, timePart = ''] = value.split('T')
+  return { date: datePart || '', time: (timePart || '').slice(0, 5) }
+}
+
+const formatToolbarTime = (value: string) => {
+  if (!value) return '年 / 月 / 日  --:--'
+  const { date, time } = splitDateTimeLocal(value)
+  if (!date) return '年 / 月 / 日  --:--'
+  const [y, m, d] = date.split('-')
+  if (!y || !m || !d) return value
+  return `${y}/${m}/${d}  ${time || '--:--'}`
+}
+
+const parseDateTimeLocalValue = (value: string) => {
+  const now = new Date()
+  if (!value) {
+    return {
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      day: now.getDate(),
+      hour: now.getHours(),
+      minute: now.getMinutes()
+    }
+  }
+  const [datePart = '', timePart = ''] = value.split('T')
+  const [y, m, d] = datePart.split('-').map(v => Number(v))
+  const [h, mm] = timePart.split(':').map(v => Number(v))
+  if (!y || !m || !d) {
+    return {
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      day: now.getDate(),
+      hour: now.getHours(),
+      minute: now.getMinutes()
+    }
+  }
+  return {
+    year: y,
+    month: m,
+    day: d,
+    hour: Number.isFinite(h) ? Math.max(0, Math.min(23, h)) : 0,
+    minute: Number.isFinite(mm) ? Math.max(0, Math.min(59, mm)) : 0
+  }
+}
+
+const daysInMonth = (year: number, month: number) => {
+  return new Date(year, month, 0).getDate()
+}
+
+const normalizeDayByMonth = () => {
+  const maxDay = daysInMonth(pickerYear.value, pickerMonth.value)
+  if (pickerDay.value > maxDay) pickerDay.value = maxDay
+}
+
+const calendarCells = computed<CalendarCell[]>(() => {
+  const first = new Date(displayYear.value, displayMonth.value - 1, 1)
+  const firstWeekDay = (first.getDay() + 6) % 7
+  const startDate = new Date(displayYear.value, displayMonth.value - 1, 1 - firstWeekDay)
+  const today = new Date()
+  const todayY = today.getFullYear()
+  const todayM = today.getMonth() + 1
+  const todayD = today.getDate()
+  const cells: CalendarCell[] = []
+
+  for (let i = 0; i < 42; i += 1) {
+    const d = new Date(startDate)
+    d.setDate(startDate.getDate() + i)
+    const year = d.getFullYear()
+    const month = d.getMonth() + 1
+    const day = d.getDate()
+    cells.push({
+      year,
+      month,
+      day,
+      inCurrentMonth: year === displayYear.value && month === displayMonth.value,
+      isToday: year === todayY && month === todayM && day === todayD,
+      isSelected: year === pickerYear.value && month === pickerMonth.value && day === pickerDay.value
+    })
+  }
+  return cells
+})
+
+const assignPickerParts = (value: string) => {
+  const parsed = parseDateTimeLocalValue(value)
+  pickerYear.value = parsed.year
+  pickerMonth.value = parsed.month
+  pickerDay.value = parsed.day
+  pickerHour.value = parsed.hour
+  pickerMinute.value = parsed.minute
+  displayYear.value = parsed.year
+  displayMonth.value = parsed.month
+}
+
+const shiftDisplayMonth = (offset: number) => {
+  const base = new Date(displayYear.value, displayMonth.value - 1 + offset, 1)
+  displayYear.value = base.getFullYear()
+  displayMonth.value = base.getMonth() + 1
+}
+
+const selectCalendarDay = (cell: CalendarCell) => {
+  pickerYear.value = cell.year
+  pickerMonth.value = cell.month
+  pickerDay.value = cell.day
+  if (cell.year !== displayYear.value || cell.month !== displayMonth.value) {
+    displayYear.value = cell.year
+    displayMonth.value = cell.month
+  }
+}
+
+watch([displayYear, displayMonth], () => {
+  pickerYear.value = displayYear.value
+  pickerMonth.value = displayMonth.value
+  normalizeDayByMonth()
+})
+
+watch([pickerYear, pickerMonth], () => {
+  normalizeDayByMonth()
+})
+
+const composePickerDateTime = () => {
+  const pad = (v: number) => String(v).padStart(2, '0')
+  return `${pickerYear.value}-${pad(pickerMonth.value)}-${pad(pickerDay.value)}T${pad(pickerHour.value)}:${pad(pickerMinute.value)}`
+}
+
+const openTimePicker = (type: 'start' | 'end') => {
+  const source = type === 'start' ? startTime.value : endTime.value
+  assignPickerParts(source)
+  activeTimePicker.value = type
+}
+
+const cancelTimePicker = () => {
+  activeTimePicker.value = null
+}
+
+const clearTimePicker = (type: 'start' | 'end') => {
+  if (type === 'start') {
+    startTime.value = ''
+  } else {
+    endTime.value = ''
+  }
+  activeTimePicker.value = null
+}
+
+const formatDateTimeLocal = (date: Date) => {
+  const pad = (v: number) => String(v).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const setTimeNow = (type: 'start' | 'end') => {
+  const now = formatDateTimeLocal(new Date())
+  assignPickerParts(now)
+  const finalValue = composePickerDateTime()
+  if (type === 'start') startTime.value = finalValue
+  else endTime.value = finalValue
+}
+
+const confirmTimePicker = (type: 'start' | 'end') => {
+  normalizeDayByMonth()
+  const finalValue = composePickerDateTime()
+  if (type === 'start') startTime.value = finalValue
+  else endTime.value = finalValue
+  activeTimePicker.value = null
+}
+
+const handleGlobalMouseDown = (event: MouseEvent) => {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  if (!target.closest('.track-time-picker-wrap')) {
+    activeTimePicker.value = null
+  }
+}
 
 watch(filterTrackRoute, () => {
   filterTaskGroup.value = ''
@@ -634,10 +929,12 @@ onMounted(() => {
   loadFilterOptions()
   fetchRecords(1)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  document.addEventListener('mousedown', handleGlobalMouseDown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  document.removeEventListener('mousedown', handleGlobalMouseDown)
 })
 </script>
 
@@ -723,23 +1020,258 @@ onUnmounted(() => {
 }
 
 .track-time-input {
-  width: 165px !important;
-  min-width: 150px !important;
-  max-width: 165px !important;
-  padding-right: 18px;
+  width: 200px !important;
+  min-width: 190px !important;
+  max-width: 200px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  padding: 0 34px 0 10px !important;
   box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid rgba(103, 213, 253, 0.35) !important;
+  border-radius: 6px !important;
+  background: linear-gradient(180deg, rgba(12, 48, 76, 0.9) 0%, rgba(10, 38, 62, 0.92) 100%) !important;
+  color: #dff5ff !important;
+  box-shadow: inset 0 0 0 1px rgba(25, 103, 143, 0.25);
+  color-scheme: dark;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.track-time-input:hover {
+  border-color: rgba(103, 213, 253, 0.55) !important;
+}
+
+.track-time-input:focus {
+  outline: none;
+  border-color: #67d5fd !important;
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.18), inset 0 0 0 1px rgba(25, 103, 143, 0.3);
+}
+
+.track-time-input::-webkit-datetime-edit {
+  color: #dff5ff;
+}
+
+.track-time-input::-webkit-datetime-edit-fields-wrapper {
+  color: #dff5ff;
+}
+
+.track-time-input::-webkit-datetime-edit-text {
+  color: rgba(170, 220, 245, 0.75);
 }
 
 .track-time-input::-webkit-calendar-picker-indicator {
-  opacity: 0;
+  opacity: 0.9;
   cursor: pointer;
-  position: absolute;
-  right: 8px;
+  filter: brightness(1.2) saturate(0.8) hue-rotate(165deg);
+  margin-right: -4px;
 }
 
-.track-time-input {
-  -webkit-appearance: none;
-  appearance: none;
+.track-time-input::-webkit-clear-button,
+.track-time-input::-webkit-inner-spin-button {
+  display: none;
+}
+
+.track-time-picker-wrap {
+  position: relative;
+  width: 200px;
+  min-width: 190px;
+}
+
+.track-time-trigger {
+  width: 100%;
+  height: 32px;
+  border: 1px solid rgba(103, 213, 253, 0.35);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(12, 48, 76, 0.9) 0%, rgba(10, 38, 62, 0.92) 100%);
+  color: #dff5ff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(25, 103, 143, 0.25);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.track-time-trigger:hover {
+  border-color: rgba(103, 213, 253, 0.55);
+}
+
+.track-time-trigger-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-time-trigger-icon {
+  opacity: 0.85;
+  font-size: 12px;
+}
+
+.track-time-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1200;
+  width: 332px;
+  border: 1px solid rgba(103, 213, 253, 0.35);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(7, 37, 56, 0.98) 0%, rgba(8, 30, 48, 0.98) 100%);
+  box-shadow: 0 14px 36px rgba(2, 10, 18, 0.6), inset 0 0 0 1px rgba(61, 135, 173, 0.16);
+  padding: 12px;
+}
+
+.track-time-popover-title {
+  color: #67d5fd;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.track-time-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.track-time-calendar-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.track-time-nav-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(103, 213, 253, 0.32);
+  border-radius: 5px;
+  background: rgba(13, 51, 74, 0.85);
+  color: #bcecff;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.track-time-mini-select {
+  height: 28px;
+  min-width: 82px;
+  padding: 0 8px;
+  border: 1px solid rgba(103, 213, 253, 0.35);
+  border-radius: 6px;
+  background: rgba(8, 39, 59, 0.9);
+  color: #dff5ff;
+  font-size: 12px;
+  outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.55) transparent;
+}
+
+.track-time-mini-select.hm {
+  min-width: 94px;
+}
+
+.track-time-mini-select option {
+  background: #0b2e47;
+  color: #dff5ff;
+}
+
+.track-time-mini-select::-webkit-scrollbar {
+  width: 8px;
+}
+
+.track-time-mini-select::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.track-time-mini-select::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.55);
+  border-radius: 8px;
+}
+
+.track-time-week-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+  color: #95bbd1;
+  font-size: 12px;
+  text-align: center;
+}
+
+.track-time-day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.track-time-day-cell {
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: rgba(9, 41, 61, 0.78);
+  color: #d7effd;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.track-time-day-cell:hover {
+  border-color: rgba(103, 213, 253, 0.45);
+  background: rgba(18, 67, 95, 0.88);
+}
+
+.track-time-day-cell.is-muted {
+  color: rgba(162, 196, 218, 0.5);
+}
+
+.track-time-day-cell.is-today {
+  border-color: rgba(106, 214, 255, 0.55);
+}
+
+.track-time-day-cell.is-active {
+  border-color: rgba(131, 223, 255, 0.95);
+  background: linear-gradient(180deg, rgba(60, 129, 170, 0.98) 0%, rgba(40, 101, 139, 0.98) 100%);
+  color: #f2fbff;
+  box-shadow: 0 0 0 1px rgba(183, 239, 255, 0.28) inset;
+}
+
+.track-time-hm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.track-time-hm-row label {
+  width: 42px;
+  color: #a8cde2;
+  font-size: 12px;
+}
+
+.track-time-popover-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.track-time-btn {
+  height: 28px;
+  min-width: 54px;
+  border: 1px solid rgba(103, 213, 253, 0.4);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(22, 109, 155, 0.95) 0%, rgba(17, 86, 124, 0.95) 100%);
+  color: #eaf9ff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.track-time-btn.ghost {
+  background: rgba(12, 52, 78, 0.72);
+  color: #b7d7ea;
+  border-color: rgba(109, 169, 201, 0.35);
 }
 
 .alarm-input {

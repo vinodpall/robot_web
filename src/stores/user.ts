@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { User } from '@/types'
+import { clearLogoutSessionMemory } from '@/utils/logoutSessionMemory'
 
 export const useUserStore = defineStore('user', {
   state: () => {
@@ -51,6 +52,7 @@ export const useUserStore = defineStore('user', {
       this.token = ''
       localStorage.removeItem('token')
       localStorage.removeItem('user')
+      clearLogoutSessionMemory()
     }
   }
 })

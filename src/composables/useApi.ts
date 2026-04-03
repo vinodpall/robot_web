@@ -5,6 +5,7 @@ import { config, refreshEnvironmentConfig } from '../config/environment'
 import type { User, Dock, Drone, Mission, Alert, Device, Role, HmsAlert, Permission } from '../types'
 import { useDeviceStore } from '../stores/device'
 import { setVideoStreams, setDefaultVideoType, cleanupOldVideoCache } from '../utils/videoCache'
+import { clearLogoutSessionMemory } from '../utils/logoutSessionMemory'
 
 // 通用 API 访问与设备能力处理
 const VIDEO_CACHE_KEY = 'video_devices_cache'
@@ -220,6 +221,7 @@ export function useAuth() {
       localStorage.removeItem('user')
       localStorage.removeItem('token')
       localStorage.removeItem('workspace_id')
+      clearLogoutSessionMemory()
     }
   }
 

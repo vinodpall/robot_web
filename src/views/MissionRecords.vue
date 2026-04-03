@@ -57,6 +57,7 @@
                 <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tasklist-create'" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
                 <button class="mission-btn mission-btn-stop" :disabled="filteredPointTaskList.length === 0 || !selectedPointTaskId" v-permission-click-dialog="'task-tasklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
                 <button class="mission-btn mission-btn-primary" :disabled="filteredPointTaskList.length === 0 || !selectedPointTaskId" v-permission-click-dialog="'task-tasklist-create'" @click="handleAddTask">添加任务</button>
+                <button class="mission-btn mission-btn-secondary" :disabled="filteredPointTaskList.length === 0 || !selectedPointTaskId" v-permission-click-dialog="'task-tasklist-show'" @click="openPreviewDialog">预览</button>
               </div>
             </div>
             <div class="file-table file-table-adaptive">
@@ -132,6 +133,28 @@
         </section>
       </div>
     </main>
+
+    <div v-if="previewDialog.visible" class="custom-dialog-mask preview-dialog-mask" @click="closePreviewDialog">
+      <div class="preview-modal" @click.stop>
+        <div class="preview-modal-header">
+          <span>运行预览</span>
+          <span class="simple-close-icon" @click="closePreviewDialog">×</span>
+        </div>
+        <div class="preview-modal-body">
+          <div class="preview-map-wrap">
+            <ThreePointCloudPreview
+              :points="previewPointCloudData"
+              :loading="previewDialog.loading"
+              :error="previewDialog.error"
+              :normalization-params="previewPointCloudNormalization"
+              :robot-pose="robotStore.pose"
+              :robot-mesh="previewPc.robotMesh.value"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showMediaModal" class="media-modal-mask" @click="closeMediaModal">
       <div class="media-modal" @click.stop>
         <div class="media-modal-header">
@@ -344,10 +367,10 @@
             </div>
 
             <!-- 额外事务 -->
-             <div class="simple-form-item">
+            <div class="simple-form-item">
                <label class="simple-label">额外事务</label>
                <div class="simple-flex-row" style="justify-content: space-between;">
-                  <span style="color: #fff;">{{ addTaskDialog.form.extraConfig || '未配置' }}</span>
+                  <span style="color: #fff;">{{ extraConfigDisplayValue || '未配置' }}</span>
                   <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
                </div>
             </div>
@@ -394,14 +417,6 @@
                    </div>
                    <img :src="addTaskDialog.form.stopAtPoint ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
                  </div>
-              </div>
-               <div class="simple-form-item">
-                 <label class="simple-label">避障模式</label>
-                  <select v-model="addTaskDialog.form.obsMode" class="simple-select">
-                    <option value="无避障">无避障</option>
-                    <option value="近障模式">近障模式</option>
-                    <option value="绕障模式">绕障模式</option>
-                  </select>
               </div>
             </div>
 
@@ -511,18 +526,29 @@
       <div v-if="extraConfigDialog.visible" class="custom-dialog-mask" style="z-index: 10001;">
         <div class="simple-modal-card" style="width: 500px; max-width: 95vw;" @click.stop>
           <div class="simple-modal-header">
-            <span>额外配置</span>
+            <span>参数配置</span>
             <span class="simple-close-icon" @click="closeExtraConfigDialog">×</span>
           </div>
           <div class="simple-modal-body" style="padding: 30px;">
-            <div class="simple-form-item">
+            <div v-if="activeExtraConfigFields.length === 0" class="simple-form-item">
               <label class="simple-label">额外事务</label>
-              <textarea 
-                v-model="extraConfigDialog.content" 
-                class="simple-textarea"
-                placeholder="请输入额外事务配置"
-                rows="6"
-              ></textarea>
+              <input
+                v-model="extraConfigDialog.rawExtra"
+                class="simple-input extra-config-input"
+                placeholder="请输入额外事务"
+              />
+            </div>
+            <div v-for="field in activeExtraConfigFields" :key="field.field" class="simple-form-item">
+              <label class="simple-label">
+                <span v-if="field.required" class="required-star">*</span>{{ field.title }}
+              </label>
+              <input
+                v-model="extraConfigDialog.formValues[field.field]"
+                class="simple-input extra-config-input"
+                :class="{ 'input-error-border': !!extraConfigDialog.errors[field.field] }"
+                :placeholder="field.default !== undefined && field.default !== null ? `默认值：${field.default}` : '请输入'"
+              />
+              <div v-if="extraConfigDialog.errors[field.field]" class="input-error-text">{{ extraConfigDialog.errors[field.field] }}</div>
             </div>
           </div>
           <div class="simple-modal-footer">
@@ -555,6 +581,13 @@
           <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-tasklist-create'" @click="handleCreateTaskGroup">确定</button>
           <button class="mission-btn mission-btn-secondary" @click="closeCreateTaskGroupDialog">取消</button>
         </div>
+      </div>
+    </div>
+
+    <div v-if="taskInitDialog.visible" class="custom-dialog-mask task-init-mask">
+      <div class="track-init-dialog" @click.stop>
+        <div class="track-init-spinner"></div>
+        <span class="track-init-text">{{ taskInitDialog.text }}</span>
       </div>
     </div>
 
@@ -601,12 +634,15 @@ import editIcon from '@/assets/source_data/svg_data/robot_source/edit.png'
 import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import arriveIcon from '@/assets/source_data/svg_data/robot_source/arrive.png'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
-import { waylineApi, navigationApi } from '../api/services'
+import { waylineApi, navigationApi, dogApi } from '../api/services'
 import { getErrorMessage } from '@/utils/errorCodes'
 import { mediaApi } from '../api/services'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ThreePointCloudPreview from '@/components/ThreePointCloudPreview.vue'
+import { usePointCloudRenderer } from '@/composables/usePointCloudRenderer'
+import { load3MF } from '@/utils/threemfParser'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
 import { useRobotStore } from '@/stores/robot'
 import { usePermissionStore } from '@/stores/permission'
@@ -798,6 +834,225 @@ const waypointsData = computed(() => {
 
 const missionRecordsEmptyRowCount = computed(() => Math.max(0, 10 - waypointsData.value.length))
 
+const MAP_DB_NAME = 'MapFilesDB'
+const MAP_STORE_NAME = 'mapFiles'
+
+const previewDialog = ref({
+  visible: false,
+  loading: false,
+  error: ''
+})
+const previewPc = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5 })
+const previewPointCloudData = previewPc.data
+const previewBasePointCloudData = previewPc.baseData
+const previewPointCloudNormalization = previewPc.normalizationParams
+const previewOverlayTaskPoints = ref<Array<{ x: number; y: number; z: number; name: string }>>([])
+const previewPointCloudCanvas = previewPc.canvasRef
+let previewCanvasEventController: AbortController | null = null
+let previewResizeObserver: ResizeObserver | null = null
+
+const openMapDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(MAP_DB_NAME, 1)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains(MAP_STORE_NAME)) {
+        db.createObjectStore(MAP_STORE_NAME, { keyPath: 'id' })
+      }
+    }
+  })
+}
+
+const getMapFile = async (mapName: string, fileName: string): Promise<Blob | null> => {
+  try {
+    const db = await openMapDB()
+    return new Promise((resolve) => {
+      const tx = db.transaction([MAP_STORE_NAME], 'readonly')
+      const request = tx.objectStore(MAP_STORE_NAME).get(`${mapName}/${fileName}`)
+      request.onsuccess = () => resolve(request.result?.blob || null)
+      request.onerror = () => resolve(null)
+    })
+  } catch {
+    return null
+  }
+}
+
+const parsePcdBufferInWorker = (
+  buffer: ArrayBuffer
+): Promise<{
+  points: Array<{ x: number; y: number; z: number; intensity: number }>
+  normParams: { centerX: number; centerY: number; centerZ: number; maxRange: number }
+}> => {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../workers/pcdParser.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e) => {
+      worker.terminate()
+      if (e.data?.ok) {
+        resolve({ points: e.data.points, normParams: e.data.normParams })
+      } else {
+        reject(new Error(e.data?.error || 'PCD 解析失败'))
+      }
+    }
+    worker.onerror = (err) => {
+      worker.terminate()
+      reject(err)
+    }
+    worker.postMessage({ buffer }, [buffer])
+  })
+}
+
+const resolvePreviewMapName = () => {
+  if (selectedMap.value) return selectedMap.value
+  const taskName = String(selectedTaskDetail.value?.task_name || '')
+  if (!taskName.includes('_')) return ''
+  return taskName.split('_')[0] || ''
+}
+
+const getPreviewTaskPoints = () => {
+  const taskPoints: Array<{ x: number; y: number; z: number; name: string }> = []
+  const taskContent = selectedTaskDetail.value?.taskcontent || []
+  taskContent.forEach((task: any, idx: number) => {
+    const x = Number(task.x)
+    const y = Number(task.y)
+    const z = Number(task.z ?? 0)
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+      const name = String(task.type_text || task.preset || task.remark || task.task_id || `任务点${idx + 1}`)
+      taskPoints.push({ x, y, z, name })
+    }
+  })
+  return taskPoints
+}
+
+const applyPreviewOverlay = async () => {
+  if (!previewBasePointCloudData.value.length) return
+  const { centerX, centerY, centerZ, maxRange } = previewPointCloudNormalization.value
+  if (!maxRange || maxRange <= 1e-6) return
+
+  const normalizedTaskPoints = previewOverlayTaskPoints.value.map(point => ({
+    x: (point.x - centerX) / maxRange,
+    y: (point.y - centerY) / maxRange,
+    z: (point.z - centerZ) / maxRange,
+    intensity: 1.75,
+    name: point.name
+  }))
+
+  previewPointCloudData.value = [
+    ...previewBasePointCloudData.value,
+    ...normalizedTaskPoints
+  ]
+  await nextTick()
+  previewPc.schedule()
+}
+
+const setupPreviewCanvasEvents = () => {
+  const canvas = previewPointCloudCanvas.value
+  if (!canvas) return
+
+  if (previewCanvasEventController) {
+    previewCanvasEventController.abort()
+    previewCanvasEventController = null
+  }
+  previewCanvasEventController = new AbortController()
+  const signal = previewCanvasEventController.signal
+
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault()
+    previewPc.onWheel(event)
+  }, { passive: false, signal })
+  canvas.addEventListener('pointerdown', previewPc.onPointerDown, { signal })
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault(), { signal })
+  window.addEventListener('keydown', previewPc.onKeydown, { signal })
+
+  if (previewResizeObserver) {
+    previewResizeObserver.disconnect()
+    previewResizeObserver = null
+  }
+  previewResizeObserver = new ResizeObserver(() => {
+    previewPc.schedule()
+  })
+  const parent = canvas.parentElement || canvas
+  previewResizeObserver.observe(parent)
+}
+
+const destroyPreviewCanvasEvents = () => {
+  if (previewCanvasEventController) {
+    previewCanvasEventController.abort()
+    previewCanvasEventController = null
+  }
+  if (previewResizeObserver) {
+    previewResizeObserver.disconnect()
+    previewResizeObserver = null
+  }
+}
+
+const loadPreviewData = async () => {
+  previewDialog.value.loading = true
+  previewDialog.value.error = ''
+  try {
+    if (!selectedPointTaskId.value || !selectedTaskDetail.value) {
+      previewDialog.value.error = '请先选择任务组'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+
+    const mapName = resolvePreviewMapName()
+    if (!mapName) {
+      previewDialog.value.error = '未找到地图，请先在首页选择地图'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+
+    const pcdBlob = await getMapFile(mapName, 'tinyMap.pcd')
+    if (!pcdBlob || pcdBlob.size === 0) {
+      previewDialog.value.error = '点云文件不存在'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+
+    const { points: pcdPoints, normParams } = await parsePcdBufferInWorker(await pcdBlob.arrayBuffer())
+    if (!pcdPoints.length) {
+      previewDialog.value.error = '点云数据为空'
+      previewPointCloudData.value = []
+      previewBasePointCloudData.value = []
+      previewOverlayTaskPoints.value = []
+      return
+    }
+
+    previewPointCloudNormalization.value = normParams
+    previewBasePointCloudData.value = pcdPoints
+    previewOverlayTaskPoints.value = getPreviewTaskPoints()
+    await applyPreviewOverlay()
+  } catch (err) {
+    console.error('[MissionRecords 预览] 加载失败:', err)
+    previewDialog.value.error = '预览加载失败'
+    previewPointCloudData.value = []
+    previewBasePointCloudData.value = []
+    previewOverlayTaskPoints.value = []
+  } finally {
+    previewDialog.value.loading = false
+  }
+}
+
+const openPreviewDialog = async () => {
+  previewDialog.value.visible = true
+  await nextTick()
+  setupPreviewCanvasEvents()
+  await loadPreviewData()
+}
+
+const closePreviewDialog = () => {
+  previewDialog.value.visible = false
+  destroyPreviewCanvasEvents()
+}
+
 // 当前位置和任务信息
 const currentPosition = ref<{
   x: number | null
@@ -872,6 +1127,98 @@ const getJobErrorMessage = (job: any) => {
   const code = job.error_code ?? job.error?.code ?? job.errorCode
   if (!code && job.error?.message) return job.error.message
   return getErrorMessage(code, undefined, { fallback: '执行失败，具体原因未知' })
+}
+
+const parseErrorMessage = (error: any): string => {
+  const message = error?.detail
+    || error?.response?.detail
+    || error?.response?.data?.detail
+    || error?.data?.detail
+    || error?.response?._data?.detail
+    || error?.response?.data?.message
+    || error?.response?.data?.msg?.error_msg
+    || error?.data?.message
+    || error?.message
+    || error?.msg
+
+  if (typeof message === 'string' && message.trim()) return message.trim()
+  return '未知错误'
+}
+
+const trackGaitConfigMap: Record<number, { command: string; label: string }> = {
+  0: { command: 'foot_walk', label: '行走步态' },
+  1: { command: 'foot_climb', label: '斜坡步态' },
+  2: { command: 'foot_obs', label: '越障步态' },
+  3: { command: 'foot_stair', label: '楼梯步态' },
+  4: { command: 'foot_stair2', label: '楼梯步态（累积帧模式）' },
+  5: { command: 'foot_stair3', label: '45°楼梯步态（累积帧模式）' },
+  6: { command: 'foot_l', label: 'L行走步态' },
+  7: { command: 'foot_mountain', label: '山地步态' },
+  8: { command: 'foot_silent', label: '静音步态' }
+}
+
+const waitForRobotState = async (
+  condition: () => boolean,
+  timeoutMs: number,
+  errorMessage: string
+) => {
+  if (condition()) return
+  await new Promise<void>((resolve, reject) => {
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => {
+      if (condition()) {
+        window.clearInterval(timer)
+        resolve()
+        return
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        window.clearInterval(timer)
+        reject(new Error(errorMessage))
+      }
+    }, 100)
+  })
+}
+
+const sendDogCommand = async (robotId: string, commandName: string) => {
+  await dogApi.sendCommand(robotId, { command_name: commandName })
+}
+
+const prepareRobotForTaskStart = async (
+  robotId: string,
+  options?: { gaitConfig?: { command: string; label: string } }
+) => {
+  if (robotStore.robotStatusText === 'RL状态') {
+    await sendDogCommand(robotId, 'foot_walk')
+  }
+
+  await sendDogCommand(robotId, 'mode_auto')
+  await sendDogCommand(robotId, 'ground_1')
+
+  await waitForRobotState(
+    () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
+    8000,
+    '等待机器人切换到非手动模式超时'
+  )
+
+  await sendDogCommand(robotId, 'mode_auto_2')
+
+  if (robotStore.motionState?.basic_state !== 4) {
+    await sendDogCommand(robotId, 'action')
+    await waitForRobotState(
+      () => robotStore.motionState?.basic_state === 4,
+      10000,
+      '等待机器人进入踏步状态超时'
+    )
+  }
+
+  if (options?.gaitConfig) {
+    await sendDogCommand(robotId, options.gaitConfig.command)
+    await waitForRobotState(
+      () => robotStore.gaitText === options.gaitConfig?.label,
+      10000,
+      `等待机器人切换到${options.gaitConfig.label}超时`
+    )
+  }
 }
 
 // 显示媒体文件弹窗
@@ -1203,6 +1550,13 @@ const loadJobRecords = async () => {
 
 // 启动发布点任务
 const handleStartTask = async () => {
+  if (isNavPaused.value) {
+    errorMessage.value = { show: true, text: '请先关闭导航暂停' }
+    setTimeout(() => {
+      errorMessage.value.show = false
+    }, 2000)
+    return
+  }
   if (isPointTaskRunning.value) {
     const robotId = localStorage.getItem('selected_robot_id')
     if (!robotId) {
@@ -1251,20 +1605,44 @@ const handleStartTask = async () => {
   }
   
   try {
+    taskInitDialog.value.text = '任务初始化中...'
+    taskInitDialog.value.visible = true
+
+    await prepareRobotForTaskStart(robotId, {
+      gaitConfig: trackGaitConfigMap[0]
+    })
+
     const response = await navigationApi.startPointTask(robotId, {
       id: selectedPointTaskId.value,
       // 与Home.vue保持一致，sn参数传入robotId
       sn: robotId
     })
-    
-    successMessage.value = { show: true, text: '任务启动指令已发送' }
+
+    if (response && (response as any).msg) {
+      const { error_code, error_msg } = (response as any).msg
+      if (error_code !== 0) {
+        errorMessage.value = { show: true, text: `启动失败: ${error_msg || '未知错误'}` }
+        setTimeout(() => {
+          errorMessage.value.show = false
+        }, 2000)
+        return
+      }
+    }
+
+    taskExecutionStore.markMultiTaskStopped()
+    successMessage.value = { show: true, text: '发布点任务启动成功' }
     setTimeout(() => {
       successMessage.value.show = false
     }, 2000)
     console.log('启动任务响应:', response)
   } catch (error: any) {
     console.error('启动任务失败:', error)
-    errorMessage.value = { show: true, text: `启动任务失败: ${error.message || '未知错误'}` }
+    errorMessage.value = { show: true, text: parseErrorMessage(error) || '启动发布点任务失败，请稍后重试' }
+    setTimeout(() => {
+      errorMessage.value.show = false
+    }, 2000)
+  } finally {
+    taskInitDialog.value.visible = false
   }
 }
 
@@ -1501,8 +1879,21 @@ watch(() => addTaskDialog.value.form.isMulti, () => {
   addTaskFieldErrors.value.taskType = ''
 })
 
-watch(() => addTaskDialog.value.form.typeInput, (val) => {
+watch(() => addTaskDialog.value.form.typeInput, (val, oldVal) => {
   if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
+  const nextTypeInput = String(val || '').trim()
+  const prevTypeInput = String(oldVal || '').trim()
+  if (nextTypeInput !== prevTypeInput) {
+    addTaskDialog.value.form.extraConfig = ''
+  }
+})
+watch(() => addTaskDialog.value.form.actionType, (val, oldVal) => {
+  if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
+  const nextType = String(val || '').trim()
+  const prevType = String(oldVal || '').trim()
+  if (nextType !== prevType) {
+    addTaskDialog.value.form.extraConfig = ''
+  }
 })
 watch(() => addTaskDialog.value.form.x, (val) => {
   if (String(val || '').trim()) addTaskFieldErrors.value.x = ''
@@ -1606,7 +1997,7 @@ const confirmAddTask = async () => {
     presetID: addTaskDialog.value.form.preset,
     remark: addTaskDialog.value.form.description || '',
     extra: addTaskDialog.value.form.extraConfig || '',
-    obs_mode: addTaskDialog.value.form.obsMode || '近障模式',
+    obs_mode: 2,
     gait: addTaskDialog.value.form.gait || '1',
     ground: addTaskDialog.value.form.ground || '1',
     no_switch: !addTaskDialog.value.form.stopAtPoint
@@ -1930,23 +2321,171 @@ const handleGotoPreset = () => {
 // ========== 预置点选择相关结束 ==========
 
 // ========== 额外配置相关 ==========
+interface ExtraConfigFieldDef {
+  type?: string
+  title: string
+  field: string
+  required?: boolean
+  default?: string | number | boolean | null
+}
+
 const extraConfigDialog = ref({
   visible: false,
-  content: ''
+  rawExtra: '',
+  formValues: {} as Record<string, string>,
+  errors: {} as Record<string, string>
+})
+
+const parseTaskTypeFieldname = (raw: unknown): ExtraConfigFieldDef[] => {
+  if (!raw) return []
+  const text = String(raw).trim()
+  if (!text || text === '[]') return []
+  try {
+    const parsed = JSON.parse(text)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map(item => ({
+        type: String(item?.type ?? ''),
+        title: String(item?.title ?? item?.field ?? ''),
+        field: String(item?.field ?? ''),
+        required: Boolean(item?.required),
+        default: item?.default
+      }))
+      .filter(item => !!item.field && !!item.title)
+  } catch (_) {
+    return []
+  }
+}
+
+const currentActionTypeMeta = computed(() => {
+  const actionType = String(addTaskDialog.value.form.actionType || addTaskDialog.value.form.typeInput || '').trim()
+  return findTaskTypeMeta(actionType)
+})
+
+const activeExtraConfigFields = computed<ExtraConfigFieldDef[]>(() => {
+  return parseTaskTypeFieldname(currentActionTypeMeta.value?.fieldname)
+})
+
+const parseExtraConfigPayload = (rawValue: string): Record<string, string> => {
+  if (!rawValue) return {}
+  try {
+    const parsed = JSON.parse(rawValue)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const result: Record<string, string> = {}
+      Object.entries(parsed as Record<string, unknown>).forEach(([key, value]) => {
+        result[key] = value == null ? '' : String(value)
+      })
+      return result
+    }
+  } catch (_) {}
+  return {}
+}
+
+const extraConfigDisplayValue = computed(() => {
+  const fields = activeExtraConfigFields.value
+  const raw = addTaskDialog.value.form.extraConfig || ''
+  if (!raw) return ''
+  if (fields.length === 0) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'extra' in parsed) {
+        return String((parsed as Record<string, unknown>).extra ?? '')
+      }
+    } catch (_) {}
+    return raw
+  }
+  const payload = parseExtraConfigPayload(raw)
+  return fields
+    .map(field => {
+      const value = payload[field.field]
+      const resolved = value !== undefined && value !== '' ? value : (field.default ?? '')
+      return `${field.title}: ${resolved}`
+    })
+    .join('，')
 })
 
 const openExtraConfigDialog = () => {
-  extraConfigDialog.value.content = addTaskDialog.value.form.extraConfig || ''
+  const fields = activeExtraConfigFields.value
+  if (fields.length === 0) {
+    const raw = addTaskDialog.value.form.extraConfig || ''
+    let rawExtra = ''
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'extra' in parsed) {
+          rawExtra = String((parsed as Record<string, unknown>).extra ?? '')
+        } else {
+          rawExtra = raw
+        }
+      } catch (_) {
+        rawExtra = raw
+      }
+    }
+    extraConfigDialog.value.rawExtra = rawExtra
+    extraConfigDialog.value.formValues = {}
+    extraConfigDialog.value.errors = {}
+    extraConfigDialog.value.visible = true
+    return
+  }
+
+  const existingPayload = parseExtraConfigPayload(addTaskDialog.value.form.extraConfig || '')
+  const nextFormValues: Record<string, string> = {}
+  const nextErrors: Record<string, string> = {}
+
+  fields.forEach(field => {
+    const existingValue = existingPayload[field.field]
+    if (existingValue !== undefined) {
+      nextFormValues[field.field] = existingValue
+    } else if (field.default !== undefined && field.default !== null) {
+      nextFormValues[field.field] = String(field.default)
+    } else {
+      nextFormValues[field.field] = ''
+    }
+    nextErrors[field.field] = ''
+  })
+
+  extraConfigDialog.value.formValues = nextFormValues
+  extraConfigDialog.value.errors = nextErrors
   extraConfigDialog.value.visible = true
+}
+
+const confirmExtraConfig = () => {
+  const fields = activeExtraConfigFields.value
+  if (fields.length === 0) {
+    addTaskDialog.value.form.extraConfig = JSON.stringify({
+      extra: String(extraConfigDialog.value.rawExtra ?? '')
+    })
+    closeExtraConfigDialog()
+    return
+  }
+
+  const payload: Record<string, string> = {}
+  const nextErrors: Record<string, string> = {}
+
+  for (const field of fields) {
+    const rawValue = extraConfigDialog.value.formValues[field.field]
+    const inputValue = String(rawValue ?? '').trim()
+    const hasDefault = field.default !== undefined && field.default !== null
+    const finalValue = inputValue || (hasDefault ? String(field.default) : '')
+
+    if (field.required && !finalValue) {
+      nextErrors[field.field] = `${field.title}不能为空`
+      continue
+    }
+
+    nextErrors[field.field] = ''
+    payload[field.field] = finalValue
+  }
+
+  extraConfigDialog.value.errors = nextErrors
+  if (Object.values(nextErrors).some(Boolean)) return
+
+  addTaskDialog.value.form.extraConfig = JSON.stringify(payload)
+  closeExtraConfigDialog()
 }
 
 const closeExtraConfigDialog = () => {
   extraConfigDialog.value.visible = false
-}
-
-const confirmExtraConfig = () => {
-  addTaskDialog.value.form.extraConfig = extraConfigDialog.value.content
-  closeExtraConfigDialog()
 }
 // ========== 额外配置相关结束 ==========
 
@@ -2064,6 +2603,10 @@ const confirmDialog = ref({
   message: '',
   onConfirm: () => {}
 })
+const taskInitDialog = ref({
+  visible: false,
+  text: '任务初始化中...'
+})
 
 // 更新缓存并同步到服务器
 const updateCache = async () => {
@@ -2110,6 +2653,14 @@ const handleRobotContextRefreshed = () => {
   fetchPointTaskList()
 }
 
+watch(
+  [selectedPointTaskId, selectedMap, isNavigationEnabled],
+  async () => {
+    if (!previewDialog.value.visible) return
+    await loadPreviewData()
+  }
+)
+
 onMounted(async () => {
   fetchPointTaskList()
   // 初始化分页输入框
@@ -2124,6 +2675,9 @@ onMounted(async () => {
   window.addEventListener('click', closeErrorTooltip)
   window.addEventListener('click', closeDropdown)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  load3MF('/jiantou.3mf').then(mesh => {
+    if (mesh) previewPc.robotMesh.value = mesh
+  })
 })
 
 // 离开时移除监听
@@ -2131,6 +2685,7 @@ onUnmounted(() => {
   window.removeEventListener('click', closeErrorTooltip)
   window.removeEventListener('click', closeDropdown)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  destroyPreviewCanvasEvents()
   cleanupBlobUrls() // 清理所有blob URL
 })
 
@@ -2732,6 +3287,20 @@ const handleDeleteJob = (job: any) => {
   max-height: 80vh;
 }
 
+.preview-dialog-mask {
+  z-index: 1101;
+}
+
+.preview-modal-body {
+  height: calc(100% - 45px);
+  padding: 0;
+}
+
+.preview-map-wrap {
+  width: 100%;
+  height: 100%;
+}
+
 .preview-modal-header {
   display: flex;
   align-items: center;
@@ -2836,6 +3405,40 @@ const handleDeleteJob = (job: any) => {
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
   background: rgba(0,0,0,0.6); z-index: 9999;
   display: flex; justify-content: center; align-items: center;
+}
+.task-init-mask {
+  z-index: 10040;
+}
+.track-init-dialog {
+  min-width: 280px;
+  max-width: 420px;
+  padding: 26px 24px;
+  border-radius: 14px;
+  border: 1px solid rgba(103, 213, 253, 0.35);
+  background: linear-gradient(135deg, #102a43 70%, #0d2036 100%);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.track-init-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(103, 213, 253, 0.25);
+  border-top-color: #67d5fd;
+  animation: track-init-spin 0.9s linear infinite;
+}
+.track-init-text {
+  color: #d7f2ff;
+  font-size: 15px;
+  line-height: 1.4;
+}
+@keyframes track-init-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .simple-modal-card {
   width: 440px; margin: auto;

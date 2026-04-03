@@ -100,20 +100,46 @@
         </div>
         <div class="user-edit-content">
           <div class="user-edit-row">
-            <label class="user-edit-label">{{ t.username }}</label>
-            <input v-model.trim="userForm.username" class="user-edit-input" :placeholder="t.inputUsername" />
+            <label class="user-edit-label">{{ t.username }}<span class="required-star">*</span></label>
+            <div class="user-edit-field">
+              <input
+                v-model.trim="userForm.username"
+                :class="['user-edit-input', { 'has-error': !!userFormErrors.username }]"
+                :placeholder="t.inputUsername"
+                :disabled="userDialogMode === 'edit'"
+                @input="clearUserFieldError('username')"
+              />
+              <div v-if="userFormErrors.username" class="user-edit-error">{{ userFormErrors.username }}</div>
+            </div>
+          </div>
+          <div class="user-edit-row">
+            <label class="user-edit-label">{{ t.password }}<span class="required-star">*</span></label>
+            <div class="user-edit-field">
+              <input
+                v-model.trim="userForm.password"
+                type="password"
+                :class="['user-edit-input', { 'has-error': !!userFormErrors.password }]"
+                :placeholder="userDialogMode === 'create' ? t.inputPassword : t.inputPasswordOptional"
+                @input="clearUserFieldError('password')"
+              />
+              <div v-if="userFormErrors.password" class="user-edit-error">{{ userFormErrors.password }}</div>
+            </div>
           </div>
           <div class="user-edit-row">
             <label class="user-edit-label">{{ t.email }}</label>
-            <input v-model.trim="userForm.email" class="user-edit-input" :placeholder="t.inputEmail" />
+            <div class="user-edit-field">
+              <input
+                v-model.trim="userForm.email"
+                :class="['user-edit-input', { 'has-error': !!userFormErrors.email }]"
+                :placeholder="t.inputEmail"
+                @input="clearUserFieldError('email')"
+              />
+              <div v-if="userFormErrors.email" class="user-edit-error">{{ userFormErrors.email }}</div>
+            </div>
           </div>
           <div class="user-edit-row">
             <label class="user-edit-label">{{ t.fullName }}</label>
             <input v-model.trim="userForm.full_name" class="user-edit-input" :placeholder="t.inputFullName" />
-          </div>
-          <div class="user-edit-row">
-            <label class="user-edit-label">{{ t.password }}</label>
-            <input v-model.trim="userForm.password" type="password" class="user-edit-input" :placeholder="userDialogMode === 'create' ? t.inputPassword : t.inputPasswordOptional" />
           </div>
           <div class="user-edit-row">
             <label class="user-edit-label">{{ t.role }}</label>
@@ -171,6 +197,28 @@
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      :show="deleteConfirmDialog.visible"
+      :title="deleteConfirmDialog.title"
+      :message="deleteConfirmDialog.message"
+      type="warning"
+      @confirm="confirmDeleteUser"
+      @cancel="closeDeleteConfirmDialog"
+      @close="closeDeleteConfirmDialog"
+    />
+
+    <ErrorMessage
+      :show="errorMessage.show"
+      :message="errorMessage.text"
+      @close="errorMessage.show = false"
+    />
+
+    <SuccessMessage
+      :show="successMessage.show"
+      :message="successMessage.text"
+      @close="successMessage.show = false"
+    />
   </div>
 </template>
 
@@ -181,6 +229,9 @@ import { usePermissionStore } from '@/stores/permission'
 import { useRoles, useUsers } from '@/composables/useApi'
 import { robotApi } from '@/api/services'
 import type { Robot, Role, User } from '@/types'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ErrorMessage from '@/components/ErrorMessage.vue'
+import SuccessMessage from '@/components/SuccessMessage.vue'
 import bodyInfoIcon from '@/assets/source_data/svg_data/robot_source/body_info.svg'
 import userIcon from '@/assets/source_data/svg_data/user.svg'
 import roleIcon from '@/assets/source_data/svg_data/role.svg'
@@ -253,6 +304,22 @@ const robotDropdownOpen = ref(false)
 const robotMultiRef = ref<HTMLElement | null>(null)
 const robotOptions = ref<Robot[]>([])
 const robotOptionsLoading = ref(false)
+const deleteConfirmDialog = ref({
+  visible: false,
+  title: '确认删除',
+  message: '确定要删除该用户吗？',
+  userToDelete: null as User | null
+})
+const errorMessage = ref({
+  show: false,
+  text: ''
+})
+const successMessage = ref({
+  show: false,
+  text: ''
+})
+let successMessageTimer: ReturnType<typeof setTimeout> | null = null
+let errorMessageTimer: ReturnType<typeof setTimeout> | null = null
 const userForm = ref({
   id: null as number | null,
   username: '',
@@ -262,6 +329,25 @@ const userForm = ref({
   role_ids: [] as number[],
   robot_ids: [] as number[]
 })
+const userFormErrors = ref({
+  username: '',
+  password: '',
+  email: ''
+})
+
+const clearUserFieldError = (field: 'username' | 'password' | 'email') => {
+  if (userFormErrors.value[field]) {
+    userFormErrors.value[field] = ''
+  }
+}
+
+const resetUserFormErrors = () => {
+  userFormErrors.value.username = ''
+  userFormErrors.value.password = ''
+  userFormErrors.value.email = ''
+}
+
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
 const { users, loading, fetchUsers, createUser, updateUser, deleteUser, getUser, syncUserRole, syncUserRobots } = useUsers()
 const { roles, fetchRoles } = useRoles()
@@ -382,6 +468,7 @@ const onCreateUser = () => {
     role_ids: [],
     robot_ids: []
   }
+  resetUserFormErrors()
   roleDropdownOpen.value = false
   robotDropdownOpen.value = false
   showUserDialog.value = true
@@ -435,6 +522,7 @@ const onEditUser = async (user: User) => {
     role_ids: Array.from(new Set(roleIds)),
     robot_ids: Array.from(new Set(robotIds))
   }
+  resetUserFormErrors()
   roleDropdownOpen.value = false
   robotDropdownOpen.value = false
   showUserDialog.value = true
@@ -499,31 +587,98 @@ const onGlobalMouseDown = (event: MouseEvent) => {
 }
 
 const onDeleteUser = (user: User) => {
-  if (!window.confirm('\u786e\u8ba4\u5220\u9664\u8be5\u7528\u6237\u5417\uff1f')) return
-  deleteUser(user.id)
-    .then(() => fetchUsers())
-    .catch(error => {
-      console.error('delete user failed:', error)
-      window.alert('\u5220\u9664\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5')
-    })
+  deleteConfirmDialog.value.message = `确定要删除用户“${user.username || '-'}”吗？`
+  deleteConfirmDialog.value.userToDelete = user
+  deleteConfirmDialog.value.visible = true
+}
+
+const closeDeleteConfirmDialog = () => {
+  deleteConfirmDialog.value.visible = false
+  deleteConfirmDialog.value.userToDelete = null
+}
+
+const confirmDeleteUser = async () => {
+  const user = deleteConfirmDialog.value.userToDelete
+  if (!user) return
+
+  try {
+    await deleteUser(user.id)
+    await fetchUsers()
+    showSuccessMessage('删除用户成功')
+  } catch (error) {
+    console.error('delete user failed:', error)
+    showErrorMessage('删除失败，请稍后重试')
+  } finally {
+    closeDeleteConfirmDialog()
+  }
+}
+
+const showSuccessMessage = (text: string, duration = 2000) => {
+  if (successMessageTimer) {
+    clearTimeout(successMessageTimer)
+    successMessageTimer = null
+  }
+  successMessage.value = { show: true, text }
+  successMessageTimer = setTimeout(() => {
+    successMessage.value.show = false
+    successMessageTimer = null
+  }, duration)
+}
+
+const showErrorMessage = (text: string, duration = 2000) => {
+  if (errorMessageTimer) {
+    clearTimeout(errorMessageTimer)
+    errorMessageTimer = null
+  }
+  errorMessage.value = { show: true, text }
+  errorMessageTimer = setTimeout(() => {
+    errorMessage.value.show = false
+    errorMessageTimer = null
+  }, duration)
+}
+
+const parseUserErrorMessage = (error: any) => {
+  const message = error?.detail
+    || error?.response?.detail
+    || error?.response?.data?.detail
+    || error?.data?.detail
+    || error?.response?._data?.detail
+    || error?.response?.data?.message
+    || error?.data?.message
+    || error?.message
+
+  if (typeof message === 'string' && message.trim()) {
+    return message.trim()
+  }
+  return '保存用户失败，请稍后重试'
 }
 
 const onUserSubmit = async () => {
   const username = userForm.value.username.trim()
   const password = userForm.value.password.trim()
+  const email = userForm.value.email.trim()
+  const isCreateMode = userDialogMode.value === 'create'
+  resetUserFormErrors()
+
   if (!username) {
-    window.alert('\u7528\u6237\u540d\u4e3a\u5fc5\u586b\u9879')
-    return
+    userFormErrors.value.username = '\u8bf7\u8f93\u5165\u7528\u6237\u540d'
   }
 
   if (userDialogMode.value === 'create' && !password) {
-    window.alert('\u5bc6\u7801\u4e3a\u5fc5\u586b\u9879')
+    userFormErrors.value.password = '\u8bf7\u8f93\u5165\u5bc6\u7801'
+  }
+
+  if (email && !isValidEmail(email)) {
+    userFormErrors.value.email = '\u90ae\u7bb1\u683c\u5f0f\u4e0d\u6b63\u786e'
+  }
+
+  if (userFormErrors.value.username || userFormErrors.value.password || userFormErrors.value.email) {
     return
   }
 
   submitting.value = true
   try {
-    if (userDialogMode.value === 'create') {
+    if (isCreateMode) {
       const created = await createUser({
         username,
         email: userForm.value.email.trim() || undefined,
@@ -540,7 +695,6 @@ const onUserSubmit = async () => {
       const userId = Number(userForm.value.id)
       if (Number.isNaN(userId)) return
       await updateUser(userId, {
-        username,
         email: userForm.value.email.trim() || undefined,
         full_name: userForm.value.full_name.trim() || undefined,
         password: password || undefined
@@ -552,9 +706,10 @@ const onUserSubmit = async () => {
 
     showUserDialog.value = false
     await fetchUsers()
+    showSuccessMessage(isCreateMode ? '新增用户成功' : '编辑用户成功')
   } catch (error) {
     console.error('save user failed:', error)
-    window.alert('\u4fdd\u5b58\u7528\u6237\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5')
+    showErrorMessage(parseUserErrorMessage(error))
   } finally {
     submitting.value = false
   }
@@ -567,6 +722,14 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onGlobalMouseDown)
+  if (successMessageTimer) {
+    clearTimeout(successMessageTimer)
+    successMessageTimer = null
+  }
+  if (errorMessageTimer) {
+    clearTimeout(errorMessageTimer)
+    errorMessageTimer = null
+  }
 })
 </script>
 
@@ -686,6 +849,31 @@ onBeforeUnmount(() => {
 .user-edit-input:focus {
   border-color: rgba(96, 196, 245, 0.85);
   box-shadow: 0 0 0 2px rgba(89, 185, 235, 0.15);
+}
+.user-edit-input:disabled {
+  background: rgba(90, 104, 117, 0.35);
+  border-color: rgba(120, 136, 151, 0.55);
+  color: #a8b9c8;
+  cursor: not-allowed;
+}
+.user-edit-input.has-error {
+  border-color: rgba(255, 106, 106, 0.92);
+  box-shadow: 0 0 0 2px rgba(255, 106, 106, 0.16);
+}
+.user-edit-field {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.user-edit-error {
+  color: #ff8e8e;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.required-star {
+  color: #ff8e8e;
+  margin-left: 4px;
 }
 
 .dialog-actions {

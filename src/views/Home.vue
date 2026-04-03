@@ -212,6 +212,7 @@
               :loading="pointCloudLoading"
               :error="pointCloudError"
               :normalization-params="pointCloudNormalizationParams"
+              :navigation-origin="pointCloudNavigationOrigin"
               :robot-pose="robotStore.pose"
               :robot-mesh="arrowMesh"
             />
@@ -1513,6 +1514,7 @@ const threePointCloudRef = ref<InstanceType<typeof ThreePointCloudPreview> | nul
 /** 机器狗箭头 3MF 网格（加载完成后设置） */
 const arrowMesh = ref<MeshData | null>(null)
 const pointCloudNormalizationParams = ref<NormalizationParams>({ centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 })
+const pointCloudNavigationOrigin = ref<{ x: number; y: number; z: number } | null>(null)
 const pointCloudLoading = ref(false)
 const pointCloudError = ref('')
 const isPointCloudFullscreen = ref(false)
@@ -1572,8 +1574,8 @@ const overlayTrackTrajectory = async (trackName: string) => {
     try {
       const contextKeys = getCurrentRobotContextKeys()
       const cachedData = contextKeys
-        ? localStorage.getItem(contextKeys.allTrackTaskListKey)
-        : null
+        ? localStorage.getItem(contextKeys.allTrackTaskListKey) || localStorage.getItem('all_track_task_list')
+        : localStorage.getItem('all_track_task_list')
       if (cachedData) {
         const parsed = JSON.parse(cachedData)
         const allTaskList = extractTrackTaskList(parsed)
@@ -1671,8 +1673,37 @@ const parsePcdBufferInWorker = (buffer: ArrayBuffer): Promise<{ points: PointClo
 const clearPointCloud = () => {
   pointCloudData.value = []
   basePointCloudData.value = []
+  pointCloudNavigationOrigin.value = null
   // 重置归一化参数，避免继续显示原场景辅助元素
   pointCloudNormalizationParams.value = { centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 }
+}
+
+const parseNavigationOriginFromOdomKeyFrames = (text: string): { x: number; y: number; z: number } | null => {
+  if (!text) return null
+  const firstLine = text.split(/\r?\n/).find(line => String(line || '').trim())
+  if (!firstLine) return null
+
+  const tokens = firstLine.trim().split(/[\s,]+/).filter(Boolean)
+  if (tokens.length < 12) return null
+
+  const x = Number(tokens[3])
+  const y = Number(tokens[7])
+  const z = Number(tokens[11])
+  if (![x, y, z].every(Number.isFinite)) return null
+
+  return { x, y, z }
+}
+
+const loadMapNavigationOrigin = async (mapName: string): Promise<{ x: number; y: number; z: number } | null> => {
+  try {
+    const originBlob = await getMapFile(mapName, 'odom_key_frames.txt')
+    if (!originBlob || originBlob.size === 0) return null
+    const text = await originBlob.text()
+    return parseNavigationOriginFromOdomKeyFrames(text)
+  } catch (error) {
+    console.warn('[点云] 读取导航原点失败:', error)
+    return null
+  }
 }
 
 const refreshPointCloud = async () => {
@@ -1710,6 +1741,7 @@ const refreshPointCloud = async () => {
     }
 
     pointCloudNormalizationParams.value = normParams
+    pointCloudNavigationOrigin.value = await loadMapNavigationOrigin(selectedMap.value)
     pointCloudData.value = points
     basePointCloudData.value = points
     await nextTick()
@@ -2103,13 +2135,13 @@ const wsTaskMeta = computed(() => {
   const finishedRaw = Math.max(0, Math.floor(toFiniteNumber(p.finished_points, 0)))
   const finished = total > 0 ? Math.min(finishedRaw, total) : finishedRaw
   const complete = Math.max(0, Math.min(100, toFiniteNumber(p.task_complete, 0)))
-  const hasTaskName = !!String(p.task_name || '').trim()
-  const started = hasTaskName || total > 0 || complete > 0 || finished > 0
+  const started = total > 0 || complete > 0 || finished > 0
   const completed = started && ((total > 0 && finished >= total) || complete >= 100)
   return { total, finished, complete, started, completed }
 })
 
 const waylineTaskName = computed(() => {
+  if (!hasActiveTaskStatistics.value) return '暂无任务'
   const name = wsTaskProgress.value?.task_name
   if (name && String(name).trim()) return name
   return waylineJobDetail.value?.name || '暂无任务'
@@ -2120,11 +2152,6 @@ const waylineTaskStartTime = computed(() => {
   const wsTrackStartTime = wsTaskProgress.value?.track_start_time
   if (wsTrackStartTime && String(wsTrackStartTime).trim()) {
     return String(wsTrackStartTime).trim()
-  }
-  const wsTimestamp = wsTaskProgress.value?.timestamp
-  if (wsTimestamp) {
-    const ts = new Date(wsTimestamp).getTime()
-    if (Number.isFinite(ts)) return formatTimestamp(ts)
   }
   if (!waylineJobDetail.value?.begin_time) return '--'
   return formatTimestamp(new Date(waylineJobDetail.value.begin_time).getTime())
@@ -4429,13 +4456,24 @@ const openMapDB = (): Promise<IDBDatabase> => {
   })
 }
 
+const normalizeMapCacheFileName = (fileName: string) => {
+  const text = String(fileName || '').trim()
+  if (!text) return ''
+  const segments = text.split('/').filter(Boolean)
+  return segments.length > 0 ? segments[segments.length - 1] : text
+}
+
+const buildMapCacheKey = (mapName: string, fileName: string) => {
+  return `${mapName}/${normalizeMapCacheFileName(fileName)}`
+}
+
 // 保存地图文件
 const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promise<void> => {
   const db = await openMapDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction([MAP_STORE_NAME], 'readwrite')
     const store = tx.objectStore(MAP_STORE_NAME)
-    const key = `${mapName}/${fileName}`
+    const key = buildMapCacheKey(mapName, fileName)
     store.put({ id: key, blob })
     tx.oncomplete = () => {
       resolve()
@@ -4453,14 +4491,28 @@ const getMapFile = async (mapName: string, fileName: string): Promise<Blob | nul
     const db = await openMapDB()
     return new Promise((resolve) => {
       const tx = db.transaction([MAP_STORE_NAME], 'readonly')
-      const key = `${mapName}/${fileName}`
-      const request = tx.objectStore(MAP_STORE_NAME).get(key)
+      const normalizedKey = buildMapCacheKey(mapName, fileName)
+      const legacyKey = `${mapName}/${fileName}`
+      const store = tx.objectStore(MAP_STORE_NAME)
+      const request = store.get(normalizedKey)
       request.onsuccess = () => {
         const blob = request.result?.blob || null
-        resolve(blob)
+        if (blob) {
+          resolve(blob)
+          return
+        }
+
+        if (legacyKey !== normalizedKey) {
+          const fallbackRequest = store.get(legacyKey)
+          fallbackRequest.onsuccess = () => resolve(fallbackRequest.result?.blob || null)
+          fallbackRequest.onerror = () => resolve(null)
+          return
+        }
+
+        resolve(null)
       }
       request.onerror = () => {
-        console.error(`[地图缓存] 读取文件失败: ${key}`, request.error)
+        console.error(`[地图缓存] 读取文件失败: ${normalizedKey}`, request.error)
         resolve(null)
       }
     })
@@ -4564,7 +4616,10 @@ const downloadMapFiles = async (mapName: string, updateTime: string) => {
         console.error(`[地图缓存] 保存文件失败: ${fileName}`, err)
       }
     }
-    if (files.size === mapFileApi.MAP_FILES.length) {
+    const requiredMapFiles = ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt']
+    const hasRequiredMapFiles = requiredMapFiles.every(fileName => files.has(fileName))
+
+    if (hasRequiredMapFiles) {
       updateMapConfig(mapName, updateTime)
     }
   })()
@@ -5054,8 +5109,22 @@ const canDispatchMultiTask = computed(() => {
   )
 })
 
+const isNavigationPaused = computed(() => {
+  return Number((robotStore.cmdStatus as any)?.app_nav_pause?.result ?? 0) === 1
+})
+
+const ensureNavPauseReleased = () => {
+  if (isNavigationPaused.value) {
+    showError('请先关闭导航暂停')
+    return false
+  }
+  return true
+}
+
 // 下发任务处理
 const handleDispatchTask = () => {
+  if (!ensureNavPauseReleased()) return
+
   if (!canDispatchTrackTask.value) {
     if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
       showError('请先开启导航、INS或MSF')
@@ -5125,6 +5194,8 @@ const dispatchTrackTask = (trackName: string, taskLabel: string) => {
 }
 
 const handleDispatchPointTask = () => {
+  if (!ensureNavPauseReleased()) return
+
   if (!canDispatchPointTask.value) {
     if (!navigationEnabled.value && !insEnabled.value && !msfEnabled.value) {
       alert('请先开启导航、INS或MSF')
@@ -5205,6 +5276,10 @@ const handleCancelTask = async () => {
   const effectiveTaskType = resolveActiveTaskTypeForCancel()
   if (effectiveTaskType === null) {
     showError('当前没有正在执行的任务')
+    return
+  }
+
+  if ((effectiveTaskType === 'track' || effectiveTaskType === 'point') && !ensureNavPauseReleased()) {
     return
   }
   
@@ -5691,6 +5766,8 @@ const finalizeTrackTaskStart = async (trackName: string, taskpointName: string, 
 
 // 循迹任务启动弹窗 - 确认
 const onTrackStartConfirm = async () => {
+  if (!ensureNavPauseReleased()) return
+
   const form = trackStartDialog.value.form
   
   // 验证循迹任务名称
@@ -5857,6 +5934,8 @@ const onPointTaskStartCancel = () => {
 
 // 发布点任务启动弹窗 - 确认
 const onPointTaskStartConfirm = async () => {
+  if (!ensureNavPauseReleased()) return
+
   const form = pointTaskStartDialog.value.form
   
   // 验证任务ID

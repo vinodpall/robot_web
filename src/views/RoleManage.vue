@@ -380,7 +380,7 @@ const permissionModules = ref<PermissionModule[]>([])
 const deleteConfirm = ref({
   visible: false,
   roleId: null as number | null,
-  title: '鍒犻櫎瑙掕壊',
+  title: '删除角色',
   message: '确认删除该角色吗？'
 })
 

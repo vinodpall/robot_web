@@ -1102,7 +1102,7 @@ export const navigationApi = {
       task_id: string;
       obs_mode: string;
       is_origin_publish: number;
-      start_mode: string;
+      start_mode: number;
       gait: string;
       ground: string;
     };
@@ -1120,7 +1120,7 @@ export const navigationApi = {
       task_id: string;
       obs_mode: string;
       is_origin_publish: number;
-      start_mode: string;
+      start_mode: number;
       gait: string;
       ground: string;
     };
@@ -1272,7 +1272,7 @@ export const navigationApi = {
   }) => {
     return apiClient.post(`/tracks/${robotId}/export_track_log`, data)
   },
-  oneKeyRecharge: (robotId: string, data: { sn: string; action: number; chargeIndex: string }) => {
+  oneKeyRecharge: (robotId: string, data: { chargeIndex: number }) => {
     return apiClient.post(`/charging/${robotId}/one_key_recharge`, data)
   },
   pauseNavigation: (robotId: string, data: any = {}) => {
@@ -1340,7 +1340,7 @@ const logMapDownloadOnce = (key: string, message: string, error?: unknown) => {
 }
 
 export const mapFileApi = {
-  MAP_FILES: ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt'],
+  MAP_FILES: ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt', 'scancontext/odom_key_frames.txt'],
 
   downloadMapFile: async (
     robotIp: string,

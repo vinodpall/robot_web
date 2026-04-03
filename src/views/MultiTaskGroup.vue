@@ -245,8 +245,8 @@
           <div class="mtg-task-form-row mtg-task-form-row-obs" v-if="addTaskGroupDialog.form.taskMode === 'track'">
             <label class="mtg-task-form-label">避障模式</label>
             <select v-model="addTaskGroupDialog.form.obsMode" class="mtg-task-form-select">
+              <option value="无避障">无避障</option>
               <option value="近障模式">近障模式</option>
-              <option value="停障模式">停障模式</option>
               <option value="绕障模式">绕障模式</option>
             </select>
           </div>
@@ -459,7 +459,7 @@ const addTaskGroupDialog = ref({
     obsMode: '近障模式',
     gait: '行走步态',
     ground: '实心地面',
-    originPublish: false
+    originPublish: true
   }
 })
 
@@ -729,7 +729,7 @@ const handleAddTaskGroup = () => {
     obsMode: '近障模式',
     gait: '行走步态',
     ground: '实心地面',
-    originPublish: false
+    originPublish: true
   }
 
   // Load data from cache
@@ -754,6 +754,13 @@ const closeAddTaskGroupDialog = () => {
 
 const confirmAddTaskGroup = async () => {
   const form = addTaskGroupDialog.value.form
+
+  const startModeToNumber = (mode: string): number => {
+    if (mode === 'nav') return 1
+    if (mode === 'ins') return 2
+    if (mode === 'msf') return 3
+    return 1
+  }
   
   // Validate required fields
   if (!form.mapName) {
@@ -805,7 +812,7 @@ const confirmAddTaskGroup = async () => {
       task_id: addTaskGroupDialog.value.editTaskId || '',
       obs_mode: form.obsMode,
       is_origin_publish: form.originPublish ? 1 : 0,
-      start_mode: form.startMode,
+      start_mode: startModeToNumber(form.startMode),
       gait: form.gait,
       ground: form.ground
     }
@@ -1155,8 +1162,9 @@ const handleEditTaskGroup = async (task: any) => {
   }
   const normalizeStartMode = (raw: any): 'nav' | 'ins' | 'msf' => {
     const v = String(raw ?? '').trim().toLowerCase()
-    if (v === '1' || v === 'ins') return 'ins'
-    if (v === '2' || v === 'msf') return 'msf'
+    if (v === '1' || v === 'nav') return 'nav'
+    if (v === '2' || v === 'ins') return 'ins'
+    if (v === '3' || v === 'msf') return 'msf'
     return 'nav'
   }
   const normalizeTaskMode = (raw: any): 'track' | 'publish' => {
@@ -1166,8 +1174,9 @@ const handleEditTaskGroup = async (task: any) => {
   }
   const normalizeObsMode = (raw: any) => {
     const v = String(raw ?? '').trim()
+    if (v === '0' || v === '无障碍' || v === '无避障' || v === '停障模式') return '无避障'
     if (v === '1') return '近障模式'
-    if (v === '2') return '停障模式'
+    if (v === '2') return '绕障模式'
     if (v === '3') return '绕障模式'
     return v || '近障模式'
   }
