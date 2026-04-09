@@ -162,65 +162,70 @@
                     </div>
                   </div>
 
-                  <!-- 速度信息 -->
-                  <div class="nav-info-row">
-                    <div class="nav-info-col">
-                      <span class="nav-info-label">W:</span>
-                      <span class="nav-info-value">{{ navData.w }} rad/s</span>
-                    </div>
-                    <div class="nav-info-col">
-                      <span class="nav-info-label">V:</span>
-                      <span class="nav-info-value">{{ navData.v }}</span>
-                    </div>
-                  </div>
-
-                  <!-- 位置信息 -->
-                  <div class="nav-info-row">
-                    <div class="nav-info-col">
-                      <span class="nav-info-label">X:</span>
-                      <span class="nav-info-value">{{ navData.x }}</span>
-                    </div>
-                    <div class="nav-info-col">
-                      <span class="nav-info-label">Y:</span>
-                      <span class="nav-info-value">{{ navData.y }}</span>
+                  <div class="nav-info-card">
+                    <div class="nav-info-card-title">速度</div>
+                    <div class="nav-info-row">
+                      <div class="nav-info-col">
+                        <span class="nav-info-label">W:</span>
+                        <span class="nav-info-value">{{ navData.w }} rad/s</span>
+                      </div>
+                      <div class="nav-info-col">
+                        <span class="nav-info-label">V:</span>
+                        <span class="nav-info-value">{{ navData.v }}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <!-- 其他状态信息 -->
-                  <div class="nav-info-row">
-                    <div class="nav-info-col">
-                      <span class="nav-info-label">Z:</span>
-                      <span class="nav-info-value">{{ navData.z }}</span>
+                  <div class="nav-info-card">
+                    <div class="nav-info-card-title">位姿</div>
+                    <div class="nav-info-row">
+                      <div class="nav-info-col">
+                        <span class="nav-info-label">X:</span>
+                        <span class="nav-info-value">{{ navData.x }}</span>
+                      </div>
+                      <div class="nav-info-col">
+                        <span class="nav-info-label">Y:</span>
+                        <span class="nav-info-value">{{ navData.y }}</span>
+                      </div>
                     </div>
-                    <div class="nav-info-col">
-                      <span class="nav-info-label">theta:</span>
-                      <span class="nav-info-value">{{ navData.theta }}</span>
+                    <div class="nav-info-row">
+                      <div class="nav-info-col">
+                        <span class="nav-info-label">Z:</span>
+                        <span class="nav-info-value">{{ navData.z }}</span>
+                      </div>
+                      <div class="nav-info-col">
+                        <span class="nav-info-label">theta:</span>
+                        <span class="nav-info-value">{{ navData.theta }}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="nav-info-item">
-                    <span class="nav-info-label">激光雷达数据:</span>
-                    <span class="nav-info-value">{{ navData.lidar }}</span>
+                  <div class="nav-info-card">
+                    <div class="nav-info-card-title">传感器状态</div>
+                    <div class="nav-status-row">
+                      <span class="nav-info-label">激光雷达数据</span>
+                      <span class="nav-status-badge" :class="sensorBadgeClass(navData.lidar)">{{ navData.lidar }}</span>
+                    </div>
+                    <div class="nav-status-row">
+                      <span class="nav-info-label">IMU数据</span>
+                      <span class="nav-status-badge" :class="sensorBadgeClass(navData.imu)">{{ navData.imu }}</span>
+                    </div>
+                    <div class="nav-status-row">
+                      <span class="nav-info-label">卫星数据</span>
+                      <span class="nav-status-badge" :class="sensorBadgeClass(hasRobotRtk ? navData.satellite : '未配置')">{{ hasRobotRtk ? navData.satellite : '未配置' }}</span>
+                    </div>
                   </div>
 
-                  <div class="nav-info-item">
-                    <span class="nav-info-label">IMU数据:</span>
-                    <span class="nav-info-value">{{ navData.imu }}</span>
-                  </div>
-
-                  <div class="nav-info-item" :class="{ 'rtk-disabled': !hasRobotRtk }">
-                    <span class="nav-info-label">卫星数据:</span>
-                    <span class="nav-info-value">{{ navData.satellite }}</span>
-                  </div>
-
-                  <div class="nav-info-item" :class="{ 'rtk-disabled': !hasRobotRtk }">
-                    <span class="nav-info-label">MSF状态:</span>
-                    <span class="nav-info-value">{{ navData.msfStatus }}</span>
-                  </div>
-
-                  <div class="nav-info-item" :class="{ 'rtk-disabled': !hasRobotRtk }">
-                    <span class="nav-info-label">INS初始化:</span>
-                    <span class="nav-info-value">{{ navData.insOrigin }}</span>
+                  <div class="nav-info-card">
+                    <div class="nav-info-card-title">系统状态</div>
+                    <div class="nav-status-row">
+                      <span class="nav-info-label">MSF状态</span>
+                      <span class="nav-status-badge" :class="systemBadgeClass(hasRobotRtk ? navData.msfStatus : '未配置')">{{ hasRobotRtk ? navData.msfStatus : '未配置' }}</span>
+                    </div>
+                    <div class="nav-status-row">
+                      <span class="nav-info-label">定位状态</span>
+                      <span class="nav-status-badge" :class="systemBadgeClass(localizationStatusText)">{{ localizationStatusText }}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -782,7 +787,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch, computed, shallowRef } from 'vue'
+import { ref, onMounted, onActivated, onUnmounted, nextTick, watch, computed, shallowRef } from 'vue'
 import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
 import ThreePointCloudPreview from '../components/ThreePointCloudPreview.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -932,6 +937,7 @@ const getDefaultNavManageTab = () => {
 }
 
 const currentTab = ref(getDefaultNavManageTab())
+const mapRefreshTabs = new Set(['nav', 'map_edit', 'track_record', 'file_manage'])
 
 watch(currentTab, (tabKey) => {
   localStorage.setItem(NAV_MANAGE_TAB_STORAGE_KEY, tabKey)
@@ -945,7 +951,7 @@ const emitPermissionDenied = (permission: string) => {
   }
 }
 
-const handleTabClick = (tab: { key: string; permission?: string }) => {
+const handleTabClick = async (tab: { key: string; permission?: string }) => {
   const key = tab.key
   if (tab.permission && !permissionStore.hasPermission(tab.permission)) {
     emitPermissionDenied(tab.permission)
@@ -957,6 +963,10 @@ const handleTabClick = (tab: { key: string; permission?: string }) => {
   // 如果离开导航/路线录制标签，清理点云图状态
   if ((previousTab === 'nav' || previousTab === 'track_record') && key !== 'nav' && key !== 'track_record') {
     cleanupNavPointCloud()
+  }
+
+  if (mapRefreshTabs.has(key)) {
+    await refreshMapListCache()
   }
   
   // 当切换到导航标签时，初始化点云图并获取GPS状态和地图列表
@@ -1120,6 +1130,7 @@ const clearTrackPreviewFromPointCloud = async () => {
   if (!isNavPreviewMode.value) return
 
   isNavPreviewMode.value = false
+  lastNavTrackOverlayKey.value = ''
 
   const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
   if (robotStore.cmdStatus?.track === 1 && trackNameFromStatus) {
@@ -1511,6 +1522,7 @@ const previewTrackRoute = async (options?: { silentSuccess?: boolean }) => {
 
     const base = baseNavPointCloudData.value.length > 0 ? baseNavPointCloudData.value : []
     navPointCloudData.value = [...base, ...normalizedTrajectoryPoints, ...previewTaskPoints]
+    lastNavTrackOverlayKey.value = ''
     isNavPreviewMode.value = true
     await nextTick()
     scheduleNavPointCloudRender()
@@ -1663,6 +1675,25 @@ const appNavPauseEnabled = computed(() => Number((robotStore.cmdStatus as any)?.
 const appNavNavtrackEnabled = computed(() => Number((robotStore.cmdStatus as any)?.app_stop_navtrack?.result ?? 0) === 1)
 /** INS 初始化状态（1=已初始化） */
 const insOriginEnabled = computed(() => robotStore.cmdStatus?.ins_origin === 1)
+
+const localizationStatusText = computed(() => {
+  const loc = robotStore.locStatus
+  if (!loc) return '未收到'
+  return Number(loc.result) === 1 ? '正常' : '异常'
+})
+
+const sensorBadgeClass = (value: string | number | null | undefined) => {
+  const text = String(value ?? '')
+  return text.includes('收到') && !text.includes('未') ? 'is-on' : 'is-off'
+}
+
+const systemBadgeClass = (value: string | number | null | undefined) => {
+  const text = String(value ?? '').trim()
+  if (!text) return 'is-off'
+  if (text.includes('异常')) return 'is-error'
+  if (text.includes('未') || text.includes('关闭') || text.includes('异常')) return 'is-off'
+  return 'is-on'
+}
 
 // 对接 WebSocket 实时 MSF 状态（msf_status 消息）
 watch(() => robotStore.msfStatus, (msfData) => {
@@ -2779,6 +2810,15 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
   if (!normalizedTrackName || baseNavPointCloudData.value.length === 0) return
 
   try {
+    const currentTaskPointName = normalizeTaskPointName(activeNavTrackInfo.value.taskpoint_name)
+    const overlayKey = `${normalizedTrackName}::${currentTaskPointName}`
+    if (
+      lastNavTrackOverlayKey.value === overlayKey &&
+      navPointCloudData.value.length > baseNavPointCloudData.value.length
+    ) {
+      return
+    }
+
     let blob = await getTrajectoryFile(normalizedTrackName)
 
     // 缓存未命中：尝试即时下载
@@ -2828,7 +2868,6 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
     }
 
     const taskPointsData: Array<{ x: number; y: number; z: number; name: string }> = []
-    const currentTaskPointName = normalizeTaskPointName(activeNavTrackInfo.value.taskpoint_name)
     const cachedData = localStorage.getItem('all_track_task_list')
     if (cachedData) {
       const parsed = JSON.parse(cachedData)
@@ -2879,6 +2918,7 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
       ...normalizedTrajectory,
       ...normalizedTaskPoints
     ]
+    lastNavTrackOverlayKey.value = overlayKey
     await nextTick()
     scheduleNavPointCloudRender()
   } catch (err) {
@@ -2916,19 +2956,26 @@ const extractTrackTaskList = (payload: any): any[] => {
 
 const activeNavTrackInfo = ref({ track_name: '', taskpoint_name: '' })
 const activeNavOverlayTrackName = ref('')
+const lastNavTrackOverlayKey = ref('')
 // 预览锁：用户点击预览路线时为 true，阻止 WebSocket 任务状态更新覆盖预览画面
 const isNavPreviewMode = ref(false)
 
 
 // 刷新点云数据
-const refreshNavPointCloud = async (mapName?: string) => {
+const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boolean }) => {
   const targetMap = mapName || selectedNavMap.value
   if (!targetMap) {
     console.warn('未选择地图，无法加载点云数据')
     return
   }
 
-  navPointCloudLoading.value = true
+  const hasExistingPointCloud = navPointCloudData.value.length > 0 || baseNavPointCloudData.value.length > 0
+  const silentRefresh = !!options?.silent && hasExistingPointCloud
+  if (!silentRefresh) {
+    navPointCloudLoading.value = true
+  } else {
+    navPointCloudLoading.value = false
+  }
   navPointCloudError.value = ''
   console.log('开始加载导航点云数据，地图:', targetMap)
   
@@ -2971,9 +3018,11 @@ const refreshNavPointCloud = async (mapName?: string) => {
       navPointCloudData.value = parsedPoints
       // 保存原始地图数据，用于叠加轨迹
       baseNavPointCloudData.value = parsedPoints
+      lastNavTrackOverlayKey.value = ''
     } else {
       console.warn('未解析到点云数据，使用模拟数据')
       navPointCloudData.value = generateMockNavPointCloud()
+      lastNavTrackOverlayKey.value = ''
     }
     
     const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
@@ -2997,10 +3046,13 @@ const refreshNavPointCloud = async (mapName?: string) => {
     console.error('点云数据加载失败:', error)
     navPointCloudError.value = '点云数据加载失败'
     navPointCloudData.value = generateMockNavPointCloud()
+    lastNavTrackOverlayKey.value = ''
     await nextTick()
     scheduleNavPointCloudRender()
   } finally {
-    navPointCloudLoading.value = false
+    if (!silentRefresh) {
+      navPointCloudLoading.value = false
+    }
   }
 }
 
@@ -3016,7 +3068,7 @@ const initNavPointCloud = async () => {
   navPointCloudInitialized = true
   const targetMap = selectedNavMap.value
   if (targetMap) {
-    await refreshNavPointCloud(targetMap)
+    await refreshNavPointCloud(targetMap, { silent: true })
   }
 }
 
@@ -3047,9 +3099,10 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
       overlayNavTrackTrajectory(trackName)
     }
   } else if (val === 0) {
+    lastNavTrackOverlayKey.value = ''
     activeNavOverlayTrackName.value = ''
     if (baseNavPointCloudData.value.length > 0) {
-      navPointCloudData.value = baseNavPointCloudData.value
+      navPointCloudData.value = [...baseNavPointCloudData.value]
       scheduleNavPointCloudRender()
     }
   }
@@ -3091,6 +3144,21 @@ onMounted(async () => {
 
   // 监听机器人切换事件，刷新各 tab 的列表
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+})
+
+onActivated(async () => {
+  if (!mapRefreshTabs.has(currentTab.value)) return
+
+  await refreshMapListCache()
+  if (currentTab.value === 'nav') {
+    fetchMapList()
+  } else if (currentTab.value === 'map_edit') {
+    fetchEditMapList()
+  } else if (currentTab.value === 'track_record') {
+    fetchTrackMapList()
+  } else if (currentTab.value === 'file_manage') {
+    fetchFileMapList()
+  }
 })
 
 const handleRobotContextRefreshed = () => {
@@ -5562,12 +5630,12 @@ const handleDelete = (item: any) => {
   background: rgba(10, 42, 58, 0.6);
   border: 1px solid rgba(103, 213, 253, 0.2);
   border-radius: 8px;
-  padding: 18px 20px;
+  padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   flex-shrink: 0;
-  overflow-y: auto;
+  overflow-y: hidden;
   /* 高度和点云图一致 */
   height: calc(100vh - 280px);
   min-height: 400px;
@@ -5577,7 +5645,28 @@ const handleDelete = (item: any) => {
 .nav-info-item {
   display: flex;
   flex-direction: column;
-  gap: 11px;
+  gap: 10px;
+}
+
+.nav-info-card {
+  background: rgba(12, 60, 86, 0.5);
+  border: 1px solid rgba(38, 131, 182, 0.4);
+  border-radius: 8px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-info-card:last-of-type {
+  margin-top: auto;
+}
+
+.nav-info-card-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .nav-info-item.rtk-disabled {
@@ -5639,17 +5728,19 @@ const handleDelete = (item: any) => {
 .nav-speed-control {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
+  width: 100%;
 }
 
 .nav-speed-btn {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
   background: linear-gradient(135deg, #0c3c56 0%, #0a2f44 100%);
   border: 1px solid rgba(38, 131, 182, 0.6);
   border-radius: 6px;
   color: #67d5fd;
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
@@ -5672,8 +5763,10 @@ const handleDelete = (item: any) => {
 }
 
 .nav-speed-input {
-  width: 110px;
-  height: 40px;
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 36px;
   background: rgba(12, 60, 86, 0.5);
   border: 1px solid rgba(38, 131, 182, 0.4);
   border-radius: 6px;
@@ -5687,7 +5780,7 @@ const handleDelete = (item: any) => {
 
 .nav-info-row {
   display: flex;
-  gap: 18px;
+  gap: 12px;
 }
 
 .nav-info-col {
@@ -5698,7 +5791,7 @@ const handleDelete = (item: any) => {
 }
 
 .nav-info-label {
-  font-size: 14px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.75);
   white-space: nowrap;
   line-height: 1.35;
@@ -5709,7 +5802,7 @@ const handleDelete = (item: any) => {
 }
 
 .nav-info-value {
-  font-size: 14px;
+  font-size: 12px;
   color: #67d5fd;
   font-weight: 500;
   line-height: 1.35;
@@ -5717,6 +5810,52 @@ const handleDelete = (item: any) => {
 
 .nav-info-item.rtk-disabled .nav-info-value {
   color: rgba(174, 194, 210, 0.58);
+}
+
+.nav-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nav-status-row.rtk-disabled {
+  opacity: 0.52;
+  filter: saturate(0.35);
+  pointer-events: none;
+}
+
+.nav-status-badge {
+  min-width: 52px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+  background: rgba(12, 60, 86, 0.5);
+  color: #67d5fd;
+  font-size: 12px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.nav-status-badge.is-on {
+  color: #67d5fd;
+  border-color: rgba(103, 213, 253, 0.85);
+  background: rgba(12, 70, 102, 0.55);
+}
+
+.nav-status-badge.is-off {
+  color: rgba(180, 205, 220, 0.62);
+  border-color: rgba(103, 213, 253, 0.3);
+  background: linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%);
+}
+
+.nav-status-badge.is-error {
+  color: #ff8f8f;
+  border-color: rgba(255, 95, 95, 0.55);
+  background: rgba(88, 20, 20, 0.45);
 }
 
 .nav-map-container {

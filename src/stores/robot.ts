@@ -7,6 +7,8 @@ import type {
   AlertData,
   MappingProgressData,
   MsfStatusData,
+  LocStatusData,
+  MultiTaskStatusData,
   TaskStatusData,
   TaskProgressData,
   DogUdpData,
@@ -41,6 +43,7 @@ export const useRobotStore = defineStore('robot', () => {
 
   // ===== 融合定位状态 =====
   const msfStatus = ref<MsfStatusData | null>(null)
+  const locStatus = ref<LocStatusData | null>(null)
   const sensorStatus = ref<SensorStatusData | null>(null)
 
   // ===== 机器狗 UDP 原始消息（最新一条） =====
@@ -70,7 +73,7 @@ export const useRobotStore = defineStore('robot', () => {
   const taskProgress = ref<TaskProgressData | null>(null)
 
   // ===== multitask_status 多任务组运行状态 =====
-  const multitaskStatus = ref<{ status: boolean } | null>(null)
+  const multitaskStatus = ref<MultiTaskStatusData | null>(null)
 
   // ===== mutations =====
 
@@ -107,6 +110,10 @@ export const useRobotStore = defineStore('robot', () => {
 
   const setMsfStatus = (data: MsfStatusData) => {
     msfStatus.value = data
+  }
+
+  const setLocStatus = (data: LocStatusData) => {
+    locStatus.value = data
   }
 
   const setSensorStatus = (data: SensorStatusData) => {
@@ -156,7 +163,7 @@ export const useRobotStore = defineStore('robot', () => {
     taskProgress.value = data
   }
 
-  const setMultitaskStatus = (data: { status: boolean }) => {
+  const setMultitaskStatus = (data: MultiTaskStatusData) => {
     multitaskStatus.value = data
   }
 
@@ -168,6 +175,7 @@ export const useRobotStore = defineStore('robot', () => {
     alerts.value = []
     mappingProgress.value = null
     msfStatus.value = null
+    locStatus.value = null
     sensorStatus.value = null
     latestDogUdpMessage.value = null
     rcsData.value = null
@@ -364,6 +372,7 @@ export const useRobotStore = defineStore('robot', () => {
     alerts,
     mappingProgress,
     msfStatus,
+    locStatus,
     sensorStatus,
     latestDogUdpMessage,
     rcsData,
@@ -384,6 +393,7 @@ export const useRobotStore = defineStore('robot', () => {
     pushAlert,
     setMappingProgress,
     setMsfStatus,
+    setLocStatus,
     setSensorStatus,
     setDogUdpMessage,
     setRcsData,

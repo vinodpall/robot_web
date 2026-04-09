@@ -163,16 +163,40 @@
         </div>
         <div class="role-edit-content">
           <div class="role-edit-row">
-            <label class="role-edit-label">{{ t.roleName }}</label>
-            <input v-model.trim="roleForm.role_name" class="role-edit-input" :placeholder="t.inputRoleName" />
+            <label class="role-edit-label">{{ t.roleName }}<span class="required-star">*</span></label>
+            <div class="role-edit-field">
+              <input
+                v-model.trim="roleForm.role_name"
+                :class="['role-edit-input', { 'has-error': !!roleFormErrors.role_name }]"
+                :placeholder="t.inputRoleName"
+                @input="clearRoleFieldError('role_name')"
+              />
+              <div v-if="roleFormErrors.role_name" class="role-edit-error">{{ roleFormErrors.role_name }}</div>
+            </div>
           </div>
           <div class="role-edit-row">
-            <label class="role-edit-label">{{ t.roleCode }}</label>
-            <input v-model.trim="roleForm.role_code" class="role-edit-input" :placeholder="t.inputRoleCode" />
+            <label class="role-edit-label">{{ t.roleCode }}<span class="required-star">*</span></label>
+            <div class="role-edit-field">
+              <input
+                v-model.trim="roleForm.role_code"
+                :class="['role-edit-input', { 'has-error': !!roleFormErrors.role_code }]"
+                :placeholder="t.inputRoleCode"
+                @input="clearRoleFieldError('role_code')"
+              />
+              <div v-if="roleFormErrors.role_code" class="role-edit-error">{{ roleFormErrors.role_code }}</div>
+            </div>
           </div>
           <div class="role-edit-row">
-            <label class="role-edit-label">{{ t.roleDesc }}</label>
-            <input v-model.trim="roleForm.description" class="role-edit-input" :placeholder="t.inputRoleDesc" />
+            <label class="role-edit-label">{{ t.roleDesc }}<span class="required-star">*</span></label>
+            <div class="role-edit-field">
+              <input
+                v-model.trim="roleForm.description"
+                :class="['role-edit-input', { 'has-error': !!roleFormErrors.description }]"
+                :placeholder="t.inputRoleDesc"
+                @input="clearRoleFieldError('description')"
+              />
+              <div v-if="roleFormErrors.description" class="role-edit-error">{{ roleFormErrors.description }}</div>
+            </div>
           </div>
         </div>
         <div class="permission-dialog-actions">
@@ -412,6 +436,38 @@ const roleForm = ref({
   role_code: '',
   description: ''
 })
+const roleFormErrors = ref({
+  role_name: '',
+  role_code: '',
+  description: ''
+})
+
+const clearRoleFieldError = (field: 'role_name' | 'role_code' | 'description') => {
+  if (roleFormErrors.value[field]) {
+    roleFormErrors.value[field] = ''
+  }
+}
+
+const resetRoleFormErrors = () => {
+  roleFormErrors.value.role_name = ''
+  roleFormErrors.value.role_code = ''
+  roleFormErrors.value.description = ''
+}
+
+const validateRoleForm = () => {
+  resetRoleFormErrors()
+  if (!roleForm.value.role_name.trim()) {
+    roleFormErrors.value.role_name = t.inputRoleName
+  }
+  if (!roleForm.value.role_code.trim()) {
+    roleFormErrors.value.role_code = t.inputRoleCode
+  }
+  if (!roleForm.value.description.trim()) {
+    roleFormErrors.value.description = t.inputRoleDesc
+  }
+  return !roleFormErrors.value.role_name && !roleFormErrors.value.role_code && !roleFormErrors.value.description
+}
+
 const displayRoles = computed(() => {
   return roles.value.filter(role => !searchRoleName.value || role.role_name?.includes(searchRoleName.value))
 })
@@ -514,6 +570,7 @@ const onCreateRole = () => {
     role_code: '',
     description: ''
   }
+  resetRoleFormErrors()
   showRoleDialog.value = true
 }
 
@@ -551,6 +608,7 @@ const onEditRole = (id: number) => {
     role_code: found.role_code || '',
     description: found.description || found.role_description || ''
   }
+  resetRoleFormErrors()
   showRoleDialog.value = true
 }
 
@@ -579,13 +637,12 @@ const confirmDeleteRole = () => {
 }
 
 const onRoleSubmit = async () => {
+  if (!validateRoleForm()) {
+    return
+  }
   const roleName = roleForm.value.role_name.trim()
   const roleCode = roleForm.value.role_code.trim()
   const roleDesc = roleForm.value.description.trim()
-  if (!roleName || !roleCode || !roleDesc) {
-    window.alert('\u8bf7\u586b\u5199\u5b8c\u6574\u7684\u89d2\u8272\u4fe1\u606f')
-    return
-  }
   roleSubmitting.value = true
   try {
     if (roleDialogMode.value === 'create') {
@@ -873,6 +930,29 @@ onMounted(() => {
 .role-edit-input:focus {
   border-color: rgba(96, 196, 245, 0.85);
   box-shadow: 0 0 0 2px rgba(89, 185, 235, 0.15);
+}
+
+.role-edit-input.has-error {
+  border-color: rgba(255, 106, 106, 0.92);
+  box-shadow: 0 0 0 2px rgba(255, 106, 106, 0.16);
+}
+
+.role-edit-field {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.role-edit-error {
+  color: #ff8e8e;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.required-star {
+  color: #ff8e8e;
+  margin-left: 4px;
 }
 </style>
 

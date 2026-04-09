@@ -38,7 +38,7 @@
                 <button
                   class="mission-btn"
                   :class="[isMultiTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary', { loading: executeLoading }]"
-                  :disabled="((!canStartMultiTask || multiTaskList.length === 0 || !selectedMultiTaskName) && !isMultiTaskRunning) || (runningTaskType && runningTaskType !== 'multi') || executeLoading"
+                  :disabled="isExecuteButtonDisabled"
                   v-permission-click-dialog="'task-multitasklist-execute'"
                   @click="handleExecuteTaskGroup"
                 >
@@ -69,10 +69,6 @@
                 <div class="file-table-cell file-table-action" style="min-width: 360px; width: 360px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
               <div class="file-table-body">
-                <div v-if="loading" class="mission-loading">
-                  加载中...
-                </div>
-                <template v-else>
                 <div class="file-table-row" v-for="(task, index) in currentTaskGroupList" :key="index">
                   <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center; display: flex; align-items: center; justify-content: center;">
                     <span class="ms-seq-num">{{ index + 1 }}</span>
@@ -117,7 +113,6 @@
                     </button>
                   </div>
                 </div>
-              </template>
               <!-- 始终显示固定的空行以保持表格边框（补足到10行） -->
               <div class="file-table-row" v-for="i in multiTaskEmptyRowCount" :key="'empty-' + i">
                 <div class="file-table-cell" style="min-width: 120px; width: 120px; text-align: center;">&nbsp;</div>
@@ -255,24 +250,24 @@
             <div class="mtg-task-form-row">
               <label class="mtg-task-form-label">步态切换</label>
               <select v-model="addTaskGroupDialog.form.gait" class="mtg-task-form-select">
-                <option value="行走步态">行走步态</option>
-                <option value="斜坡步态">斜坡步态</option>
-                <option value="越障步态">越障步态</option>
-                <option value="楼梯步态">楼梯步态</option>
-                <option value="帧楼梯步态">帧楼梯步态</option>
-                <option value="帧45°楼梯步态">帧45°楼梯步态</option>
-                <option value="L行走步态">L行走步态</option>
-                <option value="山地步态">山地步态</option>
-                <option value="静音步态">静音步态</option>
+                <option value="1">行走步态</option>
+                <option value="2">斜坡步态</option>
+                <option value="3">越障步态</option>
+                <option value="4">楼梯步态</option>
+                <option value="5">帧楼梯步态</option>
+                <option value="6">帧45°楼梯步态</option>
+                <option value="7">L行走步态</option>
+                <option value="8">山地步态</option>
+                <option value="9">静音步态</option>
               </select>
             </div>
             <div class="mtg-task-form-row">
               <label class="mtg-task-form-label">地形图设置</label>
               <select v-model="addTaskGroupDialog.form.ground" class="mtg-task-form-select">
-                <option value="实心地面">实心地面</option>
-                <option value="镂空地面">镂空地面</option>
-                <option value="无踢面地面">无踢面地面</option>
-                <option value="累积帧模式">累积帧模式</option>
+                <option value="1">实心地面</option>
+                <option value="2">镂空地面</option>
+                <option value="3">无踢面地面</option>
+                <option value="4">累积帧模式</option>
               </select>
             </div>
           </div>
@@ -324,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, onActivated, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { navigationApi } from '@/api/services'
@@ -342,12 +337,14 @@ import downIcon from '@/assets/source_data/svg_data/robot_source/down.png'
 import lockIcon from '@/assets/source_data/svg_data/robot_source/lock.png'
 import unlockIcon from '@/assets/source_data/svg_data/robot_source/unlock.png'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
+import { useRobotStore } from '@/stores/robot'
 import { usePermissionStore } from '@/stores/permission'
 import { getRobotContextCacheKeys } from '@/utils/robotBootstrap'
 
 const router = useRouter()
 const route = useRoute()
 const permissionStore = usePermissionStore()
+const robotStore = useRobotStore()
 const taskExecutionStore = useTaskExecutionStore()
 const {
   isMultiTaskRunning,
@@ -386,6 +383,20 @@ const loading = ref(false)
 const multiTaskList = ref<any[]>([])
 const selectedMultiTaskName = ref('')
 const currentTaskGroupList = ref<any[]>([])
+const pendingRunningMultiTaskName = ref('')
+const lastHandledRunningMultiTaskName = ref('')
+
+const applyPendingRunningMultiTaskName = () => {
+  const runningName = String(pendingRunningMultiTaskName.value || '').trim()
+  if (!runningName) return false
+  const matched = multiTaskList.value.find(item => item.multitask_name === runningName)
+  if (!matched) return false
+  if (selectedMultiTaskName.value !== matched.multitask_name) {
+    selectedMultiTaskName.value = matched.multitask_name
+  }
+  pendingRunningMultiTaskName.value = ''
+  return true
+}
 
 // Deprecated taskGroups ref, using computed or updated currentTaskGroupList
 // const taskGroups = ref<any[]>([])
@@ -393,6 +404,12 @@ const taskGroups = computed(() => currentTaskGroupList.value) // For template co
 const exceptionStart = ref(false)
 const executeLoading = ref(false)
 const multiTaskEmptyRowCount = computed(() => Math.max(0, 10 - currentTaskGroupList.value.length))
+const isExecuteButtonDisabled = computed(() => {
+  if (executeLoading.value) return true
+  // 多任务运行中必须允许“关闭”，不受 runningTaskType 干扰
+  if (isMultiTaskRunning.value) return false
+  return !canStartMultiTask.value || multiTaskList.value.length === 0 || !selectedMultiTaskName.value
+})
 
 const getStatusClass = (status: string) => {
   const statusMap: Record<string, string> = {
@@ -427,6 +444,39 @@ const showErrorMessage = (text: string) => {
   errorMessage.value = { visible: true, text }
 }
 
+const gaitLabelToCode: Record<string, string> = {
+  '行走步态': '1',
+  '斜坡步态': '2',
+  '越障步态': '3',
+  '楼梯步态': '4',
+  '帧楼梯步态': '5',
+  '帧45°楼梯步态': '6',
+  'L行走步态': '7',
+  '山地步态': '8',
+  '静音步态': '9'
+}
+
+const groundLabelToCode: Record<string, string> = {
+  '实心地面': '1',
+  '镂空地面': '2',
+  '无踢面地面': '3',
+  '累积帧模式': '4'
+}
+
+const normalizeGaitCode = (raw: any): string => {
+  const value = String(raw ?? '').trim()
+  if (gaitLabelToCode[value]) return gaitLabelToCode[value]
+  if (/^[1-9]$/.test(value)) return value
+  return '1'
+}
+
+const normalizeGroundCode = (raw: any): string => {
+  const value = String(raw ?? '').trim()
+  if (groundLabelToCode[value]) return groundLabelToCode[value]
+  if (/^[1-4]$/.test(value)) return value
+  return '1'
+}
+
 const closeDeleteConfirmDialog = () => {
   deleteConfirmDialog.value.visible = false
   deleteConfirmDialog.value.taskToDelete = null
@@ -457,8 +507,8 @@ const addTaskGroupDialog = ref({
     taskGroup: '',
     circle: 1,
     obsMode: '近障模式',
-    gait: '行走步态',
-    ground: '实心地面',
+    gait: '1',
+    ground: '1',
     originPublish: true
   }
 })
@@ -557,7 +607,12 @@ const fetchMultiTaskList = async () => {
         const contextKeys = getRobotContextCacheKeys(robotId)
         localStorage.setItem(contextKeys.multiTaskListKey, JSON.stringify(res.msg))
         localStorage.setItem('cached_multi_task_list', JSON.stringify(res.msg))
-        
+
+        // 有指定名称时，必须在列表刷新后再进行匹配
+        if (applyPendingRunningMultiTaskName()) {
+          return
+        }
+
         // If newly created group exists, select it
         if (createGroupDialog.value.name) {
            const newGroup = multiTaskList.value.find(item => item.multitask_name === createGroupDialog.value.name)
@@ -727,8 +782,8 @@ const handleAddTaskGroup = () => {
     taskGroup: '',
     circle: 1,
     obsMode: '近障模式',
-    gait: '行走步态',
-    ground: '实心地面',
+    gait: '1',
+    ground: '1',
     originPublish: true
   }
 
@@ -813,8 +868,8 @@ const confirmAddTaskGroup = async () => {
       obs_mode: form.obsMode,
       is_origin_publish: form.originPublish ? 1 : 0,
       start_mode: startModeToNumber(form.startMode),
-      gait: form.gait,
-      ground: form.ground
+      gait: normalizeGaitCode(form.gait),
+      ground: normalizeGroundCode(form.ground)
     }
     
     // 编辑模式时添加child_id和index
@@ -1224,8 +1279,8 @@ const handleEditTaskGroup = async (task: any) => {
       taskGroup: editTaskGroup,
       circle: Number(pick(taskPayload.circle, task.circle) || 1),
       obsMode: normalizeObsMode(pick(taskPayload.obs_mode, task.obs_mode)),
-      gait: String(pick(taskPayload.gait, task.gait) || '行走步态'),
-      ground: String(pick(taskPayload.ground, task.ground) || '实心地面'),
+      gait: normalizeGaitCode(pick(taskPayload.gait, task.gait)),
+      ground: normalizeGroundCode(pick(taskPayload.ground, task.ground)),
       originPublish: String(pick(taskPayload.is_origin_publish, task.is_origin_publish)).toLowerCase() === '1'
         || String(pick(taskPayload.is_origin_publish, task.is_origin_publish)).toLowerCase() === 'true'
     }
@@ -1402,29 +1457,28 @@ const handleRobotContextRefreshed = () => {
   loadTrackListFromCache()
 }
 
-onMounted(() => {
-  // 初始化加载任务组数据
+const refreshMultiTaskPageListOnEnter = async () => {
   loading.value = true
-  
   try {
-    const cachedData = localStorage.getItem('cached_multi_task_list')
-    if (cachedData) {
-      const parsedData = JSON.parse(cachedData)
-      if (Array.isArray(parsedData)) {
-        multiTaskList.value = parsedData
-        // Default select first one
-        if (multiTaskList.value.length > 0) {
-          selectedMultiTaskName.value = multiTaskList.value[0].multitask_name
-        }
-      }
-    }
-  } catch (e) {
-    console.error('加载缓存多任务组数据失败', e)
+    await fetchMultiTaskList()
   } finally {
     loading.value = false
   }
+}
 
+onMounted(async () => {
+  await refreshMultiTaskPageListOnEnter()
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+})
+
+let multiTaskPageMounted = false
+onMounted(() => {
+  multiTaskPageMounted = true
+})
+
+onActivated(async () => {
+  if (!multiTaskPageMounted) return
+  await refreshMultiTaskPageListOnEnter()
 })
 
 onUnmounted(() => {
@@ -1443,6 +1497,34 @@ watch(selectedMultiTaskName, (newVal) => {
     currentTaskGroupList.value = []
   }
 }, { immediate: true })
+
+watch(
+  () => ({
+    running: robotStore.multitaskStatus?.status === true,
+    runningName: String(robotStore.multitaskStatus?.current_task_name || '').trim()
+  }),
+  ({ running, runningName }) => {
+    if (!running || !runningName) {
+      if (!running) {
+        lastHandledRunningMultiTaskName.value = ''
+      }
+      return
+    }
+    // WebSocket 会频繁推送 multitask_status，避免同一任务名重复刷列表。
+    if (lastHandledRunningMultiTaskName.value === runningName) {
+      return
+    }
+    lastHandledRunningMultiTaskName.value = runningName
+    pendingRunningMultiTaskName.value = runningName
+    // 先刷新列表，再按名称匹配选中
+    void fetchMultiTaskList()
+  },
+  { immediate: true }
+)
+
+watch(multiTaskList, () => {
+  applyPendingRunningMultiTaskName()
+}, { deep: true })
 </script>
 
 <style scoped>

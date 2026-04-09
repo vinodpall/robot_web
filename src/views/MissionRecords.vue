@@ -70,7 +70,7 @@
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">角度</div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center; display: flex; align-items: center; justify-content: center;">预置点</div>
                 <div class="file-table-cell" style="flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
-                <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
+                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
               <!-- 显示实际数据行 -->
               <div class="file-table-body">
@@ -103,7 +103,7 @@
                     <span v-if="waypoint.description" class="ms-desc-text">{{ waypoint.description }}</span>
                     <span v-else class="ms-empty">-</span>
                   </div>
-                  <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center; display: flex; gap: 25px; justify-content: center; align-items: center;">
+                  <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; gap: 12px; justify-content: center; align-items: center;">
                     <button class="action-btn action-btn-edit" v-permission-click-dialog="'task-tasklist-edit'" @click="handleEditTask(waypoint)">
                       <img :src="editIcon" alt="编辑" />
                       编辑
@@ -111,6 +111,10 @@
                     <button class="action-btn action-btn-delete" v-permission-click-dialog="'task-tasklist-delete'" @click="handleDeleteTask(waypoint)">
                       <img :src="deleteIcon" alt="删除" />
                       删除
+                    </button>
+                    <button class="action-btn action-btn-arrive" v-permission-click-dialog="'task-tasklist-execute'" @click="handleArriveTask(waypoint)">
+                      <img :src="arriveIcon" alt="到点" />
+                      到点
                     </button>
                   </div>
                 </div>
@@ -125,7 +129,7 @@
                 <div class="file-table-cell" style="min-width: 200px; width: 200px; text-align: center;"></div>
                 <div class="file-table-cell" style="min-width: 180px; width: 180px; text-align: center;"></div>
                 <div class="file-table-cell" style="flex: 1; text-align: center;"></div>
-                <div class="file-table-cell file-table-action" style="min-width: 200px; width: 200px; text-align: center;"></div>
+                <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center;"></div>
               </div>
               </div>
             </div>
@@ -621,7 +625,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
@@ -675,6 +679,7 @@ interface PointTask {
 
 const pointTaskList = ref<PointTask[]>([])
 const selectedPointTaskId = ref('')
+const pendingRunningPointTaskName = ref('')
 
 const getSelectedPointTaskCacheKey = () => {
   const robotId = localStorage.getItem('selected_robot_id') || ''
@@ -721,8 +726,18 @@ const pickValidPointTaskSelection = (list: PointTask[]) => {
   selectedPointTaskId.value = cachedInCurrentList ? cachedSelectedId : visibleList[0].task_id
 }
 
+const applyPendingRunningPointTaskSelection = () => {
+  const pendingName = String(pendingRunningPointTaskName.value || '').trim()
+  if (!pendingName) return false
+  const matched = filteredPointTaskList.value.find(t => String(t.task_name || '').trim() === pendingName)
+  if (!matched) return false
+  selectedPointTaskId.value = matched.task_id
+  pendingRunningPointTaskName.value = ''
+  return true
+}
+
 // 获取发布点任务列表
-const fetchPointTaskList = async () => {
+const fetchPointTaskList = async (forceRefresh = false) => {
   const robotId = localStorage.getItem('selected_robot_id')
   if (!robotId) {
     console.warn('未选择机器人，尝试从缓存加载发布点任务列表')
@@ -749,7 +764,9 @@ const fetchPointTaskList = async () => {
       }
       localStorage.setItem('cached_point_task_list', JSON.stringify(pointTaskList.value))
 
-      pickValidPointTaskSelection(pointTaskList.value)
+      if (!applyPendingRunningPointTaskSelection()) {
+        pickValidPointTaskSelection(pointTaskList.value)
+      }
     }
   } catch (error) {
     console.error('获取发布点任务列表失败:', error)
@@ -757,7 +774,9 @@ const fetchPointTaskList = async () => {
     const cached = localStorage.getItem('cached_point_task_list')
     if (cached) {
       pointTaskList.value = JSON.parse(cached)
-      pickValidPointTaskSelection(pointTaskList.value)
+      if (!applyPendingRunningPointTaskSelection()) {
+        pickValidPointTaskSelection(pointTaskList.value)
+      }
     }
   }
 }
@@ -778,6 +797,7 @@ const filteredPointTaskList = computed(() => {
 
 // 监听筛选后的发布点任务列表变化，自动选择第一个
 watch(filteredPointTaskList, (newList) => {
+  if (applyPendingRunningPointTaskSelection()) return
   if (newList.length === 0) {
     selectedPointTaskId.value = ''
     return
@@ -797,8 +817,9 @@ watch(selectedPointTaskId, (newVal) => {
 // 监听 WebSocket task_status，运行中时自动选中对应任务
 watch(() => robotStore.taskStatus, (ts) => {
   if (!ts?.is_running || !ts.task_name) return
-  const matched = pointTaskList.value.find(t => t.task_name === ts.task_name)
-  if (matched) selectedPointTaskId.value = matched.task_id
+  pendingRunningPointTaskName.value = String(ts.task_name || '').trim()
+  if (applyPendingRunningPointTaskSelection()) return
+  void fetchPointTaskList(true)
 }, { deep: true })
 
 // 根据选中的任务组ID获取任务详情
@@ -825,10 +846,12 @@ const waypointsData = computed(() => {
     angle: item.theta,
     preset: item.preset || item.presetID,
     description: item.remark,
+    time: item.time,
     extra: item.extra,
     gait: item.gait,
     ground: item.ground,
-    no_switch: item.no_switch
+    no_switch: item.no_switch,
+    rawData: item
   }))
 })
 
@@ -2107,6 +2130,45 @@ const handleDeleteTask = (waypoint: any) => {
   }
 }
 
+const handleArriveTask = async (waypoint: any) => {
+  if (!isPointTaskRunning.value) {
+    errorMessage.value = { show: true, text: '需要先启动发布点任务' }
+    setTimeout(() => {
+      errorMessage.value.show = false
+    }, 2000)
+    return
+  }
+
+  confirmDialog.value = {
+    show: true,
+    title: '到点任务',
+    message: '确定要执行到点任务吗？',
+    onConfirm: async () => {
+      confirmDialog.value.show = false
+      const robotId = localStorage.getItem('selected_robot_id')
+      if (!robotId) return
+
+      const chargeIndex = Number(waypoint?.rawData?.time ?? waypoint?.time ?? waypoint?.index)
+      if (!Number.isFinite(chargeIndex)) {
+        errorMessage.value = { show: true, text: '当前任务点缺少有效的 time 字段' }
+        setTimeout(() => {
+          errorMessage.value.show = false
+        }, 2000)
+        return
+      }
+
+      successMessage.value = { show: true, text: '到点指令已发送' }
+      setTimeout(() => {
+        successMessage.value.show = false
+      }, 2000)
+
+      navigationApi.oneKeyRecharge(robotId, { chargeIndex }).catch((err) => {
+        console.error('到点指令发送失败', err)
+      })
+    }
+  }
+}
+
 // ========== 预置点选择相关 ==========
 const presetDialog = ref({
   visible: false,
@@ -2366,6 +2428,27 @@ const activeExtraConfigFields = computed<ExtraConfigFieldDef[]>(() => {
   return parseTaskTypeFieldname(currentActionTypeMeta.value?.fieldname)
 })
 
+const isChargeTargetTaskType = computed(() => {
+  const candidates = [
+    addTaskDialog.value.form.actionType,
+    currentActionTypeMeta.value?.cn_name,
+    currentActionTypeMeta.value?.type_text,
+    currentActionTypeMeta.value?.type,
+    currentActionTypeMeta.value?.en_name
+  ]
+    .map(item => String(item ?? '').trim())
+    .filter(Boolean)
+
+  return candidates.some(name => name === '回充' || name === '充电结束任务')
+})
+
+const isTargetBatteryField = (field: ExtraConfigFieldDef) => {
+  const title = String(field.title || '').trim()
+  const fieldName = String(field.field || '').trim()
+  return title.includes('目标电量')
+    || /target.*(battery|power)|battery|target_power|power_target/i.test(fieldName)
+}
+
 const parseExtraConfigPayload = (rawValue: string): Record<string, string> => {
   if (!rawValue) return {}
   try {
@@ -2471,6 +2554,14 @@ const confirmExtraConfig = () => {
     if (field.required && !finalValue) {
       nextErrors[field.field] = `${field.title}不能为空`
       continue
+    }
+
+    if (isChargeTargetTaskType.value && isTargetBatteryField(field)) {
+      const numericValue = Number(finalValue)
+      if (!finalValue || !Number.isFinite(numericValue) || numericValue < 0 || numericValue > 100) {
+        nextErrors[field.field] = `${field.title}只能输入0~100的数值`
+        continue
+      }
     }
 
     nextErrors[field.field] = ''
@@ -2653,6 +2744,10 @@ const handleRobotContextRefreshed = () => {
   fetchPointTaskList()
 }
 
+const refreshPointTaskPageListOnEnter = async () => {
+  await fetchPointTaskList()
+}
+
 watch(
   [selectedPointTaskId, selectedMap, isNavigationEnabled],
   async () => {
@@ -2662,12 +2757,11 @@ watch(
 )
 
 onMounted(async () => {
-  fetchPointTaskList()
+  await refreshPointTaskPageListOnEnter()
   // 初始化分页输入框
   pageInput.value = currentPage.value.toString()
   
   // 获取发布点任务列表
-  await fetchPointTaskList()
   await fetchTaskTypeList()
   
   await loadJobRecords()
@@ -2678,6 +2772,16 @@ onMounted(async () => {
   load3MF('/jiantou.3mf').then(mesh => {
     if (mesh) previewPc.robotMesh.value = mesh
   })
+})
+
+let pointTaskPageMounted = false
+onMounted(() => {
+  pointTaskPageMounted = true
+})
+
+onActivated(async () => {
+  if (!pointTaskPageMounted) return
+  await refreshPointTaskPageListOnEnter()
 })
 
 // 离开时移除监听

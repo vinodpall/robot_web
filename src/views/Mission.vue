@@ -500,7 +500,7 @@
       <div v-if="addTaskDialog.visible" class="custom-dialog-mask">
         <div class="simple-modal-card add-task-modal-card">
           <div class="simple-modal-header">
-            <span>添加任务</span>
+            <span>{{ isEditMode ? '编辑任务' : '添加任务' }}</span>
             <span class="simple-close-icon" @click="cancelAddTask">×</span>
           </div>
           
@@ -833,7 +833,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, watch, onUnmounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
@@ -1396,8 +1396,20 @@ const filteredRouteList = computed(() => {
   })
 })
 
+const pendingRunningRouteName = ref('')
+const applyPendingRunningRouteSelection = () => {
+  const pendingName = normalizeTrackName(pendingRunningRouteName.value || '')
+  if (!pendingName) return false
+  const matched = filteredRouteList.value.find(item => normalizeTrackName(item) === pendingName)
+  if (!matched) return false
+  selectedRouteName.value = matched
+  pendingRunningRouteName.value = ''
+  return true
+}
+
 // 监听筛选后的路线列表变化，自动选择第一个
 watch(filteredRouteList, (newList) => {
+  if (applyPendingRunningRouteSelection()) return
   if (isTrackTaskRunning.value && runningTrackName.value) {
     const normalizedRunningTrack = normalizeTrackName(runningTrackName.value)
     const matched = newList.find(item => normalizeTrackName(item) === normalizedRunningTrack)
@@ -1428,6 +1440,14 @@ watch(
     if (!running) return
     const normalizedTrack = normalizeTrackName(runningTrackName.value)
     if (!normalizedTrack) return
+
+    pendingRunningRouteName.value = normalizedTrack
+    const robotId = localStorage.getItem('selected_robot_id') || ''
+    if (robotId) {
+      await refreshTrackTaskListFromApi(robotId)
+      await loadRouteList()
+    }
+    applyPendingRunningRouteSelection()
 
     if (!routeList.value.some(item => normalizeTrackName(item) === normalizedTrack)) {
       routeList.value = [...routeList.value, normalizedTrack]
@@ -2850,19 +2870,38 @@ const handleRobotContextRefreshed = async () => {
   }
 }
 
+const refreshTrackTaskPageListOnEnter = async () => {
+  const robotId = localStorage.getItem('selected_robot_id')
+  if (robotId) {
+    await refreshTrackTaskListFromApi(robotId)
+  }
+  syncSelectedMapWithCache()
+  await loadRouteList()
+  if (selectedRouteName.value) {
+    await fetchTaskGroupListByRoute(selectedRouteName.value)
+  } else {
+    applyTaskGroupSelection([])
+  }
+}
+
 // 页面加载时获取数据
 // 页面加载时获取数据
 onMounted(async () => {
   await loadWaylineFiles()
-  syncSelectedMapWithCache()
-  await loadRouteList()
+  await refreshTrackTaskPageListOnEnter()
   await fetchTaskTypeList()
-  await refreshAllTrackTaskListCache()
-  if (selectedRouteName.value) {
-    await fetchTaskGroupListByRoute(selectedRouteName.value)
-  }
   window.addEventListener('click', closeDropdown)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+})
+
+let trackTaskPageMounted = false
+onMounted(() => {
+  trackTaskPageMounted = true
+})
+
+onActivated(async () => {
+  if (!trackTaskPageMounted) return
+  await refreshTrackTaskPageListOnEnter()
 })
 
 onUnmounted(() => {
@@ -3027,6 +3066,7 @@ const isSelected = (item: any) => {
 
 const taskTypeList = ref<any[]>([])
 let skipNextIsMultiReset = false
+let suppressExtraConfigReset = false
 
 const filteredTaskTypes = computed(() => {
   const isSingle = addTaskDialog.value.form.isMulti === '0'
@@ -3077,7 +3117,7 @@ watch(() => addTaskDialog.value.form.actionType, (val, oldVal) => {
   if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
   const nextType = String(val || '').trim()
   const prevType = String(oldVal || '').trim()
-  if (nextType !== prevType) {
+  if (nextType !== prevType && !suppressExtraConfigReset) {
     addTaskDialog.value.form.extraConfig = ''
   }
 })
@@ -3186,6 +3226,7 @@ const handleEditTask = async (waypoint: any) => {
   
   isEditMode.value = true
   editingTaskItem.value = waypoint // This might be partial. 
+  suppressExtraConfigReset = true
   
   // 处理预置点信息：从 preset 和 presetID 组合回原始格式
   let presetDisplay = ''
@@ -3203,42 +3244,47 @@ const handleEditTask = async (waypoint: any) => {
     presetDisplay = rawPreset
   }
 
-  await fetchTaskTypeList()
+  try {
+    await fetchTaskTypeList()
 
-  const rawTypeText = waypoint.rawData?.type_text || waypoint.rawData?.type || waypoint.type || ''
-  const typeNames = splitTaskTypeNames(rawTypeText).map(normalizeTaskTypeNameToCn)
-  const normalizedTypeText = typeNames.join(',')
-  const matchedTypeMeta = taskTypeList.value.filter(item => typeNames.includes(String(item?.cn_name || '')))
-  const hasSingleType = matchedTypeMeta.some(item => item?.single === true)
-  const hasMultiType = matchedTypeMeta.some(item => item?.single === false)
+    const rawTypeText = waypoint.rawData?.type_text || waypoint.rawData?.type || waypoint.type || ''
+    const typeNames = splitTaskTypeNames(rawTypeText).map(normalizeTaskTypeNameToCn)
+    const normalizedTypeText = typeNames.join(',')
+    const matchedTypeMeta = taskTypeList.value.filter(item => typeNames.includes(String(item?.cn_name || '')))
+    const hasSingleType = matchedTypeMeta.some(item => item?.single === true)
+    const hasMultiType = matchedTypeMeta.some(item => item?.single === false)
 
-  let targetIsMulti: '0' | '1'
-  if (hasSingleType && !hasMultiType) {
-    targetIsMulti = '0'
-  } else if (!hasSingleType && hasMultiType) {
-    targetIsMulti = '1'
-  } else {
-    targetIsMulti = typeNames.length > 1 ? '1' : '0'
+    let targetIsMulti: '0' | '1'
+    if (hasSingleType && !hasMultiType) {
+      targetIsMulti = '0'
+    } else if (!hasSingleType && hasMultiType) {
+      targetIsMulti = '1'
+    } else {
+      targetIsMulti = typeNames.length > 1 ? '1' : '0'
+    }
+
+    skipNextIsMultiReset = true
+    addTaskDialog.value.form.isMulti = targetIsMulti
+    addTaskDialog.value.form.typeInput = normalizedTypeText
+    addTaskDialog.value.form.actionType = typeNames[0] || ''
+
+    addTaskDialog.value.form.x = (waypoint.coordinates?.x || '0').toString()
+    addTaskDialog.value.form.y = (waypoint.coordinates?.y || '0').toString()
+    addTaskDialog.value.form.z = (waypoint.coordinates?.z || '0').toString()
+    addTaskDialog.value.form.angle = (waypoint.angle || '0').toString()
+    addTaskDialog.value.form.preset = presetDisplay
+    addTaskDialog.value.form.description = waypoint.description || ''
+    addTaskDialog.value.form.extraConfig = waypoint.extra || waypoint.rawData?.extra || ''
+    addTaskDialog.value.form.obsMode = normalizeTrackTaskObsModeText(waypoint.rawData?.obs_mode)
+    addTaskDialog.value.form.gait = waypoint.gait || waypoint.rawData?.gait || '1'
+    addTaskDialog.value.form.ground = waypoint.ground || waypoint.rawData?.ground || '1'
+    addTaskDialog.value.form.stopAtPoint = resolveStopAtPointFromTask(waypoint.rawData || waypoint)
+
+    addTaskDialog.value.visible = true
+    await nextTick()
+  } finally {
+    suppressExtraConfigReset = false
   }
-
-  skipNextIsMultiReset = true
-  addTaskDialog.value.form.isMulti = targetIsMulti
-  addTaskDialog.value.form.typeInput = normalizedTypeText
-  addTaskDialog.value.form.actionType = typeNames[0] || ''
-
-  addTaskDialog.value.form.x = (waypoint.coordinates?.x || '0').toString()
-  addTaskDialog.value.form.y = (waypoint.coordinates?.y || '0').toString()
-  addTaskDialog.value.form.z = (waypoint.coordinates?.z || '0').toString()
-  addTaskDialog.value.form.angle = (waypoint.angle || '0').toString()
-  addTaskDialog.value.form.preset = presetDisplay
-  addTaskDialog.value.form.description = waypoint.description || ''
-  addTaskDialog.value.form.extraConfig = waypoint.extra || waypoint.rawData?.extra || ''
-  addTaskDialog.value.form.obsMode = normalizeTrackTaskObsModeText(waypoint.rawData?.obs_mode)
-  addTaskDialog.value.form.gait = waypoint.gait || waypoint.rawData?.gait || '1'
-  addTaskDialog.value.form.ground = waypoint.ground || waypoint.rawData?.ground || '1'
-  addTaskDialog.value.form.stopAtPoint = resolveStopAtPointFromTask(waypoint.rawData || waypoint)
-
-  addTaskDialog.value.visible = true
 }
 
 const cancelAddTask = () => {
@@ -3445,6 +3491,10 @@ const handleDeleteTask = (waypoint: any) => {
 }
 
 const handleArriveTask = async (waypoint: any) => {
+  if (!isTrackTaskRunning.value) {
+    showMissionError('需要先启动循迹任务')
+    return
+  }
   showConfirmDialog('确定要执行到点任务吗？', async () => {
     const robotId = localStorage.getItem('selected_robot_id')
     if (!robotId) return
@@ -3904,6 +3954,27 @@ const activeExtraConfigFields = computed<ExtraConfigFieldDef[]>(() => {
   return parseTaskTypeFieldname(currentActionTypeMeta.value?.fieldname)
 })
 
+const isChargeTargetTaskType = computed(() => {
+  const candidates = [
+    addTaskDialog.value.form.actionType,
+    currentActionTypeMeta.value?.cn_name,
+    currentActionTypeMeta.value?.type_text,
+    currentActionTypeMeta.value?.type,
+    currentActionTypeMeta.value?.en_name
+  ]
+    .map(item => String(item ?? '').trim())
+    .filter(Boolean)
+
+  return candidates.some(name => name === '回充' || name === '充电结束任务')
+})
+
+const isTargetBatteryField = (field: ExtraConfigFieldDef) => {
+  const title = String(field.title || '').trim()
+  const fieldName = String(field.field || '').trim()
+  return title.includes('目标电量')
+    || /target.*(battery|power)|battery|target_power|power_target/i.test(fieldName)
+}
+
 const parseExtraConfigPayload = (rawValue: string): Record<string, string> => {
   if (!rawValue) return {}
 
@@ -4016,6 +4087,14 @@ const confirmExtraConfig = () => {
     if (field.required && !finalValue) {
       nextErrors[field.field] = `${field.title}不能为空`
       continue
+    }
+
+    if (isChargeTargetTaskType.value && isTargetBatteryField(field)) {
+      const numericValue = Number(finalValue)
+      if (!finalValue || !Number.isFinite(numericValue) || numericValue < 0 || numericValue > 100) {
+        nextErrors[field.field] = `${field.title}只能输入0~100的数值`
+        continue
+      }
     }
 
     nextErrors[field.field] = ''
@@ -4897,6 +4976,7 @@ const confirmExtraConfig = () => {
   min-width: auto;
 }
 
+
 .action-btn img {
   width: 14px;
   height: 14px;
@@ -4925,6 +5005,7 @@ const confirmExtraConfig = () => {
 .action-btn-arrive img {
   filter: drop-shadow(0 0 4px rgba(103, 213, 253, 0.4));
 }
+
 
 /* ---- 任务列表单元格样式 ---- */
 /* 行 hover 效果 */

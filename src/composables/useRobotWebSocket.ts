@@ -83,6 +83,19 @@ export interface MsfStatusData {
   timestamp: string
 }
 
+export interface LocStatusData {
+  result: number
+  status_text: string
+  error_code: number
+  error_msg: string
+  timestamp: string
+}
+
+export interface MultiTaskStatusData {
+  status: boolean
+  current_task_name: string
+}
+
 export interface TaskStatusData {
   is_running: boolean
   task_name: string
@@ -302,7 +315,7 @@ export function useRobotWebSocket() {
         break
 
       case 'multitask_status':
-        robotStore.setMultitaskStatus(data as { status: boolean })
+        robotStore.setMultitaskStatus(data as MultiTaskStatusData)
         break
 
       // ---- 机器人上下线 ----
@@ -341,6 +354,11 @@ export function useRobotWebSocket() {
       // ---- 融合定位状态 ----
       case 'msf_status':
         robotStore.setMsfStatus(data as MsfStatusData)
+        break
+
+      // ---- 定位状态 ----
+      case 'loc_status':
+        robotStore.setLocStatus(data as LocStatusData)
         break
 
       // ---- 传感器状态（激光雷达/IMU/GPS） ----

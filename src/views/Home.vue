@@ -1302,6 +1302,8 @@ const extractTrackTaskList = (payload: any): any[] => {
 
 const activeOverlayTrackName = ref('')
 const activeOverlayPointTaskId = ref('')
+const lastTrackOverlayKey = ref('')
+const lastPointTaskOverlayKey = ref('')
 
 // cmd_status.track 同步 activeTaskType：WebSocket 反馈 track=1 时标记循迹任务运行中
 watch(() => robotStore.cmdStatus?.track, (val) => {
@@ -1364,6 +1366,10 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
   if (!info) return
   if (robotStore.cmdStatus?.track === 1 && info.track_name) {
     const normalizedTrackName = normalizeTrackName(info.track_name)
+    const normalizedTaskPointName = normalizeTaskPointName(
+      info.taskpoint_name || activeTrackInfo.value.taskpoint_name || trackStartDialog.value.form.taskpoint_name || ''
+    )
+    pendingRunningTrackName.value = normalizedTrackName
 
     // 若下拉列表中没有该轨迹（缓存为空或机器人正在运行新任务），动态插入并写入缓存
     if (!filteredTrackList.value.includes(normalizedTrackName)) {
@@ -1379,22 +1385,31 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
       }
     }
 
-    selectedTrack.value = normalizedTrackName
+    if (!applyPendingRunningTrackName()) {
+      selectedTrack.value = normalizedTrackName
+    }
     // 同时更新取消时需要的任务参数
     activeTrackInfo.value = {
       track_name: normalizedTrackName,
       // 某些固件在运行中可能回传空 taskpoint_name，这里保留已有值避免任务点丢失
-      taskpoint_name: info.taskpoint_name || activeTrackInfo.value.taskpoint_name || trackStartDialog.value.form.taskpoint_name || ''
+      taskpoint_name: normalizedTaskPointName
     }
     activeOverlayTrackName.value = normalizedTrackName
     // 叠加路线轨迹到点云图
-    overlayTrackTrajectory(normalizedTrackName)
+    const nextOverlayKey = `${normalizedTrackName}::${normalizedTaskPointName}`
+    if (
+      nextOverlayKey !== lastTrackOverlayKey.value ||
+      pointCloudData.value.length === basePointCloudData.value.length
+    ) {
+      overlayTrackTrajectory(normalizedTrackName)
+    }
   }
 }, { deep: true })
 
 // 循迹任务结束时，还原点云图（移除轨迹叠加），并重置下拉为第一条
 watch(() => robotStore.isTracking, (tracking) => {
   if (!tracking) {
+    lastTrackOverlayKey.value = ''
     activeOverlayTrackName.value = ''
     if (basePointCloudData.value.length > 0) {
       pointCloudData.value = basePointCloudData.value
@@ -1570,6 +1585,13 @@ const overlayTrackTrajectory = async (trackName: string) => {
     // 2. 读取任务点数据（从 localStorage 的 all_track_task_list）
     const taskPointsData: Array<{x: number, y: number, z: number, name: string}> = []
     const currentTaskPointName = normalizeTaskPointName(activeTrackInfo.value.taskpoint_name)
+    const overlayKey = `${normalizedTrackName}::${currentTaskPointName}`
+    if (
+      lastTrackOverlayKey.value === overlayKey &&
+      pointCloudData.value.length > basePointCloudData.value.length
+    ) {
+      return
+    }
     
     try {
       const contextKeys = getCurrentRobotContextKeys()
@@ -1644,6 +1666,7 @@ const overlayTrackTrajectory = async (trackName: string) => {
       ...normalizedTrajectory,
       ...normalizedTaskPoints
     ]
+    lastTrackOverlayKey.value = overlayKey
   } catch (e) {
     console.warn('叠加轨迹失败:', e)
   }
@@ -1674,6 +1697,8 @@ const clearPointCloud = () => {
   pointCloudData.value = []
   basePointCloudData.value = []
   pointCloudNavigationOrigin.value = null
+  lastTrackOverlayKey.value = ''
+  lastPointTaskOverlayKey.value = ''
   // 重置归一化参数，避免继续显示原场景辅助元素
   pointCloudNormalizationParams.value = { centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 }
 }
@@ -1706,8 +1731,14 @@ const loadMapNavigationOrigin = async (mapName: string): Promise<{ x: number; y:
   }
 }
 
-const refreshPointCloud = async () => {
-  pointCloudLoading.value = true
+const refreshPointCloud = async (options?: { silent?: boolean }) => {
+  const hasExistingPointCloud = pointCloudData.value.length > 0 || basePointCloudData.value.length > 0
+  const silentRefresh = !!options?.silent && hasExistingPointCloud
+  if (!silentRefresh) {
+    pointCloudLoading.value = true
+  } else {
+    pointCloudLoading.value = false
+  }
   pointCloudError.value = ''
   try {
     if (!selectedMap.value) {
@@ -1744,6 +1775,8 @@ const refreshPointCloud = async () => {
     pointCloudNavigationOrigin.value = await loadMapNavigationOrigin(selectedMap.value)
     pointCloudData.value = points
     basePointCloudData.value = points
+    lastTrackOverlayKey.value = ''
+    lastPointTaskOverlayKey.value = ''
     await nextTick()
 
     const currentTrackName = activeOverlayTrackName.value || normalizeTrackName(selectedTrack.value)
@@ -1765,7 +1798,9 @@ const refreshPointCloud = async () => {
     pointCloudError.value = '地图加载失败'
     clearPointCloud()
   } finally {
-    pointCloudLoading.value = false
+    if (!silentRefresh) {
+      pointCloudLoading.value = false
+    }
   }
 }
 
@@ -4409,6 +4444,13 @@ const overlayPointTaskWaypoints = async (taskId: string, taskName?: string) => {
   }
 
   const currentTaskIndex = resolvePointTaskCurrentIndex(taskName || targetTask.task_name, taskContent.length)
+  const overlayKey = `${String(taskId)}::${currentTaskIndex}`
+  if (
+    lastPointTaskOverlayKey.value === overlayKey &&
+    pointCloudData.value.length > basePointCloudData.value.length
+  ) {
+    return
+  }
   const { centerX, centerY, centerZ, maxRange } = pointCloudNormalizationParams.value
   if (!maxRange || !Number.isFinite(maxRange)) return
 
@@ -4435,6 +4477,7 @@ const overlayPointTaskWaypoints = async (taskId: string, taskName?: string) => {
     ...basePointCloudData.value,
     ...normalizedTaskPoints
   ]
+  lastPointTaskOverlayKey.value = overlayKey
 }
 
 // 地图文件缓存 - 使用 IndexedDB 存储大文件
@@ -4764,6 +4807,10 @@ watch(mapList, () => {
 const trackList = ref<string[]>([])
 const selectedTrack = ref('')
 const trajectoryDownloadInFlight = ref(false)
+const pendingRunningTrackName = ref('')
+const trackListForceRefreshInFlight = ref(false)
+let lastTrackListForceRefreshAt = 0
+const TRACK_LIST_FORCE_REFRESH_INTERVAL_MS = 3000
 
 const syncSelectedMapTrajectoryFiles = async (mapName: string) => {
   if (!mapName) return
@@ -4784,8 +4831,41 @@ const syncSelectedMapTrajectoryFiles = async (mapName: string) => {
   }
 }
 
-const fetchTrackList = async () => {
+const applyPendingRunningTrackName = () => {
+  const pendingName = normalizeTrackName(pendingRunningTrackName.value || '')
+  if (!pendingName) return false
+  const matched = filteredTrackList.value.find(item => normalizeTrackName(item) === pendingName)
+  if (!matched) return false
+  selectedTrack.value = matched
+  pendingRunningTrackName.value = ''
+  return true
+}
+
+const fetchTrackList = async (forceRefresh = false) => {
   const contextKeys = getCurrentRobotContextKeys()
+  const robotId = deviceStore.selectedRobotId
+  if (forceRefresh && robotId) {
+    const now = Date.now()
+    if (trackListForceRefreshInFlight.value) return
+    if (now - lastTrackListForceRefreshAt < TRACK_LIST_FORCE_REFRESH_INTERVAL_MS) return
+    trackListForceRefreshInFlight.value = true
+    try {
+      const response = await navigationApi.getTrackList(robotId)
+      const remoteList = Array.isArray(response?.msg?.result) ? response.msg.result : []
+      trackList.value = remoteList
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.trackListKey, JSON.stringify(trackList.value))
+      }
+      localStorage.setItem('cached_track_list', JSON.stringify(trackList.value))
+      lastTrackListForceRefreshAt = Date.now()
+      return
+    } catch (error) {
+      console.warn('[循迹列表] 强制刷新失败，回退缓存:', error)
+    } finally {
+      trackListForceRefreshInFlight.value = false
+    }
+  }
+
   const cached = contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null
   if (cached) {
     trackList.value = JSON.parse(cached)
@@ -4854,6 +4934,7 @@ watch(selectedMap, async (newMapName) => {
 // 监听 filteredTrackList 变化，确保有数据时自动选择第一个
 // 循迹进行中时由 WebSocket 数据驱动，不强制覆盖
 watch(filteredTrackList, (newList) => {
+  if (applyPendingRunningTrackName()) return
   if (robotStore.isTracking) return
   if (newList.length > 0 && !newList.includes(selectedTrack.value)) {
     selectedTrack.value = newList[0]
@@ -4879,11 +4960,24 @@ interface PointTask {
 const pointTaskList = ref<PointTask[]>([])
 const selectedPointTask = ref('')
 let pointTaskRequestToken = 0
+const pendingRunningPointTaskName = ref('')
 
-const fetchPointTaskList = async () => {
+const applyPendingRunningPointTaskName = () => {
+  const pendingName = String(pendingRunningPointTaskName.value || '').trim()
+  if (!pendingName) return false
+  const matched = filteredPointTaskList.value.find(t => String(t.task_name || '').trim() === pendingName)
+  if (!matched) return false
+  selectedPointTask.value = matched.task_id
+  activeOverlayPointTaskId.value = matched.task_id
+  void overlayPointTaskWaypoints(matched.task_id, matched.task_name)
+  pendingRunningPointTaskName.value = ''
+  return true
+}
+
+const fetchPointTaskList = async (forceRefresh = false) => {
   // 优先读缓存（robotBootstrap 切换机器人后已预填充）
   const contextKeys = getCurrentRobotContextKeys()
-  const cached = contextKeys ? localStorage.getItem(contextKeys.pointTaskListKey) : null
+  const cached = !forceRefresh && contextKeys ? localStorage.getItem(contextKeys.pointTaskListKey) : null
   if (cached) {
     try {
       const list = JSON.parse(cached)
@@ -4934,6 +5028,7 @@ const filteredPointTaskList = computed(() => {
 
 // 监听筛选后的发布点任务列表变化，自动选择第一个
 watch(filteredPointTaskList, (newList) => {
+  if (applyPendingRunningPointTaskName()) return
   if (newList.length > 0) {
     selectedPointTask.value = newList[0].task_id
   } else {
@@ -4945,6 +5040,7 @@ watch(filteredPointTaskList, (newList) => {
 watch(() => robotStore.taskStatus, (ts) => {
   if (!ts?.is_running || !ts.task_name) {
     activeOverlayPointTaskId.value = ''
+    lastPointTaskOverlayKey.value = ''
     if (!robotStore.isTracking && basePointCloudData.value.length > 0) {
       pointCloudData.value = basePointCloudData.value
     }
@@ -4954,12 +5050,9 @@ watch(() => robotStore.taskStatus, (ts) => {
     selectedPointTask.value = ''
     return
   }
-  const matched = filteredPointTaskList.value.find(t => t.task_name === ts.task_name)
-  if (matched) {
-    selectedPointTask.value = matched.task_id
-    activeOverlayPointTaskId.value = matched.task_id
-    overlayPointTaskWaypoints(matched.task_id, matched.task_name)
-  }
+  pendingRunningPointTaskName.value = String(ts.task_name || '').trim()
+  if (applyPendingRunningPointTaskName()) return
+  void fetchPointTaskList(true)
 }, { deep: true })
 
 watch(() => selectedPointTask.value, (taskId) => {
@@ -4979,14 +5072,29 @@ interface MultiTask {
 
 const multiTaskList = ref<MultiTask[]>([])
 let multiTaskRequestToken = 0
+const pendingRunningMultiTaskName = ref('')
+const lastHandledRunningMultiTaskName = ref('')
 
-const fetchMultiTaskList = async () => {
+const applyPendingHomeRunningMultiTaskName = () => {
+  const runningName = String(pendingRunningMultiTaskName.value || '').trim()
+  if (!runningName) return false
+  const matched = multiTaskList.value.find(item => item.multitask_name === runningName)
+  if (!matched) return false
+  if (selectedMultiTask.value !== matched.multitask_id) {
+    selectedMultiTask.value = matched.multitask_id
+  }
+  pendingRunningMultiTaskName.value = ''
+  return true
+}
+
+const fetchMultiTaskList = async (forceRefresh = false) => {
   // 优先读缓存（robotBootstrap 切换机器人后已预填充）
   const contextKeys = getCurrentRobotContextKeys()
-  const cached = contextKeys ? localStorage.getItem(contextKeys.multiTaskListKey) : null
+  const cached = !forceRefresh && contextKeys ? localStorage.getItem(contextKeys.multiTaskListKey) : null
   if (cached) {
     try {
       multiTaskList.value = JSON.parse(cached)
+      applyPendingHomeRunningMultiTaskName()
       return
     } catch (_) {}
   }
@@ -5022,11 +5130,39 @@ watch(multiTaskList, (newList) => {
     return
   }
 
+  if (applyPendingHomeRunningMultiTaskName()) {
+    return
+  }
+
   const hasCurrentSelection = newList.some(item => item.multitask_id === selectedMultiTask.value)
   if (!hasCurrentSelection) {
     selectedMultiTask.value = newList[0].multitask_id
   }
 })
+
+watch(
+  () => ({
+    running: robotStore.multitaskStatus?.status === true,
+    runningName: String(robotStore.multitaskStatus?.current_task_name || '').trim()
+  }),
+  ({ running, runningName }) => {
+    if (!running || !runningName) {
+      if (!running) {
+        lastHandledRunningMultiTaskName.value = ''
+      }
+      return
+    }
+    // WebSocket 会频繁推送 multitask_status，避免同一任务名重复刷列表。
+    if (lastHandledRunningMultiTaskName.value === runningName) {
+      return
+    }
+    lastHandledRunningMultiTaskName.value = runningName
+    pendingRunningMultiTaskName.value = runningName
+    // 先刷新列表，再按名称匹配选中
+    void fetchMultiTaskList(true)
+  },
+  { immediate: true }
+)
 
 // 获取当前选中的航线名称
 const getCurrentWaylineName = computed(() => {
@@ -7874,7 +8010,7 @@ onActivated(async () => {
 
     if (selectedMap.value) {
       await nextTick()
-      await refreshPointCloud()
+      await refreshPointCloud({ silent: true })
     }
   }
 })
