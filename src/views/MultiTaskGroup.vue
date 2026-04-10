@@ -385,11 +385,22 @@ const selectedMultiTaskName = ref('')
 const currentTaskGroupList = ref<any[]>([])
 const pendingRunningMultiTaskName = ref('')
 const lastHandledRunningMultiTaskName = ref('')
+const wasMultiTaskRunning = ref(false)
+
+const getRunningMultiTaskGroupName = () => {
+  const status = robotStore.multitaskStatus
+  const groupName = String(status?.current_group_name || '').trim()
+  if (groupName) return groupName
+  return String(status?.current_task_name || '').trim()
+}
 
 const applyPendingRunningMultiTaskName = () => {
   const runningName = String(pendingRunningMultiTaskName.value || '').trim()
   if (!runningName) return false
-  const matched = multiTaskList.value.find(item => item.multitask_name === runningName)
+  const matched = multiTaskList.value.find(item =>
+    String(item.multitask_name || '').trim() === runningName ||
+    String(item.multitask_id || '').trim() === runningName
+  )
   if (!matched) return false
   if (selectedMultiTaskName.value !== matched.multitask_name) {
     selectedMultiTaskName.value = matched.multitask_name
@@ -1501,15 +1512,21 @@ watch(selectedMultiTaskName, (newVal) => {
 watch(
   () => ({
     running: robotStore.multitaskStatus?.status === true,
-    runningName: String(robotStore.multitaskStatus?.current_task_name || '').trim()
+    runningName: getRunningMultiTaskGroupName()
   }),
   ({ running, runningName }) => {
     if (!running || !runningName) {
+      if (!running && wasMultiTaskRunning.value && multiTaskList.value.length > 0) {
+        selectedMultiTaskName.value = multiTaskList.value[0].multitask_name
+      }
+      wasMultiTaskRunning.value = false
+      pendingRunningMultiTaskName.value = ''
       if (!running) {
         lastHandledRunningMultiTaskName.value = ''
       }
       return
     }
+    wasMultiTaskRunning.value = true
     // WebSocket 会频繁推送 multitask_status，避免同一任务名重复刷列表。
     if (lastHandledRunningMultiTaskName.value === runningName) {
       return

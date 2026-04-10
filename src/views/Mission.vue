@@ -53,7 +53,7 @@
                 <button
                   class="mission-btn"
                   :class="isTrackTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
-                  :disabled="((!canStartTrackTask || filteredRouteList.length === 0 || taskGroupList.length === 0 || !selectedRouteName || !selectedTaskGroupName) && !isTrackTaskRunning) || (runningTaskType != null && runningTaskType !== 'track')"
+                  :disabled="((!canStartTrackTask || !hasNavInsMsfEnabled || filteredRouteList.length === 0 || taskGroupList.length === 0 || !selectedRouteName || !selectedTaskGroupName) && !isTrackTaskRunning) || (runningTaskType != null && runningTaskType !== 'track')"
                   v-permission-click-dialog="'task-tracklist-execute'"
                   @click="handleStartTrack"
                 >
@@ -567,9 +567,14 @@
             <!-- 额外事务 -->
              <div class="simple-form-item">
                <label class="simple-label">额外事务</label>
-               <div class="simple-flex-row" style="justify-content: space-between;">
-                  <span style="color: #fff;">{{ extraConfigDisplayValue || '未配置' }}</span>
-                  <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
+               <div class="simple-flex-row extra-config-display-row">
+                  <span
+                    class="extra-config-display-text"
+                    :title="extraConfigDisplayValue || '未配置'"
+                  >
+                    {{ extraConfigDisplayValue || '未配置' }}
+                  </span>
+                  <button class="mission-btn mission-btn-primary extra-config-display-btn" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
                </div>
             </div>
 
@@ -891,6 +896,10 @@ const {
   navPaused: isNavPaused
 } = storeToRefs(taskExecutionStore)
 const robotStore = useRobotStore()
+const hasNavInsMsfEnabled = computed(() => {
+  const cmdStatus = robotStore.cmdStatus
+  return cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
+})
 
 // 航线文件相关
 const selectedTrack = ref('')
@@ -2257,7 +2266,7 @@ const waypointsData = computed(() => {
         extra: task.extra,
         gait: task.gait,
         ground: task.ground,
-        no_switch: task.no_switch,
+        nostop: task.nostop ?? task.no_switch,
         // 保留原始数据以备后用
         rawData: task
       }
@@ -3121,17 +3130,50 @@ watch(() => addTaskDialog.value.form.actionType, (val, oldVal) => {
     addTaskDialog.value.form.extraConfig = ''
   }
 })
+const sanitizeNumericInput = (value: unknown): string => {
+  const raw = String(value ?? '')
+  if (!raw) return ''
+  let next = raw.replace(/[^\d.-]/g, '')
+  next = next.replace(/(?!^)-/g, '')
+  const dotIndex = next.indexOf('.')
+  if (dotIndex !== -1) {
+    next = next.slice(0, dotIndex + 1) + next.slice(dotIndex + 1).replace(/\./g, '')
+  }
+  if (next.startsWith('.')) next = `0${next}`
+  if (next.startsWith('-.')) next = `-0${next.slice(1)}`
+  return next
+}
 watch(() => addTaskDialog.value.form.x, (val) => {
-  if (String(val || '').trim()) addTaskFieldErrors.value.x = ''
+  const sanitized = sanitizeNumericInput(val)
+  if (sanitized !== String(val ?? '')) {
+    addTaskDialog.value.form.x = sanitized
+    return
+  }
+  if (String(sanitized || '').trim()) addTaskFieldErrors.value.x = ''
 })
 watch(() => addTaskDialog.value.form.y, (val) => {
-  if (String(val || '').trim()) addTaskFieldErrors.value.y = ''
+  const sanitized = sanitizeNumericInput(val)
+  if (sanitized !== String(val ?? '')) {
+    addTaskDialog.value.form.y = sanitized
+    return
+  }
+  if (String(sanitized || '').trim()) addTaskFieldErrors.value.y = ''
 })
 watch(() => addTaskDialog.value.form.z, (val) => {
-  if (String(val || '').trim()) addTaskFieldErrors.value.z = ''
+  const sanitized = sanitizeNumericInput(val)
+  if (sanitized !== String(val ?? '')) {
+    addTaskDialog.value.form.z = sanitized
+    return
+  }
+  if (String(sanitized || '').trim()) addTaskFieldErrors.value.z = ''
 })
 watch(() => addTaskDialog.value.form.angle, (val) => {
-  if (String(val || '').trim()) addTaskFieldErrors.value.angle = ''
+  const sanitized = sanitizeNumericInput(val)
+  if (sanitized !== String(val ?? '')) {
+    addTaskDialog.value.form.angle = sanitized
+    return
+  }
+  if (String(sanitized || '').trim()) addTaskFieldErrors.value.angle = ''
 })
 
 watch(filteredTaskTypes, (list) => {
@@ -3189,11 +3231,11 @@ const parseBooleanLike = (value: unknown): boolean | null => {
 
 const resolveStopAtPointFromTask = (task: any): boolean => {
   // 循迹任务接口返回值与UI开关语义保持一致：false=关闭，true=开启
-  const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
-  if (noSwitch !== null) return noSwitch
-
   const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
   if (noStop !== null) return noStop
+
+  const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
+  if (noSwitch !== null) return noSwitch
 
   const stopAtPoint = parseBooleanLike(task?.stopAtPoint ?? task?.stop_at_point)
   if (stopAtPoint !== null) return stopAtPoint
@@ -3343,7 +3385,7 @@ const confirmAddTask = async () => {
     track_point_name: selectedTaskGroupName.value,
     extra: form.extraConfig || '',
     obs_mode: form.obsMode || '近障模式',
-    no_switch: form.stopAtPoint,
+    nostop: form.stopAtPoint,
     gait: form.gait,
     ground: form.ground,
     createtime: isEditMode.value ? (editingTaskItem.value?.rawData?.createtime || timestamp) : timestamp
@@ -4117,6 +4159,25 @@ const confirmExtraConfig = () => {
 .extra-config-input {
   height: 34px;
   line-height: 34px;
+}
+
+.extra-config-display-row {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.extra-config-display-text {
+  color: #fff;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.extra-config-display-btn {
+  flex-shrink: 0;
 }
 
 .btn-spinner {

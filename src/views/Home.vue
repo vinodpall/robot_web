@@ -1532,6 +1532,7 @@ const pointCloudNormalizationParams = ref<NormalizationParams>({ centerX: 0, cen
 const pointCloudNavigationOrigin = ref<{ x: number; y: number; z: number } | null>(null)
 const pointCloudLoading = ref(false)
 const pointCloudError = ref('')
+const lastLoadedPointCloudMap = ref('')
 const isPointCloudFullscreen = ref(false)
 const togglePointCloudFullscreen = () => {
   isPointCloudFullscreen.value = !isPointCloudFullscreen.value
@@ -1697,10 +1698,38 @@ const clearPointCloud = () => {
   pointCloudData.value = []
   basePointCloudData.value = []
   pointCloudNavigationOrigin.value = null
+  lastLoadedPointCloudMap.value = ''
   lastTrackOverlayKey.value = ''
   lastPointTaskOverlayKey.value = ''
   // 重置归一化参数，避免继续显示原场景辅助元素
   pointCloudNormalizationParams.value = { centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 }
+}
+
+const syncPointCloudOverlayByRuntimeState = async () => {
+  if (basePointCloudData.value.length === 0) return
+
+  const currentTrackName = activeOverlayTrackName.value || normalizeTrackName(selectedTrack.value)
+  if (robotStore.isTracking && currentTrackName) {
+    activeOverlayTrackName.value = currentTrackName
+    await overlayTrackTrajectory(currentTrackName)
+    return
+  }
+
+  if (robotStore.isPointTaskRunning) {
+    const runningTaskName = String(robotStore.taskStatus?.task_name || '').trim()
+    const matchedTask =
+      pointTaskList.value.find(task => String(task.task_id) === String(activeOverlayPointTaskId.value))
+      || pointTaskList.value.find(task => String(task.task_name || '').trim() === runningTaskName)
+    if (matchedTask) {
+      activeOverlayPointTaskId.value = matchedTask.task_id
+      await overlayPointTaskWaypoints(matchedTask.task_id, matchedTask.task_name)
+      return
+    }
+  }
+
+  lastTrackOverlayKey.value = ''
+  lastPointTaskOverlayKey.value = ''
+  pointCloudData.value = [...basePointCloudData.value]
 }
 
 const parseNavigationOriginFromOdomKeyFrames = (text: string): { x: number; y: number; z: number } | null => {
@@ -1746,6 +1775,17 @@ const refreshPointCloud = async (options?: { silent?: boolean }) => {
       clearPointCloud()
       return
     }
+    const normalizedSelectedMap = String(selectedMap.value || '').trim().split('@')[0] || ''
+    // 快速路径：切页回到首页时，地图未变且已有点云，避免重复重载导致首次拖动卡顿
+    if (
+      silentRefresh &&
+      normalizedSelectedMap &&
+      lastLoadedPointCloudMap.value === normalizedSelectedMap &&
+      basePointCloudData.value.length > 0
+    ) {
+      await syncPointCloudOverlayByRuntimeState()
+      return
+    }
 
     // 先检查栅格图是否存在，没有则直接报错，不加载其他文件
     const gridBlob = await getMapFile(selectedMap.value, 'gridMap.pgm')
@@ -1773,26 +1813,13 @@ const refreshPointCloud = async (options?: { silent?: boolean }) => {
 
     pointCloudNormalizationParams.value = normParams
     pointCloudNavigationOrigin.value = await loadMapNavigationOrigin(selectedMap.value)
+    lastLoadedPointCloudMap.value = normalizedSelectedMap
     pointCloudData.value = points
     basePointCloudData.value = points
     lastTrackOverlayKey.value = ''
     lastPointTaskOverlayKey.value = ''
     await nextTick()
-
-    const currentTrackName = activeOverlayTrackName.value || normalizeTrackName(selectedTrack.value)
-    if (robotStore.isTracking && currentTrackName) {
-      activeOverlayTrackName.value = currentTrackName
-      await overlayTrackTrajectory(currentTrackName)
-    } else if (robotStore.isPointTaskRunning) {
-      const runningTaskName = String(robotStore.taskStatus?.task_name || '').trim()
-      const matchedTask =
-        pointTaskList.value.find(task => String(task.task_id) === String(activeOverlayPointTaskId.value))
-        || pointTaskList.value.find(task => String(task.task_name || '').trim() === runningTaskName)
-      if (matchedTask) {
-        activeOverlayPointTaskId.value = matchedTask.task_id
-        await overlayPointTaskWaypoints(matchedTask.task_id, matchedTask.task_name)
-      }
-    }
+    await syncPointCloudOverlayByRuntimeState()
   } catch (error) {
     console.error('[点云] 加载失败:', error)
     pointCloudError.value = '地图加载失败'
@@ -5074,11 +5101,22 @@ const multiTaskList = ref<MultiTask[]>([])
 let multiTaskRequestToken = 0
 const pendingRunningMultiTaskName = ref('')
 const lastHandledRunningMultiTaskName = ref('')
+const wasHomeMultiTaskRunning = ref(false)
+
+const getHomeRunningMultiTaskGroupName = () => {
+  const status = robotStore.multitaskStatus
+  const groupName = String(status?.current_group_name || '').trim()
+  if (groupName) return groupName
+  return String(status?.current_task_name || '').trim()
+}
 
 const applyPendingHomeRunningMultiTaskName = () => {
   const runningName = String(pendingRunningMultiTaskName.value || '').trim()
   if (!runningName) return false
-  const matched = multiTaskList.value.find(item => item.multitask_name === runningName)
+  const matched = multiTaskList.value.find(item =>
+    String(item.multitask_name || '').trim() === runningName ||
+    String(item.multitask_id || '').trim() === runningName
+  )
   if (!matched) return false
   if (selectedMultiTask.value !== matched.multitask_id) {
     selectedMultiTask.value = matched.multitask_id
@@ -5143,15 +5181,21 @@ watch(multiTaskList, (newList) => {
 watch(
   () => ({
     running: robotStore.multitaskStatus?.status === true,
-    runningName: String(robotStore.multitaskStatus?.current_task_name || '').trim()
+    runningName: getHomeRunningMultiTaskGroupName()
   }),
   ({ running, runningName }) => {
     if (!running || !runningName) {
+      if (!running && wasHomeMultiTaskRunning.value && multiTaskList.value.length > 0) {
+        selectedMultiTask.value = multiTaskList.value[0].multitask_id
+      }
+      wasHomeMultiTaskRunning.value = false
+      pendingRunningMultiTaskName.value = ''
       if (!running) {
         lastHandledRunningMultiTaskName.value = ''
       }
       return
     }
+    wasHomeMultiTaskRunning.value = true
     // WebSocket 会频繁推送 multitask_status，避免同一任务名重复刷列表。
     if (lastHandledRunningMultiTaskName.value === runningName) {
       return

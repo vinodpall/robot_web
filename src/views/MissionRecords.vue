@@ -45,7 +45,7 @@
                 <button
                   class="mission-btn"
                   :class="isPointTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
-                  :disabled="((!canStartPointTask || filteredPointTaskList.length === 0 || !selectedPointTaskId) && !isPointTaskRunning) || (runningTaskType != null && runningTaskType !== 'point')"
+                  :disabled="((!canStartPointTask || !hasNavInsMsfEnabled || filteredPointTaskList.length === 0 || !selectedPointTaskId) && !isPointTaskRunning) || (runningTaskType != null && runningTaskType !== 'point')"
                   v-permission-click-dialog="'task-tasklist-execute'"
                   @click="handleStartTask"
                 >
@@ -373,9 +373,14 @@
             <!-- 额外事务 -->
             <div class="simple-form-item">
                <label class="simple-label">额外事务</label>
-               <div class="simple-flex-row" style="justify-content: space-between;">
-                  <span style="color: #fff;">{{ extraConfigDisplayValue || '未配置' }}</span>
-                  <button class="mission-btn mission-btn-primary" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
+               <div class="simple-flex-row extra-config-display-row">
+                  <span
+                    class="extra-config-display-text"
+                    :title="extraConfigDisplayValue || '未配置'"
+                  >
+                    {{ extraConfigDisplayValue || '未配置' }}
+                  </span>
+                  <button class="mission-btn mission-btn-primary extra-config-display-btn" style="height: 34px; padding: 0 15px; display: flex; align-items: center; justify-content: center;" @click="openExtraConfigDialog">配置</button>
                </div>
             </div>
 
@@ -664,6 +669,10 @@ const {
   isNavigationEnabled,
   navPaused: isNavPaused
 } = storeToRefs(taskExecutionStore)
+const hasNavInsMsfEnabled = computed(() => {
+  const cmdStatus = robotStore.cmdStatus
+  return cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
+})
 
 // 使用任务记录API
 const { jobs, loading, error, pagination, fetchJobs, clearJobs } = useWaylineJobs()
@@ -850,7 +859,7 @@ const waypointsData = computed(() => {
     extra: item.extra,
     gait: item.gait,
     ground: item.ground,
-    no_switch: item.no_switch,
+    nostop: item.nostop ?? item.no_switch,
     rawData: item
   }))
 })
@@ -1771,6 +1780,28 @@ const normalizeTrackTaskObsModeText = (rawValue: any) => {
   return text
 }
 
+const parseBooleanLike = (value: any): boolean | null => {
+  if (typeof value === 'boolean') return value
+  const text = String(value ?? '').trim().toLowerCase()
+  if (!text) return null
+  if (text === 'true' || text === '1') return true
+  if (text === 'false' || text === '0') return false
+  return null
+}
+
+const resolveStopAtPointFromTask = (task: any): boolean => {
+  const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
+  if (noStop !== null) return !noStop
+
+  const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
+  if (noSwitch !== null) return !noSwitch
+
+  const stopAtPoint = parseBooleanLike(task?.stopAtPoint ?? task?.stop_at_point)
+  if (stopAtPoint !== null) return stopAtPoint
+
+  return false
+}
+
 const showTypeDropdown = ref(false)
 const splitTaskTypeNames = (value: unknown): string[] => {
   return String(value ?? '')
@@ -1856,6 +1887,7 @@ const closeDropdown = () => {
 
 const taskTypeList = ref<any[]>([])
 let skipNextIsMultiReset = false
+let suppressExtraConfigReset = false
 
 const filteredTaskTypes = computed(() => {
   const isSingle = addTaskDialog.value.form.isMulti === '0'
@@ -1906,7 +1938,7 @@ watch(() => addTaskDialog.value.form.typeInput, (val, oldVal) => {
   if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
   const nextTypeInput = String(val || '').trim()
   const prevTypeInput = String(oldVal || '').trim()
-  if (nextTypeInput !== prevTypeInput) {
+  if (nextTypeInput !== prevTypeInput && !suppressExtraConfigReset) {
     addTaskDialog.value.form.extraConfig = ''
   }
 })
@@ -1914,18 +1946,53 @@ watch(() => addTaskDialog.value.form.actionType, (val, oldVal) => {
   if (String(val || '').trim()) addTaskFieldErrors.value.taskType = ''
   const nextType = String(val || '').trim()
   const prevType = String(oldVal || '').trim()
-  if (nextType !== prevType) {
+  if (nextType !== prevType && !suppressExtraConfigReset) {
     addTaskDialog.value.form.extraConfig = ''
   }
 })
+const sanitizeNumericInput = (value: unknown): string => {
+  const raw = String(value ?? '')
+  if (!raw) return ''
+  let next = raw.replace(/[^\d.-]/g, '')
+  next = next.replace(/(?!^)-/g, '')
+  const dotIndex = next.indexOf('.')
+  if (dotIndex !== -1) {
+    next = next.slice(0, dotIndex + 1) + next.slice(dotIndex + 1).replace(/\./g, '')
+  }
+  if (next.startsWith('.')) next = `0${next}`
+  if (next.startsWith('-.')) next = `-0${next.slice(1)}`
+  return next
+}
 watch(() => addTaskDialog.value.form.x, (val) => {
-  if (String(val || '').trim()) addTaskFieldErrors.value.x = ''
+  const sanitized = sanitizeNumericInput(val)
+  if (sanitized !== String(val ?? '')) {
+    addTaskDialog.value.form.x = sanitized
+    return
+  }
+  if (String(sanitized || '').trim()) addTaskFieldErrors.value.x = ''
 })
 watch(() => addTaskDialog.value.form.y, (val) => {
-  if (String(val || '').trim()) addTaskFieldErrors.value.y = ''
+  const sanitized = sanitizeNumericInput(val)
+  if (sanitized !== String(val ?? '')) {
+    addTaskDialog.value.form.y = sanitized
+    return
+  }
+  if (String(sanitized || '').trim()) addTaskFieldErrors.value.y = ''
 })
 watch(() => addTaskDialog.value.form.z, (val) => {
-  if (String(val || '').trim()) addTaskFieldErrors.value.z = ''
+  const sanitized = sanitizeNumericInput(val)
+  if (sanitized !== String(val ?? '')) {
+    addTaskDialog.value.form.z = sanitized
+    return
+  }
+  if (String(sanitized || '').trim()) addTaskFieldErrors.value.z = ''
+})
+watch(() => addTaskDialog.value.form.angle, (val) => {
+  const sanitized = sanitizeNumericInput(val)
+  if (sanitized !== String(val ?? '')) {
+    addTaskDialog.value.form.angle = sanitized
+    return
+  }
 })
 
 watch(filteredTaskTypes, (list) => {
@@ -2007,10 +2074,14 @@ const confirmAddTask = async () => {
   })
   
   // 构建任务数据
+  const existingTask = editingTaskIndex.value >= 0
+    ? (selectedTaskDetail.value?.taskcontent[editingTaskIndex.value] as any)
+    : null
   const taskData = {
     task_id: editingTaskIndex.value >= 0 
-      ? (selectedTaskDetail.value?.taskcontent[editingTaskIndex.value] as any)?.task_id || `task_${Date.now()}`
+      ? existingTask?.task_id || `task_${Date.now()}`
       : `task_${Date.now()}`,
+    isStart: true,
     ...taskTypePayload,
     x: String(parseFloat(xText) || 0),
     y: String(parseFloat(yText) || 0),
@@ -2023,7 +2094,7 @@ const confirmAddTask = async () => {
     obs_mode: 2,
     gait: addTaskDialog.value.form.gait || '1',
     ground: addTaskDialog.value.form.ground || '1',
-    no_switch: !addTaskDialog.value.form.stopAtPoint
+    nostop: !addTaskDialog.value.form.stopAtPoint
   }
   
   console.log('准备提交的 taskData:', taskData)
@@ -2084,27 +2155,32 @@ const handleEditTask = async (waypoint: any) => {
     targetIsMulti = typeNames.length > 1 ? '1' : '0'
   }
   
-  // 填充表单数据
+  // 填充表单数据（编辑回填期间避免 watcher 清空 extraConfig）
   skipNextIsMultiReset = true
-  addTaskDialog.value.form = {
-    isMulti: targetIsMulti,
-    typeInput: normalizedTypeText,
-    actionType: typeNames[0] || taskData.type || '',
-    x: String(taskData.x || 0),
-    y: String(taskData.y || 0),
-    z: String(taskData.z || 0),
-    angle: String(taskData.theta || 0),
-    preset: taskData.preset || taskData.presetID || '',
-    remark: taskData.remark || '',
-    extraConfig: taskData.extra || '',
-    description: taskData.remark || '',
-    obsMode: normalizeTrackTaskObsModeText(taskData.obs_mode),
-    gait: taskData.gait || '1',
-    ground: taskData.ground || '1',
-    stopAtPoint: !(taskData.no_switch === 'true' || taskData.no_switch === true)
+  suppressExtraConfigReset = true
+  try {
+    addTaskDialog.value.form = {
+      isMulti: targetIsMulti,
+      typeInput: normalizedTypeText,
+      actionType: typeNames[0] || taskData.type || '',
+      x: String(taskData.x || 0),
+      y: String(taskData.y || 0),
+      z: String(taskData.z || 0),
+      angle: String(taskData.theta || 0),
+      preset: taskData.preset || taskData.presetID || '',
+      remark: taskData.remark || '',
+      extraConfig: taskData.extra || '',
+      description: taskData.remark || '',
+      obsMode: normalizeTrackTaskObsModeText(taskData.obs_mode),
+      gait: taskData.gait || '1',
+      ground: taskData.ground || '1',
+      stopAtPoint: resolveStopAtPointFromTask(taskData)
+    }
+    addTaskDialog.value.visible = true
+    await nextTick()
+  } finally {
+    suppressExtraConfigReset = false
   }
-  
-  addTaskDialog.value.visible = true
 }
 
 // 删除任务
@@ -2702,6 +2778,8 @@ const taskInitDialog = ref({
 // 更新缓存并同步到服务器
 const updateCache = async () => {
   try {
+    const localSnapshot = JSON.parse(JSON.stringify(pointTaskList.value || []))
+
     // 1. 更新本地缓存
     const contextKeys = getCurrentRobotContextKeys()
     if (contextKeys) {
@@ -2721,7 +2799,24 @@ const updateCache = async () => {
     
     // 4. 使用返回的数据更新列表
     if (response.response?.data) {
-      pointTaskList.value = response.response.data
+      const serverList = response.response.data
+      const mergedList = serverList.map((serverGroup: any) => {
+        const localGroup = localSnapshot.find((g: any) => String(g?.task_id || '') === String(serverGroup?.task_id || ''))
+        if (!localGroup || !Array.isArray(serverGroup?.taskcontent) || !Array.isArray(localGroup?.taskcontent)) {
+          return serverGroup
+        }
+        const mergedTaskcontent = serverGroup.taskcontent.map((serverTask: any) => {
+          const localTask = localGroup.taskcontent.find((t: any) => String(t?.task_id || '') === String(serverTask?.task_id || ''))
+          if (!localTask) return serverTask
+          const mergedTask = { ...serverTask }
+          if (mergedTask.extra === undefined || mergedTask.extra === null) {
+            mergedTask.extra = localTask.extra
+          }
+          return mergedTask
+        })
+        return { ...serverGroup, taskcontent: mergedTaskcontent }
+      })
+      pointTaskList.value = mergedList
       // 5. 更新缓存
       if (contextKeys) {
         localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(pointTaskList.value))
@@ -3596,6 +3691,22 @@ const handleDeleteJob = (job: any) => {
 .simple-label { display: block; margin-bottom: 8px; font-size: 13px; color: #b0d0ff; } 
 .required-star { color: #ff4d4f; margin-right: 4px; }
 .simple-flex-row { display: flex; align-items: center; gap: 10px; }
+.extra-config-display-row {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.extra-config-display-text {
+  color: #fff;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.extra-config-display-btn {
+  flex-shrink: 0;
+}
 .simple-radio { margin-right: 20px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; color: #fff; }
 
 .simple-input, .simple-select {

@@ -828,6 +828,11 @@ const getCurrentRobotMapKeys = () => {
   return robotId ? getRobotMapCacheKeys(robotId) : null
 }
 
+const getCurrentRobotContextKeys = () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  return robotId ? getRobotContextCacheKeys(robotId) : null
+}
+
 // 导航点云图相关变量（需要在前面声明，因为在cleanupNavPointCloud中使用）
 let navPointCloudInitialized = false
 let navResizeObserver: ResizeObserver | null = null
@@ -2954,6 +2959,150 @@ const extractTrackTaskList = (payload: any): any[] => {
   return []
 }
 
+interface NavPointTask {
+  task_id: string
+  task_name: string
+  taskcontent: any[]
+}
+
+const navPointTaskList = ref<NavPointTask[]>([])
+const selectedNavPointTaskId = ref('')
+const pendingRunningNavPointTaskName = ref('')
+const activeNavOverlayPointTaskId = ref('')
+const lastNavPointTaskOverlayKey = ref('')
+let navPointTaskRequestToken = 0
+
+const filteredNavPointTaskList = computed(() => {
+  const mapName = normalizeMapName(selectedNavMap.value || '')
+  if (!mapName) return []
+  return navPointTaskList.value.filter(task => String(task.task_name || '').startsWith(`${mapName}_`))
+})
+
+const resolveNavPointTaskCurrentIndex = (taskName: string, totalCount: number) => {
+  if (totalCount <= 0) return -1
+  const progress = robotStore.taskProgress
+  if (!progress) return 0
+  const progressTaskName = String(progress.task_name || '').trim()
+  if (!progressTaskName || progressTaskName !== String(taskName || '').trim()) {
+    return 0
+  }
+  const finished = Math.max(0, Math.floor(Number(progress.finished_points ?? 0)))
+  return Math.min(finished, totalCount - 1)
+}
+
+const overlayNavPointTaskWaypoints = async (taskId: string, taskName?: string) => {
+  if (!taskId || baseNavPointCloudData.value.length === 0) return
+
+  const targetTask = navPointTaskList.value.find(task => String(task.task_id) === String(taskId))
+  if (!targetTask) return
+
+  const taskContent = Array.isArray(targetTask.taskcontent) ? targetTask.taskcontent : []
+  if (taskContent.length === 0) {
+    navPointCloudData.value = [...baseNavPointCloudData.value]
+    scheduleNavPointCloudRender()
+    return
+  }
+
+  const currentTaskIndex = resolveNavPointTaskCurrentIndex(taskName || targetTask.task_name, taskContent.length)
+  const overlayKey = `${String(taskId)}::${currentTaskIndex}`
+  if (
+    lastNavPointTaskOverlayKey.value === overlayKey &&
+    navPointCloudData.value.length > baseNavPointCloudData.value.length
+  ) {
+    return
+  }
+
+  const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
+  if (!maxRange || !Number.isFinite(maxRange)) return
+
+  const normalizedTaskPoints = taskContent
+    .map((task: any, idx: number) => {
+      const tx = parseFloat(task?.x)
+      const ty = parseFloat(task?.y)
+      const tz = parseFloat(task?.z ?? '0')
+      if (!Number.isFinite(tx) || !Number.isFinite(ty) || !Number.isFinite(tz)) return null
+
+      const isCurrent = idx === currentTaskIndex
+      return {
+        x: (tx - centerX) / maxRange,
+        y: (ty - centerY) / maxRange,
+        z: (tz - centerZ) / maxRange,
+        intensity: isCurrent ? 2.2 : 1.8,
+        name: isCurrent
+          ? `当前任务点${idx + 1}`
+          : (task?.type_text || task?.preset || `任务点${idx + 1}`)
+      }
+    })
+    .filter(Boolean) as any[]
+
+  navPointCloudData.value = [
+    ...baseNavPointCloudData.value,
+    ...normalizedTaskPoints
+  ]
+  lastNavPointTaskOverlayKey.value = overlayKey
+  scheduleNavPointCloudRender()
+}
+
+const applyPendingRunningNavPointTaskName = () => {
+  const pendingName = String(pendingRunningNavPointTaskName.value || '').trim()
+  if (!pendingName) return false
+  const matched = filteredNavPointTaskList.value.find(t => String(t.task_name || '').trim() === pendingName)
+  if (!matched) return false
+  selectedNavPointTaskId.value = matched.task_id
+  activeNavOverlayPointTaskId.value = matched.task_id
+  void overlayNavPointTaskWaypoints(matched.task_id, matched.task_name)
+  pendingRunningNavPointTaskName.value = ''
+  return true
+}
+
+const fetchNavPointTaskList = async (forceRefresh = false) => {
+  const contextKeys = getCurrentRobotContextKeys()
+  const cached = !forceRefresh && contextKeys ? localStorage.getItem(contextKeys.pointTaskListKey) : null
+  if (cached) {
+    try {
+      navPointTaskList.value = JSON.parse(cached).map((task: any) => ({
+        ...task,
+        task_id: String(task.task_id)
+      }))
+      return
+    } catch (_) {}
+  }
+
+  const fallbackCached = !forceRefresh ? localStorage.getItem('cached_point_task_list') : null
+  if (fallbackCached) {
+    try {
+      navPointTaskList.value = JSON.parse(fallbackCached).map((task: any) => ({
+        ...task,
+        task_id: String(task.task_id)
+      }))
+      return
+    } catch (_) {}
+  }
+
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  const requestToken = ++navPointTaskRequestToken
+  try {
+    const response = await navigationApi.getPointTaskList(robotId)
+    if (requestToken !== navPointTaskRequestToken || robotId !== (deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || '')) {
+      return
+    }
+    if (response && Array.isArray(response.data)) {
+      navPointTaskList.value = response.data.map((task: any) => ({
+        ...task,
+        task_id: String(task.task_id)
+      }))
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.pointTaskListKey, JSON.stringify(navPointTaskList.value))
+      }
+      localStorage.setItem('cached_point_task_list', JSON.stringify(navPointTaskList.value))
+    }
+  } catch (_) {
+    navPointTaskList.value = []
+  }
+}
+
 const activeNavTrackInfo = ref({ track_name: '', taskpoint_name: '' })
 const activeNavOverlayTrackName = ref('')
 const lastNavTrackOverlayKey = ref('')
@@ -3037,6 +3186,21 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
           ''
       }
       await overlayNavTrackTrajectory(trackNameFromStatus)
+    } else if (robotStore.isPointTaskRunning) {
+      await fetchNavPointTaskList()
+      const runningPointTaskName = String(robotStore.taskStatus?.task_name || '').trim()
+      let matched = filteredNavPointTaskList.value.find(task => String(task.task_name || '').trim() === runningPointTaskName)
+      if (!matched && activeNavOverlayPointTaskId.value) {
+        matched = navPointTaskList.value.find(task => String(task.task_id) === String(activeNavOverlayPointTaskId.value))
+      }
+      if (matched) {
+        selectedNavPointTaskId.value = matched.task_id
+        activeNavOverlayPointTaskId.value = matched.task_id
+        await overlayNavPointTaskWaypoints(matched.task_id, matched.task_name)
+      } else {
+        await nextTick()
+        scheduleNavPointCloudRender()
+      }
     } else {
       // 等待数据设置完成后渲染
       await nextTick()
@@ -3126,6 +3290,43 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
   }
 }, { deep: true })
 
+watch(filteredNavPointTaskList, (newList) => {
+  if (applyPendingRunningNavPointTaskName()) return
+  if (newList.length === 0) {
+    selectedNavPointTaskId.value = ''
+    return
+  }
+  if (!newList.some(task => String(task.task_id) === String(selectedNavPointTaskId.value))) {
+    selectedNavPointTaskId.value = String(newList[0].task_id)
+  }
+})
+
+watch(() => robotStore.taskStatus, (ts) => {
+  if (isNavPreviewMode.value) return
+  if (!ts?.is_running || !ts.task_name || !robotStore.isPointTaskRunning) {
+    activeNavOverlayPointTaskId.value = ''
+    lastNavPointTaskOverlayKey.value = ''
+    if (!robotStore.isTracking && baseNavPointCloudData.value.length > 0) {
+      navPointCloudData.value = [...baseNavPointCloudData.value]
+      scheduleNavPointCloudRender()
+    }
+    return
+  }
+  if (!selectedNavMap.value || robotStore.isTracking) return
+  pendingRunningNavPointTaskName.value = String(ts.task_name || '').trim()
+  if (applyPendingRunningNavPointTaskName()) return
+  void fetchNavPointTaskList(true)
+}, { deep: true })
+
+watch(() => selectedNavPointTaskId.value, (taskId) => {
+  if (isNavPreviewMode.value) return
+  if (!robotStore.isPointTaskRunning || robotStore.isTracking || !taskId) return
+  const matched = navPointTaskList.value.find(task => String(task.task_id) === String(taskId))
+  if (!matched) return
+  activeNavOverlayPointTaskId.value = matched.task_id
+  void overlayNavPointTaskWaypoints(matched.task_id, matched.task_name)
+})
+
 onMounted(async () => {
   load3MF('/jiantou.3mf').then(mesh => {
     if (mesh) {
@@ -3144,6 +3345,7 @@ onMounted(async () => {
 
   // 监听机器人切换事件，刷新各 tab 的列表
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  await fetchNavPointTaskList()
 })
 
 onActivated(async () => {
@@ -3174,6 +3376,7 @@ const handleRobotContextRefreshed = () => {
   if (cached) {
     allTrackList.value = JSON.parse(cached)
   }
+  void fetchNavPointTaskList(true)
 }
 
 onUnmounted(() => {

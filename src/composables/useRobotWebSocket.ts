@@ -94,6 +94,7 @@ export interface LocStatusData {
 export interface MultiTaskStatusData {
   status: boolean
   current_task_name: string
+  current_group_name?: string
 }
 
 export interface TaskStatusData {
