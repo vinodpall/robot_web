@@ -1,48 +1,48 @@
-// 环境配置文件
-// 支持内网/外网环境切换
+﻿// 鐜閰嶇疆鏂囦欢
+// 鏀寔鍐呯綉/澶栫綉鐜鍒囨崲
 
-// 环境类型常量
+// 鐜绫诲瀷甯搁噺
 export const Environment = {
-  INTRANET: 'intranet',  // 内网环境
-  INTERNET: 'internet'   // 外网环境
+  INTRANET: 'intranet',  // 鍐呯綉鐜
+  INTERNET: 'internet'   // 澶栫綉鐜
 } as const
 
 export type Environment = typeof Environment[keyof typeof Environment]
 
-// 环境配置接口
+// 鐜閰嶇疆鎺ュ彛
 export interface EnvironmentConfig {
-  // API配置
+  // API閰嶇疆
   api: {
     baseUrl: string
     domain: string
   }
 
-  // WebSocket配置
+  // WebSocket閰嶇疆
   websocket: {
     host: string
     port: number
     fullUrl: string
   }
 
-  // 视频流配置
+  // 瑙嗛娴侀厤缃?
   video: {
     webrtcDomain: string
     rtmpDomain: string
   }
 
-  // 其他服务配置
+  // 鍏朵粬鏈嶅姟閰嶇疆
   services: {
     vision: string
     livestream: string
-    mapFile: string  // 地图文件服务地址
+    mapFile: string  // 鍦板浘鏂囦欢鏈嶅姟鍦板潃
   }
 }
 
-// 内网环境配置
+// 鍐呯綉鐜閰嶇疆
 const intranetConfig: EnvironmentConfig = {
   api: {
     baseUrl: '/v1',
-    domain: '/v1' // 同域部署，使用相对路径
+    domain: '/v1' // 鍚屽煙閮ㄧ讲锛屼娇鐢ㄧ浉瀵硅矾寰?
   },
   websocket: {
     host: '172.16.88.152',
@@ -56,38 +56,38 @@ const intranetConfig: EnvironmentConfig = {
   services: {
     vision: 'http://172.16.88.152:8000',
     livestream: 'http://172.16.88.152:8000',
-    mapFile: 'http://172.16.88.152:5000'  // 地图文件服务
+    mapFile: 'http://172.16.88.152:5000'  // 鍦板浘鏂囦欢鏈嶅姟
   }
 }
 
-// 外网环境配置
+// 澶栫綉鐜閰嶇疆
 const internetConfig: EnvironmentConfig = {
   api: {
     baseUrl: '/v1',
-    domain: '/v1' // 同域部署，使用相对路径
+    domain: '/v1' // 鍚屽煙閮ㄧ讲锛屼娇鐢ㄧ浉瀵硅矾寰?
   },
   websocket: {
-    host: '39.185.83.71',
+    host: '10.10.1.71',
     port: 8000,
-    fullUrl: 'ws://39.185.83.71:8000'
+    fullUrl: 'ws://10.10.1.71:8000'
   },
   video: {
-    webrtcDomain: 'webrtc://39.185.83.71:8000',
-    rtmpDomain: 'rtmp://39.185.83.71:8000'
+    webrtcDomain: 'webrtc://10.10.1.71:8000',
+    rtmpDomain: 'rtmp://10.10.1.71:8000'
   },
   services: {
-    vision: 'http://39.185.83.71:8000',
-    livestream: 'http://39.185.83.71:8000',
-    mapFile: 'http://39.185.83.71:5000'  // 地图文件服务
+    vision: 'http://10.10.1.71:8000',
+    livestream: 'http://10.10.1.71:8000',
+    mapFile: 'http://10.10.1.71:5000'  // 鍦板浘鏂囦欢鏈嶅姟
   }
 }
 
-// 获取当前环境类型
+// 鑾峰彇褰撳墠鐜绫诲瀷
 export function getCurrentEnvironment(): Environment {
-  // 优先使用构建时注入的常量，其次使用 Vite 环境变量
+  // 浼樺厛浣跨敤鏋勫缓鏃舵敞鍏ョ殑甯搁噺锛屽叾娆′娇鐢?Vite 鐜鍙橀噺
   let envFromDefine: string | undefined
   try {
-    // __APP_ENVIRONMENT__ 由 vite.config.ts 的 define 注入
+    // __APP_ENVIRONMENT__ 鐢?vite.config.ts 鐨?define 娉ㄥ叆
     // @ts-ignore
     envFromDefine = typeof __APP_ENVIRONMENT__ !== 'undefined' ? __APP_ENVIRONMENT__ : undefined
   } catch (_err) {
@@ -97,67 +97,68 @@ export function getCurrentEnvironment(): Environment {
   const envFromVar = (import.meta.env && (import.meta.env as any).VITE_APP_ENVIRONMENT) as string | undefined
   const resolved = envFromDefine || envFromVar || Environment.INTRANET
 
-  console.log('🔧 环境检测:')
+  console.log('馃敡 鐜妫€娴?')
   console.log('- __APP_ENVIRONMENT__:', envFromDefine)
   console.log('- VITE_APP_ENVIRONMENT:', envFromVar)
-  console.log('- 最终环境:', resolved)
+  console.log('- 鏈€缁堢幆澧?', resolved)
 
   if (resolved === Environment.INTERNET) return Environment.INTERNET
   return Environment.INTRANET
 }
 
-// 获取当前环境配置
+// 鑾峰彇褰撳墠鐜閰嶇疆
 export function getCurrentConfig(): EnvironmentConfig {
   const currentEnv = getCurrentEnvironment()
   return currentEnv === Environment.INTRANET ? intranetConfig : internetConfig
 }
 
-// 设置环境类型（通过环境变量）
+// 璁剧疆鐜绫诲瀷锛堥€氳繃鐜鍙橀噺锛?
 export function setEnvironment(env: Environment): void {
-  console.log(`当前环境: ${env}`)
-  console.log('如需切换环境，请修改 .env 文件中的 VITE_APP_ENVIRONMENT 变量')
+  console.log(`褰撳墠鐜: ${env}`)
+  console.log('濡傞渶鍒囨崲鐜锛岃淇敼 .env 鏂囦欢涓殑 VITE_APP_ENVIRONMENT 鍙橀噺')
 }
 
-// 导出当前配置的便捷访问
+// 瀵煎嚭褰撳墠閰嶇疆鐨勪究鎹疯闂?
 export const config = getCurrentConfig()
 
-// 导出环境类型
+// 瀵煎嚭鐜绫诲瀷
 export const currentEnvironment = getCurrentEnvironment()
 
-// 强制刷新环境配置（用于登录时确保配置正确）
+// 寮哄埗鍒锋柊鐜閰嶇疆锛堢敤浜庣櫥褰曟椂纭繚閰嶇疆姝ｇ‘锛?
 export function refreshEnvironmentConfig(): EnvironmentConfig {
-  console.log('🔄 强制刷新环境配置...')
-  console.log('- 环境变量 VITE_APP_ENVIRONMENT:', import.meta.env.VITE_APP_ENVIRONMENT)
+  console.log('馃攧 寮哄埗鍒锋柊鐜閰嶇疆...')
+  console.log('- 鐜鍙橀噺 VITE_APP_ENVIRONMENT:', import.meta.env.VITE_APP_ENVIRONMENT)
 
-  // 重新获取配置
+  // 閲嶆柊鑾峰彇閰嶇疆
   const newConfig = getCurrentConfig()
 
-  console.log('🔄 刷新后的配置:')
-  console.log('- 环境类型:', getCurrentEnvironment())
-  console.log('- API域名:', newConfig.api.domain)
-  console.log('- WebRTC域名:', newConfig.video.webrtcDomain)
+  console.log('馃攧 鍒锋柊鍚庣殑閰嶇疆:')
+  console.log('- 鐜绫诲瀷:', getCurrentEnvironment())
+  console.log('- API鍩熷悕:', newConfig.api.domain)
+  console.log('- WebRTC鍩熷悕:', newConfig.video.webrtcDomain)
 
   return newConfig
 }
 
-// 调试函数
+// 璋冭瘯鍑芥暟
 export function logEnvironmentConfig(): void {
-  console.log('🔧 当前环境配置:')
-  console.log('- 环境类型:', currentEnvironment)
-  console.log('- API域名:', config.api.domain)
-  console.log('- WebSocket地址:', config.websocket.fullUrl)
-  console.log('- WebRTC域名:', config.video.webrtcDomain)
+  console.log('馃敡 褰撳墠鐜閰嶇疆:')
+  console.log('- 鐜绫诲瀷:', currentEnvironment)
+  console.log('- API鍩熷悕:', config.api.domain)
+  console.log('- WebSocket鍦板潃:', config.websocket.fullUrl)
+  console.log('- WebRTC鍩熷悕:', config.video.webrtcDomain)
   console.log('- 生产环境:', import.meta.env.PROD ? '是' : '否')
-  console.log('- 当前域名:', typeof window !== 'undefined' ? window.location.origin : 'N/A')
+  console.log('- 褰撳墠鍩熷悕:', typeof window !== 'undefined' ? window.location.origin : 'N/A')
   try {
     // @ts-ignore
-    console.log('- 构建常量 __APP_ENVIRONMENT__:', typeof __APP_ENVIRONMENT__ !== 'undefined' ? __APP_ENVIRONMENT__ : 'undefined')
+    console.log('- 鏋勫缓甯搁噺 __APP_ENVIRONMENT__:', typeof __APP_ENVIRONMENT__ !== 'undefined' ? __APP_ENVIRONMENT__ : 'undefined')
   } catch (_) { }
-  console.log('- 环境变量 VITE_APP_ENVIRONMENT:', import.meta.env.VITE_APP_ENVIRONMENT)
+  console.log('- 鐜鍙橀噺 VITE_APP_ENVIRONMENT:', import.meta.env.VITE_APP_ENVIRONMENT)
 }
 
-// 导出所有配置供外部使用
+// 瀵煎嚭鎵€鏈夐厤缃緵澶栭儴浣跨敤
 export {
   intranetConfig,
   internetConfig
 } 
+

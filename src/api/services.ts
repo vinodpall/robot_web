@@ -1220,11 +1220,12 @@ export const navigationApi = {
   getNavigationList: (robotId: string, mapName: string, path?: string, _robotIp?: string) => {
     const params: Record<string, any> = { map_name: mapName }
     if (path) params.path = path
-    return apiClient.get<{ code: number; msg: string; data: any[] }>('/navigation_list', params, {
-      baseURL: ''
-    })
+    return apiClient.get<{ code: number; msg: string; data: any[] }>(
+      `/robots/${encodeURIComponent(robotId)}/http/5000/navigation_list`,
+      params
+    )
   },
-  deleteNavigationData: (data: {
+  deleteNavigationData: (robotId: string, data: {
     map_name: string;
     type: string;
     pwd?: string;
@@ -1241,11 +1242,13 @@ export const navigationApi = {
       }
     })
 
-    return apiClient.post<{ code: number; msg: string }>('/navigation_delete', params.toString(), {
+    return apiClient.post<{ code: number; msg: string }>(
+      `/robots/${encodeURIComponent(robotId)}/http/5000/navigation_delete`,
+      params.toString(),
+      {
       headers: {
         'content-type': 'application/x-www-form-urlencoded'
-      },
-      baseURL: ''
+      }
     })
   },
   trackRecord: (robotId: string, data: { action: number; track_name: string }) => {
@@ -1321,6 +1324,40 @@ export const cameraApi = {
 const MAP_DOWNLOAD_LOG_TTL_MS = 5000
 const recentMapDownloadLogs = new Map<string, number>()
 
+const encodeRobotHttpPath = (path: string): string => {
+  const normalized = String(path || '').replace(/^\/+/, '')
+  if (!normalized) return ''
+  return normalized
+    .split('/')
+    .filter(Boolean)
+    .map(segment => encodeURIComponent(segment))
+    .join('/')
+}
+
+const buildRobotHttpUrl = (
+  robotId: string,
+  port: number,
+  path: string,
+  query?: Record<string, string | number | boolean | undefined | null>
+): string => {
+  const encodedPath = encodeRobotHttpPath(path)
+  const base = `${API_BASE_URL}/robots/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}`
+  if (!query) return base
+  const search = new URLSearchParams()
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      search.append(key, String(value))
+    }
+  })
+  const qs = search.toString()
+  return qs ? `${base}?${qs}` : base
+}
+
+const buildAuthHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem('token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 const logMapDownloadOnce = (key: string, message: string, error?: unknown) => {
   if (recentMapDownloadLogs.has(key)) return
 
@@ -1341,17 +1378,21 @@ export const mapFileApi = {
   MAP_FILES: ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt', 'scancontext/odom_key_frames.txt'],
 
   downloadMapFile: async (
+    robotId: string,
     mapName: string,
     fileName: string,
     suppressErrorLog = false
   ): Promise<Blob | null> => {
-    const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}`
+    const url = buildRobotHttpUrl(robotId, 5000, 'download_file', {
+      remote_path: `/root/dxr_data/map/${mapName}/${fileName}`
+    })
     const sourceTag = 'server'
 
     try {
       const response = await fetch(url, {
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: buildAuthHeaders()
       })
 
       if (!response.ok) {
@@ -1389,12 +1430,12 @@ export const mapFileApi = {
     }
   },
 
-  downloadAllMapFiles: async (mapName: string): Promise<Map<string, Blob>> => {
+  downloadAllMapFiles: async (robotId: string, mapName: string): Promise<Map<string, Blob>> => {
     const results = new Map<string, Blob>()
     const failedFiles: string[] = []
 
     for (const fileName of mapFileApi.MAP_FILES) {
-      const blob = await mapFileApi.downloadMapFile(mapName, fileName, true)
+      const blob = await mapFileApi.downloadMapFile(robotId, mapName, fileName, true)
       if (blob) {
         results.set(fileName, blob)
       } else {
@@ -1412,9 +1453,9 @@ export const mapFileApi = {
     return results
   },
 
-  uploadMapFile: async (mapName: string, fileName: string, file: Blob): Promise<boolean> => {
+  uploadMapFile: async (robotId: string, mapName: string, fileName: string, file: Blob): Promise<boolean> => {
     const remotePath = `/root/dxr_data/map/${mapName}`
-    const url = '/upload_single_file'
+    const url = buildRobotHttpUrl(robotId, 5000, 'upload_single_file')
 
     const formData = new FormData()
     formData.append('file', file, fileName)
@@ -1430,7 +1471,8 @@ export const mapFileApi = {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: buildAuthHeaders()
       })
 
       if (!response.ok) {
@@ -1448,22 +1490,28 @@ export const mapFileApi = {
   },
 
   downloadTrajectoryFile: async (
+    robotId: string,
     trajectoryName: string,
     forceNoCache = false
   ): Promise<Blob | null> => {
-    const querySuffix = forceNoCache ? `&_t=${Date.now()}` : ''
-    const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt${querySuffix}`
+    const url = buildRobotHttpUrl(robotId, 5000, 'download_file', {
+      remote_path: `/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt`,
+      ...(forceNoCache ? { _t: Date.now() } : {})
+    })
     try {
       const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
-        headers: forceNoCache
-          ? {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              Pragma: 'no-cache',
-              Expires: '0'
-            }
-          : undefined
+        headers: {
+          ...buildAuthHeaders(),
+          ...(forceNoCache
+            ? {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                Pragma: 'no-cache',
+                Expires: '0'
+              }
+            : {})
+        }
       })
       if (!response.ok) {
         console.error(`[轨迹下载] 轨迹文件下载失败: ${trajectoryName}, HTTP ${response.status}`)

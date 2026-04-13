@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from 'vite'
+﻿import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import { readFileSync, existsSync } from 'fs'
@@ -6,7 +6,7 @@ import { resolve } from 'path'
 import { createRequire } from 'node:module'
 import * as httpModule from 'node:http'
 
-// 读取环境配置文件
+// 璇诲彇鐜閰嶇疆鏂囦欢
 function loadEnvConfig() {
   try {
     // ????????
@@ -19,7 +19,7 @@ function loadEnvConfig() {
     ]
     const existing = candidates.find(p => existsSync(p))
     if (!existing) {
-      // 尝试回退读取 env.config.js（CommonJS 格式）
+      // 灏濊瘯鍥為€€璇诲彇 env.config.js锛圕ommonJS 鏍煎紡锛?
       const configDir = fileURLToPath(new URL('.', import.meta.url))
       const envConfigJs = resolve(configDir, 'env.config.js')
       if (existsSync(envConfigJs)) {
@@ -32,7 +32,7 @@ function loadEnvConfig() {
           console.log('读取 env.config.js 失败:', e)
         }
       }
-      console.log('未找到 env.local 文件，使用默认环境变量 (intranet)')
+      console.log('未找到 env.local 文件，使用默认环境变量(intranet)')
       return {}
     }
     const envContent = readFileSync(existing, 'utf-8')
@@ -50,13 +50,13 @@ function loadEnvConfig() {
 
     return envVars
   } catch (error) {
-    console.log('未找到env.local文件，使用默认环境变量')
+    console.log('未找到 env.local 文件，使用默认环境变量')
     return {}
   }
 }
 
-// 动态机器人代理中间件：拦截带 robot_ip 参数的请求，转发到对应机器人
-// 同时挂载到 dev server 和 preview server，确保开发与生产行为一致
+// 鍔ㄦ€佹満鍣ㄤ汉浠ｇ悊涓棿浠讹細鎷︽埅甯?robot_ip 鍙傛暟鐨勮姹傦紝杞彂鍒板搴旀満鍣ㄤ汉
+// 鍚屾椂鎸傝浇鍒?dev server 鍜?preview server锛岀‘淇濆紑鍙戜笌鐢熶骇琛屼负涓€鑷?
 function dynamicRobotMiddleware(
   req: import('http').IncomingMessage,
   res: import('http').ServerResponse,
@@ -82,7 +82,7 @@ function dynamicRobotMiddleware(
   const isRobot81Req = urlObj.pathname.startsWith('/robot81/')
   const targetPort = (isDxrApiReq || isRobot81Req) ? 81 : 5000
 
-  // /robot81/ 是机器人 :81 静态文件代理，需剥掉该前缀后转发
+  // /robot81/ 鏄満鍣ㄤ汉 :81 闈欐€佹枃浠朵唬鐞嗭紝闇€鍓ユ帀璇ュ墠缂€鍚庤浆鍙?
   if (isRobot81Req) {
     urlObj.pathname = urlObj.pathname.replace(/^\/robot81/, '')
   }
@@ -117,7 +117,7 @@ function dynamicRobotMiddleware(
     }
   })
 
-  // GET/HEAD 没有请求体，直接结束；其他方法将请求体流式转发
+  // GET/HEAD 娌℃湁璇锋眰浣擄紝鐩存帴缁撴潫锛涘叾浠栨柟娉曞皢璇锋眰浣撴祦寮忚浆鍙?
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === undefined) {
     proxyReq.end()
   } else {
@@ -133,8 +133,8 @@ function dynamicRobotMiddleware(
   }
 }
 
-// SRS WebRTC 信令代理中间件：处理 /rtc-proxy/{host}/rtc/v1/play/ -> http://{host}:1985/rtc/v1/play/
-// 与 nginx location ~ ^/rtc-proxy/([^/]+)/rtc/v1/play/ 行为一致，解决本地开发 CORS 问题
+// SRS WebRTC 淇′护浠ｇ悊涓棿浠讹細澶勭悊 /rtc-proxy/{host}/rtc/v1/play/ -> http://{host}:1985/rtc/v1/play/
+// 涓?nginx location ~ ^/rtc-proxy/([^/]+)/rtc/v1/play/ 琛屼负涓€鑷达紝瑙ｅ喅鏈湴寮€鍙?CORS 闂
 function rtcProxyMiddleware(
   req: import('http').IncomingMessage,
   res: import('http').ServerResponse,
@@ -204,22 +204,22 @@ function rtcProxyMiddleware(
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  // 加载环境变量
+  // 鍔犺浇鐜鍙橀噺
   const env = loadEnv(mode, process.cwd(), '')
   const localEnv = loadEnvConfig()
 
-  // 合并环境变量，本地配置优先
+  // 鍚堝苟鐜鍙橀噺锛屾湰鍦伴厤缃紭鍏?
   const mergedEnv = { ...env, ...localEnv }
 
-  // 根据环境变量动态配置代理
+  // 鏍规嵁鐜鍙橀噺鍔ㄦ€侀厤缃唬鐞?
   const getProxyTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
-    console.log('🔧 Vite配置 - 当前环境:', environment)
+    console.log('Vite 配置 - 当前环境:', environment)
     if (environment === 'internet') {
-      console.log('🔧 Vite配置 - 使用外网代理:', 'http://39.185.83.71:8000')
-      return 'http://39.185.83.71:8000'
+      console.log('Vite 配置 - 使用外网代理:', 'http://10.10.1.71:8000')
+      return 'http://10.10.1.71:8000'
     } else {
-      console.log('🔧 Vite配置 - 使用内网代理:', 'http://172.16.88.152:8000')
+      console.log('Vite 配置 - 使用内网代理:', 'http://172.16.88.152:8000')
       return 'http://172.16.88.152:8000'
     }
   }
@@ -227,7 +227,7 @@ export default defineConfig(({ mode }) => {
   const getDxrApiTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     if (environment === 'internet') {
-      return 'http://39.185.83.71:81'
+      return 'http://10.10.1.71:81'
     } else {
       return 'http://172.16.88.152:81'
     }
@@ -237,7 +237,7 @@ export default defineConfig(({ mode }) => {
     base: './',
     plugins: [
       vue(),
-      // 动态机器人代理插件：拦截带 robot_ip 参数的请求，转发到对应机器人
+      // 鍔ㄦ€佹満鍣ㄤ汉浠ｇ悊鎻掍欢锛氭嫤鎴甫 robot_ip 鍙傛暟鐨勮姹傦紝杞彂鍒板搴旀満鍣ㄤ汉
       {
         name: 'dynamic-robot-proxy',
         configureServer(server) {
@@ -256,7 +256,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
-      host: '127.0.0.1', // 绑定到127.0.0.1而不是localhost
+      host: '127.0.0.1', // 缁戝畾鍒?27.0.0.1鑰屼笉鏄痩ocalhost
       proxy: {
         '/v1': {
           target: getProxyTarget(),
@@ -264,15 +264,15 @@ export default defineConfig(({ mode }) => {
           secure: false,
           configure: (proxy, options) => {
             proxy.on('error', (err, req, _res) => {
-              console.error('❌ 代理错误:', err.message)
+              console.error('代理错误:', err.message)
               console.error('   请求URL:', req.url)
               console.error('   目标服务器:', options.target)
             })
             proxy.on('proxyReq', (_proxyReq, req, _res) => {
-              console.log('📤 代理请求:', req.method, req.url, '→', options.target)
+              console.log('代理请求:', req.method, req.url, '->', options.target)
             })
             proxy.on('proxyRes', (proxyRes, req, _res) => {
-              console.log('📥 代理响应:', proxyRes.statusCode, req.url)
+              console.log('代理响应:', proxyRes.statusCode, req.url)
             })
           }
         },
@@ -282,28 +282,28 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         '/navigation_list': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://10.10.1.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/navigation_delete': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://10.10.1.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/download_file': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://10.10.1.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/upload_single_file': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://10.10.1.71:5000',
           changeOrigin: true,
           secure: false,
         },
       }
     },
-    // 定义环境变量
+    // 瀹氫箟鐜鍙橀噺
     define: {
       __APP_ENVIRONMENT__: JSON.stringify(mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'),
       __AMAP_KEY__: JSON.stringify(mergedEnv.VITE_AMAP_KEY || ''),
@@ -311,3 +311,5 @@ export default defineConfig(({ mode }) => {
     }
   }
 })
+
+

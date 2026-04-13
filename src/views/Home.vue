@@ -1048,20 +1048,12 @@ const shouldDownloadTrajectory = (trackName: string, serverUpdateTime: string): 
 }
 
 // 下载单个轨迹文件
-const downloadTrajectoryFile = async (trackName: string): Promise<Blob | null> => {
-  // 轨迹文件名和文件夹同名
-  const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trackName}/${trackName}.txt`
-  try {
-    const response = await fetch(url, { method: 'GET' })
-    if (!response.ok) return null
-    return await response.blob()
-  } catch {
-    return null
-  }
+const downloadTrajectoryFile = async (robotId: string, trackName: string): Promise<Blob | null> => {
+  return mapFileApi.downloadTrajectoryFile(robotId, trackName)
 }
 
 // 下载所有轨迹文件（切换地图时调用）
-const downloadAllTrajectoryFiles = async (trackList: string[]) => {
+const downloadAllTrajectoryFiles = async (robotId: string, trackList: string[]) => {
   // trackList 形如 [map1_track1@20260121, map1_track2@20260120]
   for (const trackRaw of trackList) {
     const atIndex = trackRaw.indexOf('@')
@@ -1069,7 +1061,7 @@ const downloadAllTrajectoryFiles = async (trackList: string[]) => {
     const updateTime = atIndex > -1 ? trackRaw.substring(atIndex + 1) : ''
     if (!trackName) continue
     if (!shouldDownloadTrajectory(trackName, updateTime)) continue
-    const blob = await downloadTrajectoryFile(trackName)
+    const blob = await downloadTrajectoryFile(robotId, trackName)
     if (blob) {
       await saveTrajectoryFile(trackName, blob)
       updateTrajectoryConfig(trackName, updateTime)
@@ -1102,6 +1094,7 @@ import { useRobotStore } from '../stores/robot'
 import { useTaskExecutionStore } from '../stores/taskExecution'
 import { getVideoStreams, getVideoStream, setVideoStreams } from '../utils/videoCache'
 import type { VideoStream } from '../utils/videoCache'
+import { buildRobotHttpAssetUrl } from '../utils/robotHttpProxy'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import flvjs from 'flv.js'
 import * as echarts from 'echarts'
@@ -2026,23 +2019,12 @@ const fetchLatestAlarmLogs = async () => {
         hour: '2-digit', minute: '2-digit', second: '2-digit'
       })
     }
-    // 将图片路径转换为 /robot81/ 代理 URL，与循迹记录页保持一致，解决 CORS
+    // 将图片路径转换为统一机器人 HTTP 代理 URL，解决 CORS
     const toProxyImageUrl = (imgPath: string): string => {
       if (!imgPath) return ''
-      if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
-        try {
-          const url = new URL(imgPath)
-          const ip = url.hostname
-          const qs = url.search ? url.search + '&robot_ip=' + ip : '?robot_ip=' + ip
-          return `/robot81${url.pathname}${qs}`
-        } catch {
-          return imgPath
-        }
-      }
-      const ip = robotIp || ''
-      if (!ip) return ''
-      const path = imgPath.startsWith('/') ? imgPath : '/' + imgPath
-      return `/robot81${path}?robot_ip=${ip}`
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (!robotId) return ''
+      return buildRobotHttpAssetUrl(robotId, 81, imgPath)
     }
     // 生成缩略图 URL：将 .jpg/.jpeg/.png 替换为 _thumb.jpg
     const toThumbImageUrl = (proxyUrl: string): string => {
@@ -4664,8 +4646,11 @@ const downloadMapFiles = async (mapName: string, updateTime: string) => {
     if (!(await shouldDownloadMap(mapName, updateTime))) {
       return
     }
-    
-    const files = await mapFileApi.downloadAllMapFiles(mapName)
+    if (!robotId || robotId === 'unknown') {
+      console.warn('[地图缓存] 未选择机器人，无法下载地图')
+      return
+    }
+    const files = await mapFileApi.downloadAllMapFiles(robotId, mapName)
     
     // 保存文件到 IndexedDB
     let savedCount = 0
@@ -4837,10 +4822,12 @@ const syncSelectedMapTrajectoryFiles = async (mapName: string) => {
 
   const relatedTracks = trackList.value.filter(track => track.startsWith(mapName + '_'))
   if (relatedTracks.length === 0) return
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
 
   trajectoryDownloadInFlight.value = true
   try {
-    await downloadAllTrajectoryFiles(relatedTracks)
+    await downloadAllTrajectoryFiles(robotId, relatedTracks)
   } finally {
     trajectoryDownloadInFlight.value = false
   }

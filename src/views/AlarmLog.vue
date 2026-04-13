@@ -340,6 +340,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useDeviceStore } from '@/stores/device'
 import { usePermissionStore } from '@/stores/permission'
 import { navigationApi } from '@/api/services'
+import { buildRobotHttpAssetUrl } from '@/utils/robotHttpProxy'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import trackRecordIcon from '@/assets/source_data/svg_data/robot_source/track_record.svg'
 
@@ -736,26 +737,9 @@ const normalizeExportUrl = (rawUrl: string): string => {
   if (!rawUrl) return ''
   const value = rawUrl.trim()
   if (!value) return ''
-  if (value.startsWith('/robot81/')) return value
-  if (value.startsWith('//')) {
-    return normalizeExportUrl(`${window.location.protocol}${value}`)
-  }
-  if (/^https?:\/\//i.test(value)) {
-    try {
-      const parsed = new URL(value)
-      const qs = parsed.search ? `${parsed.search}&robot_ip=${encodeURIComponent(parsed.hostname)}` : `?robot_ip=${encodeURIComponent(parsed.hostname)}`
-      return `/robot81${parsed.pathname}${qs}`
-    } catch {
-      return value
-    }
-  }
-  const selectedIp = deviceStore.selectedRobot?.ip_address
-  const normalizedPath = value.startsWith('/') ? value : `/${value}`
-  if (selectedIp) {
-    const qs = normalizedPath.includes('?') ? '&' : '?'
-    return `/robot81${normalizedPath}${qs}robot_ip=${encodeURIComponent(selectedIp)}`
-  }
-  return normalizedPath
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return value
+  return buildRobotHttpAssetUrl(robotId, 81, value)
 }
 
 const triggerDownloadByUrl = async (downloadUrl: string) => {
@@ -891,20 +875,9 @@ const getOutMessage = (row: any): Record<string, any> => {
 const getImage = (row: any): string | null => {
   const img = getOutMessage(row)?.out_image
   if (!img) return null
-  if (img.startsWith('http://') || img.startsWith('https://')) {
-    try {
-      const url = new URL(img)
-      const robotIp = url.hostname
-      const qs = url.search ? url.search + '&robot_ip=' + robotIp : '?robot_ip=' + robotIp
-      return `/robot81${url.pathname}${qs}`
-    } catch {
-      return img
-    }
-  }
-  const ip = deviceStore.selectedRobot?.ip_address
-  if (!ip) return null
-  const path = img.startsWith('/') ? img : '/' + img
-  return `/robot81${path}?robot_ip=${ip}`
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return null
+  return buildRobotHttpAssetUrl(robotId, 81, img)
 }
 const getThumbImage = (row: any): string | null => {
   const original = getImage(row)

@@ -1240,7 +1240,7 @@ watch(trackRecordLine, async (newLine) => {
     }
     
     // 从服务器下载轨迹文件
-    const blob = await mapFileApi.downloadTrajectoryFile(newLine)
+    const blob = await mapFileApi.downloadTrajectoryFile(robotId, newLine)
     
     if (blob) {
       const text = await blob.text()
@@ -1562,7 +1562,7 @@ const handleTrackSmooth = async () => {
     })
 
     // 平滑成功后，强制重新下载当前路线轨迹文件并覆盖本地缓存
-    const blob = await mapFileApi.downloadTrajectoryFile(trackRecordLine.value, true)
+    const blob = await mapFileApi.downloadTrajectoryFile(robotId, trackRecordLine.value, true)
     if (!blob) {
       showErrorMessage('轨迹平滑成功，但重新下载轨迹文件失败')
       return
@@ -2817,7 +2817,9 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
     // 缓存未命中：尝试即时下载
     if (!blob) {
       console.log('[轨迹叠加] 缓存未命中，尝试下载:', normalizedTrackName)
-      const downloaded = await mapFileApi.downloadTrajectoryFile(normalizedTrackName)
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (!robotId) return
+      const downloaded = await mapFileApi.downloadTrajectoryFile(robotId, normalizedTrackName)
       if (downloaded) {
         const text = await downloaded.text()
         if (!text.trim().startsWith('<') && !text.includes('error_code')) {
@@ -3930,8 +3932,12 @@ const downloadMapFiles = async (mapName: string) => {
   }
 
   const task = (async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    throw new Error('未选择机器人，无法下载地图')
+  }
   // 下载文件
-  const files = await mapFileApi.downloadAllMapFiles(mapName)
+  const files = await mapFileApi.downloadAllMapFiles(robotId, mapName)
   
   // 保存文件到 IndexedDB
   for (const [fileName, blob] of files) {
@@ -4517,6 +4523,10 @@ const handleSaveGridMap = async () => {
         // 创建Blob对象
         const blob = new Blob([pgmData], { type: 'application/octet-stream' })
         
+        const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+        if (!robotId) {
+          throw new Error('未选择机器人，无法上传地图')
+        }
         const mapName = selectedEditMap.value
         const fileName = 'gridMap.pgm'
         
@@ -4530,7 +4540,7 @@ const handleSaveGridMap = async () => {
         
         // 步骤1: 上传到服务器
         showSuccessMessage('正在上传到服务器...')
-        const uploadSuccess = await mapFileApi.uploadMapFile(mapName, fileName, blob)
+        const uploadSuccess = await mapFileApi.uploadMapFile(robotId, mapName, fileName, blob)
         
         if (!uploadSuccess) {
           throw new Error('上传到服务器失败')
@@ -4539,7 +4549,7 @@ const handleSaveGridMap = async () => {
         
         // 步骤2: 从服务器下载验证
         showSuccessMessage('正在从服务器下载验证...')
-        const downloadedBlob = await mapFileApi.downloadMapFile(mapName, fileName)
+        const downloadedBlob = await mapFileApi.downloadMapFile(robotId, mapName, fileName)
         
         if (!downloadedBlob) {
           throw new Error('从服务器下载验证失败')
@@ -5218,7 +5228,12 @@ const handleDelete = (item: any) => {
     type: 'warning',
     onConfirm: async () => {
       try {
-        await navigationApi.deleteNavigationData({
+        const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+        if (!robotId) {
+          showErrorMessage('未选择机器人')
+          return
+        }
+        await navigationApi.deleteNavigationData(robotId, {
           map_name: fileManageMap.value,
           type: item.type,
           pwd: item.pwd,
