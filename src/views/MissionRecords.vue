@@ -2081,7 +2081,6 @@ const confirmAddTask = async () => {
     task_id: editingTaskIndex.value >= 0 
       ? existingTask?.task_id || `task_${Date.now()}`
       : `task_${Date.now()}`,
-    isStart: true,
     ...taskTypePayload,
     x: String(parseFloat(xText) || 0),
     y: String(parseFloat(yText) || 0),
@@ -2696,7 +2695,7 @@ const handleCreateTaskGroup = async () => {
   }
   
   const newTaskGroup: PointTask = {
-    isStart: false,
+    isStart: true,
     task_id: String(Date.now()),
     task_name: taskName,
     taskcontent: []
