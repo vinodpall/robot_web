@@ -26,6 +26,8 @@ function extractPermissionsFromUser(user: any): string[] {
 }
 
 function isSuperAdminUser(user: any): boolean {
+  const isSuperFlag = user?.is_superuser === true || user?.is_superuser === 1 || user?.is_superuser === '1' || user?.is_superuser === 'true'
+  if (isSuperFlag) return true
   if (!Array.isArray(user?.roles)) return false
   return user.roles.some((role: any) => {
     if (typeof role === 'string') return role === 'super_admin'

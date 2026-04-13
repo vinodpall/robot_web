@@ -1217,10 +1217,9 @@ export const navigationApi = {
   deleteDataPackage: (robotId: string, dataName: string) => {
     return apiClient.delete(`/navigation/${robotId}/data/${dataName}`)
   },
-  getNavigationList: (robotId: string, mapName: string, path?: string, robotIp?: string) => {
+  getNavigationList: (robotId: string, mapName: string, path?: string, _robotIp?: string) => {
     const params: Record<string, any> = { map_name: mapName }
     if (path) params.path = path
-    if (robotIp) params.robot_ip = robotIp
     return apiClient.get<{ code: number; msg: string; data: any[] }>('/navigation_list', params, {
       baseURL: ''
     })
@@ -1233,8 +1232,7 @@ export const navigationApi = {
     path?: string;
     robot_ip?: string;
   }) => {
-    const { robot_ip, ...bodyData } = data
-    const qs = robot_ip ? `?robot_ip=${encodeURIComponent(robot_ip)}` : ''
+    const { robot_ip: _robotIp, ...bodyData } = data
 
     const params = new URLSearchParams()
     Object.entries(bodyData).forEach(([key, value]) => {
@@ -1243,7 +1241,7 @@ export const navigationApi = {
       }
     })
 
-    return apiClient.post<{ code: number; msg: string }>(`/navigation_delete${qs}`, params.toString(), {
+    return apiClient.post<{ code: number; msg: string }>('/navigation_delete', params.toString(), {
       headers: {
         'content-type': 'application/x-www-form-urlencoded'
       },
@@ -1343,12 +1341,12 @@ export const mapFileApi = {
   MAP_FILES: ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt', 'scancontext/odom_key_frames.txt'],
 
   downloadMapFile: async (
-    robotIp: string,
     mapName: string,
     fileName: string,
     suppressErrorLog = false
   ): Promise<Blob | null> => {
-    const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}&robot_ip=${robotIp}`
+    const url = `/download_file?remote_path=/root/dxr_data/map/${mapName}/${fileName}`
+    const sourceTag = 'server'
 
     try {
       const response = await fetch(url, {
@@ -1359,7 +1357,7 @@ export const mapFileApi = {
       if (!response.ok) {
         if (!suppressErrorLog) {
           logMapDownloadOnce(
-            `${robotIp}:${mapName}:${fileName}:status:${response.status}`,
+            `${sourceTag}:${mapName}:${fileName}:status:${response.status}`,
             `[地图下载] 文件下载失败: ${mapName}/${fileName}，HTTP ${response.status}`
           )
         }
@@ -1371,7 +1369,7 @@ export const mapFileApi = {
       if (blob.type.includes('text/html')) {
         if (!suppressErrorLog) {
           logMapDownloadOnce(
-            `${robotIp}:${mapName}:${fileName}:html`,
+            `${sourceTag}:${mapName}:${fileName}:html`,
             `[地图下载] 文件返回了 HTML 内容: ${mapName}/${fileName}`
           )
         }
@@ -1382,7 +1380,7 @@ export const mapFileApi = {
     } catch (error) {
       if (!suppressErrorLog) {
         logMapDownloadOnce(
-          `${robotIp}:${mapName}:${fileName}:catch`,
+          `${sourceTag}:${mapName}:${fileName}:catch`,
           `[地图下载] 请求异常: ${mapName}/${fileName}`,
           error
         )
@@ -1391,12 +1389,12 @@ export const mapFileApi = {
     }
   },
 
-  downloadAllMapFiles: async (robotIp: string, mapName: string): Promise<Map<string, Blob>> => {
+  downloadAllMapFiles: async (mapName: string): Promise<Map<string, Blob>> => {
     const results = new Map<string, Blob>()
     const failedFiles: string[] = []
 
     for (const fileName of mapFileApi.MAP_FILES) {
-      const blob = await mapFileApi.downloadMapFile(robotIp, mapName, fileName, true)
+      const blob = await mapFileApi.downloadMapFile(mapName, fileName, true)
       if (blob) {
         results.set(fileName, blob)
       } else {
@@ -1406,7 +1404,7 @@ export const mapFileApi = {
 
     if (failedFiles.length > 0) {
       logMapDownloadOnce(
-        `${robotIp}:${mapName}:batch:${failedFiles.join(',')}`,
+        `server:${mapName}:batch:${failedFiles.join(',')}`,
         `[地图下载] 地图 ${mapName} 有 ${failedFiles.length} 个文件下载失败: ${failedFiles.join(', ')}`
       )
     }
@@ -1414,9 +1412,9 @@ export const mapFileApi = {
     return results
   },
 
-  uploadMapFile: async (robotIp: string, mapName: string, fileName: string, file: Blob): Promise<boolean> => {
+  uploadMapFile: async (mapName: string, fileName: string, file: Blob): Promise<boolean> => {
     const remotePath = `/root/dxr_data/map/${mapName}`
-    const url = `/upload_single_file?robot_ip=${robotIp}`
+    const url = '/upload_single_file'
 
     const formData = new FormData()
     formData.append('file', file, fileName)
@@ -1451,11 +1449,10 @@ export const mapFileApi = {
 
   downloadTrajectoryFile: async (
     trajectoryName: string,
-    robotIp: string,
     forceNoCache = false
   ): Promise<Blob | null> => {
     const querySuffix = forceNoCache ? `&_t=${Date.now()}` : ''
-    const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt&robot_ip=${robotIp}${querySuffix}`
+    const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trajectoryName}/${trajectoryName}.txt${querySuffix}`
     try {
       const response = await fetch(url, {
         method: 'GET',

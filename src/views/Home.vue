@@ -1048,9 +1048,9 @@ const shouldDownloadTrajectory = (trackName: string, serverUpdateTime: string): 
 }
 
 // 下载单个轨迹文件
-const downloadTrajectoryFile = async (trackName: string, robotIp: string): Promise<Blob | null> => {
+const downloadTrajectoryFile = async (trackName: string): Promise<Blob | null> => {
   // 轨迹文件名和文件夹同名
-  const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trackName}/${trackName}.txt&robot_ip=${robotIp}`
+  const url = `/download_file?remote_path=/root/dxr_data/trajectory/${trackName}/${trackName}.txt`
   try {
     const response = await fetch(url, { method: 'GET' })
     if (!response.ok) return null
@@ -1061,7 +1061,7 @@ const downloadTrajectoryFile = async (trackName: string, robotIp: string): Promi
 }
 
 // 下载所有轨迹文件（切换地图时调用）
-const downloadAllTrajectoryFiles = async (trackList: string[], robotIp: string) => {
+const downloadAllTrajectoryFiles = async (trackList: string[]) => {
   // trackList 形如 [map1_track1@20260121, map1_track2@20260120]
   for (const trackRaw of trackList) {
     const atIndex = trackRaw.indexOf('@')
@@ -1069,7 +1069,7 @@ const downloadAllTrajectoryFiles = async (trackList: string[], robotIp: string) 
     const updateTime = atIndex > -1 ? trackRaw.substring(atIndex + 1) : ''
     if (!trackName) continue
     if (!shouldDownloadTrajectory(trackName, updateTime)) continue
-    const blob = await downloadTrajectoryFile(trackName, robotIp)
+    const blob = await downloadTrajectoryFile(trackName)
     if (blob) {
       await saveTrajectoryFile(trackName, blob)
       updateTrajectoryConfig(trackName, updateTime)
@@ -4665,16 +4665,7 @@ const downloadMapFiles = async (mapName: string, updateTime: string) => {
       return
     }
     
-    // 获取机器人 IP
-    const robotInfo = deviceStore.selectedRobot
-    if (!robotInfo?.ip_address) {
-      console.warn('[地图缓存] 机器人IP地址不存在，无法下载')
-      return
-    }
-    
-    const robotIp = robotInfo.ip_address
-    
-    const files = await mapFileApi.downloadAllMapFiles(robotIp, mapName)
+    const files = await mapFileApi.downloadAllMapFiles(mapName)
     
     // 保存文件到 IndexedDB
     let savedCount = 0
@@ -4847,12 +4838,9 @@ const syncSelectedMapTrajectoryFiles = async (mapName: string) => {
   const relatedTracks = trackList.value.filter(track => track.startsWith(mapName + '_'))
   if (relatedTracks.length === 0) return
 
-  const robotIp = deviceStore.selectedRobot?.ip_address || ''
-  if (!robotIp) return
-
   trajectoryDownloadInFlight.value = true
   try {
-    await downloadAllTrajectoryFiles(relatedTracks, robotIp)
+    await downloadAllTrajectoryFiles(relatedTracks)
   } finally {
     trajectoryDownloadInFlight.value = false
   }
