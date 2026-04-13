@@ -1293,6 +1293,20 @@ const normalizeTaskPointName = (rawTaskPointName: string) => {
   return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
 }
 
+const normalizePointTaskName = (rawTaskName: string) => {
+  const trimmed = (rawTaskName || '').trim()
+  if (!trimmed) return ''
+  const atIndex = trimmed.indexOf('@')
+  return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
+}
+
+const normalizeMapName = (rawMapName: string) => {
+  const trimmed = (rawMapName || '').trim()
+  if (!trimmed) return ''
+  const atIndex = trimmed.indexOf('@')
+  return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
+}
+
 const extractTrackTaskList = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
@@ -1331,15 +1345,16 @@ watch(() => robotStore.multitaskStatus?.status, (running) => {
 
 // 导航开启时，以 WebSocket 返回的地图为准覆盖缓存与下拉选中
 const syncMapFromNavigation = (mapName: string) => {
-  if (!mapName) return
+  const normalizedMapName = normalizeMapName(mapName)
+  if (!normalizedMapName) return
   const cached = taskExecutionStore.selectedMapName
   // 若列表中没有该地图，动态插入首位，避免 select 出现空选项
-  if (!mapList.value.includes(mapName)) {
-    mapList.value = [mapName, ...mapList.value]
+  if (!mapList.value.includes(normalizedMapName)) {
+    mapList.value = [normalizedMapName, ...mapList.value]
   }
-  selectedMap.value = mapName
+  selectedMap.value = normalizedMapName
   // 打标记供 robotBootstrap 判断，防止它在 forceResetMapSelection 时覆盖掉这个值
-  localStorage.setItem('nav_confirmed_map', mapName)
+  localStorage.setItem('nav_confirmed_map', normalizedMapName)
 }
 
 // cmd_status.map_name 变化时同步（导航进行中地图切换）
@@ -1716,10 +1731,10 @@ const syncPointCloudOverlayByRuntimeState = async () => {
   }
 
   if (robotStore.isPointTaskRunning) {
-    const runningTaskName = String(robotStore.taskStatus?.task_name || '').trim()
+    const runningTaskName = normalizePointTaskName(String(robotStore.taskStatus?.task_name || ''))
     const matchedTask =
       pointTaskList.value.find(task => String(task.task_id) === String(activeOverlayPointTaskId.value))
-      || pointTaskList.value.find(task => String(task.task_name || '').trim() === runningTaskName)
+      || pointTaskList.value.find(task => normalizePointTaskName(String(task.task_name || '')) === runningTaskName)
     if (matchedTask) {
       activeOverlayPointTaskId.value = matchedTask.task_id
       await overlayPointTaskWaypoints(matchedTask.task_id, matchedTask.task_name)
@@ -4921,9 +4936,10 @@ const fetchTrackList = async (forceRefresh = false) => {
 
 // 过滤后的循迹任务列表
 const filteredTrackList = computed(() => {
-  if (!selectedMap.value) return []
+  const mapName = normalizeMapName(selectedMap.value || '')
+  if (!mapName) return []
   return trackList.value
-    .filter(track => track.startsWith(selectedMap.value + '_'))
+    .filter(track => normalizeTrackName(track).startsWith(mapName + '_'))
     .map(track => {
       const atIndex = track.indexOf('@')
       return atIndex > -1 ? track.substring(0, atIndex) : track
@@ -4988,11 +5004,16 @@ const pointTaskList = ref<PointTask[]>([])
 const selectedPointTask = ref('')
 let pointTaskRequestToken = 0
 const pendingRunningPointTaskName = ref('')
+const pointTaskForceRefreshInFlight = ref(false)
+let lastPointTaskForceRefreshAt = 0
+const POINT_TASK_FORCE_REFRESH_INTERVAL_MS = 3000
 
 const applyPendingRunningPointTaskName = () => {
-  const pendingName = String(pendingRunningPointTaskName.value || '').trim()
+  const pendingName = normalizePointTaskName(String(pendingRunningPointTaskName.value || ''))
   if (!pendingName) return false
-  const matched = filteredPointTaskList.value.find(t => String(t.task_name || '').trim() === pendingName)
+  const matched = filteredPointTaskList.value.find(
+    t => normalizePointTaskName(String(t.task_name || '')) === pendingName
+  )
   if (!matched) return false
   selectedPointTask.value = matched.task_id
   activeOverlayPointTaskId.value = matched.task_id
@@ -5019,6 +5040,12 @@ const fetchPointTaskList = async (forceRefresh = false) => {
   // 缓存为空时才直接请求接口
   const robotId = deviceStore.selectedRobotId
   if (!robotId) return
+  if (forceRefresh) {
+    const now = Date.now()
+    if (pointTaskForceRefreshInFlight.value) return
+    if (now - lastPointTaskForceRefreshAt < POINT_TASK_FORCE_REFRESH_INTERVAL_MS) return
+    pointTaskForceRefreshInFlight.value = true
+  }
   const requestToken = ++pointTaskRequestToken
   try {
     const response = await navigationApi.getPointTaskList(robotId)
@@ -5040,32 +5067,61 @@ const fetchPointTaskList = async (forceRefresh = false) => {
       return
     }
     pointTaskList.value = []
+  } finally {
+    if (forceRefresh) {
+      pointTaskForceRefreshInFlight.value = false
+      lastPointTaskForceRefreshAt = Date.now()
+    }
   }
 }
 
 // 过滤后的发布点任务列表（根据当前地图筛选）
 const filteredPointTaskList = computed(() => {
-  if (!selectedMap.value) return []
-  
+  const mapName = normalizeMapName(selectedMap.value || '')
+  if (!mapName) return []
+
   // 根据地图名称筛选：task_name 以 "地图名称_" 开头
   return pointTaskList.value.filter(task => {
-    return task.task_name.startsWith(selectedMap.value + '_')
+    const taskName = normalizePointTaskName(String(task.task_name || ''))
+    return taskName.startsWith(mapName + '_')
   })
 })
 
 // 监听筛选后的发布点任务列表变化，自动选择第一个
 watch(filteredPointTaskList, (newList) => {
   if (applyPendingRunningPointTaskName()) return
-  if (newList.length > 0) {
-    selectedPointTask.value = newList[0].task_id
-  } else {
+  if (newList.length === 0) {
     selectedPointTask.value = ''
+    return
+  }
+  if (robotStore.isPointTaskRunning) {
+    const runningTaskName = normalizePointTaskName(String(robotStore.taskStatus?.task_name || ''))
+    const runningMatched = runningTaskName
+      ? newList.find(task => normalizePointTaskName(String(task.task_name || '')) === runningTaskName)
+      : null
+    if (runningMatched) {
+      if (String(selectedPointTask.value) !== String(runningMatched.task_id)) {
+        selectedPointTask.value = runningMatched.task_id
+      }
+      return
+    }
+    if (newList.some(task => String(task.task_id) === String(selectedPointTask.value))) {
+      return
+    }
+    selectedPointTask.value = String(newList[0].task_id)
+    return
+  }
+  if (!newList.some(task => String(task.task_id) === String(selectedPointTask.value))) {
+    selectedPointTask.value = newList[0].task_id
   }
 }, { immediate: true })
 
 // task_status.task_name 同步发布点任务下拉，并叠加发布点到点云
 watch(() => robotStore.taskStatus, (ts) => {
-  if (!ts?.is_running || !ts.task_name) {
+  const isRunning = robotStore.isPointTaskRunning
+  const taskName = String(ts?.task_name || '').trim()
+  const normalizedTaskName = normalizePointTaskName(taskName)
+  if (!isRunning) {
     activeOverlayPointTaskId.value = ''
     lastPointTaskOverlayKey.value = ''
     if (!robotStore.isTracking && basePointCloudData.value.length > 0) {
@@ -5077,8 +5133,47 @@ watch(() => robotStore.taskStatus, (ts) => {
     selectedPointTask.value = ''
     return
   }
-  pendingRunningPointTaskName.value = String(ts.task_name || '').trim()
+  if (normalizedTaskName) {
+    const matchedTask = pointTaskList.value.find(
+      task => normalizePointTaskName(String(task.task_name || '')) === normalizedTaskName
+    )
+    if (matchedTask) {
+      selectedPointTask.value = matchedTask.task_id
+      activeOverlayPointTaskId.value = matchedTask.task_id
+      void overlayPointTaskWaypoints(matchedTask.task_id, matchedTask.task_name)
+      return
+    }
+    pendingRunningPointTaskName.value = normalizedTaskName
+  } else if (activeOverlayPointTaskId.value) {
+    const activeTask = pointTaskList.value.find(task => String(task.task_id) === String(activeOverlayPointTaskId.value))
+    if (activeTask) {
+      selectedPointTask.value = activeTask.task_id
+      void overlayPointTaskWaypoints(activeTask.task_id, activeTask.task_name)
+      return
+    }
+  }
   if (applyPendingRunningPointTaskName()) return
+  if (activeOverlayPointTaskId.value) {
+    const activeTask = pointTaskList.value.find(task => String(task.task_id) === String(activeOverlayPointTaskId.value))
+    if (activeTask) {
+      selectedPointTask.value = activeTask.task_id
+      void overlayPointTaskWaypoints(activeTask.task_id, activeTask.task_name)
+      return
+    }
+  }
+  const selectedTask = pointTaskList.value.find(task => String(task.task_id) === String(selectedPointTask.value))
+  if (selectedTask) {
+    activeOverlayPointTaskId.value = selectedTask.task_id
+    void overlayPointTaskWaypoints(selectedTask.task_id, selectedTask.task_name)
+    return
+  }
+  if (filteredPointTaskList.value.length > 0) {
+    const fallbackTask = filteredPointTaskList.value[0]
+    selectedPointTask.value = fallbackTask.task_id
+    activeOverlayPointTaskId.value = fallbackTask.task_id
+    void overlayPointTaskWaypoints(fallbackTask.task_id, fallbackTask.task_name)
+    return
+  }
   void fetchPointTaskList(true)
 }, { deep: true })
 
@@ -5525,7 +5620,10 @@ const handleCancelTask = async () => {
         // 停止发布点任务
         let taskId = selectedPointTask.value
         if (!taskId && robotStore.taskStatus?.task_name) {
-          const matched = pointTaskList.value.find(task => task.task_name === robotStore.taskStatus?.task_name)
+          const runningTaskName = normalizePointTaskName(String(robotStore.taskStatus?.task_name || ''))
+          const matched = pointTaskList.value.find(
+            task => normalizePointTaskName(String(task.task_name || '')) === runningTaskName
+          )
           if (matched) {
             taskId = matched.task_id
           }

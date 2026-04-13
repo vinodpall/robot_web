@@ -3303,7 +3303,9 @@ watch(filteredNavPointTaskList, (newList) => {
 
 watch(() => robotStore.taskStatus, (ts) => {
   if (isNavPreviewMode.value) return
-  if (!ts?.is_running || !ts.task_name || !robotStore.isPointTaskRunning) {
+  const isRunning = robotStore.isPointTaskRunning
+  const taskName = String(ts?.task_name || '').trim()
+  if (!isRunning) {
     activeNavOverlayPointTaskId.value = ''
     lastNavPointTaskOverlayKey.value = ''
     if (!robotStore.isTracking && baseNavPointCloudData.value.length > 0) {
@@ -3313,7 +3315,16 @@ watch(() => robotStore.taskStatus, (ts) => {
     return
   }
   if (!selectedNavMap.value || robotStore.isTracking) return
-  pendingRunningNavPointTaskName.value = String(ts.task_name || '').trim()
+  if (taskName) {
+    pendingRunningNavPointTaskName.value = taskName
+  } else if (activeNavOverlayPointTaskId.value) {
+    const activeTask = navPointTaskList.value.find(task => String(task.task_id) === String(activeNavOverlayPointTaskId.value))
+    if (activeTask) {
+      selectedNavPointTaskId.value = activeTask.task_id
+      void overlayNavPointTaskWaypoints(activeTask.task_id, activeTask.task_name)
+      return
+    }
+  }
   if (applyPendingRunningNavPointTaskName()) return
   void fetchNavPointTaskList(true)
 }, { deep: true })

@@ -342,8 +342,13 @@ export const useRobotStore = defineStore('robot', () => {
   /** MSF 是否正常（status===1） */
   const msfNormal = computed(() => msfStatus.value?.status === 1)
 
+  const parseBooleanLike = (value: unknown): boolean => {
+    if (value === true || value === 'true' || value === 1 || value === '1') return true
+    return false
+  }
+
   /** 发布点任务是否运行中（来自 task_status.is_running） */
-  const isPointTaskRunning = computed(() => taskStatus.value?.is_running === true)
+  const isPointTaskRunning = computed(() => parseBooleanLike(taskStatus.value?.is_running))
 
   /** 循迹是否运行中（来自 cmd_status.track） */
   const isTracking = computed(() => cmdStatus.value?.track === 1)
