@@ -1322,6 +1322,7 @@ export const cameraApi = {
 }
 
 const MAP_DOWNLOAD_LOG_TTL_MS = 5000
+const ROBOT_HTTP_FETCH_TIMEOUT_MS = 30000
 const recentMapDownloadLogs = new Map<string, number>()
 
 const encodeRobotHttpPath = (path: string): string => {
@@ -1334,17 +1335,44 @@ const encodeRobotHttpPath = (path: string): string => {
     .join('/')
 }
 
+const decodeQueryLikePath = (value: string): string => {
+  try {
+    const decoded = decodeURIComponent(value)
+    return decoded
+  } catch {
+    return value
+  }
+}
+
 const buildRobotHttpUrl = (
   robotId: string,
   port: number,
   path: string,
   query?: Record<string, string | number | boolean | undefined | null>
 ): string => {
-  const encodedPath = encodeRobotHttpPath(path)
+  let cleanPath = String(path || '')
+  if (!cleanPath.includes('?') && /%3F/i.test(cleanPath)) {
+    cleanPath = decodeQueryLikePath(cleanPath)
+  }
+  const mergedQuery: Record<string, string | number | boolean | undefined | null> = { ...(query || {}) }
+
+  // 兼容误传：若 path 自带 query（如 download_file?remote_path=...），拆分后合并到 query
+  const qIdx = cleanPath.indexOf('?')
+  if (qIdx >= 0) {
+    const pathQuery = cleanPath.slice(qIdx + 1)
+    cleanPath = cleanPath.slice(0, qIdx)
+    const params = new URLSearchParams(pathQuery)
+    params.forEach((value, key) => {
+      if (mergedQuery[key] === undefined || mergedQuery[key] === null) {
+        mergedQuery[key] = value
+      }
+    })
+  }
+
+  const encodedPath = encodeRobotHttpPath(cleanPath)
   const base = `${API_BASE_URL}/robots/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}`
-  if (!query) return base
   const search = new URLSearchParams()
-  Object.entries(query).forEach(([key, value]) => {
+  Object.entries(mergedQuery).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       search.append(key, String(value))
     }
@@ -1356,6 +1384,23 @@ const buildRobotHttpUrl = (
 const buildAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('token')
   return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+const fetchWithTimeout = async (
+  url: string,
+  options: RequestInit,
+  timeoutMs = ROBOT_HTTP_FETCH_TIMEOUT_MS
+): Promise<Response> => {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    })
+  } finally {
+    window.clearTimeout(timer)
+  }
 }
 
 const logMapDownloadOnce = (key: string, message: string, error?: unknown) => {
@@ -1389,7 +1434,7 @@ export const mapFileApi = {
     const sourceTag = 'server'
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
         cache: 'no-store',
         headers: buildAuthHeaders()
@@ -1419,6 +1464,15 @@ export const mapFileApi = {
 
       return blob
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        if (!suppressErrorLog) {
+          logMapDownloadOnce(
+            `${sourceTag}:${mapName}:${fileName}:timeout`,
+            `[地图下载] 请求超时(${ROBOT_HTTP_FETCH_TIMEOUT_MS}ms): ${mapName}/${fileName}`
+          )
+        }
+        return null
+      }
       if (!suppressErrorLog) {
         logMapDownloadOnce(
           `${sourceTag}:${mapName}:${fileName}:catch`,
@@ -1469,7 +1523,7 @@ export const mapFileApi = {
     })
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         body: formData,
         headers: buildAuthHeaders()
@@ -1484,6 +1538,10 @@ export const mapFileApi = {
       console.log('trajectory upload success')
       return true
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.error(`[轨迹上传] 地图文件上传超时(${ROBOT_HTTP_FETCH_TIMEOUT_MS}ms): ${fileName}`)
+        return false
+      }
       console.error(`[轨迹上传] 地图文件上传异常: ${fileName}`, error)
       return false
     }
@@ -1499,7 +1557,7 @@ export const mapFileApi = {
       ...(forceNoCache ? { _t: Date.now() } : {})
     })
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
         cache: 'no-store',
         headers: {
@@ -1519,6 +1577,10 @@ export const mapFileApi = {
       }
       return await response.blob()
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.error(`[轨迹下载] 轨迹文件下载超时(${ROBOT_HTTP_FETCH_TIMEOUT_MS}ms): ${trajectoryName}`)
+        return null
+      }
       console.error(`[轨迹下载] 轨迹文件下载异常: ${trajectoryName}`, error)
       return null
     }

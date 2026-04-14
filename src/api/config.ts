@@ -11,10 +11,12 @@ const getApiConfig = () => {
             domain: window.location.origin
         }
     } else {
-        // 寮€鍙戠幆澧冿細浣跨敤鐩稿璺緞锛屼緷璧朧ite浠ｇ悊
+        // 寮€鍙戠幆澧冿細鐩磋繛 8000锛屼笉缁忚繃 5173 /v1 浠ｇ悊
+        const current = getCurrentConfig()
+        const directBase = `${current.services.vision}/v1`
         return {
-            baseUrl: config.api.baseUrl,
-            domain: ''
+            baseUrl: directBase,
+            domain: current.services.vision
         }
     }
 }

@@ -278,7 +278,7 @@
                     alt="警情图片"
                     class="target-image-small"
                     @click="handleAlertImageClick(item)"
-                    @error="item.imageUrl = ''"
+                    @error="handleAlertThumbError(item)"
                     style="cursor:pointer;"
                   />
                 </td>
@@ -1440,6 +1440,18 @@ const handleAlertImageClick = (item: any) => {
   showBigImage.value = true
 }
 
+const handleAlertThumbError = (item: any) => {
+  if (!item) return
+  const original = item.imageOriginalUrl || ''
+  const current = item.imageUrl || ''
+  if (!item.imageFallbackTried && original && current !== original) {
+    item.imageUrl = original
+    item.imageFallbackTried = true
+    return
+  }
+  item.imageUrl = ''
+}
+
 // 使用全局任务进度数据
 const waylineProgress = computed(() => taskProgressStore.waylineProgress)
 const waylineJobDetail = computed(() => taskProgressStore.waylineJobDetail)
@@ -2051,6 +2063,7 @@ const fetchLatestAlarmLogs = async () => {
         type: row.content || '--',
         imageUrl,
         imageOriginalUrl,
+        imageFallbackTried: false,
         camera,
         content: outmsg?.message || '--',
         description: row.task_point_description || '--',
