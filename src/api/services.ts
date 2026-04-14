@@ -1006,6 +1006,15 @@ export const navigationApi = {
   }) => {
     return apiClient.post(`/navigation/${robotId}/start_track`, data)
   },
+  stopTrack: (robotId: string, data: {
+    action: number;
+    wait: number;
+    obs_mode: number;
+    track_name: string;
+    taskpoint_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/start_track`, data)
+  },
   addTrackPoint: (robotId: string, data: any) => {
     return apiClient.post(`/tracks/${robotId}/add_track_point`, data)
   },

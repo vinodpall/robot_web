@@ -5541,7 +5541,7 @@ const handleCancelTask = async () => {
         }
 
         // 取消循迹任务，使用启动时保存的任务参数
-        const response = await navigationApi.cancelTrack(robotId, {
+        const response = await navigationApi.stopTrack(robotId, {
           action: 0,
           wait: 0,
           obs_mode: 1,
@@ -5976,6 +5976,18 @@ const prepareRobotForTaskStart = async (
   }
 }
 
+const resolveCheckExitChargeResult = (response: any): boolean | null => {
+  const candidates = [
+    response?.msg?.on_charge_pile,
+    response?.response?.msg?.on_charge_pile,
+    response?.data?.msg?.on_charge_pile,
+  ]
+  for (const value of candidates) {
+    if (typeof value === 'boolean') return value
+  }
+  return null
+}
+
 const finalizeTrackTaskStart = async (trackName: string, taskpointName: string, successMessage?: string) => {
   const normalizedTrackName = normalizeTrackName(trackName)
   activeTaskType.value = 'track'
@@ -6026,7 +6038,7 @@ const onTrackStartConfirm = async () => {
   if (trackStartDialog.value.loading) return
   trackStartDialog.value.loading = true
   trackStartDialog.value.visible = false
-  trackInitDialog.value.text = '机器狗初始化中...'
+  trackInitDialog.value.text = '循迹任务启动中...'
   trackInitDialog.value.visible = true
 
   try {
@@ -6037,26 +6049,42 @@ const onTrackStartConfirm = async () => {
     }
 
     resetTrackStartProgress()
-    pushTrackStartStep('开始准备循迹任务启动流程')
-
-    await prepareRobotForTaskStart(robotId, {
-      gaitConfig,
-      stepLogger: pushTrackStartStep
-    })
-
-    pushTrackStartStep('发送循迹任务启动指令')
-    // 调用启动循迹任务API
-    const response = await navigationApi.startTrack(robotId, {
+    pushTrackStartStep('检查循迹启动前置状态')
+    const checkResult = await navigationApi.startTrack(robotId, {
       obs_mode: form.obs_mode,
       track_name: form.track_name,
       taskpoint_name: form.taskpoint_name,
       gait_name: gaitConfig.command,
       ground: ''
     })
+
+    const canWaitDirectly = resolveCheckExitChargeResult(checkResult)
+    if (canWaitDirectly === true) {
+      pushTrackStartStep('检测到可直接启动，等待循迹启动', 'success')
+      showSuccess('等待循迹启动', 8000)
+      return
+    }
+
+    trackInitDialog.value.text = '机器狗初始化中...'
+    pushTrackStartStep('开始准备循迹任务启动流程')
+    await prepareRobotForTaskStart(robotId, {
+      gaitConfig,
+      stepLogger: pushTrackStartStep
+    })
+
+    pushTrackStartStep('发送循迹任务启动指令')
+    const response = await navigationApi.stopTrack(robotId, {
+      action: 1,
+      wait: form.wait ?? 0,
+      obs_mode: form.obs_mode,
+      track_name: form.track_name,
+      taskpoint_name: form.taskpoint_name
+    })
     
     // 根据返回结果判断是否成功
-    if (response && (response as any).response && (response as any).response.msg) {
-      const { error_code, error_msg } = (response as any).response.msg
+    const startMsg = (response as any)?.response?.msg || (response as any)?.msg
+    if (startMsg) {
+      const { error_code, error_msg } = startMsg
       if (error_code === 0) {
         pushTrackStartStep((response as any).message || '循迹任务启动成功', 'success')
         await finalizeTrackTaskStart(form.track_name, form.taskpoint_name, (response as any).message || '循迹任务启动成功')
