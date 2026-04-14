@@ -234,11 +234,12 @@
                   <div class="nav-map-canvas">
                     <div class="pointcloud-wrapper">
                       <div class="pointcloud-view">
-                        <ThreePointCloudPreview
+                      <ThreePointCloudPreview
                           :points="navPointCloudData"
                           :loading="navPointCloudLoading"
                           :error="navPointCloudError"
                           :normalization-params="navPointCloudNormalizationParams"
+                          :navigation-origin="navPointCloudNavigationOrigin"
                           :robot-pose="robotStore.pose"
                           :robot-mesh="arrowMesh"
                         />
@@ -436,6 +437,7 @@
                         :loading="navPointCloudLoading"
                         :error="navPointCloudError"
                         :normalization-params="navPointCloudNormalizationParams"
+                        :navigation-origin="navPointCloudNavigationOrigin"
                         :robot-pose="robotStore.pose"
                         :robot-mesh="arrowMesh"
                       />
@@ -2334,10 +2336,38 @@ const navPointCloudPanX = navPc.panX
 const navPointCloudPanY = navPc.panY
 const navPointCloudPointSize = navPc.pointSize
 const generateMockNavPointCloud = navPc.generateMockData
-const tinymapPcdUrl = new URL('../../tinyMap.pcd', import.meta.url).href
 const navPointCloudLoading = ref(false)
 const navPointCloudError = ref('')
+const navPointCloudNavigationOrigin = ref<{ x: number; y: number; z: number } | null>(null)
 const arrowMesh = ref<MeshData | null>(null)
+
+const parseNavigationOriginFromOdomKeyFrames = (text: string): { x: number; y: number; z: number } | null => {
+  if (!text) return null
+  const firstLine = text.split(/\r?\n/).find(line => String(line || '').trim())
+  if (!firstLine) return null
+
+  const tokens = firstLine.trim().split(/[\s,]+/).filter(Boolean)
+  if (tokens.length < 12) return null
+
+  const x = Number(tokens[3])
+  const y = Number(tokens[7])
+  const z = Number(tokens[11])
+  if (![x, y, z].every(Number.isFinite)) return null
+
+  return { x, y, z }
+}
+
+const loadNavMapNavigationOrigin = async (mapName: string): Promise<{ x: number; y: number; z: number } | null> => {
+  try {
+    const originBlob = await getMapFile(mapName, 'odom_key_frames.txt')
+    if (!originBlob || originBlob.size === 0) return null
+    const text = await originBlob.text()
+    return parseNavigationOriginFromOdomKeyFrames(text)
+  } catch (error) {
+    console.warn('[导航点云] 读取导航原点失败:', error)
+    return null
+  }
+}
 
 // 用 Web Worker 解析 PCD，避免大文件在主线程解析失败
 const parsePcdBufferInWorker = (
@@ -2700,8 +2730,11 @@ const drawNavPointCloud = () => {
       const cosT = Math.cos(pose.theta - Math.PI / 2)
       const sinT = Math.sin(pose.theta - Math.PI / 2)
 
+      // 与首页 Three.js 一致：将模型头部尖端（min.x）作为机器人坐标锚点。
+      const tipAnchorX = mesh.vertices.reduce((minX, v) => Math.min(minX, v.x), Number.POSITIVE_INFINITY)
+      const safeTipAnchorX = Number.isFinite(tipAnchorX) ? tipAnchorX : 0
       const projVerts: Array<{ px: number; py: number }> = mesh.vertices.map(v => {
-        const sx = v.x * arrowScale
+        const sx = (v.x - safeTipAnchorX) * arrowScale
         const sy = v.y * arrowScale
         const sz = v.z * arrowScale
         const rx = sx * cosT - sy * sinT
@@ -2753,9 +2786,10 @@ const drawNavPointCloud = () => {
       ctx.translate(rProjX, rProjY)
       ctx.rotate(screenAngle + Math.PI / 2)
       ctx.beginPath()
-      ctx.moveTo(0, -arrowSize)
-      ctx.lineTo(-arrowSize * 0.55, arrowSize * 0.65)
-      ctx.lineTo(arrowSize * 0.55, arrowSize * 0.65)
+      // 兜底三角形也使用“尖端为坐标锚点”。
+      ctx.moveTo(0, 0)
+      ctx.lineTo(-arrowSize * 0.55, arrowSize * 1.6)
+      ctx.lineTo(arrowSize * 0.55, arrowSize * 1.6)
       ctx.closePath()
       ctx.shadowColor = '#00ff88'
       ctx.shadowBlur = 12
@@ -3130,20 +3164,12 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
       }
     }
     
-    let buffer: ArrayBuffer
-    
-    if (blob) {
-      console.log('从缓存加载点云文件')
-      buffer = await blob.arrayBuffer()
-    } else {
-      // 3. 如果还是没有，尝试加载默认文件（作为后备）
-      console.warn('无法获取地图点云文件，尝试加载默认文件')
-      const response = await fetch(tinymapPcdUrl)
-      if (!response.ok) {
-        throw new Error('默认 PCD 文件加载失败')
-      }
-      buffer = await response.arrayBuffer()
+    if (!blob || blob.size === 0) {
+      throw new Error('点云文件不存在')
     }
+
+    console.log('从缓存加载点云文件')
+    const buffer = await blob.arrayBuffer()
     
     console.log('PCD文件已加载，大小:', buffer.byteLength, 'bytes')
     const { points: parsedPoints, normParams } = await parsePcdBufferInWorker(buffer)
@@ -3151,12 +3177,14 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
     
     if (parsedPoints.length > 0) {
       navPointCloudNormalizationParams.value = normParams
+      navPointCloudNavigationOrigin.value = await loadNavMapNavigationOrigin(targetMap)
       navPointCloudData.value = parsedPoints
       // 保存原始地图数据，用于叠加轨迹
       baseNavPointCloudData.value = parsedPoints
       lastNavTrackOverlayKey.value = ''
     } else {
       console.warn('未解析到点云数据，使用模拟数据')
+      navPointCloudNavigationOrigin.value = null
       navPointCloudData.value = generateMockNavPointCloud()
       lastNavTrackOverlayKey.value = ''
     }
@@ -3196,6 +3224,7 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
   } catch (error) {
     console.error('点云数据加载失败:', error)
     navPointCloudError.value = '点云数据加载失败'
+    navPointCloudNavigationOrigin.value = null
     navPointCloudData.value = generateMockNavPointCloud()
     lastNavTrackOverlayKey.value = ''
     await nextTick()
@@ -5842,7 +5871,7 @@ const handleDelete = (item: any) => {
 }
 
 .nav-info-card:last-of-type {
-  margin-top: auto;
+  margin-top: 0;
 }
 
 .nav-info-card-title {

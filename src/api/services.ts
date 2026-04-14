@@ -989,13 +989,13 @@ export const navigationApi = {
     }>(`/taskpoints/${robotId}/task_type_list`)
   },
   startTrack: (robotId: string, data: {
-    action: number;
-    wait: number;
     obs_mode: number;
     track_name: string;
     taskpoint_name: string;
+    gait_name: string;
+    ground: string;
   }) => {
-    return apiClient.post(`/navigation/${robotId}/start_track`, data)
+    return apiClient.post(`/navigation/${robotId}/check_exit_charge`, data)
   },
   cancelTrack: (robotId: string, data: {
     action: number;

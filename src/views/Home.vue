@@ -30,6 +30,10 @@
               <div class="video-reconnect-spinner"></div>
               <span class="video-reconnect-text">信号重连中...</span>
             </div>
+            <div v-else-if="visibleLoading && !hasVisibleVideoFrame" class="video-reconnect-overlay">
+              <div class="video-reconnect-spinner"></div>
+              <span class="video-reconnect-text">视频加载中...</span>
+            </div>
             <div v-else-if="!hasVisibleVideoFrame" class="video-empty-state">
               暂无视频流
             </div>
@@ -84,6 +88,10 @@
             <div v-if="infraredReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
               <span class="video-reconnect-text">信号重连中...</span>
+            </div>
+            <div v-else-if="infraredLoading && !hasInfraredVideoFrame" class="video-reconnect-overlay">
+              <div class="video-reconnect-spinner"></div>
+              <span class="video-reconnect-text">视频加载中...</span>
             </div>
             <div v-else-if="!hasInfraredVideoFrame" class="video-empty-state">
               暂无视频流
@@ -1538,6 +1546,9 @@ const pointCloudNavigationOrigin = ref<{ x: number; y: number; z: number } | nul
 const pointCloudLoading = ref(false)
 const pointCloudError = ref('')
 const lastLoadedPointCloudMap = ref('')
+const lastPointCloudRefreshSignature = ref('')
+const lastPointCloudRefreshAt = ref(0)
+const POINT_CLOUD_REFRESH_DEDUPE_WINDOW_MS = 8000
 const isPointCloudFullscreen = ref(false)
 const togglePointCloudFullscreen = () => {
   isPointCloudFullscreen.value = !isPointCloudFullscreen.value
@@ -1704,6 +1715,8 @@ const clearPointCloud = () => {
   basePointCloudData.value = []
   pointCloudNavigationOrigin.value = null
   lastLoadedPointCloudMap.value = ''
+  lastPointCloudRefreshSignature.value = ''
+  lastPointCloudRefreshAt.value = 0
   lastTrackOverlayKey.value = ''
   lastPointTaskOverlayKey.value = ''
   // 重置归一化参数，避免继续显示原场景辅助元素
@@ -1765,7 +1778,7 @@ const loadMapNavigationOrigin = async (mapName: string): Promise<{ x: number; y:
   }
 }
 
-const refreshPointCloud = async (options?: { silent?: boolean }) => {
+const refreshPointCloud = async (options?: { silent?: boolean; force?: boolean }) => {
   const hasExistingPointCloud = pointCloudData.value.length > 0 || basePointCloudData.value.length > 0
   const silentRefresh = !!options?.silent && hasExistingPointCloud
   if (!silentRefresh) {
@@ -1781,6 +1794,22 @@ const refreshPointCloud = async (options?: { silent?: boolean }) => {
       return
     }
     const normalizedSelectedMap = String(selectedMap.value || '').trim().split('@')[0] || ''
+    const currentUpdateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
+    const currentRefreshSignature = `${normalizedSelectedMap}@${currentUpdateTime}`
+    const now = Date.now()
+    const shouldSkipDuplicateRefresh =
+      !options?.force &&
+      normalizedSelectedMap &&
+      lastLoadedPointCloudMap.value === normalizedSelectedMap &&
+      basePointCloudData.value.length > 0 &&
+      currentRefreshSignature === lastPointCloudRefreshSignature.value &&
+      now - lastPointCloudRefreshAt.value < POINT_CLOUD_REFRESH_DEDUPE_WINDOW_MS
+
+    if (shouldSkipDuplicateRefresh) {
+      await syncPointCloudOverlayByRuntimeState()
+      return
+    }
+
     // 快速路径：切页回到首页时，地图未变且已有点云，避免重复重载导致首次拖动卡顿
     if (
       silentRefresh &&
@@ -1819,6 +1848,8 @@ const refreshPointCloud = async (options?: { silent?: boolean }) => {
     pointCloudNormalizationParams.value = normParams
     pointCloudNavigationOrigin.value = await loadMapNavigationOrigin(selectedMap.value)
     lastLoadedPointCloudMap.value = normalizedSelectedMap
+    lastPointCloudRefreshSignature.value = currentRefreshSignature
+    lastPointCloudRefreshAt.value = Date.now()
     pointCloudData.value = points
     basePointCloudData.value = points
     lastTrackOverlayKey.value = ''
@@ -2884,6 +2915,7 @@ const updateMapMarkers = (shouldCenter = false) => {
 
 // 视频播放控制相关
 const isVideoPlaying = ref(false)
+const visibleLoading = ref(false)
 const hasVisibleVideoFrame = ref(false)
 const hasInfraredVideoFrame = ref(false)
 const visibleVideoWrapper = ref<HTMLElement | null>(null)
@@ -3277,9 +3309,11 @@ const initVideoPlayer = () => {
     || null
 
   if (visibleStream) {
+    visibleLoading.value = true
     videoStreamUrl.value = visibleStream.url
     currentVideoType.value = 'drone_visible'
   } else {
+    visibleLoading.value = false
     stopVideoPlayback()
   }
   
@@ -3387,8 +3421,11 @@ const initCameraStreams = async (signal?: AbortSignal) => {
 // 开始视频播放
 const startVideoPlayback = () => {
   if (!videoElement.value || !videoStreamUrl.value) {
+    visibleLoading.value = false
     return
   }
+
+  visibleLoading.value = true
 
   try {
     // 销毁之前的播放器实例
@@ -3405,6 +3442,7 @@ const startVideoPlayback = () => {
       videoElement.value.addEventListener('play', () => {
         isVideoPlaying.value = true
         hasVisibleVideoFrame.value = true
+        visibleLoading.value = false
       })
       
       videoElement.value.addEventListener('pause', () => {
@@ -3422,6 +3460,8 @@ const startVideoPlayback = () => {
         const el = videoElement.value
         if (!el) return
         el.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
+        hasVisibleVideoFrame.value = true
+        visibleLoading.value = false
       })
     }
 
@@ -3467,12 +3507,17 @@ const startVideoPlayback = () => {
       // 强制设置原生视频播放器样式
       videoElement.value.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: fill !important; position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important;'
       
-      videoElement.value.play().catch(error => {
+      videoElement.value.play().then(() => {
+        hasVisibleVideoFrame.value = true
+        visibleLoading.value = false
+      }).catch(error => {
         // 静默处理播放失败
+        visibleLoading.value = false
       })
     }
   } catch (error) {
     // 静默处理初始化失败
+    visibleLoading.value = false
   }
 }
 
@@ -3553,7 +3598,10 @@ const startWebRTCPlayback = async () => {
       if (videoElement.value) {
         const videoEl = videoElement.value
         const tryPlayVisible = () => {
-          videoEl.play().catch(err => {
+          videoEl.play().then(() => {
+            hasVisibleVideoFrame.value = true
+            visibleLoading.value = false
+          }).catch(err => {
             const name = (err as any)?.name || ''
             const message = String((err as any)?.message || '')
             // play() 被后续 load/srcObject 切换中断属于重连过程中的常见瞬态，不触发错误重连
@@ -3573,6 +3621,7 @@ const startWebRTCPlayback = async () => {
         // 新流到来时直接替换 srcObject（重连时旧流已保留最后一帧）
         videoEl.srcObject = e.streams[0]
         hasVisibleVideoFrame.value = true
+        visibleLoading.value = false
         clearWebRTCReconnectTimer()
         clearWebRTCStartTimer()
         webrtcReconnecting.value = false  // 隐藏 overlay
@@ -3675,6 +3724,7 @@ const startWebRTCPlayback = async () => {
       return
     }
     isPlaying = false
+    visibleLoading.value = false
     clearWebRTCStartTimer()
     scheduleWebRTCReconnect()
   }
@@ -3708,6 +3758,7 @@ const stopWebRTCPlayback = () => {
 
   isPlaying = false
   hasVisibleVideoFrame.value = false
+  visibleLoading.value = false
 }
 
 // 停止视频播放
@@ -3732,6 +3783,7 @@ const stopVideoPlayback = () => {
     videoElement.value.load()
   }
   hasVisibleVideoFrame.value = false
+  visibleLoading.value = false
 }
 
 // 重新加载视频
@@ -3768,9 +3820,11 @@ const initInfraredVideo = () => {
   const stream = robotId ? getRobotVideoStreamByType(robotId, 'drone_infrared') : getVideoStream('drone_infrared')
   
   if (stream) {
+    infraredLoading.value = true
     infraredStreamUrl.value = stream.url
     infraredError.value = ''
   } else {
+    infraredLoading.value = false
     stopInfraredPlayback()
     infraredError.value = '未找到红外视频流'
   }
@@ -4019,6 +4073,7 @@ const stopInfraredWebRTCPlayback = () => {
     infraredVideoElement.value.srcObject = null
   }
   hasInfraredVideoFrame.value = false
+  infraredLoading.value = false
 }
 
 const stopInfraredPlayback = () => {
@@ -5992,11 +6047,11 @@ const onTrackStartConfirm = async () => {
     pushTrackStartStep('发送循迹任务启动指令')
     // 调用启动循迹任务API
     const response = await navigationApi.startTrack(robotId, {
-      action: form.action,
-      wait: form.wait,
       obs_mode: form.obs_mode,
       track_name: form.track_name,
-      taskpoint_name: form.taskpoint_name
+      taskpoint_name: form.taskpoint_name,
+      gait_name: gaitConfig.command,
+      ground: ''
     })
     
     // 根据返回结果判断是否成功
@@ -6760,6 +6815,7 @@ const updateFlightStatisticsChart = () => {
 // 监听视频流地址变化
 watch(() => videoStreamUrl.value, (newUrl) => {
   if (newUrl) {
+    visibleLoading.value = true
     nextTick(() => {
       startVideoPlayback()
     })
@@ -6768,6 +6824,7 @@ watch(() => videoStreamUrl.value, (newUrl) => {
 
 watch(() => infraredStreamUrl.value, (newUrl) => {
   if (!newUrl) return
+  infraredLoading.value = true
   nextTick(() => {
     startInfraredPlayback()
   })
@@ -6802,7 +6859,8 @@ onMounted(async () => {
   
   // 视频初始化统一由 robot-camera-ready / onActivated 处理，避免重复起流
   if (deviceStore.selectedRobot) {
-    await refreshPointCloud()
+    // 点云加载改为后台并行，避免阻塞首屏视频初始化
+    void refreshPointCloud()
   }
   
   // 初始化图表
@@ -8020,10 +8078,13 @@ onMounted(async () => {
     if (multiTaskList.value.length === 0) await fetchMultiTaskList()
 
     if (selectedMap.value) {
-      await nextTick()
-      const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
-      await downloadMapFiles(selectedMap.value, updateTime)
-      await refreshPointCloud()
+      // 点云加载后台并行执行，避免影响视频首帧启动
+      void (async () => {
+        await nextTick()
+        const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
+        await downloadMapFiles(selectedMap.value, updateTime)
+        await refreshPointCloud()
+      })()
     }
   }
 })
@@ -8033,6 +8094,10 @@ onActivated(async () => {
   isHomePageActive.value = true
   if (!hasHomeActivatedOnce) {
     hasHomeActivatedOnce = true
+    // 首次激活也执行一次视频恢复兜底，避免错过 robot-camera-ready 事件时首屏无流
+    if (deviceStore.selectedRobot) {
+      void recoverVideoStreamsOnForeground()
+    }
     return
   }
   if (deviceStore.selectedRobot) {

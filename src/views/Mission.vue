@@ -1831,11 +1831,11 @@ const onTrackStartConfirm = async () => {
     pushTrackStartStep('发送循迹任务启动指令')
     // 调用启动循迹任务API
     const response = await navigationApi.startTrack(robotId, {
-      action: form.action,
-      wait: form.wait,
       obs_mode: form.obs_mode,
       track_name: form.track_name,
-      taskpoint_name: form.taskpoint_name
+      taskpoint_name: form.taskpoint_name,
+      gait_name: gaitConfig.command,
+      ground: ''
     })
     
     console.log('启动循迹任务响应:', response)
@@ -4169,6 +4169,8 @@ const confirmExtraConfig = () => {
 
 .extra-config-display-text {
   color: #fff;
+  font-size: 13px;
+  line-height: 34px;
   flex: 1;
   min-width: 0;
   white-space: nowrap;

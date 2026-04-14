@@ -39,7 +39,7 @@ const robotGroupRef = shallowRef<THREE.Group | null>(null)
 let resizeObserver: ResizeObserver | null = null
 let animationFrameId = 0
 const SCREEN_POINT_SIZE = 1
-const ROBOT_ICON_SCALE = 0.5
+const ROBOT_ICON_SCALE = 0.24
 const labelSprites: THREE.Sprite[] = []
 const lastFitSceneKey = ref<string>('')
 
@@ -362,6 +362,7 @@ const updateRobotPose = (group: THREE.Group | null, pose: RobotPose | null | und
 const createRobotObject = () => {
   const group = new THREE.Group()
   group.visible = false
+  let labelAnchorOffsetX = 0
 
   if (props.robotMesh?.vertices?.length && props.robotMesh.indices?.length) {
     const positions = new Float32Array(props.robotMesh.vertices.length * 3)
@@ -388,6 +389,16 @@ const createRobotObject = () => {
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.scale.setScalar(0.026 * ROBOT_ICON_SCALE)
+    geometry.computeBoundingBox()
+    if (geometry.boundingBox) {
+      // For jiantou.3mf the forward tip is on min.x (not max.x).
+      // Anchor model by the head tip so pose point aligns with icon head.
+      const tipX = geometry.boundingBox.min.x * mesh.scale.x
+      const centerX = ((geometry.boundingBox.min.x + geometry.boundingBox.max.x) / 2) * mesh.scale.x
+      // Use icon tip as pose anchor: shift model backward so local (0,0,0) is the tip.
+      mesh.position.x = -tipX
+      labelAnchorOffsetX = centerX - tipX
+    }
     group.add(mesh)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -398,6 +409,7 @@ const createRobotObject = () => {
     })
     const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
     edges.scale.copy(mesh.scale)
+    edges.position.x = mesh.position.x
     group.add(edges)
 
     group.userData.headingAxis = 'y'
@@ -405,7 +417,8 @@ const createRobotObject = () => {
     group.userData.headingOffset = -Math.PI / 2
     group.userData.headingTargets = [mesh, edges]
   } else {
-    const geometry = new THREE.ConeGeometry(0.026 * ROBOT_ICON_SCALE, 0.078 * ROBOT_ICON_SCALE, 3)
+    const coneHeight = 0.078 * ROBOT_ICON_SCALE
+    const geometry = new THREE.ConeGeometry(0.026 * ROBOT_ICON_SCALE, coneHeight, 3)
     const material = new THREE.MeshStandardMaterial({
       color: '#ff00ff',
       emissive: '#ff00ff',
@@ -414,6 +427,9 @@ const createRobotObject = () => {
     const cone = new THREE.Mesh(geometry, material)
     // Cone points to +Y by default; rotate to +X so yaw around Y matches planar heading.
     cone.rotation.z = -Math.PI / 2
+    // Use cone tip as pose anchor.
+    cone.position.x = -(coneHeight / 2)
+    labelAnchorOffsetX = -(coneHeight / 2)
     group.add(cone)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -424,6 +440,7 @@ const createRobotObject = () => {
     })
     const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
     edges.rotation.copy(cone.rotation)
+    edges.position.copy(cone.position)
     group.add(edges)
 
     group.userData.headingAxis = 'y'
@@ -444,7 +461,7 @@ const createRobotObject = () => {
     strokeWidth: 1.2,
   })
   if (label) {
-    label.position.set(0, 0.06, 0)
+    label.position.set(labelAnchorOffsetX, 0.06, 0)
     group.add(label)
   }
 

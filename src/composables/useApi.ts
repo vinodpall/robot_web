@@ -167,6 +167,31 @@ export function useAuth() {
     }
   }
 
+  const normalizeLoginErrorMessage = (err: any): string => {
+    const raw = String(err?.message || '')
+    const lower = raw.toLowerCase()
+
+    if (
+      lower.includes('failed to fetch') ||
+      lower.includes('networkerror') ||
+      lower.includes('err_connection_reset') ||
+      lower.includes('err_connection_refused') ||
+      lower.includes('err_name_not_resolved') ||
+      lower.includes('load failed')
+    ) {
+      return '网络连接失败，请检查网络或服务器状态后重试'
+    }
+
+    if (lower.includes('http error! status: 401')) {
+      return '账号或密码错误'
+    }
+    if (lower.includes('http error! status: 403')) {
+      return '当前账号无登录权限'
+    }
+
+    return raw || '登录失败，请稍后重试'
+  }
+
 
 
   const login = async (loginData: { username: string; password: string }) => {
@@ -201,8 +226,9 @@ export function useAuth() {
       
       return { user: userData, token: access_token }
     } catch (err: any) {
-      error.value = err.message || 'Login failed'
-      throw err
+      const message = normalizeLoginErrorMessage(err)
+      error.value = message
+      throw new Error(message)
     } finally {
       loading.value = false
     }

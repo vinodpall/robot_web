@@ -217,8 +217,8 @@
                         <span v-else>-</span>
                       </div>
                     </div>
-                    <div class="file-table-cell trc-coord" :title="formatCoord(row.x, row.y)">
-                      <span class="trc-coord-val">{{ formatCoord(row.x, row.y) }}</span>
+                    <div class="file-table-cell trc-coord" :title="formatCoord(row.x, row.y, row.z)">
+                      <span class="trc-coord-val">{{ formatCoord(row.x, row.y, row.z) }}</span>
                     </div>
                     <div class="file-table-cell trc-item" :title="row.content || '-'">
                       <span v-if="row.content" class="trc-item-tag">{{ row.content }}</span>
@@ -229,7 +229,7 @@
                       <span v-else-if="row.results" class="trc-result-badge">{{ row.results }}</span>
                       <span v-else class="trc-empty">-</span>
                     </div>
-                    <div class="file-table-cell trc-desc" :title="row.description || '-'">{{ row.description || '-' }}</div>
+                    <div class="file-table-cell trc-desc" :title="row.remark || '-'">{{ row.remark || '-' }}</div>
                     <div class="file-table-cell trc-pic">
                       <span v-if="!getImage(row)" class="no-image">-</span>
                       <img
@@ -856,11 +856,12 @@ const formatClockPart = (timestamp: number | null): string => {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
-const formatCoord = (x: number | null, y: number | null): string => {
-  if (x == null && y == null) return '-'
+const formatCoord = (x: number | null, y: number | null, z: number | null): string => {
+  if (x == null && y == null && z == null) return '-'
   const fx = x != null ? Number(x).toFixed(2) : '-'
   const fy = y != null ? Number(y).toFixed(2) : '-'
-  return `${fx}, ${fy}`
+  const fz = z != null ? Number(z).toFixed(2) : '-'
+  return `${fx}, ${fy}, ${fz}`
 }
 
 const getOutMessage = (row: any): Record<string, any> => {
