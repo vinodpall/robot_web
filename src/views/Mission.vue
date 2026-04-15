@@ -681,8 +681,26 @@
                    >
                      您的浏览器不支持视频播放
                    </video>
-                   <div v-if="!isPlaying" class="video-empty-state">Visible Light Stream</div>
+                   <div v-if="!isPlaying" class="video-empty-state">{{ presetVideoTypeLabel }}</div>
                    <div class="video-action-group">
+                     <button
+                       class="video-action-btn stream-source-btn"
+                       :class="{ active: presetVideoType === 'drone_visible' }"
+                       :disabled="!hasPresetVisibleStream"
+                       title="切换到可见光视频"
+                       @click.stop="switchPresetVideoType('drone_visible')"
+                     >
+                       可见光
+                     </button>
+                     <button
+                       class="video-action-btn stream-source-btn"
+                       :class="{ active: presetVideoType === 'drone_infrared' }"
+                       :disabled="!hasPresetInfraredStream"
+                       title="切换到红外视频"
+                       @click.stop="switchPresetVideoType('drone_infrared')"
+                     >
+                       红外
+                     </button>
                      <button
                        class="video-action-btn stream-mode-btn"
                        :disabled="isPresetStreamSwitching || !canSwitchPresetVideoStream"
@@ -709,13 +727,13 @@
                 <div style="flex: 0 0 300px; display: flex; flex-direction: column; gap: 10px; padding-top: 10px;">
                    <!-- PTZ -->
                    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
-                        <button class="ptz-btn" @mousedown="ptzMove('up')" @mouseup="ptzStop">▲</button>
+                        <button class="ptz-btn" @mousedown="ptzMove('up')" @mouseup="ptzStop" @mouseleave="ptzStop">▲</button>
                         <div style="display: flex; gap: 12px;">
-                             <button class="ptz-btn" @mousedown="ptzMove('left')" @mouseup="ptzStop">◀</button>
-                             <button class="ptz-btn" @click="ptzStop">↺</button>
-                             <button class="ptz-btn" @mousedown="ptzMove('right')" @mouseup="ptzStop">▶</button>
+                             <button class="ptz-btn" @mousedown="ptzMove('left')" @mouseup="ptzStop" @mouseleave="ptzStop">◀</button>
+                             <button class="ptz-btn" @click="ptzReset">↺</button>
+                             <button class="ptz-btn" @mousedown="ptzMove('right')" @mouseup="ptzStop" @mouseleave="ptzStop">▶</button>
                         </div>
-                        <button class="ptz-btn" @mousedown="ptzMove('down')" @mouseup="ptzStop">▼</button>
+                        <button class="ptz-btn" @mousedown="ptzMove('down')" @mouseup="ptzStop" @mouseleave="ptzStop">▼</button>
                    </div>
 
                    <!-- Actions -->
@@ -738,10 +756,10 @@
                                  <span style="font-size:12px; transform: scaleY(0.6);">▼</span>
                              </div>
                              <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="max-height: 340px; background: #102a43; border: 1px solid #244f78;">
-                                  <div 
-                                    v-for="p in presetList" 
-                                    :key="p.id" 
-                                    class="custom-select-option" 
+                                  <div
+                                    v-for="p in presetList"
+                                    :key="p.id"
+                                    class="custom-select-option"
                                     :class="{ selected: presetDialog.form.id === p.id }"
                                     @mousedown.prevent="selectPreset(p)"
                                   >
@@ -754,7 +772,13 @@
                     <div style="display: flex; gap: 5px;">
                         <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;" @click="handleSetPreset">设置预置点</button>
                         <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;" @click="handleGotoPreset">转到预置点</button>
-                        <button class="mission-btn mission-btn-primary" style="flex:1; padding: 0; font-size: 13px; min-width: 0;">转速</button>
+                        <button
+                          class="mission-btn mission-btn-primary"
+                          style="flex:1; padding: 0; font-size: 13px; min-width: 0;"
+                          @click="openPtzSpeedDialog"
+                        >
+                          转速
+                        </button>
                    </div>
                    
                    <div class="simple-form-item">
@@ -766,6 +790,33 @@
             <div class="simple-modal-footer">
                <button class="mission-btn mission-btn-primary" style="width: 100px;" @click="confirmPresetChoice">确定</button>
                <button class="mission-btn" style="width: 100px; background: transparent; border: 1px solid #606266; color: #fff;" @click="closePresetDialog">取消</button>
+            </div>
+         </div>
+      </div>
+   </Teleport>
+
+   <Teleport to="body">
+      <div v-if="ptzSpeedDialog.visible" class="custom-dialog-mask" style="z-index: 10030;">
+         <div class="ptz-speed-modal">
+            <div class="ptz-speed-header">
+               <span>云台转速控制</span>
+               <span class="simple-close-icon" @click="closePtzSpeedDialog">×</span>
+            </div>
+            <div class="ptz-speed-body" @wheel.prevent="handlePtzSpeedWheel">
+               <input
+                 v-model.number="ptzSpeedDialog.speed"
+                 class="ptz-speed-slider"
+                 type="range"
+                 min="1"
+                 max="7"
+                 step="1"
+                 :disabled="ptzSpeedDialog.loading"
+                 @change="handlePtzSpeedChange"
+               />
+               <div class="ptz-speed-ticks">
+                 <span v-for="tick in 7" :key="tick">{{ tick }}</span>
+               </div>
+               <div class="ptz-speed-current">当前转速：{{ ptzSpeedDialog.speed }}</div>
             </div>
          </div>
       </div>
@@ -870,6 +921,7 @@ import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import arriveIcon from '@/assets/source_data/svg_data/robot_source/arrive.png'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
 import { useRobotStore } from '@/stores/robot'
+import { useDeviceStore } from '@/stores/device'
 import { usePointCloudRenderer } from '@/composables/usePointCloudRenderer'
 import ThreePointCloudPreview from '@/components/ThreePointCloudPreview.vue'
 import { getTrajectoryFile } from '@/utils/trajectoryDB'
@@ -888,6 +940,7 @@ const { waylineFiles, waylineDetail, fetchWaylineFiles, fetchWaylineDetail, crea
 const { getCachedWorkspaceId, getCachedDeviceSns, getCachedDeviceBySn } = useDevices()
 const { droneStatus, fetchMainDeviceStatus, fetchDroneStatus } = useDeviceStatus()
 const taskExecutionStore = useTaskExecutionStore()
+const deviceStore = useDeviceStore()
 const {
   isTrackTaskRunning,
   canStartTrackTask,
@@ -1033,6 +1086,23 @@ const parseMissionErrorMessage = (error: any) => {
   return '未知错误'
 }
 
+const resolveSelectedRobotId = (): string => {
+  const storeId = String(deviceStore.selectedRobotId || '').trim()
+  if (storeId) return storeId
+
+  const cachedId = String(localStorage.getItem('selected_robot_id') || '').trim()
+  if (cachedId) return cachedId
+
+  try {
+    const infoRaw = localStorage.getItem('selected_robot_info')
+    if (!infoRaw) return ''
+    const info = JSON.parse(infoRaw) as { robot_id?: string }
+    return String(info?.robot_id || '').trim()
+  } catch {
+    return ''
+  }
+}
+
 const normalizeTrackName = (raw: string) => {
   const name = (raw || '').trim()
   const atIndex = name.indexOf('@')
@@ -1049,7 +1119,7 @@ const runningTrackName = computed(() => normalizeTrackName(robotStore.cmdStatus?
 const runningTaskGroupName = computed(() => normalizeTaskPointName(robotStore.cmdStatus?.track_info?.taskpoint_name || ''))
 
 const getCurrentRobotContextKeys = () => {
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = resolveSelectedRobotId() || ''
   return robotId ? getRobotContextCacheKeys(robotId) : null
 }
 
@@ -1068,7 +1138,7 @@ const setAllTrackTaskListCache = (taskList: any[]) => {
   }
   localStorage.setItem('all_track_task_list', serialized)
 
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = resolveSelectedRobotId() || ''
   window.dispatchEvent(new CustomEvent('track-task-list-updated', {
     detail: { robotId }
   }))
@@ -1170,7 +1240,7 @@ const fetchTaskGroupListByRoute = async (routeName: string) => {
   const cachedGroups = getTaskGroupListFromCache(normalizedRouteName)
   applyTaskGroupSelection(cachedGroups)
 
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = resolveSelectedRobotId()
   if (!robotId) {
     await refreshAllTrackTaskListCache()
     return
@@ -1309,7 +1379,7 @@ const handleCreateTaskGroup = async () => {
     return
   }
   
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = resolveSelectedRobotId()
   if (!robotId) {
     errorMessage.value = { show: true, text: '未选择机器人' }
     return
@@ -1365,7 +1435,7 @@ const handleCreateTaskGroup = async () => {
 const selectedMap = computed(() => taskExecutionStore.selectedMapName)
 
 const syncSelectedMapWithCache = () => {
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = resolveSelectedRobotId() || ''
   const mapKeys = robotId ? getRobotMapCacheKeys(robotId) : null
   const cachedMapListRaw =
     (mapKeys ? localStorage.getItem(mapKeys.mapListKey) : null)
@@ -1451,7 +1521,7 @@ watch(
     if (!normalizedTrack) return
 
     pendingRunningRouteName.value = normalizedTrack
-    const robotId = localStorage.getItem('selected_robot_id') || ''
+    const robotId = resolveSelectedRobotId() || ''
     if (robotId) {
       await refreshTrackTaskListFromApi(robotId)
       await loadRouteList()
@@ -1515,7 +1585,7 @@ const trackInitDialog = ref({
 
 // 启动循迹任务
 const handleCloseTrack = async () => {
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = resolveSelectedRobotId()
   if (!robotId) return
   const runningTrackName = robotStore.cmdStatus?.track_info?.track_name || selectedRouteName.value
   const runningTaskpoint = robotStore.cmdStatus?.track_info?.taskpoint_name || selectedTaskGroupName.value
@@ -1649,7 +1719,7 @@ const resolveCheckExitChargeResult = (response: any): boolean | null => {
 // 暂停循迹任务
 const handlePauseTrack = async () => {
   if (!isNavigationEnabled.value) return
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = resolveSelectedRobotId()
   if (!robotId) {
     showMissionError('未找到机器人ID')
     return
@@ -1688,7 +1758,7 @@ const handleDeleteTaskGroup = () => {
     title: '删除任务组',
     message: `确定要删除任务组「${selectedTaskGroupName.value}」吗？`,
     onConfirm: async () => {
-      const robotId = localStorage.getItem('selected_robot_id')
+      const robotId = resolveSelectedRobotId()
       if (!robotId) return
 
       const deletingTaskGroupName = selectedTaskGroupName.value
@@ -1791,7 +1861,7 @@ const onTrackStartConfirm = async () => {
   trackInitDialog.value.visible = true
 
   try {
-    const robotId = localStorage.getItem('selected_robot_id')
+    const robotId = resolveSelectedRobotId()
     if (!robotId) {
       showMissionError('未找到机器人ID')
       return
@@ -2907,7 +2977,7 @@ const handleRobotContextRefreshed = async () => {
 }
 
 const refreshTrackTaskPageListOnEnter = async () => {
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = resolveSelectedRobotId()
   if (robotId) {
     await refreshTrackTaskListFromApi(robotId)
   }
@@ -3110,7 +3180,7 @@ const filteredTaskTypes = computed(() => {
 })
 
 const fetchTaskTypeList = async () => {
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = resolveSelectedRobotId() || ''
   if (!robotId) return
 
   const cacheKey = buildTaskTypeCacheKey(robotId)
@@ -3365,7 +3435,7 @@ const confirmAddTask = async () => {
   if (addTaskSubmitting.value) return
   if (!validateAddTaskRequiredFields()) return
 
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = resolveSelectedRobotId()
   if (!robotId) return
 
   if (!selectedRouteName.value || !selectedTaskGroupName.value) {
@@ -3497,7 +3567,7 @@ const confirmAddTask = async () => {
 
 const handleDeleteTask = (waypoint: any) => {
   showConfirmDialog('确定要删除该任务点吗？', async () => {
-    const robotId = localStorage.getItem('selected_robot_id')
+    const robotId = resolveSelectedRobotId()
     if (!robotId) return
 
     if (!selectedRouteName.value || !selectedTaskGroupName.value) return
@@ -3565,7 +3635,7 @@ const handleArriveTask = async (waypoint: any) => {
     return
   }
   showConfirmDialog('确定要执行到点任务吗？', async () => {
-    const robotId = localStorage.getItem('selected_robot_id')
+    const robotId = resolveSelectedRobotId()
     if (!robotId) return
 
     const chargeIndex = Number(waypoint?.rawData?.time ?? waypoint?.time)
@@ -3641,9 +3711,11 @@ let pc: RTCPeerConnection | null = null
 const isPlaying = ref(false)
 const videoStreamUrl = ref('')
 const isPresetStreamSwitching = ref(false)
+const presetVideoType = ref<'drone_visible' | 'drone_infrared'>('drone_visible')
 
 const getRobotCameraListCacheKey = (robotId: string) => `camera_list_${robotId}`
 const getRobotVideoStreamsCacheKey = (robotId: string) => `video_streams_${robotId}`
+const getCurrentRobotId = (): string => deviceStore.selectedRobotId || resolveSelectedRobotId() || ''
 
 const getRobotVideoStreams = (robotId: string): VideoStream[] => {
   try {
@@ -3664,15 +3736,35 @@ const setRobotVideoStreams = (robotId: string, streams: VideoStream[]) => {
 }
 
 const getPresetVisibleStream = (): VideoStream | null => {
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = getCurrentRobotId()
   if (robotId) {
     return getRobotVideoStreamByType(robotId, 'drone_visible')
   }
   return getVideoStream('drone_visible')
 }
 
+const getPresetStreamByType = (type: 'drone_visible' | 'drone_infrared'): VideoStream | null => {
+  const robotId = getCurrentRobotId()
+  if (robotId) {
+    return getRobotVideoStreamByType(robotId, type)
+  }
+  return getVideoStream(type)
+}
+
+const getActivePresetStream = (): VideoStream | null => {
+  return (
+    getPresetStreamByType(presetVideoType.value) ||
+    getPresetStreamByType('drone_visible') ||
+    getPresetStreamByType('drone_infrared')
+  )
+}
+
+const hasPresetVisibleStream = computed(() => !!getPresetStreamByType('drone_visible')?.url)
+const hasPresetInfraredStream = computed(() => !!getPresetStreamByType('drone_infrared')?.url)
+const presetVideoTypeLabel = computed(() => presetVideoType.value === 'drone_infrared' ? 'Infrared Stream' : 'Visible Light Stream')
+
 const hasSubStreamFromCameraCache = (stream: VideoStream): boolean => {
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = getCurrentRobotId()
   try {
     const raw = robotId
       ? (localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list'))
@@ -3687,19 +3779,30 @@ const hasSubStreamFromCameraCache = (stream: VideoStream): boolean => {
 }
 
 const canSwitchPresetVideoStream = computed(() => {
-  const stream = getPresetVisibleStream()
+  const stream = getActivePresetStream()
   if (!stream) return false
   const fromStream = (stream.switchable_video_types?.length ?? 0) > 0
   return !!stream.camera_index && (fromStream || hasSubStreamFromCameraCache(stream))
 })
 
 const presetVideoStreamModeLabel = computed(() => {
-  const stream = getPresetVisibleStream()
+  const stream = getActivePresetStream()
   return stream?.use_sub_stream ? '子' : '主'
 })
 
+const switchPresetVideoType = async (type: 'drone_visible' | 'drone_infrared') => {
+  if (presetVideoType.value === type) return
+  const stream = getPresetStreamByType(type)
+  if (!stream?.url) {
+    showMissionError(type === 'drone_infrared' ? '未找到红外视频流' : '未找到可见光视频流')
+    return
+  }
+  presetVideoType.value = type
+  await startWebRTCPlayback(stream.url)
+}
+
 const handleTogglePresetVideoStream = async () => {
-  const stream = getPresetVisibleStream()
+  const stream = getActivePresetStream()
   if (!stream) {
     showMissionError('未找到视频流缓存信息')
     return
@@ -3711,7 +3814,7 @@ const handleTogglePresetVideoStream = async () => {
   if (isPresetStreamSwitching.value) return
 
   isPresetStreamSwitching.value = true
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = getCurrentRobotId()
   if (!robotId) {
     isPresetStreamSwitching.value = false
     showMissionError('未选择机器人，无法切换码流')
@@ -3866,42 +3969,56 @@ const openPresetDialog = async () => {
   
   // 获取当前表单中的预置点值
   const currentPreset = addTaskDialog.value.form.preset
-  
-  // Get robot ID and camera list
-  const robotId = localStorage.getItem('selected_robot_id')
-  const cameraListStr = localStorage.getItem('camera_list')
-  
-  if (robotId && cameraListStr) {
+
+  presetVideoType.value = hasPresetVisibleStream.value ? 'drone_visible' : (hasPresetInfraredStream.value ? 'drone_infrared' : 'drone_visible')
+
+  // 先启动视频，不等待 presets 接口
+  nextTick(() => {
     try {
-      const cameraList = JSON.parse(cameraListStr)
-      if (cameraList && cameraList.length > 0) {
-        // Use the first camera's PtzName
-        const ptzName = cameraList[0].PtzName
-        if (ptzName) {
-           console.log('Fetching presets for:', ptzName)
-           try {
-             // Re-initialize preset list to default 1-300 if needed, or keep existing map
-             // We want to overwrite names where ID matches
-             const res = await navigationApi.getPresets(robotId, ptzName)
-             if (res && res.code === 200 && Array.isArray(res.list)) {
-                // Update presetList with fetched names
-                res.list.forEach((item: any) => {
-                    const idStr = String(item.id)
-                    const existingIndex = presetList.value.findIndex(p => p.id === idStr)
-                    if (existingIndex !== -1) {
-                        presetList.value[existingIndex].name = `${idStr}.${item.presetName}`
-                    }
-                })
-                console.log('Presets updated with API data')
-             }
-           } catch (err) {
-             console.error('Failed to get presets API:', err)
-           }
-        }
+      const activeStream = getActivePresetStream()
+      if (activeStream && activeStream.url) {
+        console.log('Starting video stream:', activeStream.url)
+        startWebRTCPlayback(activeStream.url)
+      } else {
+        console.warn('No suitable video stream found')
       }
     } catch (e) {
-      console.error('Error parsing camera_list or fetching presets:', e)
+      console.error('Failed to load video streams', e)
     }
+  })
+  
+  // Get robot ID and camera list
+  const robotId = getCurrentRobotId()
+  const cameraListStr = robotId
+    ? (localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list'))
+    : localStorage.getItem('camera_list')
+  
+  // presets 后台拉取，避免阻塞视频首帧
+  if (robotId && cameraListStr) {
+    void (async () => {
+      try {
+        const cameraList = JSON.parse(cameraListStr)
+        if (cameraList && cameraList.length > 0) {
+          const ptzName = cameraList[0].PtzName
+          if (ptzName) {
+            console.log('Fetching presets for:', ptzName)
+            const res = await navigationApi.getPresets(robotId, ptzName)
+            if (res && res.code === 200 && Array.isArray(res.list)) {
+              res.list.forEach((item: any) => {
+                const idStr = String(item.id)
+                const existingIndex = presetList.value.findIndex(p => p.id === idStr)
+                if (existingIndex !== -1) {
+                  presetList.value[existingIndex].name = `${idStr}.${item.presetName}`
+                }
+              })
+              console.log('Presets updated with API data')
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing camera_list or fetching presets:', e)
+      }
+    })()
   }
 
   // 根据当前选中的预置点设置选中项
@@ -3930,25 +4047,11 @@ const openPresetDialog = async () => {
     presetDialog.value.form.id = presetList.value[0].id
     presetDialog.value.form.name = presetList.value[0].name
   }
-  
-  // Start Video
-  nextTick(() => {
-      try {
-        const visibleStream = getPresetVisibleStream()
-        if (visibleStream && visibleStream.url) {
-          console.log('Starting video stream:', visibleStream.url)
-          startWebRTCPlayback(visibleStream.url)
-        } else {
-          console.warn('No suitable video stream found')
-        }
-      } catch (e) {
-          console.error('Failed to load video streams', e)
-      }
-  })
 }
 
 const closePresetDialog = () => {
   presetDialog.value.visible = false
+  closePtzSpeedDialog()
   stopWebRTCPlayback()
 }
 
@@ -3958,19 +4061,236 @@ const confirmPresetChoice = () => {
 }
 
 // PTZ Control Placeholders
-const ptzMove = (direction: string) => {
-  console.log('PTZ Move:', direction)
-  // Call API
+type PtzControlStatus = 'left' | 'right' | 'up' | 'down' | 'stop' | 'reset' | 'zeropoint' | 'zoomup' | 'zoomdown' | 'focusup' | 'focusdown'
+
+const getActiveStreamVideoIndex = (): string => {
+  const activeStream = getActivePresetStream()
+  const activeVideoIndex = String(activeStream?.video_index || '').trim()
+  if (activeVideoIndex) return activeVideoIndex
+  return getVisibleStreamVideoIndex()
 }
+
+const getVisibleStreamVideoIndex = (): string => {
+  try {
+    const visibleStream = getPresetVisibleStream()
+    const streamVideoIndex = String(visibleStream?.video_index || '').trim()
+    if (streamVideoIndex) return streamVideoIndex
+
+    const globalStreamsRaw = localStorage.getItem('video_streams')
+    if (!globalStreamsRaw) return ''
+    const globalStreams = JSON.parse(globalStreamsRaw) as Array<{ type?: string; video_index?: string }>
+    const visible = Array.isArray(globalStreams)
+      ? globalStreams.find(item => item?.type === 'drone_visible')
+      : null
+    return String(visible?.video_index || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+const getCachedCameraList = (): Array<{
+  CamKey?: string
+  PtzName?: string
+  video_index?: string
+  camera_index?: string
+}> => {
+  try {
+    const robotId = getCurrentRobotId()
+    const raw = robotId
+      ? (localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list'))
+      : localStorage.getItem('camera_list')
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const resolvePtzDeviceName = (status: PtzControlStatus): string => {
+  // 方向使用云台设备名（如 ptz_0）
+  if (status === 'left' || status === 'right' || status === 'up' || status === 'down' || status === 'stop') {
+    const streamIndex = getVisibleStreamVideoIndex()
+    const cameraList = getCachedCameraList()
+    if (cameraList.length === 0) return ''
+
+    if (streamIndex) {
+      const matched = cameraList.find(item => {
+        const camKey = String(item?.CamKey || '').trim()
+        const videoIndex = String(item?.video_index || '').trim()
+        const cameraIndex = String(item?.camera_index || '').trim()
+        return streamIndex === camKey || streamIndex === videoIndex || streamIndex === cameraIndex
+      })
+      const matchedPtz = String(matched?.PtzName || '').trim()
+      if (matchedPtz) return matchedPtz
+    }
+
+    return String(cameraList[0]?.PtzName || '').trim()
+  }
+
+  // 回中/变焦/聚焦使用视频流索引（如 cam_rtsp_left）
+  return getVisibleStreamVideoIndex()
+}
+
+const resolvePtzCamDeviceName = (): string => {
+  return getActiveStreamVideoIndex()
+}
+
+const callPtzControl = async (status: PtzControlStatus) => {
+  const robotId = getCurrentRobotId()
+  if (!robotId) {
+    console.warn('[PTZ] 未选择机器人，忽略控制:', status)
+    return
+  }
+
+  const deviceName = resolvePtzDeviceName(status)
+  if (!deviceName) {
+    console.warn('[PTZ] 未获取到云台控制参数，忽略控制:', status)
+    return
+  }
+
+  try {
+    await navigationApi.ptzControl(robotId, {
+      device_name: deviceName,
+      status,
+      isPreset: 0,
+      preset_state: ''
+    })
+  } catch (error) {
+    console.error('[PTZ] 控制失败:', status, error)
+  }
+}
+
+const activePtzDirection = ref<'left' | 'right' | 'up' | 'down' | null>(null)
+
+const ptzMove = (direction: 'left' | 'right' | 'up' | 'down') => {
+  activePtzDirection.value = direction
+  void callPtzControl(direction)
+}
+
 const ptzStop = () => {
-    console.log('PTZ Stop') // Usually needed for mouseup
+  if (!activePtzDirection.value) return
+  activePtzDirection.value = null
+  void callPtzControl('stop')
+}
+
+const ptzReset = () => {
+  // 回中不需要在松开时追加 stop，先清理方向按压态
+  activePtzDirection.value = null
+  void callPtzControl('zeropoint')
 }
 
 const ptzZoom = (zoomIn: boolean) => {
-    console.log('Zoom:', zoomIn ? 'In' : 'Out')
+  void callPtzControl(zoomIn ? 'zoomup' : 'zoomdown')
 }
+
 const ptzFocus = (focusIn: boolean) => {
-    console.log('Focus:', focusIn ? 'In' : 'Out')
+  void callPtzControl(focusIn ? 'focusup' : 'focusdown')
+}
+
+const ptzSpeedDialog = ref({
+  visible: false,
+  loading: false,
+  speed: 4
+})
+let ptzSpeedSetTimer: number | null = null
+
+const clampPtzSpeed = (value: unknown): number => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return 4
+  return Math.min(7, Math.max(1, Math.round(num)))
+}
+
+const extractPtzSpeed = (payload: any): number => {
+  const candidates = [
+    payload?.speed,
+    payload?.data?.speed,
+    payload?.result?.speed,
+    payload?.msg?.result?.speed,
+    payload?.msg?.speed
+  ]
+  for (const item of candidates) {
+    const num = Number(item)
+    if (Number.isFinite(num)) return clampPtzSpeed(num)
+  }
+  return 4
+}
+
+const openPtzSpeedDialog = async () => {
+  const robotId = getCurrentRobotId()
+  if (!robotId) {
+    console.warn('[PTZ] 未选择机器人，忽略转速设置')
+    return
+  }
+
+  const deviceName = resolvePtzCamDeviceName()
+  if (!deviceName) {
+    console.warn('[PTZ] 未获取到 cam 设备名，忽略转速设置')
+    return
+  }
+
+  ptzSpeedDialog.value.visible = true
+  ptzSpeedDialog.value.loading = true
+  try {
+    const res = await navigationApi.ptzGetSpeed(robotId, deviceName)
+    ptzSpeedDialog.value.speed = extractPtzSpeed(res)
+  } catch (error) {
+    console.error('[PTZ] 获取转速失败:', error)
+  } finally {
+    ptzSpeedDialog.value.loading = false
+  }
+}
+
+const closePtzSpeedDialog = () => {
+  if (ptzSpeedSetTimer !== null) {
+    window.clearTimeout(ptzSpeedSetTimer)
+    ptzSpeedSetTimer = null
+  }
+  ptzSpeedDialog.value.visible = false
+}
+
+const handlePtzSpeedChange = async () => {
+  const robotId = getCurrentRobotId()
+  if (!robotId) {
+    console.warn('[PTZ] 未选择机器人，忽略转速设置')
+    return
+  }
+
+  const deviceName = resolvePtzCamDeviceName()
+  if (!deviceName) {
+    console.warn('[PTZ] 未获取到 cam 设备名，忽略转速设置')
+    return
+  }
+
+  const speed = clampPtzSpeed(ptzSpeedDialog.value.speed)
+  ptzSpeedDialog.value.speed = speed
+  ptzSpeedDialog.value.loading = true
+  try {
+    await navigationApi.ptzSetSpeed(robotId, { device_name: deviceName, speed })
+  } catch (error) {
+    console.error('[PTZ] 设置转速失败:', error)
+  } finally {
+    ptzSpeedDialog.value.loading = false
+  }
+}
+
+const schedulePtzSpeedChange = () => {
+  if (ptzSpeedSetTimer !== null) {
+    window.clearTimeout(ptzSpeedSetTimer)
+  }
+  ptzSpeedSetTimer = window.setTimeout(() => {
+    ptzSpeedSetTimer = null
+    void handlePtzSpeedChange()
+  }, 120)
+}
+
+const handlePtzSpeedWheel = (event: WheelEvent) => {
+  if (!ptzSpeedDialog.value.visible) return
+  const delta = event.deltaY < 0 ? 1 : -1
+  const nextSpeed = clampPtzSpeed(ptzSpeedDialog.value.speed + delta)
+  if (nextSpeed === ptzSpeedDialog.value.speed) return
+  ptzSpeedDialog.value.speed = nextSpeed
+  schedulePtzSpeedChange()
 }
 
 const handleSetPreset = () => { console.log('Set Preset') }
@@ -4948,6 +5268,67 @@ const confirmExtraConfig = () => {
   .simple-form-grid { grid-template-columns: 1fr; gap: 0; }
 }
 
+.ptz-speed-modal {
+  width: 520px;
+  max-width: calc(100vw - 24px);
+  background: #102a43;
+  border: 1px solid #244f78;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.ptz-speed-header {
+  height: 48px;
+  padding: 0 16px;
+  background: #163654;
+  border-bottom: 1px solid #244f78;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.ptz-speed-body {
+  padding: 20px 16px 18px;
+  background: #102a43;
+}
+
+.ptz-speed-slider {
+  width: 100%;
+  accent-color: #67d5fd;
+}
+
+.ptz-speed-ticks {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  color: #8faec7;
+  font-size: 13px;
+  user-select: none;
+}
+
+.ptz-speed-current {
+  margin-top: 16px;
+  color: #b8c7d9;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .ptz-speed-header {
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .ptz-speed-current {
+    margin-top: 14px;
+    font-size: 16px;
+  }
+}
+
 /* PTZ Buttons */
 .ptz-btn { width: 50px; height: 50px; background: #0099ff; border: none; color: #fff; cursor: pointer; border-radius: 4px; display: flex; justify-content: center; align-items: center; font-size: 24px; transition: 0.2s; }
 .ptz-btn:hover { background: #0077cc; }
@@ -5041,6 +5422,19 @@ const confirmExtraConfig = () => {
   padding: 0 5px;
   font-size: 11px;
   font-weight: 600;
+}
+
+.stream-source-btn {
+  min-width: 34px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.stream-source-btn.active {
+  border-color: rgba(142, 227, 255, 0.7);
+  background: rgba(22, 116, 164, 0.75);
+  color: #e9f7ff;
 }
 
 .video-only-element::-webkit-media-controls-mute-button,
@@ -5395,3 +5789,4 @@ const confirmExtraConfig = () => {
   background: rgba(50, 10, 10, 0.45);
 }
 </style>
+

@@ -218,6 +218,7 @@
               ref="threePointCloudRef"
               :points="pointCloudData"
               :loading="pointCloudLoading"
+              :loading-text="pointCloudLoadingText"
               :error="pointCloudError"
               :normalization-params="pointCloudNormalizationParams"
               :navigation-origin="pointCloudNavigationOrigin"
@@ -1544,6 +1545,7 @@ const arrowMesh = ref<MeshData | null>(null)
 const pointCloudNormalizationParams = ref<NormalizationParams>({ centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 })
 const pointCloudNavigationOrigin = ref<{ x: number; y: number; z: number } | null>(null)
 const pointCloudLoading = ref(false)
+const pointCloudLoadingText = ref('点云加载中...')
 const pointCloudError = ref('')
 const lastLoadedPointCloudMap = ref('')
 const lastPointCloudRefreshSignature = ref('')
@@ -1781,6 +1783,7 @@ const loadMapNavigationOrigin = async (mapName: string): Promise<{ x: number; y:
 const refreshPointCloud = async (options?: { silent?: boolean; force?: boolean }) => {
   const hasExistingPointCloud = pointCloudData.value.length > 0 || basePointCloudData.value.length > 0
   const silentRefresh = !!options?.silent && hasExistingPointCloud
+  pointCloudLoadingText.value = '点云加载中...'
   if (!silentRefresh) {
     pointCloudLoading.value = true
   } else {
@@ -4984,6 +4987,10 @@ watch(selectedMap, async (newMapName) => {
 
   // 切换地图时检查并下载地图文件和所有轨迹文件
   if (newMapName) {
+    clearPointCloud()
+    pointCloudError.value = ''
+    pointCloudLoadingText.value = '地图文件下载中...'
+    pointCloudLoading.value = true
     try {
       // 获取该地图的更新时间
       const updateTime = mapUpdateTimeMap.value[newMapName] || ''
@@ -4998,6 +5005,10 @@ watch(selectedMap, async (newMapName) => {
       // 下载失败也尝试刷新点云图（可能使用缓存）
       await refreshPointCloud()
     }
+  } else {
+    clearPointCloud()
+    pointCloudLoading.value = false
+    pointCloudLoadingText.value = '点云加载中...'
   }
 })
 

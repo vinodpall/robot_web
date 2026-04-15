@@ -1,7 +1,7 @@
 ﻿<template>
   <div class="three-pointcloud-shell">
     <div ref="containerRef" class="three-pointcloud-canvas"></div>
-    <div v-if="loading" class="three-pointcloud-overlay">点云加载中...</div>
+    <div v-if="loading" class="three-pointcloud-overlay">{{ loadingText || '点云加载中...' }}</div>
     <div v-else-if="error" class="three-pointcloud-overlay error">{{ error }}</div>
     <div v-else-if="!points.length" class="three-pointcloud-overlay">暂无点云数据</div>
   </div>
@@ -21,6 +21,7 @@ import type { MeshData } from '@/utils/threemfParser'
 const props = defineProps<{
   points: PointCloudPoint[]
   loading?: boolean
+  loadingText?: string
   error?: string
   normalizationParams: NormalizationParams
   navigationOrigin?: { x: number; y: number; z: number } | null

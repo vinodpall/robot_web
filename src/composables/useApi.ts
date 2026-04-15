@@ -220,6 +220,9 @@ export function useAuth() {
 
       user.value = userData
       token.value = access_token
+
+      // 登录成功后先清理上一会话的临时缓存，避免旧用户缓存串入当前账号
+      clearLogoutSessionMemory({ keepRememberLogin: true })
       
       localStorage.setItem('user', JSON.stringify(userData))
       localStorage.setItem('token', access_token)

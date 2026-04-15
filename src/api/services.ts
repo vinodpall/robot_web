@@ -1293,6 +1293,44 @@ export const navigationApi = {
   },
   getPresets: (robotId: string, deviceName: string) => {
     return apiClient.get<{ list: { id: string | number; presetName: string }[]; code: number }>(`/ptz/${robotId}/presets`, { device_name: deviceName })
+  },
+  ptzControl: (
+    robotId: string,
+    data: {
+      device_name: string
+      status: 'left' | 'right' | 'up' | 'down' | 'stop' | 'reset' | 'zeropoint' | 'zoomup' | 'zoomdown' | 'focusup' | 'focusdown'
+      isPreset: number
+      preset_state: string
+    }
+  ) => {
+    return apiClient.post(`/ptz/${robotId}/control`, data)
+  },
+  ptzLocateCenter: (
+    robotId: string,
+    data: {
+      device_name: string
+      x1: number
+      y1: number
+      x2: number
+      y2: number
+    }
+  ) => {
+    return apiClient.post(`/ptz/${robotId}/locate_center`, data)
+  },
+  ptzGetSpeed: (
+    robotId: string,
+    deviceName: string
+  ) => {
+    return apiClient.get(`/ptz/${robotId}/speed/get`, { device_name: deviceName })
+  },
+  ptzSetSpeed: (
+    robotId: string,
+    data: {
+      device_name: string
+      speed: number
+    }
+  ) => {
+    return apiClient.post(`/ptz/${robotId}/speed/set`, data)
   }
 }
 

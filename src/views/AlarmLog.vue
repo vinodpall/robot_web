@@ -331,6 +331,15 @@
       :message="exportErrorMessage.text"
       @close="exportErrorMessage.show = false"
     />
+
+    <Teleport to="body">
+      <div v-if="exportGenerating.show" class="export-generating-mask">
+        <div class="export-generating-card">
+          <span class="export-generating-spinner" />
+          <span class="export-generating-text">{{ exportGenerating.text }}</span>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -644,6 +653,10 @@ const exportErrorMessage = ref({
   show: false,
   text: ''
 })
+const exportGenerating = ref({
+  show: false,
+  text: '正在生成下载文件，请稍候...'
+})
 
 const pageList = computed(() => {
   const { currentPage, lastPage } = pagination.value
@@ -742,23 +755,29 @@ const normalizeExportUrl = (rawUrl: string): string => {
   return buildRobotHttpAssetUrl(robotId, 81, value)
 }
 
-const triggerDownloadByUrl = async (downloadUrl: string) => {
-  const resp = await fetch(downloadUrl, { method: 'GET' })
-  if (!resp.ok) {
-    throw new Error(`下载失败(HTTP ${resp.status})`)
-  }
+const appendTokenToDownloadUrl = (downloadUrl: string): string => {
+  if (!downloadUrl) return ''
+  const token = localStorage.getItem('token') || ''
+  if (!token) return downloadUrl
 
-  const blob = await resp.blob()
-  const blobUrl = URL.createObjectURL(blob)
+  try {
+    const url = new URL(downloadUrl, window.location.origin)
+    url.searchParams.set('token', token)
+    return url.toString()
+  } catch {
+    return downloadUrl
+  }
+}
+
+const triggerDownloadByUrl = (downloadUrl: string) => {
   const fileName = downloadUrl.split('?')[0].split('/').pop() || 'track_log.xlsx'
   const a = document.createElement('a')
-  a.href = blobUrl
+  a.href = downloadUrl
   a.setAttribute('download', fileName)
   a.style.display = 'none'
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  URL.revokeObjectURL(blobUrl)
 }
 
 const showExportError = (text: string) => {
@@ -783,6 +802,7 @@ const handleExport = async () => {
     return
   }
 
+  exportGenerating.value.show = true
   try {
     const payload = {
       map_name: filterMapName.value || '',
@@ -799,16 +819,18 @@ const handleExport = async () => {
     const response = await navigationApi.exportTrackLog(robotId, payload)
     const candidateUrls = resolveExportUrls(response)
       .map(normalizeExportUrl)
+      .map(appendTokenToDownloadUrl)
       .filter((u, idx, arr) => !!u && arr.indexOf(u) === idx)
 
     if (candidateUrls.length === 0) {
       throw new Error('接口未返回下载地址')
     }
 
+    exportGenerating.value.show = false
     let lastError: any = null
     for (const url of candidateUrls) {
       try {
-        await triggerDownloadByUrl(url)
+        triggerDownloadByUrl(url)
         return
       } catch (err) {
         lastError = err
@@ -830,6 +852,8 @@ const handleExport = async () => {
       return
     }
     showExportError(`导出失败：${msg}`)
+  } finally {
+    exportGenerating.value.show = false
   }
 }
 
@@ -1766,6 +1790,50 @@ select.track-filter-input:hover {
   word-break: break-all;
   max-width: 360px;
   text-align: center;
+}
+
+.export-generating-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.export-generating-card {
+  min-width: 280px;
+  max-width: 420px;
+  padding: 18px 22px;
+  border-radius: 10px;
+  border: 1px solid rgba(103, 213, 253, 0.32);
+  background: #132030;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.export-generating-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(103, 213, 253, 0.3);
+  border-top-color: #67d5fd;
+  animation: export-spin 0.8s linear infinite;
+  flex: 0 0 auto;
+}
+
+.export-generating-text {
+  color: #e9f7ff;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+@keyframes export-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
 
