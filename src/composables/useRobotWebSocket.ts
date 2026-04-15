@@ -248,7 +248,6 @@ export interface WsMessage {
 
 // ===== composable =====
 
-const HEARTBEAT_TIMEOUT_MS = 3000   // 3秒无 0x1008 消息则离线
 const RECONNECT_INIT_DELAY = 1000
 const RECONNECT_MAX_DELAY = 30000
 
@@ -263,7 +262,6 @@ export function useRobotWebSocket() {
 
   let reconnectDelay = RECONNECT_INIT_DELAY
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let heartbeatTimer: ReturnType<typeof setTimeout> | null = null
   let shouldReconnect = true
   let subscribedRobotId = ''
 
@@ -275,15 +273,6 @@ export function useRobotWebSocket() {
     const next = [...currentList]
     next[idx] = { ...next[idx], status }
     deviceStore.setRobots(next as any)
-  }
-
-  // ===== 心跳超时（wifi_error 方案B） =====
-  const resetHeartbeatTimer = () => {
-    if (heartbeatTimer) clearTimeout(heartbeatTimer)
-    heartbeatTimer = setTimeout(() => {
-      // 3秒内未收到 0x1008，判定机器狗离线
-      robotStore.setOnlineStatus(false)
-    }, HEARTBEAT_TIMEOUT_MS)
   }
 
   // ===== 消息分发 =====
@@ -374,27 +363,12 @@ export function useRobotWebSocket() {
 
         const hexCode = udpData.code_hex?.toLowerCase()
 
-        // 0x1008：运行状态，含 wifi_error 心跳判据
+        // 0x1008：运行状态
         if (hexCode === '0x1008') {
           const parsed = udpData.parsed as RcsData | undefined
           if (parsed) {
             // 无论是否带 error_state，都应同步最新 rcs_data（包含 rcs_state 模式位）
             robotStore.setRcsData(parsed)
-          }
-          if (parsed?.error_state) {
-            const wifiOk = !parsed.error_state.wifi_error
-            if (wifiOk) {
-              // wifi_error=false，机器狗在线，重置超时计时器
-              robotStore.setOnlineStatus(true)
-              resetHeartbeatTimer()
-            } else {
-              // wifi_error=true，WiFi 故障，标记离线
-              robotStore.setOnlineStatus(false)
-              if (heartbeatTimer) {
-                clearTimeout(heartbeatTimer)
-                heartbeatTimer = null
-              }
-            }
           }
         }
 
@@ -490,8 +464,6 @@ export function useRobotWebSocket() {
       isConnecting.value = false
       reconnectDelay = RECONNECT_INIT_DELAY
       connectionError.value = ''
-      // 连接建立时重置心跳计时器，等待第一条 0x1008
-      resetHeartbeatTimer()
     }
 
     socket.onmessage = (event) => {
@@ -512,11 +484,6 @@ export function useRobotWebSocket() {
       robotStore.setOnlineStatus(false)
       ws.value = null
 
-      if (heartbeatTimer) {
-        clearTimeout(heartbeatTimer)
-        heartbeatTimer = null
-      }
-
       if (shouldReconnect) {
         scheduleReconnect(robotId)
       }
@@ -536,7 +503,6 @@ export function useRobotWebSocket() {
   const disconnect = () => {
     shouldReconnect = false
     if (reconnectTimer) clearTimeout(reconnectTimer)
-    if (heartbeatTimer) clearTimeout(heartbeatTimer)
     const currentSocket = ws.value
     ws.value = null
     if (currentSocket) {

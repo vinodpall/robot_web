@@ -332,6 +332,18 @@
       @close="exportErrorMessage.show = false"
     />
 
+    <ConfirmDialog
+      :show="deleteConfirmDialog.show"
+      title="确认删除"
+      :message="deleteConfirmDialog.message"
+      type="warning"
+      confirm-text="确认"
+      cancel-text="取消"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+      @close="deleteConfirmDialog.show = false"
+    />
+
     <Teleport to="body">
       <div v-if="exportGenerating.show" class="export-generating-mask">
         <div class="export-generating-card">
@@ -348,9 +360,10 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useDeviceStore } from '@/stores/device'
 import { usePermissionStore } from '@/stores/permission'
-import { navigationApi } from '@/api/services'
+import { navigationApi, visionApi } from '@/api/services'
 import { buildRobotHttpAssetUrl } from '@/utils/robotHttpProxy'
 import ErrorMessage from '@/components/ErrorMessage.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import trackRecordIcon from '@/assets/source_data/svg_data/robot_source/track_record.svg'
 
 const router = useRouter()
@@ -653,6 +666,12 @@ const exportErrorMessage = ref({
   show: false,
   text: ''
 })
+const deleteConfirmDialog = ref({
+  show: false,
+  message: '',
+  startTime: '',
+  endTime: ''
+})
 const exportGenerating = ref({
   show: false,
   text: '正在生成下载文件，请稍候...'
@@ -726,7 +745,66 @@ const handleReset = () => {
   endTime.value = ''
   fetchRecords(1)
 }
-const handleDelete = () => console.log('鍒犻櫎')
+const handleDelete = () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    exportErrorMessage.value = { show: true, text: '删除失败：未选择机器人' }
+    return
+  }
+
+  const deleteStartTime = toExportDateTime(startTime.value)
+  const deleteEndTime = toExportDateTime(endTime.value)
+  if (!deleteStartTime || !deleteEndTime) {
+    exportErrorMessage.value = { show: true, text: '请先选择开始时间和结束时间' }
+    return
+  }
+
+  deleteConfirmDialog.value = {
+    show: true,
+    message: `确定删除 ${deleteStartTime} 至 ${deleteEndTime} 的日志吗？`,
+    startTime: deleteStartTime,
+    endTime: deleteEndTime
+  }
+}
+
+const confirmDelete = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    exportErrorMessage.value = { show: true, text: '删除失败：未选择机器人' }
+    return
+  }
+
+  const deleteStartTime = deleteConfirmDialog.value.startTime
+  const deleteEndTime = deleteConfirmDialog.value.endTime
+  if (!deleteStartTime || !deleteEndTime) {
+    exportErrorMessage.value = { show: true, text: '请先选择开始时间和结束时间' }
+    return
+  }
+
+  deleteConfirmDialog.value.show = false
+  try {
+    await visionApi.deleteLogs(robotId, {
+      start_time: deleteStartTime,
+      end_time: deleteEndTime,
+      type: 'all'
+    })
+    await fetchRecords(1)
+  } catch (e: any) {
+    const msg =
+      e?.detail ||
+      e?.response?.data?.message ||
+      e?.response?.data?.detail ||
+      e?.response?.data?.msg?.error_msg ||
+      e?.msg?.error_msg ||
+      e?.message ||
+      '未知错误'
+    exportErrorMessage.value = { show: true, text: `删除失败：${String(msg)}` }
+  }
+}
+
+const cancelDelete = () => {
+  deleteConfirmDialog.value.show = false
+}
 
 const resolveExportUrls = (payload: any): string[] => {
   if (!payload) return []

@@ -4009,8 +4009,26 @@ const openPresetDialog = async () => {
                 const existingIndex = presetList.value.findIndex(p => p.id === idStr)
                 if (existingIndex !== -1) {
                   presetList.value[existingIndex].name = `${idStr}.${item.presetName}`
+                } else {
+                  presetList.value.push({
+                    id: idStr,
+                    name: `${idStr}.${item.presetName}`
+                  })
                 }
               })
+              presetList.value.sort((a, b) => Number(a.id) - Number(b.id))
+
+              const selectedId = String(presetDialog.value.form.id || '').trim()
+              if (selectedId) {
+                const selectedPreset = presetList.value.find(p => String(p.id) === selectedId)
+                if (selectedPreset) {
+                  presetDialog.value.form.name = selectedPreset.name
+                }
+              } else if (presetList.value.length > 0) {
+                presetDialog.value.form.id = presetList.value[0].id
+                presetDialog.value.form.name = presetList.value[0].name
+              }
+
               console.log('Presets updated with API data')
             }
           }
@@ -4109,7 +4127,7 @@ const getCachedCameraList = (): Array<{
 
 const resolvePtzDeviceName = (status: PtzControlStatus): string => {
   // 方向使用云台设备名（如 ptz_0）
-  if (status === 'left' || status === 'right' || status === 'up' || status === 'down' || status === 'stop') {
+  if (status === 'left' || status === 'right' || status === 'up' || status === 'down' || status === 'stop' || status === 'zeropoint') {
     const streamIndex = getVisibleStreamVideoIndex()
     const cameraList = getCachedCameraList()
     if (cameraList.length === 0) return ''
@@ -4150,11 +4168,12 @@ const callPtzControl = async (status: PtzControlStatus) => {
   }
 
   try {
+    const presetState = status === 'zeropoint' ? 'zeropoint' : ''
     await navigationApi.ptzControl(robotId, {
       device_name: deviceName,
       status,
       isPreset: 0,
-      preset_state: ''
+      preset_state: presetState
     })
   } catch (error) {
     console.error('[PTZ] 控制失败:', status, error)
@@ -4293,8 +4312,87 @@ const handlePtzSpeedWheel = (event: WheelEvent) => {
   schedulePtzSpeedChange()
 }
 
-const handleSetPreset = () => { console.log('Set Preset') }
-const handleGotoPreset = () => { console.log('Goto Preset') }
+const parsePresetText = (raw: string, fallbackId?: string): { presetState: string; statusText: string } | null => {
+  const text = String(raw || '').trim()
+  if (!text) return null
+
+  const matched = text.match(/^(\d+)\.(.+)$/)
+  if (matched) {
+    const presetState = String(matched[1] || '').trim()
+    const statusText = String(matched[2] || '').trim()
+    if (presetState && statusText) {
+      return { presetState, statusText }
+    }
+  }
+
+  const presetState = String(fallbackId || '').trim()
+  if (presetState) {
+    return { presetState, statusText: text }
+  }
+
+  return null
+}
+
+const handleSetPreset = async () => {
+  const robotId = getCurrentRobotId()
+  if (!robotId) {
+    console.warn('[PTZ] 未选择机器人，忽略设置预置点')
+    return
+  }
+
+  const deviceName = resolvePtzDeviceName('stop')
+  if (!deviceName) {
+    console.warn('[PTZ] 未获取到云台设备名，忽略设置预置点')
+    return
+  }
+
+  const parsed = parsePresetText(presetDialog.value.form.name, presetDialog.value.form.id)
+  if (!parsed) {
+    console.warn('[PTZ] 预置点格式无效，忽略设置预置点')
+    return
+  }
+
+  try {
+    await navigationApi.ptzControl(robotId, {
+      device_name: deviceName,
+      status: parsed.statusText,
+      isPreset: -1,
+      preset_state: parsed.presetState
+    })
+  } catch (error) {
+    console.error('[PTZ] 设置预置点失败:', error)
+  }
+}
+const handleGotoPreset = async () => {
+  const robotId = getCurrentRobotId()
+  if (!robotId) {
+    console.warn('[PTZ] 未选择机器人，忽略转到预置点')
+    return
+  }
+
+  const deviceName = resolvePtzDeviceName('stop')
+  if (!deviceName) {
+    console.warn('[PTZ] 未获取到云台设备名，忽略转到预置点')
+    return
+  }
+
+  const presetState = String(presetDialog.value.form.id || presetDialog.value.form.name || '').trim()
+  if (!presetState) {
+    console.warn('[PTZ] 未选择预置点，忽略转到预置点')
+    return
+  }
+
+  try {
+    await navigationApi.ptzControl(robotId, {
+      device_name: deviceName,
+      status: 'stop',
+      isPreset: 1,
+      preset_state: presetState
+    })
+  } catch (error) {
+    console.error('[PTZ] 转到预置点失败:', error)
+  }
+}
 // const handleSpeed = () => { console.log('Set Speed') }
 
 // ========== 额外配置相关 ==========

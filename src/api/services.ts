@@ -887,6 +887,14 @@ export const visionApi = {
     handle_note?: string
   }) => {
     return apiClient.put<VisionAlert>(`/workspaces/${workspaceId}/vision/alerts/${alertId}/status`, data)
+  },
+
+  deleteLogs: (robotId: string, data: {
+    start_time: string
+    end_time: string
+    type: 'all'
+  }) => {
+    return apiClient.post(`/vision/${robotId}/delete_logs`, data)
   }
 }
 
@@ -1298,7 +1306,7 @@ export const navigationApi = {
     robotId: string,
     data: {
       device_name: string
-      status: 'left' | 'right' | 'up' | 'down' | 'stop' | 'reset' | 'zeropoint' | 'zoomup' | 'zoomdown' | 'focusup' | 'focusdown'
+      status: string
       isPreset: number
       preset_state: string
     }
