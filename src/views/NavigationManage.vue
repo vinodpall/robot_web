@@ -235,8 +235,10 @@
                     <div class="pointcloud-wrapper">
                       <div class="pointcloud-view">
                       <ThreePointCloudPreview
+                          ref="navPointCloudPreviewRef"
                           :points="navPointCloudData"
                           :loading="navPointCloudLoading"
+                          :loading-text="navPointCloudLoadingText"
                           :error="navPointCloudError"
                           :normalization-params="navPointCloudNormalizationParams"
                           :navigation-origin="navPointCloudNavigationOrigin"
@@ -433,8 +435,10 @@
                   <div class="pointcloud-wrapper">
                     <div class="pointcloud-view">
                       <ThreePointCloudPreview
+                        ref="navPointCloudPreviewRef"
                         :points="navPointCloudData"
                         :loading="navPointCloudLoading"
+                        :loading-text="navPointCloudLoadingText"
                         :error="navPointCloudError"
                         :normalization-params="navPointCloudNormalizationParams"
                         :navigation-origin="navPointCloudNavigationOrigin"
@@ -1025,6 +1029,11 @@ const cleanupNavPointCloud = () => {
   console.log('清理点云图状态')
   navPointCloudInitialized = false
   stopNavPointCloudDragging()
+  navPointCloudData.value = []
+  baseNavPointCloudData.value = []
+  navPointCloudError.value = ''
+  navPointCloudLoading.value = false
+  lastLoadedNavPointCloudMap.value = ''
   if (navCanvasEventController) {
     navCanvasEventController.abort()
     navCanvasEventController = null
@@ -2337,9 +2346,37 @@ const navPointCloudPanY = navPc.panY
 const navPointCloudPointSize = navPc.pointSize
 const generateMockNavPointCloud = navPc.generateMockData
 const navPointCloudLoading = ref(false)
+const navPointCloudLoadingText = ref('点云图加载中...')
 const navPointCloudError = ref('')
 const navPointCloudNavigationOrigin = ref<{ x: number; y: number; z: number } | null>(null)
 const arrowMesh = ref<MeshData | null>(null)
+const navPointCloudPreviewRef = ref<InstanceType<typeof ThreePointCloudPreview> | null>(null)
+const lastLoadedNavPointCloudMap = ref('')
+let navPointCloudLoadToken = 0
+let navPointCloudErrorTimer: number | null = null
+
+const clearNavPointCloudErrorTimer = () => {
+  if (navPointCloudErrorTimer !== null) {
+    window.clearTimeout(navPointCloudErrorTimer)
+    navPointCloudErrorTimer = null
+  }
+}
+
+const showNavPointCloudErrorDelayed = (message: string, delay = 450) => {
+  clearNavPointCloudErrorTimer()
+  navPointCloudErrorTimer = window.setTimeout(() => {
+    navPointCloudError.value = message
+    navPointCloudErrorTimer = null
+  }, delay)
+}
+
+const requestNavPointCloudRelayout = () => {
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      navPointCloudPreviewRef.value?.fitCameraToScene?.()
+    })
+  })
+}
 
 const parseNavigationOriginFromOdomKeyFrames = (text: string): { x: number; y: number; z: number } | null => {
   if (!text) return null
@@ -2973,6 +3010,12 @@ const normalizeMapName = (rawMapName: string) => {
   return atIndex > -1 ? trimmed.substring(0, atIndex) : trimmed
 }
 
+const isMapInList = (mapName: string, list: string[]) => {
+  const normalized = normalizeMapName(mapName)
+  if (!normalized) return false
+  return list.some(item => normalizeMapName(item) === normalized)
+}
+
 const extractTrackTaskList = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
@@ -3133,19 +3176,32 @@ const isNavPreviewMode = ref(false)
 
 // 刷新点云数据
 const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boolean }) => {
+  const requestToken = ++navPointCloudLoadToken
+  const isStaleRequest = () => requestToken !== navPointCloudLoadToken
   const targetMap = mapName || selectedNavMap.value
   if (!targetMap) {
     console.warn('未选择地图，无法加载点云数据')
+    lastLoadedNavPointCloudMap.value = ''
     return
   }
 
+  const normalizedTargetMap = normalizeMapName(targetMap)
+  const isMapChanged = !!normalizedTargetMap && normalizedTargetMap !== lastLoadedNavPointCloudMap.value
   const hasExistingPointCloud = navPointCloudData.value.length > 0 || baseNavPointCloudData.value.length > 0
-  const silentRefresh = !!options?.silent && hasExistingPointCloud
+  const silentRefresh = !!options?.silent && hasExistingPointCloud && !isMapChanged
+
+  if (isMapChanged) {
+    // 切换地图时先清空旧点云，避免进入页面先看到旧/默认点云再跳变。
+    navPointCloudData.value = []
+    baseNavPointCloudData.value = []
+  }
   if (!silentRefresh) {
     navPointCloudLoading.value = true
   } else {
     navPointCloudLoading.value = false
   }
+  navPointCloudLoadingText.value = '点云图加载中...'
+  clearNavPointCloudErrorTimer()
   navPointCloudError.value = ''
   console.log('开始加载导航点云数据，地图:', targetMap)
   
@@ -3156,23 +3212,27 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
     // 2. 如果缓存中没有，尝试下载
     if (!blob) {
       try {
+        navPointCloudLoadingText.value = '地图文件下载中...'
         console.log('本地缓存未找到点云文件，尝试下载...')
         await downloadMapFiles(targetMap)
         blob = await getMapFile(targetMap, 'tinyMap.pcd')
       } catch (downloadErr) {
         console.error('下载地图文件失败:', downloadErr)
       }
+      navPointCloudLoadingText.value = '点云图加载中...'
     }
     
     if (!blob || blob.size === 0) {
       throw new Error('点云文件不存在')
     }
+    if (isStaleRequest()) return
 
     console.log('从缓存加载点云文件')
     const buffer = await blob.arrayBuffer()
     
     console.log('PCD文件已加载，大小:', buffer.byteLength, 'bytes')
     const { points: parsedPoints, normParams } = await parsePcdBufferInWorker(buffer)
+    if (isStaleRequest()) return
     console.log('解析点云数据，点数:', parsedPoints.length)
     
     if (parsedPoints.length > 0) {
@@ -3181,11 +3241,13 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
       navPointCloudData.value = parsedPoints
       // 保存原始地图数据，用于叠加轨迹
       baseNavPointCloudData.value = parsedPoints
+      lastLoadedNavPointCloudMap.value = normalizedTargetMap
       lastNavTrackOverlayKey.value = ''
     } else {
       console.warn('未解析到点云数据，使用模拟数据')
       navPointCloudNavigationOrigin.value = null
       navPointCloudData.value = generateMockNavPointCloud()
+      lastLoadedNavPointCloudMap.value = normalizedTargetMap
       lastNavTrackOverlayKey.value = ''
     }
     
@@ -3221,15 +3283,25 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
       await nextTick()
       scheduleNavPointCloudRender()
     }
+    requestNavPointCloudRelayout()
   } catch (error) {
+    if (isStaleRequest()) return
     console.error('点云数据加载失败:', error)
-    navPointCloudError.value = '点云数据加载失败'
-    navPointCloudNavigationOrigin.value = null
-    navPointCloudData.value = generateMockNavPointCloud()
-    lastNavTrackOverlayKey.value = ''
-    await nextTick()
-    scheduleNavPointCloudRender()
+    if (hasExistingPointCloud) {
+      // 切页时若已有旧点云，保持旧画面，避免瞬时报错闪烁。
+      navPointCloudError.value = ''
+      scheduleNavPointCloudRender()
+    } else {
+      showNavPointCloudErrorDelayed('点云数据加载失败')
+      navPointCloudNavigationOrigin.value = null
+      navPointCloudData.value = generateMockNavPointCloud()
+      lastNavTrackOverlayKey.value = ''
+      await nextTick()
+      scheduleNavPointCloudRender()
+      requestNavPointCloudRelayout()
+    }
   } finally {
+    if (isStaleRequest()) return
     if (!silentRefresh) {
       navPointCloudLoading.value = false
     }
@@ -3238,7 +3310,15 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
 
 // 监听导航地图选择变化
 watch(() => taskExecutionStore.selectedMapName, (newMap) => {
-  if ((currentTab.value === 'nav' || currentTab.value === 'track_record') && newMap) {
+  if (!newMap) return
+  if (currentTab.value === 'nav') {
+    // 仅当地图已在导航列表中时才加载，避免先用旧 map 渲染，再被列表刷新覆盖。
+    if (!isMapInList(newMap, navMapList.value)) return
+    refreshNavPointCloud(newMap)
+    return
+  }
+  if (currentTab.value === 'track_record') {
+    if (!isMapInList(newMap, trackMapList.value)) return
     refreshNavPointCloud(newMap)
   }
 }, { immediate: true })
@@ -3370,10 +3450,20 @@ onActivated(async () => {
   await refreshMapListCache()
   if (currentTab.value === 'nav') {
     fetchMapList()
+    // 切回导航页时清掉旧点云，直接进入“当前地图加载中”状态，避免先显示旧图。
+    navPointCloudData.value = []
+    baseNavPointCloudData.value = []
+    navPointCloudError.value = ''
+    navPointCloudLoading.value = true
+    navPointCloudLoadingText.value = '点云图加载中...'
+    lastLoadedNavPointCloudMap.value = ''
+    void initNavPointCloud()
+    requestNavPointCloudRelayout()
   } else if (currentTab.value === 'map_edit') {
     fetchEditMapList()
   } else if (currentTab.value === 'track_record') {
     fetchTrackMapList()
+    requestNavPointCloudRelayout()
   } else if (currentTab.value === 'file_manage') {
     fetchFileMapList()
   }
@@ -3397,6 +3487,7 @@ const handleRobotContextRefreshed = () => {
 
 onUnmounted(() => {
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  clearNavPointCloudErrorTimer()
 })
 
 // 录包建图相关状态

@@ -165,9 +165,13 @@
             <div class="mission-toolbar track-toolbar-row track-toolbar-row-bottom">
               <div class="track-toolbar-group">
                 <span class="mission-toolbar-label">循迹路线：</span>
-                <select v-model="filterTrackRoute" class="mission-toolbar-select track-filter-input">
+                <select
+                  v-model="filterTrackRoute"
+                  class="mission-toolbar-select track-filter-input"
+                  :title="filterTrackRoute || '全部'"
+                >
                   <option value="">全部</option>
-                  <option v-for="r in filteredRouteList" :key="r" :value="r">{{ r }}</option>
+                  <option v-for="r in filteredRouteList" :key="r" :value="r" :title="r">{{ r }}</option>
                 </select>
               </div>
               <div class="track-toolbar-group">
@@ -371,11 +375,6 @@ const route = useRoute()
 const deviceStore = useDeviceStore()
 const permissionStore = usePermissionStore()
 
-const getDxrBaseUrl = () => {
-  const ip = deviceStore.selectedRobot?.ip_address
-  return ip ? `http://${ip}:81` : ''
-}
-
 const sidebarTabs = [
   { key: 'track-record', label: '循迹记录', icon: trackRecordIcon, path: '/dashboard/alarm-log', permission: 'log-tracklog-show' }
 ]
@@ -417,12 +416,10 @@ const filteredRouteList = computed(() => {
 
 const loadFilterOptions = async () => {
   try {
-    const robotIp = deviceStore.selectedRobot?.ip_address
-    if (!robotIp) return
-    const res = await fetch(`/api/dxr_api/get_lists?robot_ip=${encodeURIComponent(robotIp)}&field_array=content,task_group,tracking_route`)
-    if (!res.ok) return
-    const json = await res.json()
-    const payload = json.data || {}
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) return
+    const res = await navigationApi.getTrackLogFilterOptions(robotId, 'content,task_group,tracking_route')
+    const payload = res?.data || {}
     const clean = (arr: string[]) => (arr || []).filter((v: string) => v !== '鍏ㄩ儴' && v !== '全部' && v !== '')
     contentList.value = clean(payload.content || [])
     routeList.value = clean(payload.tracking_route || [])
@@ -692,24 +689,33 @@ const fetchRecords = async (page = 1) => {
   loading.value = true
   errorMsg.value = ''
   try {
-    const params = new URLSearchParams({
-      page: String(page),
-      page_size: String(pagination.value.perPage),
-      type: 'track'
-    })
-    if (filterMapName.value) params.append('map_name', filterMapName.value)
-    if (filterContent.value) params.append('content', filterContent.value)
-    if (filterTrackRoute.value) params.append('tracking_route', filterTrackRoute.value)
-    if (filterTaskGroup.value) params.append('task_group', filterTaskGroup.value)
-    if (startTime.value) params.append('start_create_time', String(new Date(startTime.value).getTime() / 1000))
-    if (endTime.value) params.append('end_create_time', String(new Date(endTime.value).getTime() / 1000))
-    const robotIp = deviceStore.selectedRobot?.ip_address
-    if (robotIp) params.append('robot_ip', robotIp)
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) throw new Error('未选择机器人')
 
-    const res = await fetch(`/api/dxr_api/getLog?${params.toString()}`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const json = await res.json()
-    const data = json.data || {}
+    const params: {
+      page: number
+      page_size: number
+      type: 'track'
+      map_name?: string
+      content?: string
+      tracking_route?: string
+      task_group?: string
+      start_create_time?: string
+      end_create_time?: string
+    } = {
+      page,
+      page_size: pagination.value.perPage,
+      type: 'track'
+    }
+    if (filterMapName.value) params.map_name = filterMapName.value
+    if (filterContent.value) params.content = filterContent.value
+    if (filterTrackRoute.value) params.tracking_route = filterTrackRoute.value
+    if (filterTaskGroup.value) params.task_group = filterTaskGroup.value
+    if (startTime.value) params.start_create_time = String(new Date(startTime.value).getTime() / 1000)
+    if (endTime.value) params.end_create_time = String(new Date(endTime.value).getTime() / 1000)
+
+    const res = await navigationApi.getTrackLogList(robotId, params)
+    const data = res?.data || {}
     recordList.value = data.data || []
     pagination.value = {
       total: data.total ?? 0,
@@ -761,7 +767,7 @@ const handleDelete = () => {
 
   deleteConfirmDialog.value = {
     show: true,
-    message: `确定删除 ${deleteStartTime} 至 ${deleteEndTime} 的日志吗？`,
+    message: `确认删除 ${deleteStartTime} 至 ${deleteEndTime} 时间筛选范围内的全部日志吗？此操作不可恢复。`,
     startTime: deleteStartTime,
     endTime: deleteEndTime
   }
@@ -788,7 +794,10 @@ const confirmDelete = async () => {
       end_time: deleteEndTime,
       type: 'all'
     })
-    await fetchRecords(1)
+    await Promise.all([
+      loadFilterOptions(),
+      fetchRecords(1)
+    ])
   } catch (e: any) {
     const msg =
       e?.detail ||

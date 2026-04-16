@@ -1242,6 +1242,42 @@ export const navigationApi = {
       params
     )
   },
+  getTrackLogFilterOptions: (
+    robotId: string,
+    fieldArray = 'content,task_group,tracking_route'
+  ) => {
+    return apiClient.get<{ data?: { content?: string[]; task_group?: string[]; tracking_route?: string[] } }>(
+      `/robots/${encodeURIComponent(robotId)}/http/81/api/dxr_api/get_lists`,
+      { field_array: fieldArray }
+    )
+  },
+  getTrackLogList: (
+    robotId: string,
+    params: {
+      page: number
+      page_size: number
+      type: 'track'
+      map_name?: string
+      content?: string
+      tracking_route?: string
+      task_group?: string
+      start_create_time?: string
+      end_create_time?: string
+    }
+  ) => {
+    return apiClient.get<{
+      data?: {
+        data?: any[]
+        total?: number
+        page_size?: number
+        current_page?: number
+        last_page?: number
+      }
+    }>(
+      `/robots/${encodeURIComponent(robotId)}/http/81/api/dxr_api/getLog`,
+      params
+    )
+  },
   deleteNavigationData: (robotId: string, data: {
     map_name: string;
     type: string;

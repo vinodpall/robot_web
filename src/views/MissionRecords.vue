@@ -1894,13 +1894,13 @@ const filteredTaskTypes = computed(() => {
   return taskTypeList.value.filter(item => item.single === isSingle)
 })
 
-const fetchTaskTypeList = async () => {
+const fetchTaskTypeList = async (options?: { force?: boolean }) => {
   const robotId = localStorage.getItem('selected_robot_id') || ''
   if (!robotId) return
 
   const cacheKey = buildTaskTypeCacheKey(robotId)
   const cached = localStorage.getItem(cacheKey)
-  if (cached) {
+  if (!options?.force && cached) {
     try {
       const parsed = JSON.parse(cached)
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -2043,7 +2043,7 @@ const handleAddTask = () => {
   }
   resetAddTaskFieldErrors()
   addTaskDialog.value.visible = true
-  fetchTaskTypeList()
+  void fetchTaskTypeList({ force: true })
 }
 
 const cancelAddTask = () => {

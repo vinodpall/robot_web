@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import { usePermissionStore } from '../stores/permission'
 
 function extractPermissionsFromUser(user: any): string[] {
@@ -26,7 +26,11 @@ function extractPermissionsFromUser(user: any): string[] {
 }
 
 function isSuperAdminUser(user: any): boolean {
-  const isSuperFlag = user?.is_superuser === true || user?.is_superuser === 1 || user?.is_superuser === '1' || user?.is_superuser === 'true'
+  const isSuperFlag =
+    user?.is_superuser === true ||
+    user?.is_superuser === 1 ||
+    user?.is_superuser === '1' ||
+    (typeof user?.is_superuser === 'string' && user.is_superuser.trim().toLowerCase() === 'true')
   if (isSuperFlag) return true
   if (!Array.isArray(user?.roles)) return false
   return user.roles.some((role: any) => {

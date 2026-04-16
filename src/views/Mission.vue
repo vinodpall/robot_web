@@ -704,10 +704,10 @@
                      <button
                        class="video-action-btn stream-mode-btn"
                        :disabled="isPresetStreamSwitching || !canSwitchPresetVideoStream"
-                       :title="`切换到${presetVideoStreamModeLabel === '主' ? '子码流' : '主码流'}`"
+                       :title="`切换到${getPresetVideoStreamModeLabel() === '主' ? '子码流' : '主码流'}`"
                        @click.stop="handleTogglePresetVideoStream"
                      >
-                       {{ isPresetStreamSwitching ? '...' : presetVideoStreamModeLabel }}
+                       {{ isPresetStreamSwitching ? '...' : getPresetVideoStreamModeLabel() }}
                      </button>
                      <button class="video-action-btn icon-only" title="手动重连" @click.stop="handlePresetManualReconnect">
                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1882,6 +1882,11 @@ const onTrackStartConfirm = async () => {
       showMissionSuccess('等待循迹启动', 8000)
       return
     }
+    if (canWaitDirectly === false && isMissionRobotProneState()) {
+      pushTrackStartStep('机器狗处于趴下状态，请先起立', 'error')
+      showMissionError('机器狗处于趴下状态，请先将机器狗起立')
+      return
+    }
 
     trackInitDialog.value.text = '机器狗初始化中...'
     pushTrackStartStep('开始准备循迹任务启动流程')
@@ -2995,7 +3000,6 @@ const refreshTrackTaskPageListOnEnter = async () => {
 onMounted(async () => {
   await loadWaylineFiles()
   await refreshTrackTaskPageListOnEnter()
-  await fetchTaskTypeList()
   window.addEventListener('click', closeDropdown)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 })
@@ -3179,13 +3183,13 @@ const filteredTaskTypes = computed(() => {
   return taskTypeList.value.filter(item => item.single === isSingle)
 })
 
-const fetchTaskTypeList = async () => {
+const fetchTaskTypeList = async (options?: { force?: boolean }) => {
   const robotId = resolveSelectedRobotId() || ''
   if (!robotId) return
 
   const cacheKey = buildTaskTypeCacheKey(robotId)
   const cached = localStorage.getItem(cacheKey)
-  if (cached) {
+  if (!options?.force && cached) {
     try {
       const parsed = JSON.parse(cached)
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -3317,7 +3321,7 @@ const handleAddTask = () => {
   isEditMode.value = false
   editingTaskItem.value = null
   addTaskDialog.value.visible = true
-  fetchTaskTypeList()
+  void fetchTaskTypeList({ force: true })
 }
 
 const parseBooleanLike = (value: unknown): boolean | null => {
@@ -3384,8 +3388,6 @@ const handleEditTask = async (waypoint: any) => {
   }
 
   try {
-    await fetchTaskTypeList()
-
     const rawTypeText = waypoint.rawData?.type_text || waypoint.rawData?.type || waypoint.type || ''
     const typeNames = splitTaskTypeNames(rawTypeText).map(normalizeTaskTypeNameToCn)
     const normalizedTypeText = typeNames.join(',')
@@ -3785,10 +3787,10 @@ const canSwitchPresetVideoStream = computed(() => {
   return !!stream.camera_index && (fromStream || hasSubStreamFromCameraCache(stream))
 })
 
-const presetVideoStreamModeLabel = computed(() => {
+const getPresetVideoStreamModeLabel = () => {
   const stream = getActivePresetStream()
   return stream?.use_sub_stream ? '子' : '主'
-})
+}
 
 const switchPresetVideoType = async (type: 'drone_visible' | 'drone_infrared') => {
   if (presetVideoType.value === type) return
@@ -4331,6 +4333,11 @@ const parsePresetText = (raw: string, fallbackId?: string): { presetState: strin
   }
 
   return null
+}
+
+const isMissionRobotProneState = () => {
+  const basicState = Number(robotStore.motionState?.basic_state)
+  return basicState === 0 || basicState === 5
 }
 
 const handleSetPreset = async () => {

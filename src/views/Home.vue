@@ -5957,7 +5957,7 @@ const prepareRobotForTaskStart = async (
   log('等待机器人进入非手动模式')
   await waitForRobotState(
     () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
-    8000,
+    15000,
     '等待机器人切换到非手动模式超时'
   )
 
@@ -5970,7 +5970,7 @@ const prepareRobotForTaskStart = async (
     log('等待机器人进入踏步状态')
     await waitForRobotState(
       () => robotStore.motionState?.basic_state === 4,
-      10000,
+      15000,
       '等待机器人进入踏步状态超时'
     )
   }
@@ -5981,7 +5981,7 @@ const prepareRobotForTaskStart = async (
     log(`等待机器人切换到${options.gaitConfig.label}`)
     await waitForRobotState(
       () => robotStore.gaitText === options.gaitConfig?.label,
-      10000,
+      15000,
       `等待机器人切换到${options.gaitConfig.label}超时`
     )
   }
@@ -5997,6 +5997,11 @@ const resolveCheckExitChargeResult = (response: any): boolean | null => {
     if (typeof value === 'boolean') return value
   }
   return null
+}
+
+const isRobotProneState = () => {
+  const basicState = Number(robotStore.motionState?.basic_state)
+  return basicState === 0 || basicState === 5
 }
 
 const finalizeTrackTaskStart = async (trackName: string, taskpointName: string, successMessage?: string) => {
@@ -6073,6 +6078,11 @@ const onTrackStartConfirm = async () => {
     if (canWaitDirectly === true) {
       pushTrackStartStep('检测到可直接启动，等待循迹启动', 'success')
       showSuccess('等待循迹启动', 8000)
+      return
+    }
+    if (canWaitDirectly === false && isRobotProneState()) {
+      pushTrackStartStep('机器狗处于趴下状态，请先起立', 'error')
+      showError('机器狗处于趴下状态，请先将机器狗起立')
       return
     }
 

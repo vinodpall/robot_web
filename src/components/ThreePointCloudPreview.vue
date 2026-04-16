@@ -39,10 +39,15 @@ const dynamicGroupRef = shallowRef<THREE.Group | null>(null)
 const robotGroupRef = shallowRef<THREE.Group | null>(null)
 let resizeObserver: ResizeObserver | null = null
 let animationFrameId = 0
+let renderLoopStarted = false
+let pendingStartTimer = 0
+let contextLostHandler: ((event: Event) => void) | null = null
+let contextRestoredHandler: (() => void) | null = null
 const SCREEN_POINT_SIZE = 1
 const ROBOT_ICON_SCALE = 0.24
 const labelSprites: THREE.Sprite[] = []
 const lastFitSceneKey = ref<string>('')
+const hasUserInteracted = ref(false)
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0)
 const LABEL_TEXTURE_SCALE = Math.min(4, Math.max(2, window.devicePixelRatio || 1))
@@ -610,6 +615,24 @@ const fitCameraToScene = () => {
   controls.update()
 }
 
+const getPointSignature = () => {
+  const points = props.points
+  if (!points.length) return 'empty'
+
+  const pick = (index: number) => points[Math.max(0, Math.min(points.length - 1, index))]
+  const samples = [
+    pick(0),
+    pick(Math.floor(points.length * 0.25)),
+    pick(Math.floor(points.length * 0.5)),
+    pick(Math.floor(points.length * 0.75)),
+    pick(points.length - 1),
+  ]
+
+  return samples
+    .map(point => `${point.x.toFixed(4)},${point.y.toFixed(4)},${point.z.toFixed(4)},${point.intensity.toFixed(2)}`)
+    .join('|')
+}
+
 const getSceneFitKey = () => {
   const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
   return [
@@ -618,6 +641,7 @@ const getSceneFitKey = () => {
     centerY.toFixed(6),
     centerZ.toFixed(6),
     maxRange.toFixed(6),
+    getPointSignature(),
   ].join('|')
 }
 
@@ -643,11 +667,11 @@ const resizeRenderer = () => {
   const container = containerRef.value
   const renderer = rendererRef.value
   const camera = cameraRef.value
-  if (!container || !renderer || !camera) return
+  if (!container || !renderer || !camera) return false
 
   const width = container.clientWidth
   const height = container.clientHeight
-  if (!width || !height) return
+  if (!width || !height) return false
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   // Keep CSS display size in sync with container; otherwise high-DPI screens
@@ -655,15 +679,18 @@ const resizeRenderer = () => {
   renderer.setSize(width, height, true)
   camera.aspect = width / height
   camera.updateProjectionMatrix()
+  return true
 }
 
 const startRenderLoop = () => {
+  if (renderLoopStarted) return
   const renderer = rendererRef.value
   const scene = sceneRef.value
   const camera = cameraRef.value
   const controls = controlsRef.value
   if (!renderer || !scene || !camera || !controls) return
 
+  renderLoopStarted = true
   const render = () => {
     controls.update()
     updateLabelScale()
@@ -672,6 +699,26 @@ const startRenderLoop = () => {
   }
 
   render()
+}
+
+const ensureRendererReady = (retryCount = 16) => {
+  const resized = resizeRenderer()
+  if (resized) {
+    startRenderLoop()
+    // 尺寸恢复后的第一帧重新拟合，避免偶发视角跑飞导致“全黑”。
+    if (props.points.length > 0) {
+      fitCameraToScene()
+    }
+    return
+  }
+
+  if (retryCount <= 0) return
+  if (pendingStartTimer) {
+    window.clearTimeout(pendingStartTimer)
+  }
+  pendingStartTimer = window.setTimeout(() => {
+    ensureRendererReady(retryCount - 1)
+  }, 80)
 }
 
 watch(
@@ -683,6 +730,13 @@ watch(
     if (sceneKey !== lastFitSceneKey.value) {
       fitCameraToScene()
       lastFitSceneKey.value = sceneKey
+      hasUserInteracted.value = false
+    } else if (!hasUserInteracted.value && props.points.length > 0) {
+      // 首次加载期间若点云数据更新但 key 未变化，仍做一次保守拟合，避免偶发黑屏。
+      fitCameraToScene()
+    }
+    if (!renderLoopStarted) {
+      ensureRendererReady()
     }
   },
   { deep: true }
@@ -728,6 +782,9 @@ onMounted(() => {
   controls.screenSpacePanning = true
   controls.minDistance = 0.12
   controls.maxDistance = 10
+  controls.addEventListener('start', () => {
+    hasUserInteracted.value = true
+  })
 
   scene.add(new THREE.AmbientLight('#bddcff', 1.15))
 
@@ -740,14 +797,42 @@ onMounted(() => {
   rendererRef.value = renderer
   controlsRef.value = controls
 
-  resizeRenderer()
+  const hasValidSize = resizeRenderer()
   rebuildSceneContent()
   rebuildRobotObject()
   fitCameraToScene()
-  startRenderLoop()
+  if (hasValidSize) {
+    startRenderLoop()
+  } else {
+    ensureRendererReady()
+  }
+
+  contextLostHandler = (event: Event) => {
+    event.preventDefault()
+    renderLoopStarted = false
+    if (animationFrameId) {
+      window.cancelAnimationFrame(animationFrameId)
+      animationFrameId = 0
+    }
+  }
+  contextRestoredHandler = () => {
+    renderLoopStarted = false
+    rebuildSceneContent()
+    rebuildRobotObject()
+    fitCameraToScene()
+    ensureRendererReady()
+  }
+  renderer.domElement.addEventListener('webglcontextlost', contextLostHandler, false)
+  renderer.domElement.addEventListener('webglcontextrestored', contextRestoredHandler, false)
 
   resizeObserver = new ResizeObserver(() => {
-    resizeRenderer()
+    const resized = resizeRenderer()
+    if (!resized) return
+    // 容器从隐藏切回可见时，先矫正视角再开始渲染，避免首帧偏移到左下角。
+    if (!renderLoopStarted) {
+      fitCameraToScene()
+      startRenderLoop()
+    }
   })
   resizeObserver.observe(container)
 })
@@ -756,6 +841,11 @@ onBeforeUnmount(() => {
   if (animationFrameId) {
     window.cancelAnimationFrame(animationFrameId)
   }
+  renderLoopStarted = false
+  if (pendingStartTimer) {
+    window.clearTimeout(pendingStartTimer)
+    pendingStartTimer = 0
+  }
 
   resizeObserver?.disconnect()
   resizeObserver = null
@@ -763,6 +853,15 @@ onBeforeUnmount(() => {
   clearDynamicGroup()
   clearRobotGroup()
   controlsRef.value?.dispose()
+  const renderer = rendererRef.value
+  if (renderer && contextLostHandler) {
+    renderer.domElement.removeEventListener('webglcontextlost', contextLostHandler, false)
+  }
+  if (renderer && contextRestoredHandler) {
+    renderer.domElement.removeEventListener('webglcontextrestored', contextRestoredHandler, false)
+  }
+  contextLostHandler = null
+  contextRestoredHandler = null
   rendererRef.value?.dispose()
 
   const container = containerRef.value

@@ -1,9 +1,10 @@
-﻿import { ref, reactive, readonly } from 'vue'
+import { ref, reactive, readonly } from 'vue'
 import { authApi, userApi, dockApi, droneApi, missionApi, alertApi, systemApi, deviceApi, roleApi, hmsApi, livestreamApi, waylineApi, permissionApi } from '../api/services'
 import { apiClient } from '../api/config'
 import { config, refreshEnvironmentConfig } from '../config/environment'
 import type { User, Dock, Drone, Mission, Alert, Device, Role, HmsAlert, Permission } from '../types'
 import { useDeviceStore } from '../stores/device'
+import { usePermissionStore } from '../stores/permission'
 import { setVideoStreams, setDefaultVideoType, cleanupOldVideoCache } from '../utils/videoCache'
 import { clearLogoutSessionMemory } from '../utils/logoutSessionMemory'
 
@@ -150,11 +151,36 @@ const getBestVideoDevice = (deviceType: 'dock' | 'drone_visible' | 'drone_infrar
   console.log("Selected best " + deviceType + " video device:", devices[0])
   return devices[0]
 }
+
+const extractPermissionCodesFromUser = (user: any): string[] => {
+  const codes: string[] = []
+
+  if (Array.isArray(user?.permissions)) {
+    user.permissions.forEach((permission: any) => {
+      const code = permission?.permission_code || permission?.code
+      if (code) codes.push(String(code))
+    })
+  }
+
+  if (Array.isArray(user?.roles)) {
+    user.roles.forEach((role: any) => {
+      if (!Array.isArray(role?.permissions)) return
+      role.permissions.forEach((permission: any) => {
+        const code = permission?.permission_code || permission?.code
+        if (code) codes.push(String(code))
+      })
+    })
+  }
+
+  return Array.from(new Set(codes))
+}
+
 export function useAuth() {
   const user = ref<User | null>(null)
   const token = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const permissionStore = usePermissionStore()
 
   const initAuth = () => {
     const savedUser = localStorage.getItem('user')
@@ -197,6 +223,7 @@ export function useAuth() {
   const login = async (loginData: { username: string; password: string }) => {
     loading.value = true
     error.value = null
+    permissionStore.clearPermissions()
     
     try {
       const currentConfig = refreshEnvironmentConfig()
@@ -226,6 +253,7 @@ export function useAuth() {
       
       localStorage.setItem('user', JSON.stringify(userData))
       localStorage.setItem('token', access_token)
+      permissionStore.setUserPermissions(extractPermissionCodesFromUser(userData))
       
       return { user: userData, token: access_token }
     } catch (err: any) {
@@ -250,6 +278,7 @@ export function useAuth() {
       localStorage.removeItem('user')
       localStorage.removeItem('token')
       localStorage.removeItem('workspace_id')
+      permissionStore.clearPermissions()
       clearLogoutSessionMemory()
     }
   }

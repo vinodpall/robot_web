@@ -3,7 +3,9 @@ import { ref, computed } from 'vue'
 import type { Permission } from '../types'
 
 const isTruthySuperuser = (value: unknown): boolean => {
-  return value === true || value === 1 || value === '1' || value === 'true'
+  if (value === true || value === 1 || value === '1') return true
+  if (typeof value === 'string') return value.trim().toLowerCase() === 'true'
+  return false
 }
 
 const hasSuperuserByRole = (roles: unknown): boolean => {
