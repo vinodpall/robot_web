@@ -30,7 +30,10 @@ const getSelectedRobotIp = (robotId: string): string => {
 export const buildRobotHttpAssetUrl = (
   robotId: string,
   port: number,
-  rawPathOrUrl: string
+  rawPathOrUrl: string,
+  options?: {
+    preferDirectForPort81?: boolean
+  }
 ): string => {
   const value = String(rawPathOrUrl || '').trim()
   if (!value) return ''
@@ -64,7 +67,8 @@ export const buildRobotHttpAssetUrl = (
 
   // 端口 81 的静态资源（图片等）用于 <img src>，浏览器不会带 Authorization 头。
   // 因此优先直连机器人 81 端口，避免走 /v1 鉴权链路导致 401 循环请求。
-  if (port === 81) {
+  const preferDirectForPort81 = options?.preferDirectForPort81 !== false
+  if (port === 81 && preferDirectForPort81) {
     const robotIp = getSelectedRobotIp(robotId)
     if (robotIp) {
       const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'

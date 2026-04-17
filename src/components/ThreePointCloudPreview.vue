@@ -395,16 +395,9 @@ const createRobotObject = () => {
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.scale.setScalar(0.026 * ROBOT_ICON_SCALE)
-    geometry.computeBoundingBox()
-    if (geometry.boundingBox) {
-      // For jiantou.3mf the forward tip is on min.x (not max.x).
-      // Anchor model by the head tip so pose point aligns with icon head.
-      const tipX = geometry.boundingBox.min.x * mesh.scale.x
-      const centerX = ((geometry.boundingBox.min.x + geometry.boundingBox.max.x) / 2) * mesh.scale.x
-      // Use icon tip as pose anchor: shift model backward so local (0,0,0) is the tip.
-      mesh.position.x = -tipX
-      labelAnchorOffsetX = centerX - tipX
-    }
+    // Keep pose anchor at model center so icon position matches trajectory/map pose.
+    mesh.position.x = 0
+    labelAnchorOffsetX = 0
     group.add(mesh)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -433,9 +426,9 @@ const createRobotObject = () => {
     const cone = new THREE.Mesh(geometry, material)
     // Cone points to +Y by default; rotate to +X so yaw around Y matches planar heading.
     cone.rotation.z = -Math.PI / 2
-    // Use cone tip as pose anchor.
-    cone.position.x = -(coneHeight / 2)
-    labelAnchorOffsetX = -(coneHeight / 2)
+    // Keep fallback icon anchored at center to align with pose/trajectory.
+    cone.position.x = 0
+    labelAnchorOffsetX = 0
     group.add(cone)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)

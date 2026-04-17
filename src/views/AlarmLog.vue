@@ -235,14 +235,14 @@
                     </div>
                     <div class="file-table-cell trc-desc" :title="row.remark || '-'">{{ row.remark || '-' }}</div>
                     <div class="file-table-cell trc-pic">
-                      <span v-if="!getImage(row)" class="no-image">-</span>
+                      <span v-if="!getDisplayImage(row)" class="no-image">-</span>
                       <img
                         v-else
-                        :src="getThumbImage(row)!"
+                        :src="getDisplayImage(row)!"
                         alt="识别图片"
                         class="trc-thumb-img"
                         @click="openImagePreview(getImage(row)!, row.id)"
-                        @error="($event.target as HTMLImageElement).src = getImage(row)!"
+                        @error="handleRecordImageError(row, $event)"
                         style="cursor:pointer;"
                       />
                     </div>
@@ -989,13 +989,59 @@ const getImage = (row: any): string | null => {
   if (!img) return null
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
   if (!robotId) return null
-  return buildRobotHttpAssetUrl(robotId, 81, img)
+  const baseUrl = buildRobotHttpAssetUrl(robotId, 81, img, { preferDirectForPort81: false })
+  return appendTokenToImageUrl(baseUrl)
 }
 const getThumbImage = (row: any): string | null => {
   const original = getImage(row)
   if (!original) return null
   return original.replace(/\.(jpg|jpeg|png)(\?|$)/i, '_thumb.jpg$2')
 }
+
+const appendTokenToImageUrl = (url: string): string => {
+  if (!url) return ''
+  const token = localStorage.getItem('token') || ''
+  if (!token) return url
+
+  try {
+    const parsed = new URL(url, window.location.origin)
+    parsed.searchParams.set('token', token)
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
+// 记录已失败的图片 URL，避免相同地址反复触发请求
+const failedRecordImageUrls = ref<Set<string>>(new Set())
+
+const getDisplayImage = (row: any): string | null => {
+  const thumb = getThumbImage(row)
+  const original = getImage(row)
+
+  if (thumb && !failedRecordImageUrls.value.has(thumb)) return thumb
+  if (original && !failedRecordImageUrls.value.has(original)) return original
+  return null
+}
+
+const handleRecordImageError = (row: any, event: Event) => {
+  const target = event.target as HTMLImageElement | null
+  if (!target) return
+
+  const failedUrl = target.currentSrc || target.src
+  if (failedUrl) {
+    failedRecordImageUrls.value.add(failedUrl)
+  }
+
+  const nextUrl = getDisplayImage(row)
+  if (!nextUrl) {
+    target.removeAttribute('src')
+    return
+  }
+  if (target.src === nextUrl || target.currentSrc === nextUrl) return
+  target.src = nextUrl
+}
+
 const imgModal = ref({ visible: false, url: '', recordId: 0, error: false })
 const openImagePreview = (url: string, id: number) => {
   imgModal.value = { visible: true, url, recordId: id, error: false }
@@ -1006,11 +1052,13 @@ const closeImagePreview = () => {
 
 const handleRobotContextRefreshed = () => {
   mapListTrigger.value++
+  failedRecordImageUrls.value.clear()
   loadFilterOptions()
   fetchRecords(1)
 }
 
 onMounted(() => {
+  failedRecordImageUrls.value.clear()
   loadFilterOptions()
   fetchRecords(1)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)

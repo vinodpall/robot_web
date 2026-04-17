@@ -2856,7 +2856,7 @@ onMounted(async () => {
   pageInput.value = currentPage.value.toString()
   
   // 获取发布点任务列表
-  await fetchTaskTypeList()
+  await fetchTaskTypeList({ force: true })
   
   await loadJobRecords()
   // 点击页面空白关闭

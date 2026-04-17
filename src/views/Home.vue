@@ -1305,7 +1305,50 @@ const extractTrackTaskList = (payload: any): any[] => {
 const activeOverlayTrackName = ref('')
 const activeOverlayPointTaskId = ref('')
 const lastTrackOverlayKey = ref('')
+const lastTrackOverlayTaskPointCount = ref(0)
 const lastPointTaskOverlayKey = ref('')
+let trackTaskListRefreshPromise: Promise<any[]> | null = null
+
+const getCachedTrackTaskListForCurrentRobot = (): any[] => {
+  try {
+    const contextKeys = getCurrentRobotContextKeys()
+    const cachedData = contextKeys
+      ? localStorage.getItem(contextKeys.allTrackTaskListKey) || localStorage.getItem('all_track_task_list')
+      : localStorage.getItem('all_track_task_list')
+    if (!cachedData) return []
+    return extractTrackTaskList(JSON.parse(cachedData))
+  } catch (err) {
+    console.warn('[任务点] 读取缓存任务点列表失败:', err)
+    return []
+  }
+}
+
+const fetchTrackTaskListForCurrentRobot = async (): Promise<any[]> => {
+  if (trackTaskListRefreshPromise) return trackTaskListRefreshPromise
+  const robotId = deviceStore.selectedRobotId
+  if (!robotId) return []
+
+  trackTaskListRefreshPromise = (async () => {
+    try {
+      const response = await navigationApi.getAllTrackTaskList(robotId)
+      const allTaskList = extractTrackTaskList(response)
+      const serialized = JSON.stringify(allTaskList)
+      const contextKeys = getCurrentRobotContextKeys()
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.allTrackTaskListKey, serialized)
+      }
+      localStorage.setItem('all_track_task_list', serialized)
+      return allTaskList
+    } catch (err) {
+      console.warn('[任务点] 刷新任务点列表失败:', err)
+      return []
+    } finally {
+      trackTaskListRefreshPromise = null
+    }
+  })()
+
+  return trackTaskListRefreshPromise
+}
 
 // cmd_status.track 同步 activeTaskType：WebSocket 反馈 track=1 时标记循迹任务运行中
 watch(() => robotStore.cmdStatus?.track, (val) => {
@@ -1412,6 +1455,7 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
 watch(() => robotStore.isTracking, (tracking) => {
   if (!tracking) {
     lastTrackOverlayKey.value = ''
+    lastTrackOverlayTaskPointCount.value = 0
     activeOverlayTrackName.value = ''
     if (basePointCloudData.value.length > 0) {
       pointCloudData.value = basePointCloudData.value
@@ -1607,59 +1651,62 @@ const overlayTrackTrajectory = async (trackName: string) => {
     const overlayKey = `${normalizedTrackName}::${currentTaskPointName}`
     if (
       lastTrackOverlayKey.value === overlayKey &&
-      pointCloudData.value.length > basePointCloudData.value.length
+      pointCloudData.value.length > basePointCloudData.value.length &&
+      lastTrackOverlayTaskPointCount.value > 0
     ) {
       return
     }
-    
-    try {
-      const contextKeys = getCurrentRobotContextKeys()
-      const cachedData = contextKeys
-        ? localStorage.getItem(contextKeys.allTrackTaskListKey) || localStorage.getItem('all_track_task_list')
-        : localStorage.getItem('all_track_task_list')
-      if (cachedData) {
-        const parsed = JSON.parse(cachedData)
-        const allTaskList = extractTrackTaskList(parsed)
-        let filteredTasks = allTaskList.filter((task: any) => {
-          const taskTrackName = normalizeTrackName(String(task.track_name || ''))
-          const taskPointName = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
-          return taskTrackName === normalizedTrackName &&
-                 taskPointName === currentTaskPointName
-        })
 
-        // taskpoint_name 为空或匹配不到时，回退为按 track_name 匹配
-        if (!currentTaskPointName || filteredTasks.length === 0) {
-          filteredTasks = allTaskList.filter((task: any) => {
-            const taskTrackName = normalizeTrackName(String(task.track_name || ''))
-            return taskTrackName === normalizedTrackName
-          })
-          if (filteredTasks.length > 0) {
-            console.warn(`[任务点] taskpoint_name=${currentTaskPointName || '(空)'} 未匹配，回退为按轨迹匹配，共 ${filteredTasks.length} 条`)
-          }
-        }
-        
-        filteredTasks.forEach((task: any, idx: number) => {
-          const tx = parseFloat(task.x), ty = parseFloat(task.y), tz = parseFloat(task.z ?? '0')
-          if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) {
-            // 优先使用 type_text，其次 preset，最后使用序号
-            const taskName = task.type_text || task.preset || `任务点${idx}`
-            taskPointsData.push({
-              x: tx,
-              y: ty,
-              z: tz,
-              name: taskName
-            })
-          }
+    const collectTaskPoints = (allTaskList: any[]) => {
+      let filteredTasks = allTaskList.filter((task: any) => {
+        const taskTrackName = normalizeTrackName(String(task.track_name || ''))
+        const taskPointName = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+        return taskTrackName === normalizedTrackName &&
+               taskPointName === currentTaskPointName
+      })
+
+      // taskpoint_name 为空或匹配不到时，回退为按 track_name 匹配
+      if (!currentTaskPointName || filteredTasks.length === 0) {
+        filteredTasks = allTaskList.filter((task: any) => {
+          const taskTrackName = normalizeTrackName(String(task.track_name || ''))
+          return taskTrackName === normalizedTrackName
         })
-        
-        if (taskPointsData.length === 0) {
-          console.warn('[任务点] 未找到有效的任务点坐标数据')
+        if (filteredTasks.length > 0) {
+          console.warn(`[任务点] taskpoint_name=${currentTaskPointName || '(空)'} 未匹配，回退为按轨迹匹配，共 ${filteredTasks.length} 条`)
         }
-      } else {
-        console.warn('[任务点] localStorage 中没有 all_track_task_list 数据')
       }
-    } catch (err) {
-      console.error('[任务点] 读取任务点数据失败:', err)
+
+      filteredTasks.forEach((task: any, idx: number) => {
+        const tx = parseFloat(task.x), ty = parseFloat(task.y), tz = parseFloat(task.z ?? '0')
+        if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) {
+          // 优先使用 type_text，其次 preset，最后使用序号
+          const taskName = task.type_text || task.preset || `任务点${idx}`
+          taskPointsData.push({
+            x: tx,
+            y: ty,
+            z: tz,
+            name: taskName
+          })
+        }
+      })
+    }
+
+    const cachedTaskList = getCachedTrackTaskListForCurrentRobot()
+    if (cachedTaskList.length > 0) {
+      collectTaskPoints(cachedTaskList)
+    } else {
+      console.warn('[任务点] localStorage 中没有 all_track_task_list 数据，尝试远端刷新')
+    }
+
+    if (taskPointsData.length === 0) {
+      const freshTaskList = await fetchTrackTaskListForCurrentRobot()
+      if (freshTaskList.length > 0) {
+        collectTaskPoints(freshTaskList)
+      }
+    }
+
+    if (taskPointsData.length === 0) {
+      console.warn('[任务点] 未找到有效的任务点坐标数据')
     }
 
     // 3. 归一化并合并数据
@@ -1686,6 +1733,7 @@ const overlayTrackTrajectory = async (trackName: string) => {
       ...normalizedTaskPoints
     ]
     lastTrackOverlayKey.value = overlayKey
+    lastTrackOverlayTaskPointCount.value = normalizedTaskPoints.length
   } catch (e) {
     console.warn('叠加轨迹失败:', e)
   }
@@ -1720,6 +1768,7 @@ const clearPointCloud = () => {
   lastPointCloudRefreshSignature.value = ''
   lastPointCloudRefreshAt.value = 0
   lastTrackOverlayKey.value = ''
+  lastTrackOverlayTaskPointCount.value = 0
   lastPointTaskOverlayKey.value = ''
   // 重置归一化参数，避免继续显示原场景辅助元素
   pointCloudNormalizationParams.value = { centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 }
@@ -1748,6 +1797,7 @@ const syncPointCloudOverlayByRuntimeState = async () => {
   }
 
   lastTrackOverlayKey.value = ''
+  lastTrackOverlayTaskPointCount.value = 0
   lastPointTaskOverlayKey.value = ''
   pointCloudData.value = [...basePointCloudData.value]
 }
@@ -1856,6 +1906,7 @@ const refreshPointCloud = async (options?: { silent?: boolean; force?: boolean }
     pointCloudData.value = points
     basePointCloudData.value = points
     lastTrackOverlayKey.value = ''
+    lastTrackOverlayTaskPointCount.value = 0
     lastPointTaskOverlayKey.value = ''
     await nextTick()
     await syncPointCloudOverlayByRuntimeState()
@@ -2047,16 +2098,14 @@ const fetchLatestAlarmLogs = async () => {
 
   isAlarmLogLoading.value = true
   try {
-    const robotIp = deviceStore.selectedRobot?.ip_address
-    const params = new URLSearchParams({ page: '1', page_size: '4' })
-    if (robotIp) params.append('robot_ip', robotIp)
-    const res = await fetch(`/api/dxr_api/getLog?${params.toString()}`)
-    if (!res.ok) {
-      nextAlarmLogRetryAt.value = Date.now() + ALARM_LOG_RETRY_COOLDOWN_MS
-      return
-    }
-    const json = await res.json()
-    const rows: any[] = json.data?.data || []
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) return
+    const res = await navigationApi.getTrackLogList(robotId, {
+      page: 1,
+      page_size: 4,
+      type: 'track'
+    })
+    const rows: any[] = res?.data?.data || []
     const formatTs = (ts: number | null) => {
       if (!ts) return '--'
       const ms = ts > 1e10 ? ts : ts * 1000
@@ -2065,12 +2114,24 @@ const fetchLatestAlarmLogs = async () => {
         hour: '2-digit', minute: '2-digit', second: '2-digit'
       })
     }
+    const appendTokenToImageUrl = (url: string): string => {
+      if (!url) return ''
+      const token = localStorage.getItem('token') || ''
+      if (!token) return url
+      try {
+        const parsed = new URL(url, window.location.origin)
+        parsed.searchParams.set('token', token)
+        return parsed.toString()
+      } catch {
+        return url
+      }
+    }
     // 将图片路径转换为统一机器人 HTTP 代理 URL，解决 CORS
     const toProxyImageUrl = (imgPath: string): string => {
       if (!imgPath) return ''
-      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
-      if (!robotId) return ''
-      return buildRobotHttpAssetUrl(robotId, 81, imgPath)
+      return appendTokenToImageUrl(
+        buildRobotHttpAssetUrl(robotId, 81, imgPath, { preferDirectForPort81: false })
+      )
     }
     // 生成缩略图 URL：将 .jpg/.jpeg/.png 替换为 _thumb.jpg
     const toThumbImageUrl = (proxyUrl: string): string => {
@@ -2121,7 +2182,7 @@ watch(
   },
   (latestAlertKey, previousAlertKey) => {
     if (!latestAlertKey || latestAlertKey === previousAlertKey) return
-    if (!deviceStore.selectedRobot?.ip_address) return
+    if (!(deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id'))) return
     fetchLatestAlarmLogs()
   }
 )
@@ -2220,6 +2281,7 @@ const toFiniteNumber = (value: unknown, fallback = 0) => {
 }
 
 const wsTaskMeta = computed(() => {
+  if (!isTrackOrPointTaskRunning.value) return null
   const p = wsTaskProgress.value
   if (!p) return null
   const total = Math.max(0, Math.floor(toFiniteNumber(p.total_points, 0)))
@@ -2229,6 +2291,10 @@ const wsTaskMeta = computed(() => {
   const started = total > 0 || complete > 0 || finished > 0
   const completed = started && ((total > 0 && finished >= total) || complete >= 100)
   return { total, finished, complete, started, completed }
+})
+
+const isTrackOrPointTaskRunning = computed(() => {
+  return robotStore.isTracking || robotStore.isPointTaskRunning
 })
 
 const waylineTaskName = computed(() => {
@@ -2249,6 +2315,7 @@ const waylineTaskStartTime = computed(() => {
 })
 
 const waylineInspectionProgressText = computed(() => {
+  if (!hasActiveTaskStatistics.value) return '0/0'
   const ws = wsTaskMeta.value
   if (ws) {
     return `${ws.finished}/${ws.total}`
@@ -2257,6 +2324,7 @@ const waylineInspectionProgressText = computed(() => {
 })
 
 const waylineTaskStatus = computed(() => {
+  if (!hasActiveTaskStatistics.value) return 'waiting'
   const ws = wsTaskMeta.value
   if (ws) {
     if (!ws.started) return 'waiting'
@@ -2266,12 +2334,14 @@ const waylineTaskStatus = computed(() => {
 })
 
 const waylineProgressPercent = computed(() => {
+  if (!hasActiveTaskStatistics.value) return 0
   const ws = wsTaskMeta.value
   if (ws) return Math.round(ws.complete)
   return taskProgressStore.taskProgressPercent
 })
 
 const waylineTaskStatusText = computed(() => {
+  if (!hasActiveTaskStatistics.value) return '暂无'
   const ws = wsTaskMeta.value
   if (ws) {
     if (!ws.started) return '暂无'
@@ -2286,10 +2356,7 @@ const waylineTaskStatusText = computed(() => {
 })
 
 const hasActiveTaskStatistics = computed(() => {
-  const ws = wsTaskMeta.value
-  if (ws) return ws.started
-  const status = waylineProgress.value?.status
-  return status === 'in_progress' || status === 'paused' || status === 'sent'
+  return isTrackOrPointTaskRunning.value
 })
 
 // 按钮状态控制
@@ -6886,6 +6953,7 @@ onMounted(async () => {
   window.addEventListener('multi-task-list-updated', handleMultiTaskListUpdated)
   window.addEventListener('point-task-list-updated', handlePointTaskListUpdated)
   window.addEventListener('track-task-group-updated', handleTrackTaskGroupUpdated)
+  window.addEventListener('track-task-list-updated', handleTrackTaskListUpdated)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('focus', handleWindowFocus)
@@ -7076,6 +7144,27 @@ const handleTrackTaskGroupUpdated = async (event: Event) => {
   await fetchTaskpointList(currentTrack)
 }
 
+const handleTrackTaskListUpdated = async (event: Event) => {
+  const { robotId } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+
+  await fetchTrackList()
+
+  const runningTrackName = normalizeTrackName(
+    robotStore.cmdStatus?.track_info?.track_name
+    || activeOverlayTrackName.value
+    || selectedTrack.value
+    || ''
+  )
+  if (!robotStore.isTracking || !runningTrackName || basePointCloudData.value.length === 0) return
+
+  lastTrackOverlayKey.value = ''
+  lastTrackOverlayTaskPointCount.value = 0
+  await overlayTrackTrajectory(runningTrackName)
+}
+
 // 切换机器人第三阶段：其余数据就绪，刷新其他下拉和点云
 const handleRobotContextRefreshed = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
@@ -7118,6 +7207,7 @@ onUnmounted(() => {
   window.removeEventListener('multi-task-list-updated', handleMultiTaskListUpdated)
   window.removeEventListener('point-task-list-updated', handlePointTaskListUpdated)
   window.removeEventListener('track-task-group-updated', handleTrackTaskGroupUpdated)
+  window.removeEventListener('track-task-list-updated', handleTrackTaskListUpdated)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('focus', handleWindowFocus)

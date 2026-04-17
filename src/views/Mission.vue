@@ -1115,6 +1115,15 @@ const normalizeTaskPointName = (raw: string) => {
   return atIndex > -1 ? name.slice(0, atIndex) : name
 }
 
+const isSameStringList = (a: string[], b: string[]) => {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
 const runningTrackName = computed(() => normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || ''))
 const runningTaskGroupName = computed(() => normalizeTaskPointName(robotStore.cmdStatus?.track_info?.taskpoint_name || ''))
 
@@ -1212,21 +1221,34 @@ const setTaskGroupCache = (trackName: string, groups: string[]) => {
 }
 
 const applyTaskGroupSelection = (groups: string[]) => {
-  taskGroupList.value = groups
+  const nextGroups = groups
+  let nextSelected = ''
   if (isTrackTaskRunning.value && runningTaskGroupName.value) {
     const normalizedRunningGroup = normalizeTaskPointName(runningTaskGroupName.value)
-    const matchedGroup = groups.find(group => normalizeTaskPointName(group) === normalizedRunningGroup)
+    const matchedGroup = nextGroups.find(group => normalizeTaskPointName(group) === normalizedRunningGroup)
     if (matchedGroup) {
-      selectedTaskGroupName.value = matchedGroup
-    } else if (groups.length > 0) {
-      selectedTaskGroupName.value = groups[0]
+      nextSelected = matchedGroup
+    } else if (nextGroups.length > 0) {
+      nextSelected = nextGroups[0]
     } else {
-      selectedTaskGroupName.value = ''
+      nextSelected = ''
     }
-  } else if (groups.length > 0) {
-    selectedTaskGroupName.value = groups[0]
+  } else if (nextGroups.length > 0) {
+    // 保留当前选中项，避免列表未变化时被重置到第一项
+    if (nextGroups.includes(selectedTaskGroupName.value)) {
+      nextSelected = selectedTaskGroupName.value
+    } else {
+      nextSelected = nextGroups[0]
+    }
   } else {
-    selectedTaskGroupName.value = ''
+    nextSelected = ''
+  }
+
+  if (!isSameStringList(taskGroupList.value, nextGroups)) {
+    taskGroupList.value = nextGroups
+  }
+  if (selectedTaskGroupName.value !== nextSelected) {
+    selectedTaskGroupName.value = nextSelected
   }
 }
 
@@ -1256,8 +1278,10 @@ const fetchTaskGroupListByRoute = async (routeName: string) => {
       ? response.msg.result.map((group: string) => normalizeTaskPointName(group)).filter(Boolean)
       : []
 
-    setTaskGroupCache(normalizedRouteName, remoteGroups)
-    applyTaskGroupSelection(remoteGroups)
+    if (!isSameStringList(remoteGroups, taskGroupList.value)) {
+      setTaskGroupCache(normalizedRouteName, remoteGroups)
+      applyTaskGroupSelection(remoteGroups)
+    }
   } catch (err) {
     if (requestToken !== taskGroupRequestToken) return
     if (normalizeTrackName(selectedRouteName.value) !== normalizedRouteName) return
@@ -1318,10 +1342,15 @@ const loadRouteList = async () => {
       const name = normalizeTrackName(String(item || ''))
       if (name) processedSet.add(name)
     })
-    routeList.value = Array.from(processedSet)
+    const nextRouteList = Array.from(processedSet)
+    if (!isSameStringList(routeList.value, nextRouteList)) {
+      routeList.value = nextRouteList
+    }
 
-    if (routeList.value.length > 0) {
-      selectedRouteName.value = routeList.value[0]
+    if (nextRouteList.length > 0) {
+      if (!nextRouteList.includes(selectedRouteName.value)) {
+        selectedRouteName.value = nextRouteList[0]
+      }
     } else {
       clearRouteAndTaskGroupState(false)
     }
@@ -3346,6 +3375,7 @@ const resolveStopAtPointFromTask = (task: any): boolean => {
 
 const handleEditTask = async (waypoint: any) => {
   resetAddTaskFieldErrors()
+  await fetchTaskTypeList({ force: true })
   // Find the original item from key data if needed, or use waypoint if it has all data
   // waypoint here is the computed object for table display. We might need the raw object.
   // Assuming waypoint (from waypointsData) has necessary fields or we can find it.
