@@ -257,12 +257,15 @@ const closeErrorDialog = () => {
 .title {
   color: #FFF;
   text-align: center;
-  font-family: YouSheBiaoTiHei;
+  font-family: 'YouSheBiaoTiHei', 'Microsoft YaHei', 'PingFang SC', 'SimHei', sans-serif;
   font-size: 48px;
   font-style: normal;
-  font-weight: bold;
-  line-height: 150%;
-  letter-spacing: 1px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0.5px;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   margin: 0;
 }
 

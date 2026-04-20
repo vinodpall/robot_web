@@ -58,7 +58,7 @@
                 <div class="map-section-buttons">
                   <button class="map-btn map-btn-primary" :disabled="isRecording || !canGenerateMap" v-permission-click-dialog="'nav-lbjt-slam'" @click="handleGenerateMap">生成地图</button>
                   <button class="map-btn map-btn-primary" :disabled="isRecording || mappingStopLoading" v-permission-click-dialog="'nav-lbjt-changepcd'" @click="handleGenerateGridMap">生成栅格地图</button>
-                  <button class="map-btn map-btn-primary" :disabled="isRecording || !hasRobotRtk" v-permission-click-dialog="'nav-lbjt-msfrecord'" @click="handleCreateFusionMap">新建融合地图</button>
+                  <button class="map-btn" :class="hasRobotRtk ? 'map-btn-primary' : 'map-btn-disabled-visual'" :disabled="isRecording || !hasRobotRtk" v-permission-click-dialog="'nav-lbjt-msfrecord'" @click="handleCreateFusionMap">新建融合地图</button>
                 </div>
               </div>
 
@@ -116,17 +116,17 @@
                   </button>
                   <button 
                     class="map-btn" 
-                    :class="insEnabled ? 'map-btn-danger' : 'map-btn-primary'"
+                    :class="!hasRobotRtk ? 'map-btn-disabled-visual' : (insEnabled ? 'map-btn-danger' : 'map-btn-primary')"
                     :disabled="navigationEnabled || msfEnabled || !hasRobotRtk"
                     v-permission-click-dialog="'nav-navmanage-startnav'"
                     @click="handleStartINS"
                   >
                     {{ insEnabled ? '关闭INS' : '开始INS' }}
                   </button>
-                  <button class="map-btn map-btn-primary" :disabled="navigationEnabled || msfEnabled || !hasRobotRtk" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleInitINS">INS初始化</button>
+                  <button class="map-btn" :class="hasRobotRtk ? 'map-btn-primary' : 'map-btn-disabled-visual'" :disabled="navigationEnabled || msfEnabled || !hasRobotRtk" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleInitINS">INS初始化</button>
                   <button 
                     class="map-btn" 
-                    :class="msfEnabled ? 'map-btn-danger' : 'map-btn-primary'"
+                    :class="!hasRobotRtk ? 'map-btn-disabled-visual' : (msfEnabled ? 'map-btn-danger' : 'map-btn-primary')"
                     :disabled="navigationEnabled || insEnabled || !hasRobotRtk"
                     v-permission-click-dialog="'nav-navmanage-startnav'"
                     @click="handleStartMSF"
@@ -378,8 +378,8 @@
                 <div class="track-toolbar-group">
                   <span class="track-label">路线:</span>
                   <div class="track-select-wrapper">
-                    <select v-model="trackRecordLine" class="track-select">
-                      <option v-if="trackLineList.length === 0" value="">暂无路线</option>
+                    <select v-model="trackRecordLine" class="track-select" :key="`track-line-${trackRecordMap}-${trackLineList.length}`">
+                      <option value="">{{ trackLineList.length === 0 ? '暂无路线' : '请选择路线' }}</option>
                       <option v-for="line in trackLineList" :key="line" :value="line">{{ line }}</option>
                     </select>
                     <span class="track-select-arrow">
@@ -392,8 +392,8 @@
                 <div class="track-toolbar-group">
                   <span class="track-label">任务组:</span>
                   <div class="track-select-wrapper">
-                    <select v-model="trackRecordTask" class="track-select">
-                      <option v-if="trackTaskList.length === 0" value="">暂无任务组</option>
+                    <select v-model="trackRecordTask" class="track-select" :disabled="!trackRecordLine" :key="`track-task-${trackRecordLine}-${trackTaskList.length}`">
+                      <option value="">{{ !trackRecordLine || trackTaskList.length === 0 ? '暂无任务组' : '请选择任务组' }}</option>
                       <option v-for="task in trackTaskList" :key="task" :value="task">{{ task }}</option>
                     </select>
                     <span class="track-select-arrow">
@@ -1131,6 +1131,8 @@ watch(trackLineList, (newLines) => {
 
   if (newLines.length === 0) {
     trackRecordLine.value = ''
+    trackRecordTask.value = ''
+    trackTaskList.value = []
     return
   }
 
@@ -1141,6 +1143,20 @@ watch(trackLineList, (newLines) => {
 
 // 任务组列表
 const trackTaskList = ref<string[]>([])
+let trackTaskListRequestToken = 0
+
+watch(trackTaskList, (newTasks) => {
+  if (currentTab.value !== 'track_record') return
+
+  if (!trackRecordLine.value || newTasks.length === 0) {
+    trackRecordTask.value = ''
+    return
+  }
+
+  if (!trackRecordTask.value || !newTasks.includes(trackRecordTask.value)) {
+    trackRecordTask.value = newTasks[0]
+  }
+})
 
 const clearTrackPreviewFromPointCloud = async () => {
   if (!isNavPreviewMode.value) return
@@ -1197,6 +1213,8 @@ watch(trackRecordMap, async (newMap) => {
 
 // 监听路线选择变化 - 获取该路线的任务组列表（关键点文件列表）
 watch(trackRecordLine, async (newLine) => {
+  const requestToken = ++trackTaskListRequestToken
+
   // 路线切换时清理预览轨迹，恢复点云基线（或实时循迹叠加）
   await clearTrackPreviewFromPointCloud()
   // 清空任务组选择
@@ -1216,6 +1234,10 @@ watch(trackRecordLine, async (newLine) => {
   try {
     console.log('获取路线的任务组列表:', newLine)
     const response = await navigationApi.getTaskpointList(robotId, newLine)
+
+    if (requestToken !== trackTaskListRequestToken || newLine !== trackRecordLine.value) {
+      return
+    }
     
     if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
       trackTaskList.value = response.msg.result
@@ -1231,6 +1253,9 @@ watch(trackRecordLine, async (newLine) => {
       trackTaskList.value = []
     }
   } catch (error) {
+    if (requestToken !== trackTaskListRequestToken || newLine !== trackRecordLine.value) {
+      return
+    }
     console.error('获取任务组列表失败:', error)
     trackTaskList.value = []
   }
@@ -1655,7 +1680,7 @@ const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
 const hasRobotRtk = computed(() => {
   const robot = deviceStore.selectedRobot as any
-  const extraRaw = robot?.extra ?? robot?.extra_data ?? null
+  const extraRaw = robot?.extra_data ?? null
   if (extraRaw == null) return false
 
   let extraObj: any = extraRaw
@@ -2218,6 +2243,12 @@ const handleSetOrigin = () => {
         await navigationApi.setOriginPoint(robotId, {
           map_name: selectedNavMap.value
         })
+
+        await downloadMapFiles(selectedNavMap.value)
+        navPointCloudNavigationOrigin.value = await loadNavMapNavigationOrigin(selectedNavMap.value)
+        window.dispatchEvent(new CustomEvent('navigation-origin-updated', {
+          detail: { mapName: selectedNavMap.value, robotId }
+        }))
 
         showSuccessMessage('原点设置成功')
       } catch (err) {
@@ -5752,6 +5783,16 @@ const handleDelete = (item: any) => {
 .map-btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.map-btn-disabled-visual,
+.map-btn-disabled-visual:disabled {
+  background: rgba(70, 89, 104, 0.36);
+  color: rgba(174, 194, 210, 0.62);
+  border-color: rgba(120, 141, 157, 0.28);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 .map-btn-secondary {

@@ -588,7 +588,7 @@
                       active: activeTaskType === 'track' || robotStore.isTracking
                     }"
                     v-permission-click-dialog="'main-taskdispatch'"
-                    @click="handleCancelTask"
+                    @click="handleCancelTask('track')"
                   >
                     取消任务
                   </span>
@@ -631,7 +631,7 @@
                       active: activeTaskType === 'point' || robotStore.isPointTaskRunning
                     }"
                     v-permission-click-dialog="'main-taskdispatch'"
-                    @click="handleCancelTask"
+                    @click="handleCancelTask('point')"
                   >
                     取消任务
                   </span>
@@ -671,7 +671,7 @@
                     class="span1" 
                     :class="{ disabled: activeTaskType !== 'multi' && !robotStore.multitaskStatus?.status, active: activeTaskType === 'multi' || robotStore.multitaskStatus?.status }"
                     v-permission-click-dialog="'main-taskdispatch'"
-                    @click="handleCancelTask"
+                    @click="handleCancelTask('multi')"
                   >
                     取消任务
                   </span>
@@ -1231,7 +1231,7 @@ const insEnabled = ref(robotStore.cmdStatus?.ins === 1)
 const msfEnabled = ref(robotStore.cmdStatus?.msf === 1)
 const hasRobotRtk = computed(() => {
   const robot = deviceStore.selectedRobot as any
-  const extraRaw = robot?.extra ?? robot?.extra_data ?? null
+  const extraRaw = robot?.extra_data ?? null
   if (extraRaw == null) return false
 
   let extraObj: any = extraRaw
@@ -5565,7 +5565,23 @@ const handleDispatchMultiTask = () => {
 }
 
 // 取消任务
-const resolveActiveTaskTypeForCancel = (): 'wayline' | 'point' | 'multi' | 'track' | null => {
+const resolveActiveTaskTypeForCancel = (
+  preferredType?: 'wayline' | 'point' | 'multi' | 'track'
+): 'wayline' | 'point' | 'multi' | 'track' | null => {
+  if (preferredType) {
+    if (preferredType === 'track') {
+      return (activeTaskType.value === 'track' || robotStore.isTracking) ? 'track' : null
+    }
+    if (preferredType === 'point') {
+      return (activeTaskType.value === 'point' || robotStore.isPointTaskRunning) ? 'point' : null
+    }
+    if (preferredType === 'multi') {
+      return (activeTaskType.value === 'multi' || robotStore.multitaskStatus?.status === true) ? 'multi' : null
+    }
+    if (preferredType === 'wayline') {
+      return activeTaskType.value === 'wayline' ? 'wayline' : null
+    }
+  }
   if (activeTaskType.value) return activeTaskType.value
   if (robotStore.isTracking) return 'track'
   if (robotStore.isPointTaskRunning) return 'point'
@@ -5573,10 +5589,20 @@ const resolveActiveTaskTypeForCancel = (): 'wayline' | 'point' | 'multi' | 'trac
   return null
 }
 
-const handleCancelTask = async () => {
-  const effectiveTaskType = resolveActiveTaskTypeForCancel()
+const handleCancelTask = async (preferredType?: 'wayline' | 'point' | 'multi' | 'track') => {
+  const effectiveTaskType = resolveActiveTaskTypeForCancel(preferredType)
   if (effectiveTaskType === null) {
-    showError('当前没有正在执行的任务')
+    const taskTypeMap = {
+      wayline: '循迹任务',
+      point: '发布点任务',
+      multi: '多任务组',
+      track: '循迹任务'
+    }
+    if (preferredType) {
+      showError(`当前没有正在执行的${taskTypeMap[preferredType] || '任务'}`)
+    } else {
+      showError('当前没有正在执行的任务')
+    }
     return
   }
 
@@ -6954,6 +6980,7 @@ onMounted(async () => {
   window.addEventListener('point-task-list-updated', handlePointTaskListUpdated)
   window.addEventListener('track-task-group-updated', handleTrackTaskGroupUpdated)
   window.addEventListener('track-task-list-updated', handleTrackTaskListUpdated)
+  window.addEventListener('navigation-origin-updated', handleNavigationOriginUpdated)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('focus', handleWindowFocus)
@@ -7165,6 +7192,19 @@ const handleTrackTaskListUpdated = async (event: Event) => {
   await overlayTrackTrajectory(runningTrackName)
 }
 
+const handleNavigationOriginUpdated = async (event: Event) => {
+  const { robotId, mapName } = (event as CustomEvent).detail || {}
+  if (robotId && robotId !== deviceStore.selectedRobotId) {
+    return
+  }
+  const targetMap = String(mapName || '').trim()
+  const currentMap = String(selectedMap.value || '').trim()
+  if (!targetMap || !currentMap || targetMap !== currentMap) {
+    return
+  }
+  pointCloudNavigationOrigin.value = await loadMapNavigationOrigin(currentMap)
+}
+
 // 切换机器人第三阶段：其余数据就绪，刷新其他下拉和点云
 const handleRobotContextRefreshed = async (event: Event) => {
   const { robotId } = (event as CustomEvent).detail || {}
@@ -7208,6 +7248,7 @@ onUnmounted(() => {
   window.removeEventListener('point-task-list-updated', handlePointTaskListUpdated)
   window.removeEventListener('track-task-group-updated', handleTrackTaskGroupUpdated)
   window.removeEventListener('track-task-list-updated', handleTrackTaskListUpdated)
+  window.removeEventListener('navigation-origin-updated', handleNavigationOriginUpdated)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('focus', handleWindowFocus)
@@ -9878,16 +9919,16 @@ const handlePageShow = () => {
 
 /* 禁用状态 - 置灰 */
 .task-btn.disabled {
-  background: #1a1a1a;
-  border-color: rgba(100, 100, 100, 0.3);
-  color: #666;
+  background: rgba(70, 89, 104, 0.36);
+  border-color: rgba(120, 141, 157, 0.28);
+  color: rgba(174, 194, 210, 0.62);
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 1;
 }
 
 .task-btn.disabled:hover {
-  background: #1a1a1a;
-  border-color: rgba(100, 100, 100, 0.3);
+  background: rgba(70, 89, 104, 0.36);
+  border-color: rgba(120, 141, 157, 0.28);
   transform: none;
   box-shadow: none;
 }

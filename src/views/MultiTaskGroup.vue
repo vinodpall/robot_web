@@ -339,12 +339,14 @@ import unlockIcon from '@/assets/source_data/svg_data/robot_source/unlock.png'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
 import { useRobotStore } from '@/stores/robot'
 import { usePermissionStore } from '@/stores/permission'
+import { useDeviceStore } from '@/stores/device'
 import { getRobotContextCacheKeys } from '@/utils/robotBootstrap'
 
 const router = useRouter()
 const route = useRoute()
 const permissionStore = usePermissionStore()
 const robotStore = useRobotStore()
+const deviceStore = useDeviceStore()
 const taskExecutionStore = useTaskExecutionStore()
 const {
   isMultiTaskRunning,
@@ -353,6 +355,10 @@ const {
   isNavigationEnabled,
   navPaused: isNavPaused
 } = storeToRefs(taskExecutionStore)
+
+const getCurrentRobotId = (): string => {
+  return String(deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || '').trim()
+}
 
 const sidebarTabs = [
   { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission', permission: 'task-tracklist-show' },
@@ -583,7 +589,7 @@ const confirmCreateGroup = async () => {
     return
   }
   
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) return
 
   try {
@@ -608,7 +614,7 @@ const confirmCreateGroup = async () => {
 }
 
 const fetchMultiTaskList = async () => {
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) return
 
   try {
@@ -659,7 +665,7 @@ const handleDeleteTaskGroup = async () => {
 }
 
 const confirmDeleteGroup = async () => {
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId || !deleteGroupDialog.value.id) return
 
   try {
@@ -690,7 +696,7 @@ const confirmDeleteGroup = async () => {
 
 const handleExecuteTaskGroup = async () => {
   if (isMultiTaskRunning.value) {
-    const robotId = localStorage.getItem('selected_robot_id')
+    const robotId = getCurrentRobotId()
     if (!robotId) {
       showErrorMessage('未找到机器人ID')
       return
@@ -728,7 +734,7 @@ const handleExecuteTaskGroup = async () => {
     return
   }
   
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) {
     showErrorMessage('未找到机器人ID')
     return
@@ -762,7 +768,7 @@ const handleExecuteTaskGroup = async () => {
 
 const handlePauseMultiTask = async () => {
   if (!isNavigationEnabled.value) return
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) {
     showErrorMessage('未找到机器人ID')
     return
@@ -854,7 +860,7 @@ const confirmAddTaskGroup = async () => {
     return
   }
   
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) {
     showErrorMessage('未找到机器人ID')
     return
@@ -927,7 +933,7 @@ const confirmAddTaskGroup = async () => {
 }
 
 const loadMapList = async () => {
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) return
   
   try {
@@ -978,7 +984,7 @@ const loadMapListFromCache = () => {
 }
 
 const loadTrackList = async () => {
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) return
   
   try {
@@ -1045,7 +1051,7 @@ const loadTrackListFromCache = () => {
 }
 
 const loadTaskGroupList = async (trackName: string) => {
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId || !trackName) {
     taskGroupOptions.value = []
     addTaskGroupDialog.value.form.taskGroup = ''
@@ -1077,7 +1083,7 @@ const loadTaskGroupList = async (trackName: string) => {
 }
 
 const loadPointTaskList = async () => {
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) return
   
   try {
@@ -1356,7 +1362,7 @@ const confirmDeleteTask = async () => {
   const task = deleteConfirmDialog.value.taskToDelete
   if (!task) return
   
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) {
     showErrorMessage('未找到机器人ID')
     return
@@ -1412,7 +1418,7 @@ const handleMoveTask = async (task: any, direction: 'up' | 'down') => {
     return
   }
   
-  const robotId = localStorage.getItem('selected_robot_id')
+  const robotId = getCurrentRobotId()
   if (!robotId) {
     showErrorMessage('未找到机器人ID')
     return
@@ -1446,7 +1452,7 @@ const handleMoveTask = async (task: any, direction: 'up' | 'down') => {
   }
 }
 
-const handleRobotContextRefreshed = () => {
+const handleRobotContextRefreshed = async () => {
   // 刷新多任务组列表
   try {
     const cachedData = localStorage.getItem('cached_multi_task_list')
@@ -1466,6 +1472,7 @@ const handleRobotContextRefreshed = () => {
   // 刷新地图、循迹列表
   loadMapListFromCache()
   loadTrackListFromCache()
+  await fetchMultiTaskList()
 }
 
 const refreshMultiTaskPageListOnEnter = async () => {
@@ -1492,6 +1499,23 @@ onActivated(async () => {
   await refreshMultiTaskPageListOnEnter()
 })
 
+watch(
+  () => route.path,
+  async (path) => {
+    if (path === '/dashboard/multi-task-group') {
+      await refreshMultiTaskPageListOnEnter()
+    }
+  }
+)
+
+watch(
+  () => deviceStore.selectedRobotId,
+  async (newId, oldId) => {
+    if (!newId || newId === oldId) return
+    if (route.path !== '/dashboard/multi-task-group') return
+    await refreshMultiTaskPageListOnEnter()
+  }
+)
 onUnmounted(() => {
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
 })

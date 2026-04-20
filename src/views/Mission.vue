@@ -37,14 +37,14 @@
               <!-- 任务组选择 -->
               <span class="mission-toolbar-label" style="margin-right: -8px;">路线名称：</span>
               <select v-model="selectedRouteName" class="mission-toolbar-select" style="min-width: 180px;" :disabled="isTrackTaskRunning">
-                <option v-if="filteredRouteList.length === 0" value="">暂无路线</option>
+                <option v-if="filteredRouteList.length === 0" :value="NO_ROUTE_VALUE">暂无路线</option>
                 <option v-for="route in filteredRouteList" :key="route" :value="route">{{ route }}</option>
               </select>
               
               <!-- 关键点选择 -->
               <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">任务组名称：</span>
               <select v-model="selectedTaskGroupName" class="mission-toolbar-select" style="min-width: 180px;">
-                <option v-if="taskGroupList.length === 0" value="">暂无任务组</option>
+                <option v-if="taskGroupList.length === 0" :value="NO_TASK_GROUP_VALUE">暂无任务组</option>
                 <option v-for="group in taskGroupList" :key="group" :value="group">{{ group }}</option>
               </select>
               
@@ -53,7 +53,7 @@
                 <button
                   class="mission-btn"
                   :class="isTrackTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"
-                  :disabled="((!canStartTrackTask || !hasNavInsMsfEnabled || filteredRouteList.length === 0 || taskGroupList.length === 0 || !selectedRouteName || !selectedTaskGroupName) && !isTrackTaskRunning) || (runningTaskType != null && runningTaskType !== 'track')"
+                  :disabled="((!canStartTrackTask || !hasNavInsMsfEnabled || filteredRouteList.length === 0 || taskGroupList.length === 0 || !hasValidSelectedRouteName || !hasValidSelectedTaskGroupName) && !isTrackTaskRunning) || (runningTaskType != null && runningTaskType !== 'track')"
                   v-permission-click-dialog="'task-tracklist-execute'"
                   @click="handleStartTrack"
                 >
@@ -63,8 +63,8 @@
                   {{ isNavPaused ? '恢复' : '暂停' }}
                 </button>
                 <button class="mission-btn mission-btn-primary" :disabled="isTrackTaskRunning" v-permission-click-dialog="'task-tracklist-create'" @click="handleOpenCreateTaskGroupDialog">添加任务组</button>
-                <button class="mission-btn mission-btn-stop" :disabled="isTrackTaskRunning || taskGroupList.length === 0 || !selectedRouteName || !selectedTaskGroupName" v-permission-click-dialog="'task-tracklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
-                <button class="mission-btn mission-btn-primary" :disabled="taskGroupList.length === 0 || !selectedRouteName || !selectedTaskGroupName" v-permission-click-dialog="'task-tracklist-create'" @click="handleAddTask">添加任务</button>
+                <button class="mission-btn mission-btn-stop" :disabled="isTrackTaskRunning || taskGroupList.length === 0 || !hasValidSelectedRouteName || !hasValidSelectedTaskGroupName" v-permission-click-dialog="'task-tracklist-delete'" @click="handleDeleteTaskGroup">删除任务组</button>
+                <button class="mission-btn mission-btn-primary" :disabled="taskGroupList.length === 0 || !hasValidSelectedRouteName || !hasValidSelectedTaskGroupName" v-permission-click-dialog="'task-tracklist-create'" @click="handleAddTask">添加任务</button>
                 <button class="mission-btn mission-btn-secondary" v-permission-click-dialog="'task-tracklist-show'" @click="openPreviewDialog">预览</button>
               </div>
             </div>
@@ -80,7 +80,7 @@
                 <div class="file-table-cell" style="min-width: 200px; flex: 1; text-align: center; display: flex; align-items: center; justify-content: center;">描述</div>
                 <div class="file-table-cell file-table-action" style="min-width: 280px; width: 280px; text-align: center; display: flex; align-items: center; justify-content: center;">操作</div>
               </div>
-              <div class="file-table-body">
+              <div ref="trackTaskTableBodyRef" class="file-table-body">
                 <!-- 显示实际数据行 -->
                 <template v-if="waypointsData.length > 0">
                 <div class="file-table-row" :class="{ 'task-last-row-active': isLastTaskRow(waypoint) }" v-for="waypoint in waypointsData" :key="waypoint.index">
@@ -170,6 +170,7 @@
               :loading="previewDialog.loading"
               :error="previewDialog.error"
               :normalization-params="previewPointCloudNormalization"
+              :navigation-origin="previewNavigationOrigin"
               :robot-pose="robotStore.pose"
               :robot-mesh="previewPc.robotMesh.value"
             />
@@ -970,7 +971,6 @@ const currentPosition = ref<{
   z: null,
   angle: null
 })
-const currentTaskId = ref('')
 
 const syncCurrentPositionFromPose = (pose: { x: number; y: number; z: number; theta: number } | null) => {
   if (!pose) return
@@ -992,11 +992,20 @@ watch(
 )
 
 // 循迹任务 - 路线与任务组
+const NO_ROUTE_VALUE = '__NO_ROUTE__'
+const NO_TASK_GROUP_VALUE = '__NO_TASK_GROUP__'
+
 const routeList = ref<string[]>([])
-const selectedRouteName = ref('')
+const selectedRouteName = ref(NO_ROUTE_VALUE)
 const taskGroupList = ref<string[]>([])
-const selectedTaskGroupName = ref('')
+const selectedTaskGroupName = ref(NO_TASK_GROUP_VALUE)
 let taskGroupRequestToken = 0
+const hasValidSelectedRouteName = computed(() => (
+  !!selectedRouteName.value && selectedRouteName.value !== NO_ROUTE_VALUE
+))
+const hasValidSelectedTaskGroupName = computed(() => (
+  !!selectedTaskGroupName.value && selectedTaskGroupName.value !== NO_TASK_GROUP_VALUE
+))
 
 const clearRouteAndTaskGroupState = (clearRoutes = true) => {
   // 递增 token 使进行中的任务组请求结果失效，避免旧数据回填
@@ -1004,9 +1013,9 @@ const clearRouteAndTaskGroupState = (clearRoutes = true) => {
   if (clearRoutes) {
     routeList.value = []
   }
-  selectedRouteName.value = ''
+  selectedRouteName.value = NO_ROUTE_VALUE
   taskGroupList.value = []
-  selectedTaskGroupName.value = ''
+  selectedTaskGroupName.value = NO_TASK_GROUP_VALUE
 }
 
 // 预览弹窗点云
@@ -1020,6 +1029,7 @@ const previewPointCloudCanvas = previewPc.canvasRef
 const previewPointCloudData = previewPc.data
 const previewBasePointCloudData = previewPc.baseData
 const previewPointCloudNormalization = previewPc.normalizationParams
+const previewNavigationOrigin = ref<{ x: number; y: number; z: number } | null>(null)
 const previewOverlayTrajectory = ref<Array<{ x: number; y: number; z: number }>>([])
 const previewOverlayTaskPoints = ref<Array<{ x: number; y: number; z: number; name: string }>>([])
 let previewCanvasEventController: AbortController | null = null
@@ -1222,7 +1232,7 @@ const setTaskGroupCache = (trackName: string, groups: string[]) => {
 
 const applyTaskGroupSelection = (groups: string[]) => {
   const nextGroups = groups
-  let nextSelected = ''
+  let nextSelected = NO_TASK_GROUP_VALUE
   if (isTrackTaskRunning.value && runningTaskGroupName.value) {
     const normalizedRunningGroup = normalizeTaskPointName(runningTaskGroupName.value)
     const matchedGroup = nextGroups.find(group => normalizeTaskPointName(group) === normalizedRunningGroup)
@@ -1231,17 +1241,17 @@ const applyTaskGroupSelection = (groups: string[]) => {
     } else if (nextGroups.length > 0) {
       nextSelected = nextGroups[0]
     } else {
-      nextSelected = ''
+      nextSelected = NO_TASK_GROUP_VALUE
     }
   } else if (nextGroups.length > 0) {
     // 保留当前选中项，避免列表未变化时被重置到第一项
-    if (nextGroups.includes(selectedTaskGroupName.value)) {
+    if (selectedTaskGroupName.value !== NO_TASK_GROUP_VALUE && nextGroups.includes(selectedTaskGroupName.value)) {
       nextSelected = selectedTaskGroupName.value
     } else {
       nextSelected = nextGroups[0]
     }
   } else {
-    nextSelected = ''
+    nextSelected = NO_TASK_GROUP_VALUE
   }
 
   if (!isSameStringList(taskGroupList.value, nextGroups)) {
@@ -1254,7 +1264,7 @@ const applyTaskGroupSelection = (groups: string[]) => {
 
 const fetchTaskGroupListByRoute = async (routeName: string) => {
   const normalizedRouteName = normalizeTrackName(routeName)
-  if (!normalizedRouteName) {
+  if (!normalizedRouteName || routeName === NO_ROUTE_VALUE) {
     applyTaskGroupSelection([])
     return
   }
@@ -1347,9 +1357,15 @@ const loadRouteList = async () => {
       routeList.value = nextRouteList
     }
 
-    if (nextRouteList.length > 0) {
-      if (!nextRouteList.includes(selectedRouteName.value)) {
-        selectedRouteName.value = nextRouteList[0]
+    const mapPrefix = `${selectedMap.value}_`
+    const visibleRouteList = nextRouteList.filter(route => route.startsWith(mapPrefix))
+
+    if (visibleRouteList.length > 0) {
+      if (
+        selectedRouteName.value === NO_ROUTE_VALUE ||
+        !visibleRouteList.includes(selectedRouteName.value)
+      ) {
+        selectedRouteName.value = visibleRouteList[0]
       }
     } else {
       clearRouteAndTaskGroupState(false)
@@ -1376,7 +1392,7 @@ const closeCreateTaskGroupDialog = () => {
 // 创建任务组
 const handleCreateTaskGroup = async () => {
   // 验证表单
-  if (!selectedRouteName.value) {
+  if (!hasValidSelectedRouteName.value) {
     errorMessage.value = { show: true, text: '请先选择路线名称' }
     return
   }
@@ -1446,7 +1462,7 @@ const handleCreateTaskGroup = async () => {
       taskGroupList.value = mergedGroups
       setTaskGroupCache(selectedRouteName.value, mergedGroups)
     }
-    selectedTaskGroupName.value = taskGroupList.value.length > 0 ? taskGroupList.value[0] : ''
+    selectedTaskGroupName.value = taskGroupList.value.length > 0 ? taskGroupList.value[0] : NO_TASK_GROUP_VALUE
 
     window.dispatchEvent(new CustomEvent('track-task-group-updated', {
       detail: {
@@ -1535,7 +1551,7 @@ watch(filteredRouteList, (newList) => {
 
 // 监听路线选择变化
 watch(selectedRouteName, async (newVal) => {
-  if (!newVal) {
+  if (!newVal || newVal === NO_ROUTE_VALUE) {
     applyTaskGroupSelection([])
     return
   }
@@ -1573,7 +1589,7 @@ watch(
     } else if (taskGroupList.value.length > 0) {
       selectedTaskGroupName.value = taskGroupList.value[0]
     } else {
-      selectedTaskGroupName.value = ''
+      selectedTaskGroupName.value = NO_TASK_GROUP_VALUE
     }
     await refreshAllTrackTaskListCache()
   },
@@ -1660,11 +1676,11 @@ const handleStartTrack = async () => {
     showMissionError('请先开启导航、INS或MSF')
     return
   }
-  if (!selectedRouteName.value) {
+  if (!hasValidSelectedRouteName.value) {
     showMissionError('请先选择路线')
     return
   }
-  if (!selectedTaskGroupName.value) {
+  if (!hasValidSelectedTaskGroupName.value) {
     showMissionError('请先选择任务组')
     return
   }
@@ -1771,12 +1787,12 @@ const handlePauseTrack = async () => {
 
 // 删除任务组
 const handleDeleteTaskGroup = () => {
-  if (!selectedRouteName.value) {
+  if (!hasValidSelectedRouteName.value) {
     errorMessage.value = { show: true, text: '请先选择路线' }
     setTimeout(() => { errorMessage.value.show = false }, 2000)
     return
   }
-  if (!selectedTaskGroupName.value) {
+  if (!hasValidSelectedTaskGroupName.value) {
     errorMessage.value = { show: true, text: '请先选择任务组' }
     setTimeout(() => { errorMessage.value.show = false }, 2000)
     return
@@ -1808,7 +1824,7 @@ const handleDeleteTaskGroup = () => {
         if (taskGroupList.value.length > 0) {
           selectedTaskGroupName.value = taskGroupList.value[0]
         } else {
-          selectedTaskGroupName.value = ''
+          selectedTaskGroupName.value = NO_TASK_GROUP_VALUE
         }
 
         // 从缓存中删除该任务组的所有任务
@@ -2090,6 +2106,19 @@ const resolvePreviewMapName = (trackName: string): string => {
   return trackName.split('_')[0] || ''
 }
 
+const parseNavigationOriginFromOdomKeyFrames = (text: string): { x: number; y: number; z: number } | null => {
+  if (!text) return null
+  const firstLine = text.split(/\r?\n/).find(line => String(line || '').trim())
+  if (!firstLine) return null
+  const tokens = firstLine.trim().split(/[\s,]+/).filter(Boolean)
+  if (tokens.length < 12) return null
+  const x = Number(tokens[3])
+  const y = Number(tokens[7])
+  const z = Number(tokens[11])
+  if (![x, y, z].every(Number.isFinite)) return null
+  return { x, y, z }
+}
+
 const getPreviewTaskPoints = (trackName: string, taskGroupName: string) => {
   const taskPoints: Array<{ x: number; y: number; z: number; name: string }> = []
   const cachedData = getAllTrackTaskListCacheRaw()
@@ -2229,6 +2258,10 @@ const loadPreviewData = async () => {
       previewOverlayTaskPoints.value = []
       return
     }
+    const originBlob = await getMapFile(mapName, 'odom_key_frames.txt')
+    previewNavigationOrigin.value = originBlob && originBlob.size > 0
+      ? parseNavigationOriginFromOdomKeyFrames(await originBlob.text())
+      : null
 
     const pcdBlob = await getMapFile(mapName, 'tinyMap.pcd')
     if (!pcdBlob || pcdBlob.size === 0) {
@@ -2262,6 +2295,7 @@ const loadPreviewData = async () => {
     previewBasePointCloudData.value = []
     previewOverlayTrajectory.value = []
     previewOverlayTaskPoints.value = []
+    previewNavigationOrigin.value = null
   } finally {
     previewDialog.value.loading = false
   }
@@ -2367,7 +2401,7 @@ const waypointsData = computed(() => {
     const allTaskList = extractTrackTaskList(parsed)
     
     // 如果没有选择路线或任务组，返回空数组
-    if (!selectedRouteName.value || !selectedTaskGroupName.value) {
+    if (!hasValidSelectedRouteName.value || !hasValidSelectedTaskGroupName.value) {
       return []
     }
     
@@ -2410,6 +2444,9 @@ const waypointsData = computed(() => {
 
 const missionEmptyRowCount = computed(() => Math.max(0, 10 - waypointsData.value.length))
 
+const trackTaskTableBodyRef = ref<HTMLElement | null>(null)
+const pendingScrollToHighlightedRow = ref(false)
+
 const getTaskProgressLastTask = computed<Record<string, any> | null>(() => {
   const raw = (robotStore.taskProgress as any)?.last_task
   if (!raw) return null
@@ -2424,6 +2461,33 @@ const getTaskProgressLastTask = computed<Record<string, any> | null>(() => {
     }
   } catch {}
   return null
+})
+
+const currentTaskId = computed(() => {
+  const lastTask = getTaskProgressLastTask.value
+  if (!lastTask) return ''
+
+  const taskType = String(lastTask.type_text || lastTask.type || '').trim()
+  if (!taskType) return ''
+
+  // 优先使用当前列表中的真实序号（与表格展示一致）
+  const lastTaskId = String(lastTask.task_id ?? '').trim()
+  if (lastTaskId) {
+    const matched = waypointsData.value.find(
+      row => String(row?.rawData?.task_id ?? '').trim() === lastTaskId
+    )
+    if (matched) {
+      return `${taskType}_${Number(matched.index) + 1}`
+    }
+  }
+
+  // 回退：使用 time 字段推导序号（time 通常从 0 开始）
+  const rawTime = Number(lastTask.time)
+  if (Number.isFinite(rawTime)) {
+    return `${taskType}_${rawTime + 1}`
+  }
+
+  return taskType
 })
 
 const normalizeCompareValue = (value: unknown) => String(value ?? '').trim()
@@ -2462,6 +2526,16 @@ const isLastTaskRow = (waypoint: any) => {
     normalizeCompareValue(lastTask.createtime) === normalizeCompareValue(rowTask.createtime)
 
   return (sameX && sameY && sameTheta && sameType) || (sameCreateTime && sameX && sameY)
+}
+
+const scrollToHighlightedTrackTaskRow = (behavior: ScrollBehavior = 'auto') => {
+  if (!isTrackTaskRunning.value) return false
+  const body = trackTaskTableBodyRef.value
+  if (!body) return false
+  const activeRow = body.querySelector('.file-table-row.task-last-row-active') as HTMLElement | null
+  if (!activeRow) return false
+  activeRow.scrollIntoView({ behavior, block: 'center', inline: 'nearest' })
+  return true
 }
 
 // 获取当前航线名称
@@ -3003,26 +3077,53 @@ const handleRobotContextRefreshed = async () => {
   await loadRouteList()  // 刷新路线列表并更新 selectedRouteName
   // 强制刷新任务组列表：即使 selectedRouteName 没有改变（watch 不会触发），
   // 也要在切换机器人后主动请求当前路线的任务组
-  if (selectedRouteName.value) {
+  if (hasValidSelectedRouteName.value) {
     await fetchTaskGroupListByRoute(selectedRouteName.value)
   } else {
     applyTaskGroupSelection([])
   }
 }
 
+const handlePreviewNavigationOriginUpdated = async (event: Event) => {
+  if (!previewDialog.value.visible) return
+  const { mapName } = (event as CustomEvent).detail || {}
+  const trackName = resolvePreviewTrackName()
+  const currentMapName = resolvePreviewMapName(trackName)
+  if (!currentMapName) return
+  if (mapName && String(mapName).trim() !== currentMapName) return
+  await loadPreviewData()
+}
+
 const refreshTrackTaskPageListOnEnter = async () => {
+  pendingScrollToHighlightedRow.value = true
   const robotId = resolveSelectedRobotId()
   if (robotId) {
     await refreshTrackTaskListFromApi(robotId)
   }
   syncSelectedMapWithCache()
   await loadRouteList()
-  if (selectedRouteName.value) {
+  if (hasValidSelectedRouteName.value) {
     await fetchTaskGroupListByRoute(selectedRouteName.value)
   } else {
     applyTaskGroupSelection([])
   }
+  await nextTick()
+  if (scrollToHighlightedTrackTaskRow()) {
+    pendingScrollToHighlightedRow.value = false
+  }
 }
+
+watch(
+  [waypointsData, currentTaskId, isTrackTaskRunning],
+  async () => {
+    if (!pendingScrollToHighlightedRow.value) return
+    await nextTick()
+    if (scrollToHighlightedTrackTaskRow()) {
+      pendingScrollToHighlightedRow.value = false
+    }
+  },
+  { flush: 'post' }
+)
 
 // 页面加载时获取数据
 // 页面加载时获取数据
@@ -3031,6 +3132,7 @@ onMounted(async () => {
   await refreshTrackTaskPageListOnEnter()
   window.addEventListener('click', closeDropdown)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  window.addEventListener('navigation-origin-updated', handlePreviewNavigationOriginUpdated)
 })
 
 let trackTaskPageMounted = false
@@ -3046,6 +3148,7 @@ onActivated(async () => {
 onUnmounted(() => {
   window.removeEventListener('click', closeDropdown)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  window.removeEventListener('navigation-origin-updated', handlePreviewNavigationOriginUpdated)
   destroyPreviewCanvasEvents()
 })
 
@@ -3470,7 +3573,7 @@ const confirmAddTask = async () => {
   const robotId = resolveSelectedRobotId()
   if (!robotId) return
 
-  if (!selectedRouteName.value || !selectedTaskGroupName.value) {
+  if (!hasValidSelectedRouteName.value || !hasValidSelectedTaskGroupName.value) {
     console.warn('请先选择路线和任务组')
     return
   }
@@ -3602,7 +3705,7 @@ const handleDeleteTask = (waypoint: any) => {
     const robotId = resolveSelectedRobotId()
     if (!robotId) return
 
-    if (!selectedRouteName.value || !selectedTaskGroupName.value) return
+    if (!hasValidSelectedRouteName.value || !hasValidSelectedTaskGroupName.value) return
 
     const rawData = waypoint.rawData || {}
     

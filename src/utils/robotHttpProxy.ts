@@ -1,3 +1,5 @@
+import { getCurrentConfig } from '../config/environment'
+
 const decodeSafely = (value: string): string => {
   try {
     return decodeURIComponent(value)
@@ -27,6 +29,16 @@ const getSelectedRobotIp = (robotId: string): string => {
   }
 }
 
+const withBackendOrigin = (pathOrUrl: string): string => {
+  const value = String(pathOrUrl || '').trim()
+  if (!value) return ''
+  if (/^https?:\/\//i.test(value)) return value
+  if (!value.startsWith('/')) return value
+  const backend = String(getCurrentConfig().services.vision || '').replace(/\/+$/, '')
+  if (!backend) return value
+  return `${backend}${value}`
+}
+
 export const buildRobotHttpAssetUrl = (
   robotId: string,
   port: number,
@@ -37,7 +49,7 @@ export const buildRobotHttpAssetUrl = (
 ): string => {
   const value = String(rawPathOrUrl || '').trim()
   if (!value) return ''
-  if (value.startsWith('/v1/robots/')) return value
+  if (value.startsWith('/v1/robots/')) return withBackendOrigin(value)
 
   let path = value
   let search = ''
@@ -76,5 +88,5 @@ export const buildRobotHttpAssetUrl = (
     }
   }
 
-  return `/v1/robots/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}${search}`
+  return withBackendOrigin(`/v1/robots/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}${search}`)
 }

@@ -36,7 +36,7 @@
               <!-- 任务组选择 -->
               <span class="mission-toolbar-label" style="margin-right: -8px;">任务组名称：</span>
               <select v-model="selectedPointTaskId" class="mission-toolbar-select" style="min-width: 180px;">
-                <option v-if="filteredPointTaskList.length === 0" value="">暂无任务组</option>
+                <option v-if="filteredPointTaskList.length === 0" :value="NO_TASK_GROUP_VALUE">暂无任务组</option>
                 <option v-for="task in filteredPointTaskList" :key="task.task_id" :value="task.task_id">{{ task.task_name }}</option>
               </select>
               
@@ -151,6 +151,7 @@
               :loading="previewDialog.loading"
               :error="previewDialog.error"
               :normalization-params="previewPointCloudNormalization"
+              :navigation-origin="previewNavigationOrigin"
               :robot-pose="robotStore.pose"
               :robot-mesh="previewPc.robotMesh.value"
             />
@@ -686,9 +687,14 @@ interface PointTask {
   taskcontent: any[]
 }
 
+const NO_TASK_GROUP_VALUE = '__NO_TASK_GROUP__'
+
 const pointTaskList = ref<PointTask[]>([])
-const selectedPointTaskId = ref('')
+const selectedPointTaskId = ref(NO_TASK_GROUP_VALUE)
 const pendingRunningPointTaskName = ref('')
+const hasValidSelectedPointTaskId = computed(() => (
+  !!selectedPointTaskId.value && selectedPointTaskId.value !== NO_TASK_GROUP_VALUE
+))
 
 const getSelectedPointTaskCacheKey = () => {
   const robotId = localStorage.getItem('selected_robot_id') || ''
@@ -702,30 +708,31 @@ const getCurrentRobotContextKeys = () => {
 
 const getCachedSelectedPointTaskId = () => {
   const key = getSelectedPointTaskCacheKey()
-  return localStorage.getItem(key) || localStorage.getItem('selected_point_task_id') || ''
+  const cached = localStorage.getItem(key) || localStorage.getItem('selected_point_task_id') || ''
+  return cached === NO_TASK_GROUP_VALUE ? '' : cached
 }
 
 const persistSelectedPointTaskId = (taskId: string) => {
   const key = getSelectedPointTaskCacheKey()
-  if (taskId) {
-    localStorage.setItem(key, taskId)
-    localStorage.setItem('selected_point_task_id', taskId)
+  if (!taskId || taskId === NO_TASK_GROUP_VALUE) {
+    localStorage.removeItem(key)
+    localStorage.removeItem('selected_point_task_id')
     return
   }
-  localStorage.removeItem(key)
-  localStorage.removeItem('selected_point_task_id')
+  localStorage.setItem(key, taskId)
+  localStorage.setItem('selected_point_task_id', taskId)
 }
 
 const pickValidPointTaskSelection = (list: PointTask[]) => {
   const mapName = selectedMap.value
   if (!mapName) {
-    selectedPointTaskId.value = ''
+    selectedPointTaskId.value = NO_TASK_GROUP_VALUE
     return
   }
 
   const visibleList = list.filter(task => String(task.task_name || '').startsWith(mapName + '_'))
   if (visibleList.length === 0) {
-    selectedPointTaskId.value = ''
+    selectedPointTaskId.value = NO_TASK_GROUP_VALUE
     return
   }
 
@@ -808,7 +815,7 @@ const filteredPointTaskList = computed(() => {
 watch(filteredPointTaskList, (newList) => {
   if (applyPendingRunningPointTaskSelection()) return
   if (newList.length === 0) {
-    selectedPointTaskId.value = ''
+    selectedPointTaskId.value = NO_TASK_GROUP_VALUE
     return
   }
 
@@ -833,7 +840,7 @@ watch(() => robotStore.taskStatus, (ts) => {
 
 // 根据选中的任务组ID获取任务详情
 const selectedTaskDetail = computed(() => {
-  if (!selectedPointTaskId.value) return null
+  if (!hasValidSelectedPointTaskId.value) return null
   return pointTaskList.value.find(task => task.task_id === selectedPointTaskId.value)
 })
 
@@ -878,6 +885,7 @@ const previewPc = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5
 const previewPointCloudData = previewPc.data
 const previewBasePointCloudData = previewPc.baseData
 const previewPointCloudNormalization = previewPc.normalizationParams
+const previewNavigationOrigin = ref<{ x: number; y: number; z: number } | null>(null)
 const previewOverlayTaskPoints = ref<Array<{ x: number; y: number; z: number; name: string }>>([])
 const previewPointCloudCanvas = previewPc.canvasRef
 let previewCanvasEventController: AbortController | null = null
@@ -940,6 +948,19 @@ const resolvePreviewMapName = () => {
   const taskName = String(selectedTaskDetail.value?.task_name || '')
   if (!taskName.includes('_')) return ''
   return taskName.split('_')[0] || ''
+}
+
+const parseNavigationOriginFromOdomKeyFrames = (text: string): { x: number; y: number; z: number } | null => {
+  if (!text) return null
+  const firstLine = text.split(/\r?\n/).find(line => String(line || '').trim())
+  if (!firstLine) return null
+  const tokens = firstLine.trim().split(/[\s,]+/).filter(Boolean)
+  if (tokens.length < 12) return null
+  const x = Number(tokens[3])
+  const y = Number(tokens[7])
+  const z = Number(tokens[11])
+  if (![x, y, z].every(Number.isFinite)) return null
+  return { x, y, z }
 }
 
 const getPreviewTaskPoints = () => {
@@ -1037,8 +1058,13 @@ const loadPreviewData = async () => {
       previewPointCloudData.value = []
       previewBasePointCloudData.value = []
       previewOverlayTaskPoints.value = []
+      previewNavigationOrigin.value = null
       return
     }
+    const originBlob = await getMapFile(mapName, 'odom_key_frames.txt')
+    previewNavigationOrigin.value = originBlob && originBlob.size > 0
+      ? parseNavigationOriginFromOdomKeyFrames(await originBlob.text())
+      : null
 
     const pcdBlob = await getMapFile(mapName, 'tinyMap.pcd')
     if (!pcdBlob || pcdBlob.size === 0) {
@@ -1046,6 +1072,7 @@ const loadPreviewData = async () => {
       previewPointCloudData.value = []
       previewBasePointCloudData.value = []
       previewOverlayTaskPoints.value = []
+      previewNavigationOrigin.value = null
       return
     }
 
@@ -1055,6 +1082,7 @@ const loadPreviewData = async () => {
       previewPointCloudData.value = []
       previewBasePointCloudData.value = []
       previewOverlayTaskPoints.value = []
+      previewNavigationOrigin.value = null
       return
     }
 
@@ -1068,6 +1096,7 @@ const loadPreviewData = async () => {
     previewPointCloudData.value = []
     previewBasePointCloudData.value = []
     previewOverlayTaskPoints.value = []
+    previewNavigationOrigin.value = null
   } finally {
     previewDialog.value.loading = false
   }
@@ -1083,6 +1112,15 @@ const openPreviewDialog = async () => {
 const closePreviewDialog = () => {
   previewDialog.value.visible = false
   destroyPreviewCanvasEvents()
+}
+
+const handlePreviewNavigationOriginUpdated = async (event: Event) => {
+  if (!previewDialog.value.visible) return
+  const { mapName } = (event as CustomEvent).detail || {}
+  const currentMapName = resolvePreviewMapName()
+  if (!currentMapName) return
+  if (mapName && String(mapName).trim() !== currentMapName) return
+  await loadPreviewData()
 }
 
 // 当前位置和任务信息
@@ -1595,7 +1633,7 @@ const handleStartTask = async () => {
       errorMessage.value = { show: true, text: '未找到机器人ID' }
       return
     }
-    if (!selectedPointTaskId.value) {
+    if (!hasValidSelectedPointTaskId.value) {
       errorMessage.value = { show: true, text: '请先选择任务组' }
       return
     }
@@ -1625,7 +1663,7 @@ const handleStartTask = async () => {
     errorMessage.value = { show: true, text: '请先开启导航、INS或MSF' }
     return
   }
-  if (!selectedPointTaskId.value) {
+  if (!hasValidSelectedPointTaskId.value) {
     errorMessage.value = { show: true, text: '请先选择任务组' }
     return
   }
@@ -2008,7 +2046,7 @@ watch(filteredTaskTypes, (list) => {
 }, { immediate: true })
 
 const handleAddTask = () => {
-  if (!selectedPointTaskId.value) {
+  if (!hasValidSelectedPointTaskId.value) {
     errorMessage.value = { show: true, text: '请先选择任务组' }
     return
   }
@@ -2053,7 +2091,7 @@ const cancelAddTask = () => {
 }
 
 const confirmAddTask = async () => {
-  if (!selectedPointTaskId.value) {
+  if (!hasValidSelectedPointTaskId.value) {
     errorMessage.value = { show: true, text: '请先选择任务组' }
     return
   }
@@ -2717,7 +2755,7 @@ const handleCreateTaskGroup = async () => {
 
 // 删除任务组
 const handleDeleteTaskGroup = () => {
-  if (!selectedPointTaskId.value) {
+  if (!hasValidSelectedPointTaskId.value) {
     errorMessage.value = { show: true, text: '请先选择要删除的任务组' }
     return
   }
@@ -2739,7 +2777,7 @@ const handleDeleteTaskGroup = () => {
         if (filteredPointTaskList.value.length > 0) {
           selectedPointTaskId.value = filteredPointTaskList.value[0].task_id
         } else {
-          selectedPointTaskId.value = ''
+          selectedPointTaskId.value = NO_TASK_GROUP_VALUE
         }
         
         successMessage.value = { show: true, text: '删除任务组成功' }
@@ -2863,6 +2901,7 @@ onMounted(async () => {
   window.addEventListener('click', closeErrorTooltip)
   window.addEventListener('click', closeDropdown)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  window.addEventListener('navigation-origin-updated', handlePreviewNavigationOriginUpdated)
   load3MF('/jiantou.3mf').then(mesh => {
     if (mesh) previewPc.robotMesh.value = mesh
   })
@@ -2883,6 +2922,7 @@ onUnmounted(() => {
   window.removeEventListener('click', closeErrorTooltip)
   window.removeEventListener('click', closeDropdown)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  window.removeEventListener('navigation-origin-updated', handlePreviewNavigationOriginUpdated)
   destroyPreviewCanvasEvents()
   cleanupBlobUrls() // 清理所有blob URL
 })

@@ -216,8 +216,8 @@ export default defineConfig(({ mode }) => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     console.log('Vite config - current environment:', environment)
     if (environment === 'internet') {
-      console.log('Vite config - using internet proxy:', 'http://39.185.83.71:8000')
-      return 'http://39.185.83.71:8000'
+      console.log('Vite config - using internet proxy:', 'http://10.10.1.71:8000')
+      return 'http://10.10.1.71:8000'
     } else {
       console.log('Vite config - using intranet proxy:', 'http://172.16.88.152:8000')
       return 'http://172.16.88.152:8000'
@@ -227,7 +227,7 @@ export default defineConfig(({ mode }) => {
   const getDxrApiTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     if (environment === 'internet') {
-      return 'http://39.185.83.71:81'
+      return 'http://10.10.1.71:81'
     } else {
       return 'http://172.16.88.152:81'
     }
@@ -282,22 +282,22 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         '/navigation_list': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://10.10.1.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/navigation_delete': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://10.10.1.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/download_file': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://10.10.1.71:5000',
           changeOrigin: true,
           secure: false,
         },
         '/upload_single_file': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://10.10.1.71:5000',
           changeOrigin: true,
           secure: false,
         },
