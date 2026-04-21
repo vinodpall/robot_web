@@ -384,6 +384,8 @@ const createRobotObject = () => {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     geometry.setIndex(props.robotMesh.indices)
     geometry.computeVertexNormals()
+    // jiantou.3mf local forward is opposite to runtime heading; add 180deg compensation.
+    const headingOffset = -Math.PI / 2
 
     const material = new THREE.MeshStandardMaterial({
       color: '#ff00ff',
@@ -393,11 +395,29 @@ const createRobotObject = () => {
       roughness: 0.4,
     })
 
+    // Compute model local forward from heading compensation, then anchor tip along that axis.
+    const localForward = new THREE.Vector3(1, 0, 0).applyAxisAngle(WORLD_UP, -headingOffset).normalize()
+    let maxForwardProjection = -Infinity
+    for (let index = 0; index < props.robotMesh.vertices.length; index++) {
+      const base = index * 3
+      const vx = positions[base]
+      const vy = positions[base + 1]
+      const vz = positions[base + 2]
+      const projection = vx * localForward.x + vy * localForward.y + vz * localForward.z
+      if (projection > maxForwardProjection) maxForwardProjection = projection
+    }
+    if (Number.isFinite(maxForwardProjection)) {
+      geometry.translate(
+        -localForward.x * maxForwardProjection,
+        -localForward.y * maxForwardProjection,
+        -localForward.z * maxForwardProjection
+      )
+    }
+
     const mesh = new THREE.Mesh(geometry, material)
     mesh.scale.setScalar(0.026 * ROBOT_ICON_SCALE)
-    // Keep pose anchor at model center so icon position matches trajectory/map pose.
     mesh.position.x = 0
-    labelAnchorOffsetX = 0
+    labelAnchorOffsetX = 0.01
     group.add(mesh)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -412,23 +432,22 @@ const createRobotObject = () => {
     group.add(edges)
 
     group.userData.headingAxis = 'y'
-    // jiantou.3mf local forward is opposite to runtime heading; add 180deg compensation.
-    group.userData.headingOffset = -Math.PI / 2
+    group.userData.headingOffset = headingOffset
     group.userData.headingTargets = [mesh, edges]
   } else {
     const coneHeight = 0.078 * ROBOT_ICON_SCALE
     const geometry = new THREE.ConeGeometry(0.026 * ROBOT_ICON_SCALE, coneHeight, 3)
+    // Bake cone orientation (+X forward) and tip anchor (x=0) into geometry.
+    geometry.rotateZ(-Math.PI / 2)
+    geometry.translate(-(coneHeight / 2), 0, 0)
     const material = new THREE.MeshStandardMaterial({
       color: '#ff00ff',
       emissive: '#ff00ff',
       emissiveIntensity: 0.22,
     })
     const cone = new THREE.Mesh(geometry, material)
-    // Cone points to +Y by default; rotate to +X so yaw around Y matches planar heading.
-    cone.rotation.z = -Math.PI / 2
-    // Keep fallback icon anchored at center to align with pose/trajectory.
     cone.position.x = 0
-    labelAnchorOffsetX = 0
+    labelAnchorOffsetX = 0.01
     group.add(cone)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -443,8 +462,8 @@ const createRobotObject = () => {
     group.add(edges)
 
     group.userData.headingAxis = 'y'
-    // Fallback cone local forward is opposite to robot heading in current world mapping.
-    group.userData.headingOffset = Math.PI
+    // Fallback cone geometry is baked to +X forward with tip at local origin.
+    group.userData.headingOffset = 0
     group.userData.headingTargets = [cone, edges]
   }
 
