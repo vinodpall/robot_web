@@ -55,6 +55,16 @@ export class ApiClient {
         return error instanceof DOMException && error.name === 'AbortError'
     }
 
+    private getHeaderValue(headers: HeadersInit | undefined, key: string): string | undefined {
+        if (!headers) return undefined
+        try {
+            const value = new Headers(headers).get(key)
+            return value ?? undefined
+        } catch {
+            return undefined
+        }
+    }
+
     private async request<T>(
         endpoint: string,
         options: RequestInit & { responseType?: 'blob', baseURL?: string } = {}
@@ -63,9 +73,12 @@ export class ApiClient {
         const url = `${baseURL}${endpoint}`
 
         // 鍚堝苟璇锋眰澶达紝纭繚鑷畾涔夌殑Content-Type涓嶈瑕嗙洊
-        const headers: Record<string, string> = { ...this.defaultHeaders }
+        const headers = new Headers(this.defaultHeaders)
         if (options.headers) {
-            Object.assign(headers, options.headers)
+            const extraHeaders = new Headers(options.headers)
+            extraHeaders.forEach((value, key) => {
+                headers.set(key, value)
+            })
         }
 
         // 璋冭瘯淇℃伅锛氭鏌uthorization澶达紙寮€鍙戞椂浣跨敤锛岀敓浜х幆澧冩敞閲婏級
@@ -75,8 +88,8 @@ export class ApiClient {
         // console.log('Authorization澶?', headers['Authorization'])
 
         const config: RequestInit = {
-            headers,
             ...options,
+            headers,
         }
 
         try {
@@ -128,12 +141,11 @@ export class ApiClient {
 
     // POST璇锋眰
     async post<T>(endpoint: string, data?: any, options?: RequestInit & { responseType?: 'blob', baseURL?: string }): Promise<T> {
-        let body: string | undefined
+        let body: BodyInit | undefined
 
         // 濡傛灉data鏄瓧绗︿覆涓攐ptions涓寚瀹氫簡Content-Type涓篺orm-urlencoded锛岀洿鎺ヤ娇鐢?
-        if (typeof data === 'string' && options?.headers &&
-            'content-type' in options.headers &&
-            options.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+        const contentType = this.getHeaderValue(options?.headers, 'content-type') || ''
+        if (typeof data === 'string' && contentType.includes('application/x-www-form-urlencoded')) {
             body = data
         } else {
             // 鍚﹀垯鎸塉SON鏍煎紡澶勭悊

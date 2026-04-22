@@ -1238,7 +1238,7 @@ export const navigationApi = {
     const params: Record<string, any> = { map_name: mapName }
     if (path) params.path = path
     return apiClient.get<{ code: number; msg: string; data: any[] }>(
-      `/robots/${encodeURIComponent(robotId)}/http/5000/navigation_list`,
+      `/proxy/${encodeURIComponent(robotId)}/http/5000/navigation_list`,
       params
     )
   },
@@ -1247,7 +1247,7 @@ export const navigationApi = {
     fieldArray = 'content,task_group,tracking_route'
   ) => {
     return apiClient.get<{ data?: { content?: string[]; task_group?: string[]; tracking_route?: string[] } }>(
-      `/robots/${encodeURIComponent(robotId)}/http/81/api/dxr_api/get_lists`,
+      `/proxy/${encodeURIComponent(robotId)}/http/81/api/dxr_api/get_lists`,
       { field_array: fieldArray }
     )
   },
@@ -1274,7 +1274,7 @@ export const navigationApi = {
         last_page?: number
       }
     }>(
-      `/robots/${encodeURIComponent(robotId)}/http/81/api/dxr_api/getLog`,
+      `/proxy/${encodeURIComponent(robotId)}/http/81/api/dxr_api/getLog`,
       params
     )
   },
@@ -1296,7 +1296,7 @@ export const navigationApi = {
     })
 
     return apiClient.post<{ code: number; msg: string }>(
-      `/robots/${encodeURIComponent(robotId)}/http/5000/navigation_delete`,
+      `/proxy/${encodeURIComponent(robotId)}/http/5000/navigation_delete`,
       params.toString(),
       {
       headers: {
@@ -1461,7 +1461,7 @@ const buildRobotHttpUrl = (
   }
 
   const encodedPath = encodeRobotHttpPath(cleanPath)
-  const base = `${API_BASE_URL}/robots/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}`
+  const base = `${API_BASE_URL}/proxy/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}`
   const search = new URLSearchParams()
   Object.entries(mergedQuery).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {

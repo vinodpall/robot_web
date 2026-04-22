@@ -49,7 +49,7 @@ export const buildRobotHttpAssetUrl = (
 ): string => {
   const value = String(rawPathOrUrl || '').trim()
   if (!value) return ''
-  if (value.startsWith('/v1/robots/')) return withBackendOrigin(value)
+  if (value.startsWith('/v1/proxy/') || value.startsWith('/v1/robots/')) return withBackendOrigin(value)
 
   let path = value
   let search = ''
@@ -88,5 +88,5 @@ export const buildRobotHttpAssetUrl = (
     }
   }
 
-  return withBackendOrigin(`/v1/robots/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}${search}`)
+  return withBackendOrigin(`/v1/proxy/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}${search}`)
 }

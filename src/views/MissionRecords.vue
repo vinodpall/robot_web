@@ -697,13 +697,27 @@ const hasValidSelectedPointTaskId = computed(() => (
 ))
 
 const getSelectedPointTaskCacheKey = () => {
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = resolveSelectedRobotId()
   return robotId ? `selected_point_task_id_${robotId}` : 'selected_point_task_id'
 }
 
 const getCurrentRobotContextKeys = () => {
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = resolveSelectedRobotId()
   return robotId ? getRobotContextCacheKeys(robotId) : null
+}
+
+const resolveSelectedRobotId = (): string => {
+  const cachedId = String(localStorage.getItem('selected_robot_id') || '').trim()
+  if (cachedId) return cachedId
+
+  try {
+    const infoRaw = localStorage.getItem('selected_robot_info')
+    if (!infoRaw) return ''
+    const info = JSON.parse(infoRaw) as { robot_id?: string }
+    return String(info?.robot_id || '').trim()
+  } catch {
+    return ''
+  }
 }
 
 const getCachedSelectedPointTaskId = () => {
@@ -1933,7 +1947,7 @@ const filteredTaskTypes = computed(() => {
 })
 
 const fetchTaskTypeList = async (options?: { force?: boolean }) => {
-  const robotId = localStorage.getItem('selected_robot_id') || ''
+  const robotId = resolveSelectedRobotId()
   if (!robotId) return
 
   const cacheKey = buildTaskTypeCacheKey(robotId)
