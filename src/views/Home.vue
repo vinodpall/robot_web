@@ -220,6 +220,7 @@
               :loading="pointCloudLoading"
               :loading-text="pointCloudLoadingText"
               :error="pointCloudError"
+              :auto-fit-on-data-change="false"
               :normalization-params="pointCloudNormalizationParams"
               :navigation-origin="pointCloudNavigationOrigin"
               :robot-pose="robotStore.pose"
@@ -1909,7 +1910,7 @@ const refreshPointCloud = async (options?: { silent?: boolean; force?: boolean }
     lastTrackOverlayTaskPointCount.value = 0
     lastPointTaskOverlayKey.value = ''
     await nextTick()
-    await syncPointCloudOverlayByRuntimeState()
+    threePointCloudRef.value?.fitCameraToScene?.()
   } catch (error) {
     console.error('[点云] 加载失败:', error)
     pointCloudError.value = '地图加载失败'
@@ -4722,7 +4723,7 @@ const getMapFile = async (mapName: string, fileName: string): Promise<Blob | nul
  * }
  */
 const MAP_CONFIG_KEY = 'map_config'
-const mapDownloadTasks = new Map<string, Promise<void>>()
+const mapDownloadTasks = new Map<string, Promise<boolean>>()
 
 // 读取地图配置
 const getMapConfig = (): Record<string, string> => {
@@ -4771,22 +4772,21 @@ const shouldDownloadMap = async (mapName: string, serverUpdateTime: string): Pro
 }
 
 // 下载地图文件
-const downloadMapFiles = async (mapName: string, updateTime: string) => {
+const downloadMapFiles = async (mapName: string, updateTime: string): Promise<boolean> => {
   const robotId = deviceStore.selectedRobotId || 'unknown'
   const taskKey = `${robotId}:${mapName}:${updateTime}`
   const existingTask = mapDownloadTasks.get(taskKey)
   if (existingTask) {
-    await existingTask
-    return
+    return await existingTask
   }
 
-  const task = (async () => {
+  const task = (async (): Promise<boolean> => {
     if (!(await shouldDownloadMap(mapName, updateTime))) {
-      return
+      return false
     }
     if (!robotId || robotId === 'unknown') {
       console.warn('[地图缓存] 未选择机器人，无法下载地图')
-      return
+      return false
     }
     const files = await mapFileApi.downloadAllMapFiles(robotId, mapName)
     
@@ -4806,17 +4806,48 @@ const downloadMapFiles = async (mapName: string, updateTime: string) => {
     if (hasRequiredMapFiles) {
       updateMapConfig(mapName, updateTime)
     }
+    return savedCount > 0
   })()
 
   mapDownloadTasks.set(taskKey, task)
 
   try {
-    await task
+    return await task
   } finally {
     if (mapDownloadTasks.get(taskKey) === task) {
       mapDownloadTasks.delete(taskKey)
     }
   }
+}
+
+const isCurrentPointCloudReusable = (mapName: string, updateTime: string) => {
+  const normalizedMapName = String(mapName || '').trim().split('@')[0] || ''
+  if (!normalizedMapName) return false
+  const currentRefreshSignature = `${normalizedMapName}@${updateTime}`
+  return (
+    lastLoadedPointCloudMap.value === normalizedMapName &&
+    basePointCloudData.value.length > 0 &&
+    lastPointCloudRefreshSignature.value === currentRefreshSignature
+  )
+}
+
+const ensureSelectedMapPointCloudFresh = async (options?: { silent?: boolean }) => {
+  const mapName = String(selectedMap.value || '').trim()
+  if (!mapName) return
+
+  const updateTime = mapUpdateTimeMap.value[mapName] || ''
+  const wasDownloaded = await downloadMapFiles(mapName, updateTime)
+  const canReuseCurrentPointCloud = isCurrentPointCloudReusable(mapName, updateTime)
+
+  if (!wasDownloaded && canReuseCurrentPointCloud) {
+    await syncPointCloudOverlayByRuntimeState()
+    return
+  }
+
+  await refreshPointCloud({
+    silent: !!options?.silent && canReuseCurrentPointCloud && !wasDownloaded,
+    force: wasDownloaded
+  })
 }
 
 // 获取地图文件 URL（用于渲染）
@@ -5054,23 +5085,20 @@ watch(selectedMap, async (newMapName) => {
 
   // 切换地图时检查并下载地图文件和所有轨迹文件
   if (newMapName) {
-    clearPointCloud()
-    pointCloudError.value = ''
-    pointCloudLoadingText.value = '地图文件下载中...'
-    pointCloudLoading.value = true
+    const updateTime = mapUpdateTimeMap.value[newMapName] || ''
+    const canReuseCurrentPointCloud = isCurrentPointCloudReusable(newMapName, updateTime)
+
+    if (!canReuseCurrentPointCloud) {
+      clearPointCloud()
+      pointCloudError.value = ''
+      pointCloudLoadingText.value = '地图文件下载中...'
+      pointCloudLoading.value = true
+    }
     try {
-      // 获取该地图的更新时间
-      const updateTime = mapUpdateTimeMap.value[newMapName] || ''
-      await downloadMapFiles(newMapName, updateTime)
-
-      // 下载所有轨迹文件（带更新时间校验）
+      await ensureSelectedMapPointCloudFresh()
       await syncSelectedMapTrajectoryFiles(newMapName)
-
-      // 地图文件和轨迹文件下载/验证完成后，刷新点云图
-      await refreshPointCloud()
     } catch (err) {
-      // 下载失败也尝试刷新点云图（可能使用缓存）
-      await refreshPointCloud()
+      await refreshPointCloud({ force: !canReuseCurrentPointCloud })
     }
   } else {
     clearPointCloud()
@@ -7231,9 +7259,7 @@ const handleRobotContextRefreshed = async (event: Event) => {
   // 若已选中地图则刷新点云
   if (selectedMap.value) {
     await nextTick()
-    const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
-    await downloadMapFiles(selectedMap.value, updateTime)
-    await refreshPointCloud()
+    await ensureSelectedMapPointCloudFresh({ silent: true })
   }
 }
 
@@ -8241,9 +8267,7 @@ watch(() => deviceStore.selectedRobot, async (newRobot, oldRobot) => {
     // 如果已经有选中的地图，触发刷新
     if (selectedMap.value) {
       await nextTick()
-      const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
-      await downloadMapFiles(selectedMap.value, updateTime)
-      await refreshPointCloud()
+      await ensureSelectedMapPointCloudFresh()
     }
   }
 }, { immediate: false })
@@ -8261,9 +8285,7 @@ onMounted(async () => {
       // 点云加载后台并行执行，避免影响视频首帧启动
       void (async () => {
         await nextTick()
-        const updateTime = mapUpdateTimeMap.value[selectedMap.value] || ''
-        await downloadMapFiles(selectedMap.value, updateTime)
-        await refreshPointCloud()
+        await ensureSelectedMapPointCloudFresh()
       })()
     }
   }
@@ -8282,12 +8304,26 @@ onActivated(async () => {
   }
   if (deviceStore.selectedRobot) {
     // 重新拉取循迹列表，确保数据最新（接口失败时自动回退到缓存）
-    await fetchTrackList()
+    void fetchTrackList()
     await recoverVideoStreamsOnForeground()
 
     if (selectedMap.value) {
-      await nextTick()
-      await refreshPointCloud({ silent: true })
+      const normalizedSelectedMap = String(selectedMap.value || '').trim().split('@')[0] || ''
+      const hasReusablePointCloud =
+        !!normalizedSelectedMap &&
+        lastLoadedPointCloudMap.value === normalizedSelectedMap &&
+        basePointCloudData.value.length > 0
+
+      // 先让首页完成显示，再在后台同步点云，避免切页时被大点云重建卡住。
+      requestAnimationFrame(() => {
+        void nextTick(() => {
+          if (hasReusablePointCloud) {
+            void ensureSelectedMapPointCloudFresh({ silent: true })
+          } else {
+            void ensureSelectedMapPointCloudFresh()
+          }
+        })
+      })
     }
   }
 })

@@ -45,13 +45,6 @@ export const useUserStore = defineStore('user', {
 
       if (Array.isArray(state.user.roles)) {
         const rolesArr = state.user.roles as unknown[]
-        const isSuper = rolesArr.some((r: any) =>
-          typeof r === 'string'
-            ? r === 'super_admin'
-            : r?.role_code === 'super_admin' || r?.role_name === '超级管理员'
-        )
-        if (isSuper) return true
-
         const rolePermissionMatched = rolesArr.some((r: any) => hasPermissionInList(r?.permissions, permission))
         if (rolePermissionMatched) return true
       }

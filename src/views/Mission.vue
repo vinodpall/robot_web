@@ -1024,7 +1024,7 @@ const previewDialog = ref({
   loading: false,
   error: ''
 })
-const previewPc = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5 })
+const previewPc = usePointCloudRenderer({ initialScale: 0.5, initialPointSize: 0.5 })
 const previewPointCloudCanvas = previewPc.canvasRef
 const previewPointCloudData = previewPc.data
 const previewBasePointCloudData = previewPc.baseData
@@ -2322,7 +2322,6 @@ watch(
 )
 
 onMounted(() => {
-  loadWaylineFiles()
   loadRouteList()
   refreshAllTrackTaskListCache()
   load3MF('/jiantou.3mf').then(mesh => {
@@ -3128,7 +3127,6 @@ watch(
 // 页面加载时获取数据
 // 页面加载时获取数据
 onMounted(async () => {
-  await loadWaylineFiles()
   await refreshTrackTaskPageListOnEnter()
   window.addEventListener('click', closeDropdown)
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)

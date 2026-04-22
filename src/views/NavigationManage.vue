@@ -240,6 +240,7 @@
                           :loading="navPointCloudLoading"
                           :loading-text="navPointCloudLoadingText"
                           :error="navPointCloudError"
+                          :auto-fit-on-data-change="false"
                           :normalization-params="navPointCloudNormalizationParams"
                           :navigation-origin="navPointCloudNavigationOrigin"
                           :robot-pose="robotStore.pose"
@@ -440,6 +441,7 @@
                         :loading="navPointCloudLoading"
                         :loading-text="navPointCloudLoadingText"
                         :error="navPointCloudError"
+                        :auto-fit-on-data-change="false"
                         :normalization-params="navPointCloudNormalizationParams"
                         :navigation-origin="navPointCloudNavigationOrigin"
                         :robot-pose="robotStore.pose"
@@ -2364,7 +2366,7 @@ const increaseSpeed = async () => {
 
 // 导航点云图相关
 // ===================== 点云图（复用 composable）=====================
-const navPc = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5 })
+const navPc = usePointCloudRenderer({ initialScale: 0.5, initialPointSize: 0.5 })
 const navPointCloudCanvas = navPc.canvasRef
 const navPointCloudData = navPc.data
 const baseNavPointCloudData = navPc.baseData
@@ -2474,7 +2476,7 @@ const scheduleNavPointCloudRender = () => {
 
 const clampNavPointCloudScale = (value: number) => {
   const MIN_SCALE = 0.01
-  const MAX_SCALE = 50
+  const MAX_SCALE = 100
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value))
 }
 
@@ -2658,11 +2660,12 @@ const drawNavPointCloud = () => {
 
   ctx.putImageData(imageData, 0, 0)
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const labelZoomScale = Math.min(1.8, Math.max(1, Math.sqrt(Math.max(navPointCloudScale.value, 0.01))))
 
   // 任务点绘制在最上层，并展示名称
   taskPoints.forEach(tp => {
     ctx.beginPath()
-    ctx.arc(tp.x, tp.y, 4, 0, Math.PI * 2)
+    ctx.arc(tp.x, tp.y, 2.4, 0, Math.PI * 2)
     ctx.fillStyle = 'rgba(255, 216, 0, 0.92)'
     ctx.fill()
     ctx.strokeStyle = '#FFFFFF'
@@ -2670,15 +2673,17 @@ const drawNavPointCloud = () => {
     ctx.stroke()
 
     if (tp.name) {
-      ctx.font = 'bold 10px Arial'
+      const fontSize = Math.round(8 * labelZoomScale)
+      ctx.font = `bold ${fontSize}px Arial`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       const textW = ctx.measureText(tp.name).width
-      const padX = 4, padY = 2
+      const padX = Math.max(2, Math.round(2 * labelZoomScale))
+      const padY = Math.max(1, Math.round(1 * labelZoomScale))
       const tagW = textW + padX * 2
-      const tagH = 12 + padY * 2
+      const tagH = fontSize + padY * 2
       const tagX = tp.x - tagW / 2
-      const tagY = tp.y - 18 - tagH / 2
+      const tagY = tp.y - Math.round(12 * labelZoomScale) - tagH / 2
       const r = 3
       ctx.beginPath()
       ctx.moveTo(tagX + r, tagY)
@@ -2725,7 +2730,7 @@ const drawNavPointCloud = () => {
     const oProjY = oYRotatedY * baseScale * oPerspective + halfH + panOffsetY
 
     ctx.beginPath()
-    ctx.arc(oProjX, oProjY, 3, 0, Math.PI * 2)
+    ctx.arc(oProjX, oProjY, 2, 0, Math.PI * 2)
     ctx.fillStyle = '#FF0000'
     ctx.fill()
     ctx.strokeStyle = '#FFFFFF'
@@ -2734,12 +2739,17 @@ const drawNavPointCloud = () => {
 
     ;{
       const lbl = '原点'
-      ctx.font = 'bold 10px Arial'
+      const fontSize = Math.round(8 * labelZoomScale)
+      ctx.font = `bold ${fontSize}px Arial`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       const tw = ctx.measureText(lbl).width
-      const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
-      const tx = oProjX - tagW / 2, ty = oProjY - 10 - tagH
+      const padX = Math.max(2, Math.round(2 * labelZoomScale))
+      const tagH = fontSize + Math.max(2, Math.round(2 * labelZoomScale))
+      const rr = 3
+      const tagW = tw + padX * 2
+      const tx = oProjX - tagW / 2
+      const ty = oProjY - Math.round(6 * labelZoomScale) - tagH
       ctx.beginPath()
       ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
       ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
@@ -2784,9 +2794,9 @@ const drawNavPointCloud = () => {
     const { px: rProjX, py: rProjY } = projectNorm(robotNormX, robotNormY, robotNormZ)
     const mesh = arrowMesh.value
     if (mesh) {
-      const baseArrowScale = 0.004
-      const minArrowPx = 8
-      const maxArrowPx = 24
+      const baseArrowScale = 0.0026
+      const minArrowPx = 5
+      const maxArrowPx = 14
       const arrowScale = Math.min(
         Math.max(
           baseArrowScale * navPointCloudScale.value,
@@ -2849,7 +2859,7 @@ const drawNavPointCloud = () => {
         robotNormZ
       )
       const screenAngle = Math.atan2(tProjY - rProjY, tProjX - rProjX)
-      const arrowSize = 14
+      const arrowSize = 8
       ctx.save()
       ctx.translate(rProjX, rProjY)
       ctx.rotate(screenAngle + Math.PI / 2)
@@ -2872,12 +2882,17 @@ const drawNavPointCloud = () => {
 
     ;{
       const lbl = '机器狗'
-      ctx.font = 'bold 10px Arial'
+      const fontSize = Math.round(8 * labelZoomScale)
+      ctx.font = `bold ${fontSize}px Arial`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       const tw = ctx.measureText(lbl).width
-      const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
-      const tx = rProjX - tagW / 2, ty = rProjY - 18 - tagH
+      const padX = Math.max(2, Math.round(2 * labelZoomScale))
+      const tagH = fontSize + Math.max(2, Math.round(2 * labelZoomScale))
+      const rr = 3
+      const tagW = tw + padX * 2
+      const tx = rProjX - tagW / 2
+      const ty = rProjY - Math.round(12 * labelZoomScale) - tagH
       ctx.beginPath()
       ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
       ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)

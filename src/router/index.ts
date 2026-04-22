@@ -26,17 +26,12 @@ function extractPermissionsFromUser(user: any): string[] {
 }
 
 function isSuperAdminUser(user: any): boolean {
-  const isSuperFlag =
+  return (
     user?.is_superuser === true ||
     user?.is_superuser === 1 ||
     user?.is_superuser === '1' ||
     (typeof user?.is_superuser === 'string' && user.is_superuser.trim().toLowerCase() === 'true')
-  if (isSuperFlag) return true
-  if (!Array.isArray(user?.roles)) return false
-  return user.roles.some((role: any) => {
-    if (typeof role === 'string') return role === 'super_admin'
-    return role?.role_name === '超级管理员' || role?.role_code === 'super_admin'
-  })
+  )
 }
 
 const router = createRouter({

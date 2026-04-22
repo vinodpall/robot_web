@@ -8,30 +8,24 @@ const isTruthySuperuser = (value: unknown): boolean => {
   return false
 }
 
-const hasSuperuserByRole = (roles: unknown): boolean => {
-  if (!Array.isArray(roles)) return false
-  return roles.some((role: any) => {
-    if (typeof role === 'string') return role === 'super_admin'
-    return role?.role_code === 'super_admin' || role?.role_name === '超级管理员'
-  })
+function readSuperuserFromStorage(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const userStr = localStorage.getItem('user')
+    if (!userStr) return false
+    return isTruthySuperuser(JSON.parse(userStr)?.is_superuser)
+  } catch {
+    return false
+  }
 }
 
 export const usePermissionStore = defineStore('permission', () => {
   const userPermissions = ref<string[]>([])
   const currentRole = ref<string>('')
   const allPermissions = ref<Permission[]>([])
+  const _isSuperuser = ref<boolean>(readSuperuserFromStorage())
 
-  const isSuperuser = computed(() => {
-    if (typeof window === 'undefined') return false
-    try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) return false
-      const user = JSON.parse(userStr)
-      return isTruthySuperuser(user?.is_superuser) || hasSuperuserByRole(user?.roles)
-    } catch (_err) {
-      return false
-    }
-  })
+  const isSuperuser = computed(() => _isSuperuser.value)
 
   const hasPermission = (permission: string): boolean => {
     if (isSuperuser.value) return true
@@ -52,6 +46,10 @@ export const usePermissionStore = defineStore('permission', () => {
     userPermissions.value = permissions
   }
 
+  const setSuperuser = (value: boolean) => {
+    _isSuperuser.value = value
+  }
+
   const setCurrentRole = (role: string) => {
     currentRole.value = role
   }
@@ -59,6 +57,7 @@ export const usePermissionStore = defineStore('permission', () => {
   const clearPermissions = () => {
     userPermissions.value = []
     currentRole.value = ''
+    _isSuperuser.value = false
   }
 
   const setAllPermissions = (permissions: Permission[]) => {
@@ -78,6 +77,7 @@ export const usePermissionStore = defineStore('permission', () => {
     hasAnyPermission,
     hasAllPermissions,
     setUserPermissions,
+    setSuperuser,
     setCurrentRole,
     clearPermissions,
     setAllPermissions,

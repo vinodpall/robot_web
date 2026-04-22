@@ -881,7 +881,7 @@ const previewDialog = ref({
   loading: false,
   error: ''
 })
-const previewPc = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5 })
+const previewPc = usePointCloudRenderer({ initialScale: 0.5, initialPointSize: 0.5 })
 const previewPointCloudData = previewPc.data
 const previewBasePointCloudData = previewPc.baseData
 const previewPointCloudNormalization = previewPc.normalizationParams

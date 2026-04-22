@@ -23,6 +23,7 @@ const props = defineProps<{
   loading?: boolean
   loadingText?: string
   error?: string
+  autoFitOnDataChange?: boolean
   normalizationParams: NormalizationParams
   navigationOrigin?: { x: number; y: number; z: number } | null
   robotPose?: RobotPose | null
@@ -44,17 +45,19 @@ let pendingStartTimer = 0
 let contextLostHandler: ((event: Event) => void) | null = null
 let contextRestoredHandler: (() => void) | null = null
 const SCREEN_POINT_SIZE = 1
-const ROBOT_ICON_SCALE = 0.24
+const ROBOT_ICON_SCALE = 0.14
 const labelSprites: THREE.Sprite[] = []
 const lastFitSceneKey = ref<string>('')
 const hasUserInteracted = ref(false)
+const baseFitDistanceRef = ref(1)
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0)
 const LABEL_TEXTURE_SCALE = Math.min(4, Math.max(2, window.devicePixelRatio || 1))
-const UNIFIED_LABEL_HEIGHT_PX = 18
-const UNIFIED_LABEL_FONT_PX = 13
-const UNIFIED_LABEL_PADDING_X = 4
-const UNIFIED_LABEL_PADDING_Y = 2
+const UNIFIED_LABEL_HEIGHT_PX = 14
+const UNIFIED_LABEL_FONT_PX = 11
+const UNIFIED_LABEL_PADDING_X = 3
+const UNIFIED_LABEL_PADDING_Y = 1
+const MARKER_SPRITE_SCALE = 0.011
 
 const toWorldPosition = (x: number, y: number, z: number) => new THREE.Vector3(x, z, -y)
 
@@ -138,7 +141,7 @@ const createLabelSprite = (text: string, options: {
   sprite.userData.aspect = logicalWidth / logicalHeight
   sprite.userData.heightPx = options.heightPx ?? 18
   sprite.userData.minHeightPx = options.heightPx ?? 18
-  sprite.scale.set(0.16, 0.045, 1)
+  sprite.scale.set(0.12, 0.034, 1)
   labelSprites.push(sprite)
   return sprite
 }
@@ -238,7 +241,7 @@ const createBullseyeMarkerSprite = (innerColor: string) => {
     depthWrite: false,
   })
   const marker = new THREE.Sprite(markerMaterial)
-  marker.scale.set(0.018, 0.018, 1)
+  marker.scale.set(MARKER_SPRITE_SCALE, MARKER_SPRITE_SCALE, 1)
   return marker
 }
 
@@ -274,7 +277,7 @@ const createOriginMarker = () => {
     strokeWidth: 1.2,
   })
   if (label) {
-    label.position.copy(origin.clone().add(new THREE.Vector3(0, 0.03, 0)))
+    label.position.copy(origin.clone().add(new THREE.Vector3(0, 0.02, 0)))
     group.add(label)
   }
 
@@ -304,7 +307,7 @@ const createTaskMarkers = () => {
       strokeWidth: 1.2,
     })
     if (label) {
-      label.position.copy(world.clone().add(new THREE.Vector3(0, 0.03, 0)))
+      label.position.copy(world.clone().add(new THREE.Vector3(0, 0.02, 0)))
       group.add(label)
     }
   }
@@ -417,7 +420,7 @@ const createRobotObject = () => {
     const mesh = new THREE.Mesh(geometry, material)
     mesh.scale.setScalar(0.026 * ROBOT_ICON_SCALE)
     mesh.position.x = 0
-    labelAnchorOffsetX = 0.01
+    labelAnchorOffsetX = 0.006
     group.add(mesh)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -447,7 +450,7 @@ const createRobotObject = () => {
     })
     const cone = new THREE.Mesh(geometry, material)
     cone.position.x = 0
-    labelAnchorOffsetX = 0.01
+    labelAnchorOffsetX = 0.006
     group.add(cone)
 
     const edgeGeometry = new THREE.EdgesGeometry(geometry)
@@ -479,7 +482,7 @@ const createRobotObject = () => {
     strokeWidth: 1.2,
   })
   if (label) {
-    label.position.set(labelAnchorOffsetX, 0.06, 0)
+    label.position.set(labelAnchorOffsetX, 0.035, 0)
     group.add(label)
   }
 
@@ -557,10 +560,17 @@ const rebuildRobotObject = () => {
 const updateLabelScale = () => {
   const camera = cameraRef.value
   const renderer = rendererRef.value
+  const controls = controlsRef.value
   if (!camera || !labelSprites.length) return
 
   const viewportHeight = renderer?.domElement.clientHeight || containerRef.value?.clientHeight || 1
   const fov = THREE.MathUtils.degToRad(camera.fov)
+  const currentViewDistance = controls
+    ? camera.position.distanceTo(controls.target)
+    : 1
+  const baseFitDistance = baseFitDistanceRef.value || currentViewDistance || 1
+  const zoomRatio = Math.max(1, baseFitDistance / Math.max(currentViewDistance, 1e-4))
+  const zoomBoost = Math.min(1.9, 1 + Math.log2(zoomRatio + 1) * 0.38)
 
   for (const sprite of labelSprites) {
     const worldPosition = new THREE.Vector3()
@@ -569,10 +579,12 @@ const updateLabelScale = () => {
     const desiredHeightPx = sprite.userData.heightPx || 18
     const minHeightPx = sprite.userData.minHeightPx || desiredHeightPx
     const aspect = sprite.userData.aspect || 3
-    const effectiveHeightPx = Math.max(minHeightPx, desiredHeightPx)
+    const boostedHeightPx = desiredHeightPx * zoomBoost
+    const boostedMinHeightPx = Math.max(minHeightPx, minHeightPx * Math.min(1.6, zoomBoost))
+    const effectiveHeightPx = Math.max(boostedMinHeightPx, boostedHeightPx)
     const worldHeight = 2 * distance * Math.tan(fov / 2) * (effectiveHeightPx / viewportHeight)
-    const minWorldHeight = 2 * distance * Math.tan(fov / 2) * (minHeightPx / viewportHeight)
-    const clampedHeight = Math.min(0.09, Math.max(minWorldHeight, worldHeight))
+    const minWorldHeight = 2 * distance * Math.tan(fov / 2) * (boostedMinHeightPx / viewportHeight)
+    const clampedHeight = Math.min(0.085, Math.max(minWorldHeight, worldHeight))
     sprite.scale.set(clampedHeight * aspect, clampedHeight, 1)
   }
 }
@@ -617,13 +629,15 @@ const fitCameraToScene = () => {
 
   const size = box.getSize(new THREE.Vector3())
   const center = box.getCenter(new THREE.Vector3())
-  const radius = Math.max(size.length() * 0.35, 0.35)
+  const radius = Math.max(size.length() * 0.22, 0.22)
+  const cameraOffset = new THREE.Vector3(radius * 1.3, radius * 1.0, radius * 1.5)
 
   controls.target.copy(center)
-  camera.position.copy(center.clone().add(new THREE.Vector3(radius * 1.25, radius * 0.95, radius * 1.45)))
+  camera.position.copy(center.clone().add(cameraOffset))
   camera.near = Math.max(radius / 100, 0.01)
   camera.far = Math.max(radius * 30, 12)
   camera.updateProjectionMatrix()
+  baseFitDistanceRef.value = cameraOffset.length()
   controls.update()
 }
 
@@ -739,13 +753,16 @@ watch(
     rebuildSceneContent()
     rebuildRobotObject()
     const sceneKey = getSceneFitKey()
-    if (sceneKey !== lastFitSceneKey.value) {
+    const shouldAutoFit = props.autoFitOnDataChange !== false
+    if (shouldAutoFit && sceneKey !== lastFitSceneKey.value) {
       fitCameraToScene()
       lastFitSceneKey.value = sceneKey
       hasUserInteracted.value = false
-    } else if (!hasUserInteracted.value && props.points.length > 0) {
+    } else if (shouldAutoFit && !hasUserInteracted.value && props.points.length > 0) {
       // 首次加载期间若点云数据更新但 key 未变化，仍做一次保守拟合，避免偶发黑屏。
       fitCameraToScene()
+    } else {
+      lastFitSceneKey.value = sceneKey
     }
     if (!renderLoopStarted) {
       ensureRendererReady()
@@ -779,7 +796,7 @@ onMounted(() => {
   scene.fog = new THREE.Fog('#020915', 1.8, 5.2)
 
   const camera = new THREE.PerspectiveCamera(48, 1, 0.01, 100)
-  camera.position.set(1.2, 1, 1.55)
+  camera.position.set(0.7, 0.6, 0.9)
   camera.up.copy(WORLD_UP)
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -792,8 +809,8 @@ onMounted(() => {
   controls.enableDamping = true
   controls.dampingFactor = 0.06
   controls.screenSpacePanning = true
-  controls.minDistance = 0.12
-  controls.maxDistance = 10
+  controls.minDistance = 0.05
+  controls.maxDistance = 4
   controls.addEventListener('start', () => {
     hasUserInteracted.value = true
   })

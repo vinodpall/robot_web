@@ -337,6 +337,7 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
     const bs = Math.min(rect.width, rect.height) * 0.8 * scale.value
     const panOX = panX.value * rect.width
     const panOY = panY.value * rect.height
+    const labelZoomScale = Math.min(1.8, Math.max(1, Math.sqrt(Math.max(scale.value, 0.01))))
     const drawBudget = _getDrawBudget(rect.width, rect.height)
     const drawStep = data.value.length > drawBudget ? Math.ceil(data.value.length / drawBudget) : 1
     const pointBoost = data.value.length <= 40000 ? 1.35 : data.value.length <= 80000 ? 1.15 : 1
@@ -356,19 +357,24 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         // 当前任务点 -> 红色高亮
         ctx.fillStyle = 'rgba(255, 77, 79, 0.98)'
         ctx.beginPath()
-        ctx.arc(px, py, 4.2, 0, Math.PI * 2)
+        ctx.arc(px, py, 2.6, 0, Math.PI * 2)
         ctx.fill()
         ctx.strokeStyle = '#FFD1D1'
         ctx.lineWidth = 1.6
         ctx.stroke()
         if (point.name) {
           const lbl = point.name
-          ctx.font = `bold ${10 * dpr}px Arial`
+          const fontPx = Math.round(8 * labelZoomScale * dpr)
+          ctx.font = `bold ${fontPx}px Arial`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           const tw = ctx.measureText(lbl).width
-          const padX = 4 * dpr, tagH = 14 * dpr, rr = 3 * dpr, tagW = tw + padX * 2
-          const tx = px - tagW / 2, ty = py - 18 * dpr - tagH / 2
+          const padX = Math.max(2, Math.round(2 * labelZoomScale)) * dpr
+          const padY = Math.max(1, Math.round(1 * labelZoomScale)) * dpr
+          const tagH = fontPx + padY * 2
+          const rr = 3 * dpr
+          const tagW = tw + padX * 2
+          const tx = px - tagW / 2, ty = py - Math.round(12 * labelZoomScale) * dpr - tagH / 2
           ctx.beginPath()
           ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
           ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
@@ -398,19 +404,24 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         // 任务点 → 黄色
         ctx.fillStyle = 'rgba(255, 220, 0, 0.95)'
         ctx.beginPath()
-        ctx.arc(px, py, 3.4, 0, Math.PI * 2)
+        ctx.arc(px, py, 2.3, 0, Math.PI * 2)
         ctx.fill()
         ctx.strokeStyle = '#FFF6B6'
         ctx.lineWidth = 1.4
         ctx.stroke()
         if (point.name) {
           const lbl = point.name
-          ctx.font = `bold ${10 * dpr}px Arial`
+          const fontPx = Math.round(8 * labelZoomScale * dpr)
+          ctx.font = `bold ${fontPx}px Arial`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           const tw = ctx.measureText(lbl).width
-          const padX = 4 * dpr, tagH = 14 * dpr, rr = 3 * dpr, tagW = tw + padX * 2
-          const tx = px - tagW / 2, ty = py - 18 * dpr - tagH / 2
+          const padX = Math.max(2, Math.round(2 * labelZoomScale)) * dpr
+          const padY = Math.max(1, Math.round(1 * labelZoomScale)) * dpr
+          const tagH = fontPx + padY * 2
+          const rr = 3 * dpr
+          const tagW = tw + padX * 2
+          const tx = px - tagW / 2, ty = py - Math.round(12 * labelZoomScale) * dpr - tagH / 2
           ctx.beginPath()
           ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
           ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
@@ -452,7 +463,7 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         bs, panOX, panOY, rect.width, rect.height
       )
       ctx.beginPath()
-      ctx.arc(opx, opy, 3 * dpr, 0, Math.PI * 2)
+      ctx.arc(opx, opy, 2 * dpr, 0, Math.PI * 2)
       ctx.fillStyle = '#FF0000'
       ctx.fill()
       ctx.strokeStyle = '#FFFFFF'
@@ -460,12 +471,16 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
       ctx.stroke()
       ;{
         const lbl = '原点'
-        ctx.font = `bold ${10 * dpr}px Arial`
+        const fontPx = Math.round(8 * labelZoomScale * dpr)
+        ctx.font = `bold ${fontPx}px Arial`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         const tw = ctx.measureText(lbl).width
-        const padX = 4 * dpr, tagH = 14 * dpr, rr = 3 * dpr, tagW = tw + padX * 2
-        const tx = opx - tagW / 2, ty = opy - 10 * dpr - tagH
+        const padX = Math.max(2, Math.round(2 * labelZoomScale)) * dpr
+        const tagH = fontPx + Math.max(2, Math.round(2 * labelZoomScale)) * dpr
+        const rr = 3 * dpr
+        const tagW = tw + padX * 2
+        const tx = opx - tagW / 2, ty = opy - Math.round(6 * labelZoomScale) * dpr - tagH
         ctx.beginPath()
         ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
         ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
@@ -519,9 +534,9 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         const mesh = robotMesh.value
         if (mesh) {
           // 3MF网格渲染（与首页一致）
-          const baseArrowScale = 0.004
-          const minArrowPx = 8
-          const maxArrowPx = 24
+          const baseArrowScale = 0.0026
+          const minArrowPx = 5
+          const maxArrowPx = 14
           const arrowScale = Math.min(
             Math.max(baseArrowScale * scale.value, minArrowPx / (bs || 1)),
             maxArrowPx / (bs || 1)
@@ -580,7 +595,7 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
             robotNormZ
           )
           const screenAngle = Math.atan2(tProjY - rProjY, tProjX - rProjX)
-          const arrowSize = 14 * dpr
+          const arrowSize = 8 * dpr
           ctx.save()
           ctx.translate(rProjX, rProjY)
           ctx.rotate(screenAngle + Math.PI / 2)
@@ -601,12 +616,16 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         // 标注文字
         ;{
           const lbl = '机器狗'
-          ctx.font = `bold ${10 * dpr}px Arial`
+          const fontPx = Math.round(8 * labelZoomScale * dpr)
+          ctx.font = `bold ${fontPx}px Arial`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           const tw = ctx.measureText(lbl).width
-          const padX = 4, tagH = 14, rr = 3, tagW = tw + padX * 2
-          const tx = rProjX - tagW / 2, ty = rProjY - 18 - tagH
+          const padX = Math.max(2, Math.round(2 * labelZoomScale))
+          const tagH = Math.round(fontPx / dpr) + Math.max(2, Math.round(2 * labelZoomScale))
+          const rr = 3
+          const tagW = tw + padX * 2
+          const tx = rProjX - tagW / 2, ty = rProjY - Math.round(12 * labelZoomScale) - tagH
           ctx.beginPath()
           ctx.moveTo(tx + rr, ty); ctx.lineTo(tx + tagW - rr, ty)
           ctx.quadraticCurveTo(tx + tagW, ty, tx + tagW, ty + rr)
@@ -633,7 +652,7 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
 
   const onWheel = (e: WheelEvent) => {
     const dir = e.deltaY < 0 ? 1 : -1
-    scale.value = Math.min(50, Math.max(0.01, scale.value + dir * 0.1))
+    scale.value = Math.min(100, Math.max(0.2, scale.value + dir * 0.1))
     schedule()
   }
 
@@ -748,7 +767,7 @@ let _sharedPointCloudRenderer: ReturnType<typeof usePointCloudRenderer> | null =
  */
 export function useSharedPointCloudRenderer() {
   if (!_sharedPointCloudRenderer) {
-    _sharedPointCloudRenderer = usePointCloudRenderer({ initialScale: 1, initialPointSize: 0.5 })
+    _sharedPointCloudRenderer = usePointCloudRenderer({ initialScale: 0.5, initialPointSize: 0.5 })
   }
   return _sharedPointCloudRenderer
 }

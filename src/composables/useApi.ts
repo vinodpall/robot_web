@@ -253,6 +253,7 @@ export function useAuth() {
       
       localStorage.setItem('user', JSON.stringify(userData))
       localStorage.setItem('token', access_token)
+      permissionStore.setSuperuser(userData?.is_superuser === true || userData?.is_superuser === 1 || userData?.is_superuser === '1')
       permissionStore.setUserPermissions(extractPermissionCodesFromUser(userData))
       
       return { user: userData, token: access_token }

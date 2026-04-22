@@ -7,21 +7,13 @@ function isTruthySuperuser(value: unknown): boolean {
   return false
 }
 
-function hasSuperuserByRole(roles: unknown): boolean {
-  if (!Array.isArray(roles)) return false
-  return roles.some((role: any) => {
-    if (typeof role === 'string') return role === 'super_admin'
-    return role?.role_code === 'super_admin' || role?.role_name === '超级管理员'
-  })
-}
-
 function isSuperuserNow(): boolean {
   if (typeof window === 'undefined') return false
   try {
     const userStr = localStorage.getItem('user')
     if (!userStr) return false
     const user = JSON.parse(userStr)
-    return isTruthySuperuser(user?.is_superuser) || hasSuperuserByRole(user?.roles)
+    return isTruthySuperuser(user?.is_superuser)
   } catch {
     return false
   }
@@ -65,40 +57,36 @@ function applyNoPermissionState(el: HTMLElement, noPermission: boolean) {
 
 export const permission = {
   mounted(el: HTMLElement, binding: DirectiveBinding) {
-    const permissionStore = usePermissionStore()
     const { value } = binding
     if (!value) return
     const permissions = Array.isArray(value) ? value : [value]
-    const hasPermission = permissionStore.hasAnyPermission(permissions)
+    const hasPermission = checkPermission(permissions)
     if (!hasPermission) el.style.display = 'none'
   },
 
   updated(el: HTMLElement, binding: DirectiveBinding) {
-    const permissionStore = usePermissionStore()
     const { value } = binding
     if (!value) return
     const permissions = Array.isArray(value) ? value : [value]
-    const hasPermission = permissionStore.hasAnyPermission(permissions)
+    const hasPermission = checkPermission(permissions)
     el.style.display = hasPermission ? '' : 'none'
   }
 }
 
 export const permissionAll = {
   mounted(el: HTMLElement, binding: DirectiveBinding) {
-    const permissionStore = usePermissionStore()
     const { value } = binding
     if (!value) return
     const permissions = Array.isArray(value) ? value : [value]
-    const hasPermission = permissionStore.hasAllPermissions(permissions)
+    const hasPermission = isSuperuserNow() || usePermissionStore().hasAllPermissions(permissions)
     if (!hasPermission) el.style.display = 'none'
   },
 
   updated(el: HTMLElement, binding: DirectiveBinding) {
-    const permissionStore = usePermissionStore()
     const { value } = binding
     if (!value) return
     const permissions = Array.isArray(value) ? value : [value]
-    const hasPermission = permissionStore.hasAllPermissions(permissions)
+    const hasPermission = isSuperuserNow() || usePermissionStore().hasAllPermissions(permissions)
     el.style.display = hasPermission ? '' : 'none'
   }
 }
