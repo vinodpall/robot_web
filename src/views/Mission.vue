@@ -753,7 +753,7 @@
                        <label class="simple-label">设置预置点：</label>
                         <div class="custom-select-wrapper" ref="presetDropdownRef" style="position: relative;" tabindex="0" @blur="isPresetDropdownOpen = false">
                              <div class="simple-select" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" @click="isPresetDropdownOpen = !isPresetDropdownOpen">
-                                 <span>{{ presetDialog.form.name || '请选择预置点' }}</span>
+                                 <span>{{ presetDialog.form.selectedName || '请选择预置点' }}</span>
                                  <span style="font-size:12px; transform: scaleY(0.6);">▼</span>
                              </div>
                              <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="max-height: 340px; background: #102a43; border: 1px solid #244f78;">
@@ -784,7 +784,7 @@
                    
                    <div class="simple-form-item">
                        <label class="simple-label">预置点名称：</label>
-                       <input v-model="presetDialog.form.name" class="simple-input" />
+                       <input v-model="presetDialog.form.inputName" class="simple-input" />
                    </div>
                </div>
             </div>
@@ -845,10 +845,14 @@
                 <span v-if="field.required" class="required-star">*</span>{{ field.title }}
               </label>
               <input
-                v-model="extraConfigDialog.formValues[field.field]"
+                :value="extraConfigDialog.formValues[field.field]"
                 class="simple-input extra-config-input"
                 :class="{ 'input-error-border': !!extraConfigDialog.errors[field.field] }"
+                :inputmode="isNumericExtraField(field) ? 'decimal' : undefined"
                 :placeholder="field.default !== undefined && field.default !== null ? `默认值：${field.default}` : '请输入'"
+                @input="handleExtraConfigFieldInput(field, $event)"
+                @compositionstart="handleExtraConfigCompositionStart(field)"
+                @compositionend="handleExtraConfigCompositionEnd(field, $event)"
               />
               <div v-if="extraConfigDialog.errors[field.field]" class="input-error-text">{{ extraConfigDialog.errors[field.field] }}</div>
             </div>
@@ -3796,7 +3800,8 @@ const presetDialog = ref({
   visible: false,
   form: {
     id: '',
-    name: ''
+    selectedName: '',
+    inputName: ''
   }
 })
 
@@ -3812,7 +3817,8 @@ const presetDropdownRef = ref<HTMLElement | null>(null)
 
 const selectPreset = (p: {id: string, name: string}) => {
     presetDialog.value.form.id = p.id
-    presetDialog.value.form.name = p.name
+    presetDialog.value.form.selectedName = p.name
+    presetDialog.value.form.inputName = p.name
     isPresetDropdownOpen.value = false
 }
 
@@ -4155,11 +4161,14 @@ const openPresetDialog = async () => {
               if (selectedId) {
                 const selectedPreset = presetList.value.find(p => String(p.id) === selectedId)
                 if (selectedPreset) {
-                  presetDialog.value.form.name = selectedPreset.name
+                  presetDialog.value.form.selectedName = selectedPreset.name
                 }
               } else if (presetList.value.length > 0) {
                 presetDialog.value.form.id = presetList.value[0].id
-                presetDialog.value.form.name = presetList.value[0].name
+                presetDialog.value.form.selectedName = presetList.value[0].name
+                if (!String(presetDialog.value.form.inputName || '').trim()) {
+                  presetDialog.value.form.inputName = presetList.value[0].name
+                }
               }
 
               console.log('Presets updated with API data')
@@ -4189,14 +4198,17 @@ const openPresetDialog = async () => {
     
     if (targetPreset) {
       presetDialog.value.form.id = targetPreset.id
-      presetDialog.value.form.name = targetPreset.name
+      presetDialog.value.form.selectedName = targetPreset.name
+      presetDialog.value.form.inputName = currentPreset
     } else if (presetList.value.length > 0) {
       presetDialog.value.form.id = presetList.value[0].id
-      presetDialog.value.form.name = presetList.value[0].name
+      presetDialog.value.form.selectedName = presetList.value[0].name
+      presetDialog.value.form.inputName = currentPreset
     }
   } else if (presetList.value.length > 0) {
     presetDialog.value.form.id = presetList.value[0].id
-    presetDialog.value.form.name = presetList.value[0].name
+    presetDialog.value.form.selectedName = presetList.value[0].name
+    presetDialog.value.form.inputName = presetList.value[0].name
   }
 }
 
@@ -4207,7 +4219,7 @@ const closePresetDialog = () => {
 }
 
 const confirmPresetChoice = () => {
-  addTaskDialog.value.form.preset = presetDialog.value.form.name
+  addTaskDialog.value.form.preset = String(presetDialog.value.form.inputName || '').trim()
   closePresetDialog()
 }
 
@@ -4484,7 +4496,7 @@ const handleSetPreset = async () => {
     return
   }
 
-  const parsed = parsePresetText(presetDialog.value.form.name, presetDialog.value.form.id)
+  const parsed = parsePresetText(presetDialog.value.form.inputName, presetDialog.value.form.id)
   if (!parsed) {
     console.warn('[PTZ] 预置点格式无效，忽略设置预置点')
     return
@@ -4514,7 +4526,7 @@ const handleGotoPreset = async () => {
     return
   }
 
-  const presetState = String(presetDialog.value.form.id || presetDialog.value.form.name || '').trim()
+  const presetState = String(presetDialog.value.form.id || presetDialog.value.form.inputName || '').trim()
   if (!presetState) {
     console.warn('[PTZ] 未选择预置点，忽略转到预置点')
     return
@@ -4546,7 +4558,9 @@ const extraConfigDialog = ref({
   visible: false,
   rawExtra: '',
   formValues: {} as Record<string, string>,
-  errors: {} as Record<string, string>
+  errors: {} as Record<string, string>,
+  lastValidValues: {} as Record<string, string>,
+  composingFields: {} as Record<string, boolean>
 })
 
 const parseTaskTypeFieldname = (raw: unknown): ExtraConfigFieldDef[] => {
@@ -4598,6 +4612,71 @@ const isTargetBatteryField = (field: ExtraConfigFieldDef) => {
   const fieldName = String(field.field || '').trim()
   return title.includes('目标电量')
     || /target.*(battery|power)|battery|target_power|power_target/i.test(fieldName)
+}
+
+const isTimeExtraField = (field: ExtraConfigFieldDef) => {
+  const title = String(field.title || '').trim()
+  return title.includes('时间')
+}
+
+const isSpeedExtraField = (field: ExtraConfigFieldDef) => {
+  const title = String(field.title || '').trim()
+  const fieldName = String(field.field || '').trim()
+  return title.includes('速度') || /speed|velocity/i.test(fieldName)
+}
+
+const isNumericExtraField = (field: ExtraConfigFieldDef) => {
+  return isTimeExtraField(field) || isSpeedExtraField(field)
+}
+
+const shouldRejectZeroValue = (field: ExtraConfigFieldDef) => {
+  const title = String(field.title || '').trim()
+  return title.includes('回充时间') || title.includes('目标电量') || title.includes('速度')
+}
+
+const normalizeNumericInput = (value: string) => {
+  const sanitized = value.replace(/[^\d.]/g, '')
+  const dotIndex = sanitized.indexOf('.')
+  if (dotIndex === -1) return sanitized
+  return `${sanitized.slice(0, dotIndex + 1)}${sanitized.slice(dotIndex + 1).replace(/\./g, '')}`
+}
+
+const isValidNumericText = (value: string) => /^(?:\d+\.?\d*|\.\d+)$/.test(value)
+
+const handleExtraConfigFieldInput = (field: ExtraConfigFieldDef, event: Event) => {
+  const target = event.target as HTMLInputElement | null
+  const rawValue = target?.value ?? ''
+
+  if (!isNumericExtraField(field)) {
+    extraConfigDialog.value.formValues[field.field] = rawValue
+    return
+  }
+
+  if (extraConfigDialog.value.composingFields[field.field]) return
+
+  const normalizedValue = normalizeNumericInput(rawValue)
+  const previousValidValue = extraConfigDialog.value.lastValidValues[field.field] ?? ''
+  const nextValue = rawValue === normalizedValue ? normalizedValue : previousValidValue
+
+  extraConfigDialog.value.formValues[field.field] = nextValue
+  if (/^(?:\d+\.?\d*|\.\d+)?$/.test(nextValue)) {
+    extraConfigDialog.value.lastValidValues[field.field] = nextValue
+  }
+
+  if (target && target.value !== nextValue) {
+    target.value = nextValue
+  }
+}
+
+const handleExtraConfigCompositionStart = (field: ExtraConfigFieldDef) => {
+  if (!isNumericExtraField(field)) return
+  extraConfigDialog.value.composingFields[field.field] = true
+}
+
+const handleExtraConfigCompositionEnd = (field: ExtraConfigFieldDef, event: CompositionEvent) => {
+  if (!isNumericExtraField(field)) return
+  extraConfigDialog.value.composingFields[field.field] = false
+  handleExtraConfigFieldInput(field, event)
 }
 
 const parseExtraConfigPayload = (rawValue: string): Record<string, string> => {
@@ -4661,6 +4740,8 @@ const openExtraConfigDialog = () => {
     extraConfigDialog.value.rawExtra = rawExtra
     extraConfigDialog.value.formValues = {}
     extraConfigDialog.value.errors = {}
+    extraConfigDialog.value.lastValidValues = {}
+    extraConfigDialog.value.composingFields = {}
     extraConfigDialog.value.visible = true
     return
   }
@@ -4683,6 +4764,8 @@ const openExtraConfigDialog = () => {
 
   extraConfigDialog.value.formValues = nextFormValues
   extraConfigDialog.value.errors = nextErrors
+  extraConfigDialog.value.lastValidValues = { ...nextFormValues }
+  extraConfigDialog.value.composingFields = {}
   extraConfigDialog.value.visible = true
 }
 
@@ -4714,10 +4797,23 @@ const confirmExtraConfig = () => {
       continue
     }
 
+    if (isNumericExtraField(field) && finalValue && !isValidNumericText(finalValue)) {
+      nextErrors[field.field] = `${field.title}只能输入整数或小数`
+      continue
+    }
+
     if (isChargeTargetTaskType.value && isTargetBatteryField(field)) {
       const numericValue = Number(finalValue)
       if (!finalValue || !Number.isFinite(numericValue) || numericValue < 0 || numericValue > 100) {
         nextErrors[field.field] = `${field.title}只能输入0~100的数值`
+        continue
+      }
+    }
+
+    if (shouldRejectZeroValue(field) && finalValue) {
+      const numericValue = Number(finalValue)
+      if (!Number.isFinite(numericValue) || numericValue === 0) {
+        nextErrors[field.field] = `${field.title}不能为0`
         continue
       }
     }

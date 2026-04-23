@@ -494,7 +494,7 @@
                        <label class="simple-label">设置预置点：</label>
                         <div class="custom-select-wrapper" style="position: relative;" tabindex="0" @blur="isPresetDropdownOpen = false">
                              <div class="simple-select" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" @click="isPresetDropdownOpen = !isPresetDropdownOpen">
-                                 <span>{{ presetDialog.form.name || '请选择预置点' }}</span>
+                                 <span>{{ presetDialog.form.selectedName || '请选择预置点' }}</span>
                                  <span style="font-size:12px; transform: scaleY(0.6);">▼</span>
                              </div>
                              <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="max-height: 340px; background: #102a43; border: 1px solid #244f78;">
@@ -519,7 +519,7 @@
                    
                    <div class="simple-form-item">
                        <label class="simple-label">预置点名称：</label>
-                       <input v-model="presetDialog.form.name" class="simple-input" />
+                       <input v-model="presetDialog.form.inputName" class="simple-input" />
                    </div>
                </div>
             </div>
@@ -553,10 +553,14 @@
                 <span v-if="field.required" class="required-star">*</span>{{ field.title }}
               </label>
               <input
-                v-model="extraConfigDialog.formValues[field.field]"
+                :value="extraConfigDialog.formValues[field.field]"
                 class="simple-input extra-config-input"
                 :class="{ 'input-error-border': !!extraConfigDialog.errors[field.field] }"
+                :inputmode="isNumericExtraField(field) ? 'decimal' : undefined"
                 :placeholder="field.default !== undefined && field.default !== null ? `默认值：${field.default}` : '请输入'"
+                @input="handleExtraConfigFieldInput(field, $event)"
+                @compositionstart="handleExtraConfigCompositionStart(field)"
+                @compositionend="handleExtraConfigCompositionEnd(field, $event)"
               />
               <div v-if="extraConfigDialog.errors[field.field]" class="input-error-text">{{ extraConfigDialog.errors[field.field] }}</div>
             </div>
@@ -2301,7 +2305,8 @@ const presetDialog = ref({
   visible: false,
   form: {
     id: '',
-    name: ''
+    selectedName: '',
+    inputName: ''
   }
 })
 
@@ -2316,7 +2321,8 @@ const isPresetDropdownOpen = ref(false)
 
 const selectPreset = (p: {id: string, name: string}) => {
     presetDialog.value.form.id = p.id
-    presetDialog.value.form.name = p.name
+    presetDialog.value.form.selectedName = p.name
+    presetDialog.value.form.inputName = p.name
     isPresetDropdownOpen.value = false
 }
 
@@ -2414,8 +2420,9 @@ const stopWebRTCPlayback = () => {
 
 const openPresetDialog = async () => {
   presetDialog.value.visible = true
-  
-  const robotId = localStorage.getItem('selected_robot_id')
+
+  const currentPreset = String(addTaskDialog.value.form.preset || '').trim()
+  const robotId = resolveSelectedRobotId()
   const cameraListStr = localStorage.getItem('camera_list')
   
   if (robotId && cameraListStr) {
@@ -2433,8 +2440,22 @@ const openPresetDialog = async () => {
                     const existingIndex = presetList.value.findIndex(p => p.id === idStr)
                     if (existingIndex !== -1) {
                         presetList.value[existingIndex].name = `${idStr}.${item.presetName}`
+                    } else {
+                        presetList.value.push({
+                          id: idStr,
+                          name: `${idStr}.${item.presetName}`
+                        })
                     }
                 })
+                presetList.value.sort((a, b) => Number(a.id) - Number(b.id))
+
+                const selectedId = String(presetDialog.value.form.id || '').trim()
+                if (selectedId) {
+                  const selectedPreset = presetList.value.find(p => String(p.id) === selectedId)
+                  if (selectedPreset) {
+                    presetDialog.value.form.selectedName = selectedPreset.name
+                  }
+                }
                 console.log('Presets updated with API data')
              }
            } catch (err) {
@@ -2447,9 +2468,32 @@ const openPresetDialog = async () => {
     }
   }
 
-  if (presetList.value.length > 0) {
+  if (currentPreset) {
+    const match = currentPreset.match(/^(\d+)\.(.+)$/)
+    let targetPreset: { id: string; name: string } | undefined
+
+    if (match) {
+      const presetId = String(match[1] || '').trim()
+      targetPreset = presetList.value.find(p => String(p.id) === presetId)
+    }
+
+    if (targetPreset) {
+      presetDialog.value.form.id = targetPreset.id
+      presetDialog.value.form.selectedName = targetPreset.name
+      presetDialog.value.form.inputName = currentPreset
+    } else if (presetList.value.length > 0) {
       presetDialog.value.form.id = presetList.value[0].id
-      presetDialog.value.form.name = presetList.value[0].name
+      presetDialog.value.form.selectedName = presetList.value[0].name
+      presetDialog.value.form.inputName = currentPreset
+    } else {
+      presetDialog.value.form.id = ''
+      presetDialog.value.form.selectedName = ''
+      presetDialog.value.form.inputName = currentPreset
+    }
+  } else if (presetList.value.length > 0) {
+    presetDialog.value.form.id = presetList.value[0].id
+    presetDialog.value.form.selectedName = presetList.value[0].name
+    presetDialog.value.form.inputName = presetList.value[0].name
   }
   
   nextTick(() => {
@@ -2480,7 +2524,7 @@ const closePresetDialog = () => {
 }
 
 const confirmPresetChoice = () => {
-  addTaskDialog.value.form.preset = presetDialog.value.form.name
+  addTaskDialog.value.form.preset = String(presetDialog.value.form.inputName || '').trim()
   closePresetDialog()
 }
 
@@ -2500,12 +2544,99 @@ const ptzFocus = (focusIn: boolean) => {
     console.log('Focus:', focusIn ? 'In' : 'Out')
 }
 
-const handleSetPreset = () => { 
-  console.log('Set Preset') 
+const parsePresetText = (raw: string, fallbackId?: string): { presetState: string; statusText: string } | null => {
+  const text = String(raw || '').trim()
+  if (!text) return null
+
+  const matched = text.match(/^(\d+)\.(.+)$/)
+  if (matched) {
+    const presetState = String(matched[1] || '').trim()
+    const statusText = String(matched[2] || '').trim()
+    if (presetState && statusText) {
+      return { presetState, statusText }
+    }
+  }
+
+  const presetState = String(fallbackId || '').trim()
+  if (presetState) {
+    return { presetState, statusText: text }
+  }
+
+  return null
 }
 
-const handleGotoPreset = () => { 
-  console.log('Goto Preset') 
+const resolvePresetDeviceName = () => {
+  try {
+    const cameraListStr = localStorage.getItem('camera_list')
+    if (!cameraListStr) return ''
+    const cameraList = JSON.parse(cameraListStr)
+    if (!Array.isArray(cameraList) || cameraList.length === 0) return ''
+    return String(cameraList[0]?.PtzName || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+const handleSetPreset = async () => {
+  const robotId = resolveSelectedRobotId()
+  if (!robotId) {
+    console.warn('[PTZ] 未选择机器人，忽略设置预置点')
+    return
+  }
+
+  const deviceName = resolvePresetDeviceName()
+  if (!deviceName) {
+    console.warn('[PTZ] 未获取到云台设备名，忽略设置预置点')
+    return
+  }
+
+  const parsed = parsePresetText(presetDialog.value.form.inputName, presetDialog.value.form.id)
+  if (!parsed) {
+    console.warn('[PTZ] 预置点格式无效，忽略设置预置点')
+    return
+  }
+
+  try {
+    await navigationApi.ptzControl(robotId, {
+      device_name: deviceName,
+      status: parsed.statusText,
+      isPreset: -1,
+      preset_state: parsed.presetState
+    })
+  } catch (error) {
+    console.error('[PTZ] 设置预置点失败:', error)
+  }
+}
+
+const handleGotoPreset = async () => {
+  const robotId = resolveSelectedRobotId()
+  if (!robotId) {
+    console.warn('[PTZ] 未选择机器人，忽略转到预置点')
+    return
+  }
+
+  const deviceName = resolvePresetDeviceName()
+  if (!deviceName) {
+    console.warn('[PTZ] 未获取到云台设备名，忽略转到预置点')
+    return
+  }
+
+  const presetState = String(presetDialog.value.form.id || presetDialog.value.form.inputName || '').trim()
+  if (!presetState) {
+    console.warn('[PTZ] 未选择预置点，忽略转到预置点')
+    return
+  }
+
+  try {
+    await navigationApi.ptzControl(robotId, {
+      device_name: deviceName,
+      status: 'stop',
+      isPreset: 1,
+      preset_state: presetState
+    })
+  } catch (error) {
+    console.error('[PTZ] 转到预置点失败:', error)
+  }
 }
 // ========== 预置点选择相关结束 ==========
 
@@ -2522,7 +2653,9 @@ const extraConfigDialog = ref({
   visible: false,
   rawExtra: '',
   formValues: {} as Record<string, string>,
-  errors: {} as Record<string, string>
+  errors: {} as Record<string, string>,
+  lastValidValues: {} as Record<string, string>,
+  composingFields: {} as Record<string, boolean>
 })
 
 const parseTaskTypeFieldname = (raw: unknown): ExtraConfigFieldDef[] => {
@@ -2574,6 +2707,71 @@ const isTargetBatteryField = (field: ExtraConfigFieldDef) => {
   const fieldName = String(field.field || '').trim()
   return title.includes('目标电量')
     || /target.*(battery|power)|battery|target_power|power_target/i.test(fieldName)
+}
+
+const isTimeExtraField = (field: ExtraConfigFieldDef) => {
+  const title = String(field.title || '').trim()
+  return title.includes('时间')
+}
+
+const isSpeedExtraField = (field: ExtraConfigFieldDef) => {
+  const title = String(field.title || '').trim()
+  const fieldName = String(field.field || '').trim()
+  return title.includes('速度') || /speed|velocity/i.test(fieldName)
+}
+
+const isNumericExtraField = (field: ExtraConfigFieldDef) => {
+  return isTimeExtraField(field) || isSpeedExtraField(field)
+}
+
+const shouldRejectZeroValue = (field: ExtraConfigFieldDef) => {
+  const title = String(field.title || '').trim()
+  return title.includes('回充时间') || title.includes('目标电量') || title.includes('速度')
+}
+
+const normalizeNumericInput = (value: string) => {
+  const sanitized = value.replace(/[^\d.]/g, '')
+  const dotIndex = sanitized.indexOf('.')
+  if (dotIndex === -1) return sanitized
+  return `${sanitized.slice(0, dotIndex + 1)}${sanitized.slice(dotIndex + 1).replace(/\./g, '')}`
+}
+
+const isValidNumericText = (value: string) => /^(?:\d+\.?\d*|\.\d+)$/.test(value)
+
+const handleExtraConfigFieldInput = (field: ExtraConfigFieldDef, event: Event) => {
+  const target = event.target as HTMLInputElement | null
+  const rawValue = target?.value ?? ''
+
+  if (!isNumericExtraField(field)) {
+    extraConfigDialog.value.formValues[field.field] = rawValue
+    return
+  }
+
+  if (extraConfigDialog.value.composingFields[field.field]) return
+
+  const normalizedValue = normalizeNumericInput(rawValue)
+  const previousValidValue = extraConfigDialog.value.lastValidValues[field.field] ?? ''
+  const nextValue = rawValue === normalizedValue ? normalizedValue : previousValidValue
+
+  extraConfigDialog.value.formValues[field.field] = nextValue
+  if (/^(?:\d+\.?\d*|\.\d+)?$/.test(nextValue)) {
+    extraConfigDialog.value.lastValidValues[field.field] = nextValue
+  }
+
+  if (target && target.value !== nextValue) {
+    target.value = nextValue
+  }
+}
+
+const handleExtraConfigCompositionStart = (field: ExtraConfigFieldDef) => {
+  if (!isNumericExtraField(field)) return
+  extraConfigDialog.value.composingFields[field.field] = true
+}
+
+const handleExtraConfigCompositionEnd = (field: ExtraConfigFieldDef, event: CompositionEvent) => {
+  if (!isNumericExtraField(field)) return
+  extraConfigDialog.value.composingFields[field.field] = false
+  handleExtraConfigFieldInput(field, event)
 }
 
 const parseExtraConfigPayload = (rawValue: string): Record<string, string> => {
@@ -2634,6 +2832,8 @@ const openExtraConfigDialog = () => {
     extraConfigDialog.value.rawExtra = rawExtra
     extraConfigDialog.value.formValues = {}
     extraConfigDialog.value.errors = {}
+    extraConfigDialog.value.lastValidValues = {}
+    extraConfigDialog.value.composingFields = {}
     extraConfigDialog.value.visible = true
     return
   }
@@ -2656,6 +2856,8 @@ const openExtraConfigDialog = () => {
 
   extraConfigDialog.value.formValues = nextFormValues
   extraConfigDialog.value.errors = nextErrors
+  extraConfigDialog.value.lastValidValues = { ...nextFormValues }
+  extraConfigDialog.value.composingFields = {}
   extraConfigDialog.value.visible = true
 }
 
@@ -2683,10 +2885,23 @@ const confirmExtraConfig = () => {
       continue
     }
 
+    if (isNumericExtraField(field) && finalValue && !isValidNumericText(finalValue)) {
+      nextErrors[field.field] = `${field.title}只能输入整数或小数`
+      continue
+    }
+
     if (isChargeTargetTaskType.value && isTargetBatteryField(field)) {
       const numericValue = Number(finalValue)
       if (!finalValue || !Number.isFinite(numericValue) || numericValue < 0 || numericValue > 100) {
         nextErrors[field.field] = `${field.title}只能输入0~100的数值`
+        continue
+      }
+    }
+
+    if (shouldRejectZeroValue(field) && finalValue) {
+      const numericValue = Number(finalValue)
+      if (!Number.isFinite(numericValue) || numericValue === 0) {
+        nextErrors[field.field] = `${field.title}不能为0`
         continue
       }
     }
