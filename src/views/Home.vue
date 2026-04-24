@@ -4615,9 +4615,7 @@ const overlayPointTaskWaypoints = async (taskId: string, taskName?: string) => {
       y: (ty - centerY) / maxRange,
       z: (tz - centerZ) / maxRange,
       intensity: isCurrent ? 2.2 : 1.8,
-      name: isCurrent
-        ? `当前任务点${idx + 1}`
-        : (task?.type_text || task?.preset || `任务点${idx + 1}`)
+      name: task?.type_text || task?.preset || `任务点${idx + 1}`
     })
   })
 
