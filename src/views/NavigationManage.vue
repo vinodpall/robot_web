@@ -273,6 +273,9 @@
                     </select>
                   </div>
                   <div class="toolbar-right">
+                    <button class="toolbar-btn" :class="{ active: isFeatureAreaPanelOpen }" v-permission-click-dialog="'nav-mapedit-edit'" @click="toggleFeatureAreaPanel" title="功能区">
+                      功能区
+                    </button>
                     <button class="toolbar-btn" :class="{ active: isEditMode }" v-permission-click-dialog="'nav-mapedit-edit'" @click="toggleEditMode" title="栅格图编辑">
                       编辑
                     </button>
@@ -282,6 +285,54 @@
               <div class="map-edit-grid-main">
                 <div ref="gridmapContainerEl" class="gridmap-container">
                   <canvas ref="gridMapCanvas" class="grid-canvas"></canvas>
+                  <svg
+                    v-if="shouldShowFeatureAreaOverlay"
+                    class="feature-area-overlay"
+                    :style="featureAreaOverlayStyle"
+                    :viewBox="`0 0 ${featureAreaCanvasSize.width} ${featureAreaCanvasSize.height}`"
+                    preserveAspectRatio="none"
+                  >
+                    <template v-for="area in visibleFeatureAreas" :key="area.id">
+                      <polygon
+                        v-if="area.geometry !== 'line' && area.points.length >= 3"
+                        :points="pointsToSvg(area.points)"
+                        :class="['feature-area-shape', `feature-area-${area.type}`]"
+                      />
+                      <polyline
+                        v-else-if="area.points.length >= 2"
+                        :points="pointsToSvg(area.points)"
+                        :class="['feature-area-line', `feature-area-${area.type}`]"
+                      />
+                      <circle
+                        v-for="(point, pointIndex) in area.points"
+                        :key="`${area.id}-point-${pointIndex}`"
+                        :cx="point.x"
+                        :cy="point.y"
+                        r="2"
+                        :class="['feature-area-marker', `feature-area-${area.type}`]"
+                      />
+                    </template>
+                    <g v-if="featureAreaDraftPoints.length > 0">
+                      <polygon
+                        v-if="selectedFeatureAreaGeometry === 'area' && featureAreaDraftPoints.length >= 3"
+                        :points="pointsToSvg(featureAreaDraftPoints)"
+                        :class="['feature-area-shape', 'feature-area-draft', `feature-area-${selectedFeatureAreaType}`]"
+                      />
+                      <polyline
+                        v-else-if="featureAreaDraftPoints.length >= 2"
+                        :points="pointsToSvg(featureAreaDraftPoints)"
+                        :class="['feature-area-line', 'feature-area-draft', `feature-area-${selectedFeatureAreaType}`]"
+                      />
+                      <circle
+                        v-for="(point, index) in featureAreaDraftPoints"
+                        :key="`feature-draft-point-${index}`"
+                        :cx="point.x"
+                        :cy="point.y"
+                        r="2.5"
+                        :class="['feature-area-marker', 'feature-area-draft-marker', `feature-area-${selectedFeatureAreaType}`]"
+                      />
+                    </g>
+                  </svg>
                   <div
                     v-if="eraserPreview.visible"
                     :class="['eraser-range-preview', `tool-${eraserPreview.tool}`]"
@@ -296,6 +347,69 @@
                   </div>
                   <div v-if="gridMapLoading" class="map-overlay loading">地图加载中...</div>
                   <div v-else-if="gridMapError" :class="['map-overlay', isGridMapEmptyState ? 'empty' : 'error']">{{ gridMapError }}</div>
+                  <div v-show="isFeatureAreaPanelOpen" class="feature-area-panel-right">
+                    <div class="feature-area-panel-content">
+                      <div class="feature-area-section">
+                        <div class="feature-area-mode-switch" role="group" aria-label="功能区绘制类型">
+                          <button
+                            type="button"
+                            :class="{ active: selectedFeatureAreaGeometry === 'area' }"
+                            @click="setFeatureAreaGeometry('area')"
+                          >
+                            区域
+                          </button>
+                          <button
+                            type="button"
+                            :class="{ active: selectedFeatureAreaGeometry === 'line' }"
+                            @click="setFeatureAreaGeometry('line')"
+                          >
+                            线段
+                          </button>
+                        </div>
+                        <button class="feature-area-action-btn" :class="{ active: isFeatureAreaDrawing }" @click="startFeatureAreaDrawing">
+                          添加
+                        </button>
+                        <button class="feature-area-action-btn" :disabled="!canUndoFeatureAreaStep" @click="undoFeatureAreaStep">
+                          撤销
+                        </button>
+                        <div class="feature-area-type-list">
+                          <label
+                            v-for="type in featureAreaTypes"
+                            :key="type.value"
+                            class="feature-area-type-option"
+                            :class="{ active: selectedFeatureAreaType === type.value }"
+                          >
+                            <input
+                              v-model="selectedFeatureAreaType"
+                              type="radio"
+                              name="feature-area-type"
+                              :value="type.value"
+                            />
+                            <span>{{ type.label }}</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="feature-area-section feature-area-section-middle">
+                        <select v-model="selectedFeatureAreaId" class="feature-area-select">
+                          <option value="">全部</option>
+                          <option v-for="option in featureAreaSelectOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                        <button class="feature-area-delete-btn" :disabled="!canDeleteSelectedFeatureArea" @click="deleteSelectedFeatureArea">
+                          删除
+                        </button>
+                        <button class="feature-area-action-btn" :class="{ active: featureAreaPreviewVisible }" @click="toggleFeatureAreaPreview">
+                          预览
+                        </button>
+                      </div>
+                      <div class="feature-area-section feature-area-section-submit">
+                        <button class="feature-area-submit-btn" :disabled="!canSubmitFeatureArea" @click="submitFeatureArea">
+                          提交
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                   <div v-show="isEditMode" class="edit-panel-right">
                     <div class="panel-tools">
                       <!-- 拖动模式 -->
@@ -761,6 +875,40 @@
             {{ trackRecordDialog.loading ? '提交中...' : '开始录制' }}
           </button>
           <button class="map-btn" @click="cancelTrackRecord">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 功能区命名弹窗 -->
+    <div v-if="featureAreaNameDialog.visible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card feature-area-name-dialog-card">
+        <div class="recording-dialog-header">
+          功能区命名
+          <button class="dialog-close-btn" @click="cancelFeatureAreaNameDialog">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="recording-dialog-body">
+          <div class="form-item">
+            <label class="form-label">功能区名称：</label>
+            <input
+              ref="featureAreaNameInput"
+              v-model="featureAreaNameDialog.name"
+              class="recording-input"
+              placeholder="请输入功能区名称"
+              @input="featureAreaNameDialog.error = ''"
+              @keyup.enter="confirmFeatureAreaNameDialog"
+            />
+          </div>
+          <div v-if="featureAreaNameDialog.error" class="feature-area-name-error">
+            {{ featureAreaNameDialog.error }}
+          </div>
+        </div>
+        <div class="recording-dialog-actions">
+          <button class="map-btn map-btn-primary" @click="confirmFeatureAreaNameDialog">确定</button>
+          <button class="map-btn" @click="cancelFeatureAreaNameDialog">取消</button>
         </div>
       </div>
     </div>
@@ -4008,6 +4156,407 @@ const brushSize = ref(5)
 const editHistory = ref<ImageData[]>([])
 const canUndo = computed(() => editHistory.value.length > 0)
 
+type GridMapPoint = { x: number; y: number }
+type FeatureAreaType = 'forbidden' | 'stairs' | 'slope' | 'narrow' | 'grass'
+type FeatureAreaGeometry = 'area' | 'line'
+
+type FeatureArea = {
+  id: string
+  name: string
+  mapName: string
+  type: FeatureAreaType
+  geometry: FeatureAreaGeometry
+  points: GridMapPoint[]
+}
+
+const featureAreaTypes: Array<{ value: FeatureAreaType; label: string }> = [
+  { value: 'forbidden', label: '禁行区' },
+  { value: 'stairs', label: '楼梯' },
+  { value: 'slope', label: '斜坡' },
+  { value: 'narrow', label: '窄通道' },
+  { value: 'grass', label: '草地' },
+]
+
+const FEATURE_AREA_STORAGE_PREFIX = 'map_feature_areas'
+const isFeatureAreaPanelOpen = ref(false)
+const isFeatureAreaDrawing = ref(false)
+const featureAreaPreviewVisible = ref(false)
+const selectedFeatureAreaType = ref<FeatureAreaType>('forbidden')
+const selectedFeatureAreaGeometry = ref<FeatureAreaGeometry>('area')
+const selectedFeatureAreaId = ref('')
+const featureAreaDraftPoints = ref<GridMapPoint[]>([])
+const featureAreas = ref<FeatureArea[]>([])
+const featureAreaCanvasSize = ref({ width: 0, height: 0 })
+const featureAreaOverlayStyle = ref<Record<string, string>>({})
+const featureAreaNameInput = ref<HTMLInputElement | null>(null)
+const featureAreaNameDialog = ref({
+  visible: false,
+  name: '',
+  error: '',
+})
+const canSubmitFeatureArea = computed(() => featureAreaDraftPoints.value.length >= 2 && !!selectedEditMap.value)
+const canUndoFeatureAreaStep = computed(() => featureAreaDraftPoints.value.length > 0 || featureAreas.value.length > 0)
+const canDeleteSelectedFeatureArea = computed(() => {
+  return Boolean(selectedFeatureAreaId.value && featureAreas.value.some(area => area.id === selectedFeatureAreaId.value))
+})
+const featureAreaTypeLabelMap = computed<Record<FeatureAreaType, string>>(() => {
+  return featureAreaTypes.reduce((labels, type) => {
+    labels[type.value] = type.label
+    return labels
+  }, {} as Record<FeatureAreaType, string>)
+})
+const featureAreaSelectOptions = computed(() => {
+  return featureAreas.value.map((area, index) => ({
+    value: area.id,
+    label: area.name || `${area.geometry === 'line' ? '线段' : '区域'}-${featureAreaTypeLabelMap.value[area.type]} ${index + 1}`,
+  }))
+})
+const visibleFeatureAreas = computed(() => {
+  if (!featureAreaPreviewVisible.value) return []
+  if (!selectedFeatureAreaId.value) return featureAreas.value
+  return featureAreas.value.filter(area => area.id === selectedFeatureAreaId.value)
+})
+const shouldShowFeatureAreaOverlay = computed(() => {
+  return Boolean(
+    featureAreaCanvasSize.value.width > 0
+      && featureAreaCanvasSize.value.height > 0
+      && !gridMapLoading.value
+      && !gridMapError.value
+      && (featureAreaPreviewVisible.value || isFeatureAreaDrawing.value || featureAreaDraftPoints.value.length > 0)
+  )
+})
+
+const pointsToSvg = (points: GridMapPoint[]) => {
+  return points.map(point => `${point.x},${point.y}`).join(' ')
+}
+
+const getFeatureAreaStorageKey = (mapName = selectedEditMap.value) => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || 'default'
+  return `${FEATURE_AREA_STORAGE_PREFIX}_${robotId}_${mapName || 'empty'}`
+}
+
+const normalizeFeatureAreaPoints = (rawPoints: unknown): GridMapPoint[] => {
+  if (!Array.isArray(rawPoints)) return []
+  return rawPoints
+    .map((point: any) => ({
+      x: Number(point?.x),
+      y: Number(point?.y),
+    }))
+    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+}
+
+const loadFeatureAreasForMap = (mapName = selectedEditMap.value) => {
+  if (!mapName) {
+    featureAreas.value = []
+    return
+  }
+
+  try {
+    const raw = localStorage.getItem(getFeatureAreaStorageKey(mapName))
+    const parsed = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) {
+      featureAreas.value = []
+      return
+    }
+
+    featureAreas.value = parsed
+      .map((area: any, index: number): FeatureArea | null => {
+        const type = featureAreaTypes.some(item => item.value === area?.type)
+          ? area.type as FeatureAreaType
+          : null
+        const geometry: FeatureAreaGeometry = area?.geometry === 'line' ? 'line' : 'area'
+        const points = normalizeFeatureAreaPoints(area?.points)
+        if (!type || points.length < 2) return null
+        const defaultName = `${geometry === 'line' ? '线段' : '区域'}-${featureAreaTypeLabelMap.value[type]} ${index + 1}`
+        return {
+          id: String(area?.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+          name: String(area?.name || defaultName),
+          mapName,
+          type,
+          geometry,
+          points,
+        }
+      })
+      .filter((area): area is FeatureArea => !!area)
+  } catch (error) {
+    console.error('读取功能区缓存失败:', error)
+    featureAreas.value = []
+  }
+
+  if (selectedFeatureAreaId.value && !featureAreas.value.some(area => area.id === selectedFeatureAreaId.value)) {
+    selectedFeatureAreaId.value = ''
+  }
+}
+
+const saveFeatureAreasForMap = () => {
+  if (!selectedEditMap.value) return
+  localStorage.setItem(getFeatureAreaStorageKey(), JSON.stringify(featureAreas.value))
+}
+
+const resetFeatureAreaDraft = () => {
+  featureAreaDraftPoints.value = []
+  isFeatureAreaDrawing.value = false
+  const canvas = gridMapCanvas.value
+  if (canvas) {
+    canvas.style.cursor = getCanvasCursor()
+  }
+}
+
+const syncFeatureAreaOverlay = () => {
+  const canvas = gridMapCanvas.value
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+    featureAreaCanvasSize.value = { width: 0, height: 0 }
+    featureAreaOverlayStyle.value = {}
+    return
+  }
+
+  featureAreaCanvasSize.value = {
+    width: canvas.width,
+    height: canvas.height,
+  }
+  featureAreaOverlayStyle.value = {
+    width: canvas.style.width || `${canvas.width}px`,
+    height: canvas.style.height || `${canvas.height}px`,
+    transform: canvas.style.transform || 'translate(0px, 0px)',
+  }
+}
+
+const getPointOrientation = (a: GridMapPoint, b: GridMapPoint, c: GridMapPoint) => {
+  return (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y)
+}
+
+const isPointOnSegment = (a: GridMapPoint, b: GridMapPoint, c: GridMapPoint) => {
+  const epsilon = 0.000001
+  return Math.abs(getPointOrientation(a, b, c)) <= epsilon
+    && b.x <= Math.max(a.x, c.x) + epsilon
+    && b.x + epsilon >= Math.min(a.x, c.x)
+    && b.y <= Math.max(a.y, c.y) + epsilon
+    && b.y + epsilon >= Math.min(a.y, c.y)
+}
+
+const segmentsIntersect = (a: GridMapPoint, b: GridMapPoint, c: GridMapPoint, d: GridMapPoint) => {
+  const epsilon = 0.000001
+  const o1 = getPointOrientation(a, b, c)
+  const o2 = getPointOrientation(a, b, d)
+  const o3 = getPointOrientation(c, d, a)
+  const o4 = getPointOrientation(c, d, b)
+
+  if (Math.abs(o1) <= epsilon && isPointOnSegment(a, c, b)) return true
+  if (Math.abs(o2) <= epsilon && isPointOnSegment(a, d, b)) return true
+  if (Math.abs(o3) <= epsilon && isPointOnSegment(c, a, d)) return true
+  if (Math.abs(o4) <= epsilon && isPointOnSegment(c, b, d)) return true
+
+  return (o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0)
+}
+
+const featureAreaHasSelfIntersection = (points: GridMapPoint[], closePath: boolean) => {
+  if (points.length < 4) return false
+
+  const edgeCount = closePath ? points.length : points.length - 1
+  const edges = Array.from({ length: edgeCount }, (_, index) => ({
+    start: points[index],
+    end: points[(index + 1) % points.length],
+  }))
+
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = i + 1; j < edges.length; j++) {
+      const isAdjacent = Math.abs(i - j) === 1 || (closePath && i === 0 && j === edges.length - 1)
+      if (isAdjacent) continue
+      if (segmentsIntersect(edges[i].start, edges[i].end, edges[j].start, edges[j].end)) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+const setFeatureAreaGeometry = (geometry: FeatureAreaGeometry) => {
+  if (selectedFeatureAreaGeometry.value === geometry) return
+
+  const nextPoints = featureAreaDraftPoints.value
+  if (nextPoints.length >= 4 && featureAreaHasSelfIntersection(nextPoints, geometry === 'area')) {
+    showErrorMessage('当前标记点切换后会产生交叉，请先撤销冲突点')
+    return
+  }
+
+  selectedFeatureAreaGeometry.value = geometry
+  featureAreaPreviewVisible.value = true
+}
+
+const addFeatureAreaPoint = (point: GridMapPoint) => {
+  const canvas = gridMapCanvas.value
+  if (!canvas) return
+  if (point.x < 0 || point.y < 0 || point.x >= canvas.width || point.y >= canvas.height) return
+
+  const exists = featureAreaDraftPoints.value.some(item => item.x === point.x && item.y === point.y)
+  if (exists) {
+    showErrorMessage('该标记点已存在，请选择其他位置')
+    return
+  }
+
+  const nextPoints = [...featureAreaDraftPoints.value, point]
+  if (nextPoints.length >= 4 && featureAreaHasSelfIntersection(nextPoints, selectedFeatureAreaGeometry.value === 'area')) {
+    showErrorMessage('标记连线存在交叉，请重新选择标记点')
+    return
+  }
+
+  featureAreaDraftPoints.value = nextPoints
+  featureAreaPreviewVisible.value = true
+}
+
+const toggleFeatureAreaPreview = () => {
+  featureAreaPreviewVisible.value = !featureAreaPreviewVisible.value
+}
+
+const undoFeatureAreaStep = () => {
+  if (featureAreaDraftPoints.value.length > 0) {
+    featureAreaDraftPoints.value = featureAreaDraftPoints.value.slice(0, -1)
+    featureAreaPreviewVisible.value = true
+    return
+  }
+
+  if (featureAreas.value.length > 0) {
+    const removedArea = featureAreas.value[featureAreas.value.length - 1]
+    featureAreas.value = featureAreas.value.slice(0, -1)
+    if (selectedFeatureAreaId.value === removedArea.id) {
+      selectedFeatureAreaId.value = ''
+    }
+    featureAreaPreviewVisible.value = true
+    saveFeatureAreasForMap()
+  }
+}
+
+const deleteSelectedFeatureArea = () => {
+  if (!selectedFeatureAreaId.value) return
+
+  const nextAreas = featureAreas.value.filter(area => area.id !== selectedFeatureAreaId.value)
+  if (nextAreas.length === featureAreas.value.length) {
+    selectedFeatureAreaId.value = ''
+    return
+  }
+
+  featureAreas.value = nextAreas
+  selectedFeatureAreaId.value = ''
+  featureAreaPreviewVisible.value = true
+  saveFeatureAreasForMap()
+}
+
+const openFeatureAreaNameDialog = () => {
+  featureAreaNameDialog.value = {
+    visible: true,
+    name: '',
+    error: '',
+  }
+  nextTick(() => {
+    featureAreaNameInput.value?.focus()
+  })
+}
+
+const cancelFeatureAreaNameDialog = () => {
+  featureAreaNameDialog.value.visible = false
+  featureAreaNameDialog.value.error = ''
+}
+
+const confirmFeatureAreaNameDialog = () => {
+  const name = featureAreaNameDialog.value.name.trim()
+  if (!name) {
+    featureAreaNameDialog.value.error = '请输入功能区名称'
+    return
+  }
+
+  const isDuplicateName = featureAreas.value.some(area => area.name.trim() === name)
+  if (isDuplicateName) {
+    featureAreaNameDialog.value.error = '功能区名称已存在'
+    return
+  }
+
+  const area: FeatureArea = {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name,
+    mapName: selectedEditMap.value,
+    type: selectedFeatureAreaType.value,
+    geometry: selectedFeatureAreaGeometry.value,
+    points: featureAreaDraftPoints.value.map(point => ({ ...point })),
+  }
+
+  featureAreas.value = [...featureAreas.value, area]
+  selectedFeatureAreaId.value = area.id
+  saveFeatureAreasForMap()
+  featureAreaDraftPoints.value = []
+  isFeatureAreaDrawing.value = false
+  featureAreaPreviewVisible.value = true
+  featureAreaNameDialog.value.visible = false
+  featureAreaNameDialog.value.error = ''
+
+  const canvas = gridMapCanvas.value
+  if (canvas) {
+    canvas.style.cursor = getCanvasCursor()
+  }
+
+  showSuccessMessage('功能区已提交')
+}
+
+const startFeatureAreaDrawing = () => {
+  if (!selectedEditMap.value) {
+    showErrorMessage('请先选择地图')
+    return
+  }
+  if (gridMapLoading.value || gridMapError.value || !gridMapCanvas.value || gridMapCanvas.value.width <= 0) {
+    showErrorMessage('栅格图未加载，无法添加功能区')
+    return
+  }
+
+  isEditMode.value = false
+  navMode.value = 'pan'
+  drawing = false
+  isDragging = false
+  featureAreaDraftPoints.value = []
+  isFeatureAreaDrawing.value = true
+  featureAreaPreviewVisible.value = true
+  hideEraserPreview()
+
+  const canvas = gridMapCanvas.value
+  if (canvas) {
+    canvas.style.cursor = getCanvasCursor()
+  }
+}
+
+const toggleFeatureAreaPanel = () => {
+  isFeatureAreaPanelOpen.value = !isFeatureAreaPanelOpen.value
+
+  if (isFeatureAreaPanelOpen.value) {
+    isEditMode.value = false
+    navMode.value = 'pan'
+    loadFeatureAreasForMap()
+    hideEraserPreview()
+  } else {
+    resetFeatureAreaDraft()
+  }
+
+  const canvas = gridMapCanvas.value
+  if (canvas) {
+    canvas.style.cursor = getCanvasCursor()
+  }
+}
+
+const submitFeatureArea = () => {
+  if (!selectedEditMap.value) {
+    showErrorMessage('请先选择地图')
+    return
+  }
+  if (featureAreaDraftPoints.value.length < 2) {
+    showErrorMessage('请至少添加两个标记点')
+    return
+  }
+  if (featureAreaDraftPoints.value.length >= 4 && featureAreaHasSelfIntersection(featureAreaDraftPoints.value, selectedFeatureAreaGeometry.value === 'area')) {
+    showErrorMessage('标记连线存在交叉，请调整标记点')
+    return
+  }
+
+  openFeatureAreaNameDialog()
+}
+
 let gridImageData: ImageData | null = null
 let missionGridImageData: ImageData | null = null
 let currentScale = 1
@@ -4313,10 +4862,17 @@ const clearGridMapDisplay = (message = '暂无栅格图') => {
   canvas.style.transform = ''
   lastPointerCanvasCoords = null
   hideEraserPreview()
+  syncFeatureAreaOverlay()
 }
 
 // 监听地图编辑选择变化（store setter 已持久化，无需手动写 localStorage）
 watch(selectedEditMap, (newMap) => {
+  resetFeatureAreaDraft()
+  featureAreaPreviewVisible.value = false
+  featureAreaNameDialog.value.visible = false
+  featureAreaNameDialog.value.error = ''
+  selectedFeatureAreaId.value = ''
+  loadFeatureAreasForMap(newMap)
   if (newMap) {
     loadGridMap(newMap)
   } else {
@@ -4421,6 +4977,10 @@ const refreshEraserPreview = () => {
 // 编辑模式切换
 const toggleEditMode = () => {
   isEditMode.value = !isEditMode.value
+  if (isEditMode.value) {
+    isFeatureAreaPanelOpen.value = false
+    resetFeatureAreaDraft()
+  }
   if (!isEditMode.value) {
     navMode.value = 'pan'
   }
@@ -4437,6 +4997,9 @@ const getEraserCursor = () => {
 }
 
 const getCanvasCursor = () => {
+  if (isFeatureAreaDrawing.value) {
+    return 'crosshair'
+  }
   if (!isEditMode.value || navMode.value === 'pan') {
     return 'grab'
   }
@@ -4500,6 +5063,7 @@ const applyTransform = () => {
   const centerY = (sh - canvas.height * finalScale) / 2 + currentOffsetY
   
   canvas.style.transform = `translate(${centerX}px, ${centerY}px)`
+  syncFeatureAreaOverlay()
   refreshEraserPreview()
 }
 
@@ -4907,6 +5471,13 @@ const setupCanvasEvents = () => {
 
     const coords = getCanvasCoords(e)
     lastPointerCanvasCoords = coords
+
+    if (isFeatureAreaDrawing.value && e.button === 0 && !e.ctrlKey) {
+      addFeatureAreaPoint(coords)
+      canvas.style.cursor = getCanvasCursor()
+      e.preventDefault()
+      return
+    }
 
     // 编辑模式下且为编辑导航模式的左键编辑
     if (isEditMode.value && navMode.value === 'edit' && e.button === 0 && !e.ctrlKey) {
@@ -6581,6 +7152,76 @@ const handleDelete = (item: any) => {
   cursor: grabbing;
 }
 
+.feature-area-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+  z-index: 8;
+  overflow: visible;
+}
+
+.feature-area-shape,
+.feature-area-line {
+  fill-opacity: 0.18;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.feature-area-line,
+.feature-area-line.feature-area-draft,
+.feature-area-line.feature-area-forbidden,
+.feature-area-line.feature-area-stairs,
+.feature-area-line.feature-area-slope,
+.feature-area-line.feature-area-narrow,
+.feature-area-line.feature-area-grass {
+  fill: none;
+  fill-opacity: 0;
+}
+
+.feature-area-marker {
+  stroke: #ffffff;
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.feature-area-draft {
+  stroke-dasharray: 8 6;
+  fill-opacity: 0.2;
+}
+
+.feature-area-draft-marker {
+  stroke-width: 1;
+}
+
+.feature-area-forbidden {
+  fill: #ef4444;
+  stroke: #ef4444;
+}
+
+.feature-area-stairs {
+  fill: #f59e0b;
+  stroke: #f59e0b;
+}
+
+.feature-area-slope {
+  fill: #8b5cf6;
+  stroke: #8b5cf6;
+}
+
+.feature-area-narrow {
+  fill: #06b6d4;
+  stroke: #06b6d4;
+}
+
+.feature-area-grass {
+  fill: #22c55e;
+  stroke: #22c55e;
+}
+
 .map-overlay {
   position: absolute;
   inset: 0;
@@ -6660,6 +7301,227 @@ const handleDelete = (item: any) => {
   color: #5f7890;
   font-size: 14px;
   letter-spacing: 0.5px;
+}
+
+/* 右侧功能区面板 */
+.feature-area-panel-right {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 124px;
+  background: linear-gradient(180deg, #244e63 0%, #1c4156 100%);
+  border-left: 1px solid rgba(73, 146, 176, 0.5);
+  border-radius: 8px;
+  display: flex;
+  z-index: 101;
+  box-shadow: -6px 0 18px rgba(10, 30, 45, 0.24);
+  backdrop-filter: blur(4px);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.feature-area-panel-content {
+  width: 100%;
+  height: 100%;
+  padding: 18px 12px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.feature-area-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 22px;
+  position: relative;
+}
+
+.feature-area-section + .feature-area-section {
+  padding-top: 24px;
+}
+
+.feature-area-section + .feature-area-section::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(127, 211, 251, 0.48), transparent);
+  box-shadow: 0 1px 0 rgba(5, 29, 42, 0.32);
+}
+
+.feature-area-section-middle {
+  gap: 11px;
+  padding-bottom: 22px;
+}
+
+.feature-area-section-submit {
+  margin-top: auto;
+  padding-top: 20px;
+  padding-bottom: 0;
+}
+
+.feature-area-mode-switch {
+  width: 86px;
+  height: 34px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  border: 1px solid rgba(127, 211, 251, 0.45);
+  border-radius: 7px;
+  background: rgba(13, 45, 62, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(5, 29, 42, 0.22);
+}
+
+.feature-area-mode-switch button {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #cdefff;
+  font-size: 13px;
+  line-height: 32px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.feature-area-mode-switch button + button {
+  border-left: 1px solid rgba(127, 211, 251, 0.38);
+}
+
+.feature-area-mode-switch button:hover {
+  background: rgba(66, 149, 186, 0.36);
+  color: #ffffff;
+}
+
+.feature-area-mode-switch button.active {
+  background: #7fd3fb;
+  color: #123447;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(127, 211, 251, 0.25);
+}
+
+.feature-area-action-btn,
+.feature-area-delete-btn,
+.feature-area-select,
+.feature-area-submit-btn {
+  width: 86px;
+  min-height: 34px;
+  border-radius: 6px;
+  border: 1px solid rgba(103, 213, 253, 0.35);
+  background: rgba(26, 80, 104, 0.8);
+  color: #d5f4ff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.feature-area-select {
+  outline: none;
+  padding: 0 8px;
+}
+
+.feature-area-action-btn:hover:not(:disabled),
+.feature-area-delete-btn:hover:not(:disabled),
+.feature-area-select:hover,
+.feature-area-submit-btn:hover:not(:disabled) {
+  background: rgba(66, 149, 186, 0.72);
+  border-color: rgba(126, 200, 230, 0.58);
+  color: #ffffff;
+  box-shadow: 0 6px 12px rgba(10, 30, 45, 0.28);
+}
+
+.feature-area-delete-btn {
+  border-color: rgba(255, 132, 132, 0.42);
+  color: #ffd5d5;
+}
+
+.feature-area-delete-btn:hover:not(:disabled) {
+  background: rgba(151, 55, 66, 0.58);
+  border-color: rgba(255, 150, 150, 0.68);
+}
+
+.feature-area-select:focus {
+  border-color: #7fd3fb;
+  box-shadow: 0 0 0 2px rgba(127, 211, 251, 0.16);
+}
+
+.feature-area-select option {
+  background: #1c4156;
+  color: #d5f4ff;
+}
+
+.feature-area-action-btn.active {
+  background: #7fd3fb;
+  border-color: #7fd3fb;
+  color: #123447;
+  box-shadow: 0 8px 16px rgba(73, 171, 212, 0.35);
+  font-weight: 600;
+}
+
+.feature-area-action-btn:disabled,
+.feature-area-delete-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.feature-area-type-list {
+  width: 86px;
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feature-area-type-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  color: #cdefff;
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.feature-area-type-option input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(142, 218, 248, 0.82);
+  background: rgba(13, 45, 62, 0.72);
+  cursor: pointer;
+  position: relative;
+}
+
+.feature-area-type-option input:checked::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #7fd3fb;
+  box-shadow: 0 0 8px rgba(127, 211, 251, 0.5);
+}
+
+.feature-area-type-option.active {
+  color: #7fd3fb;
+  font-weight: 600;
+}
+
+.feature-area-submit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* 右侧编辑面板 */
@@ -6930,6 +7792,17 @@ select.recording-input option {
     inset 0 0 0 1px rgba(103, 213, 253, 0.08);
   filter: saturate(0.72) grayscale(0.22);
   opacity: 1;
+}
+
+.feature-area-name-dialog-card {
+  width: 420px;
+}
+
+.feature-area-name-error {
+  margin-top: -8px;
+  color: #ff9f9f;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .recording-dialog-actions {
