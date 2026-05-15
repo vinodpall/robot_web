@@ -568,6 +568,175 @@
             </div>
           </template>
 
+          <!-- 路线编辑 -->
+          <template v-else-if="currentTab === 'track_edit'">
+            <div class="nav-top-card card">
+              <div class="nav-top-header">
+                <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
+                <span class="nav-top-title">路线编辑</span>
+              </div>
+            </div>
+            <div class="nav-content-wrapper track-edit-content">
+              <div class="track-record-toolbar track-edit-toolbar">
+                <div class="track-toolbar-group">
+                  <span class="track-label">地图:</span>
+                  <div class="track-select-wrapper">
+                    <select v-model="trackEditMap" class="track-select" :disabled="isMapSelectionLocked || routeEditLoading || routeEditCreateMode">
+                      <option v-if="trackMapList.length === 0" value="">暂无地图</option>
+                      <option v-for="map in trackMapList" :key="map" :value="map">{{ map }}</option>
+                    </select>
+                    <span class="track-select-arrow">
+                      <svg width="10" height="10" viewBox="0 0 12 12">
+                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+                <div class="track-toolbar-group">
+                  <span class="track-label">路线:</span>
+                  <div class="track-select-wrapper">
+                    <select v-model="trackEditLine" class="track-select" :disabled="routeEditLoading || routeEditCreateMode" :key="`track-edit-line-${trackEditMap}-${trackEditLineList.length}`">
+                      <option value="">{{ trackEditLineList.length === 0 ? '暂无路线' : '请选择路线' }}</option>
+                      <option v-for="line in trackEditLineList" :key="line" :value="line">{{ line }}</option>
+                    </select>
+                    <span class="track-select-arrow">
+                      <svg width="10" height="10" viewBox="0 0 12 12">
+                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+                <div class="track-toolbar-actions">
+                  <button class="map-btn map-btn-primary track-btn" :class="{ active: routeEditCreateMode }" :disabled="routeEditLoading || !trackEditMap" v-permission-click-dialog="'nav-trackrecord-create'" @click="routeEditCreateMode ? cancelRouteEditCreate() : startRouteEditCreate()">
+                    {{ routeEditCreateMode ? '新增中' : '新增路线' }}
+                  </button>
+                  <button class="map-btn map-btn-primary track-btn" :disabled="routeEditLoading || routeEditCreateMode || !trackEditLine" v-permission-click-dialog="'nav-trackrecord-preview'" @click="loadTrackEditRoute">
+                    {{ routeEditLoading ? '加载中...' : '加载路线' }}
+                  </button>
+                  <button class="map-btn map-btn-secondary track-btn" :class="{ active: routeEditMode === 'view' }" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="setRouteEditMode('view')">
+                    视图
+                  </button>
+                  <button class="map-btn map-btn-secondary track-btn" :class="{ active: routeEditMode === 'pick' }" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="setRouteEditMode('pick')">
+                    选段
+                  </button>
+                  <button class="map-btn map-btn-secondary track-btn" :class="{ active: routeEditMode === 'draw' }" :disabled="!routeEditCanDraw" @click="setRouteEditMode('draw')">
+                    绘制
+                  </button>
+                </div>
+              </div>
+
+              <div class="track-edit-workspace">
+                <div class="track-edit-map">
+                  <div class="nav-map-canvas">
+                    <div class="pointcloud-wrapper">
+                      <div class="pointcloud-view">
+                        <ThreePointCloudPreview
+                          ref="navPointCloudPreviewRef"
+                          :points="navPointCloudData"
+                          :loading="navPointCloudLoading || routeEditLoading"
+                          :loading-text="routeEditLoading ? '路线加载中...' : navPointCloudLoadingText"
+                          :error="routeEditError || navPointCloudError"
+                          :auto-fit-on-data-change="false"
+                          :normalization-params="navPointCloudNormalizationParams"
+                          :navigation-origin="navPointCloudNavigationOrigin"
+                          :robot-pose="robotStore.pose"
+                          :robot-mesh="arrowMesh"
+                          :interaction-mode="routeEditMode"
+                          :interaction-plane-z="routeEditInteractionPlaneZ"
+                          :trajectory-points="routeEditPreviewPoints"
+                          :selected-trajectory-range="routeEditSelectedRangeForPreview"
+                          :draft-points="routeEditDraftPreviewPoints"
+                          :draw-point-markers="routeEditDrawPointMarkers"
+                          :trajectory-breaks="routeEditBreaks"
+                          :snap-to-trajectory="true"
+                          :snap-pixel-radius="routeEditSnapPixelRadius"
+                          :snap-priority-index="routeEditSnapPriorityIndex"
+                          @trajectory-point-click="handleRouteEditTrajectoryPick"
+                          @plane-click="handleRouteEditPlaneClick"
+                        />
+                        <div v-if="routeEditMode !== 'view' && routeEditCanDraw" class="track-edit-mode-hint">
+                          {{ routeEditMode === 'pick' ? '点击绿色路线点设置编辑区间' : routeEditDrawHint }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <aside class="track-edit-panel">
+                  <div class="track-edit-panel-section">
+                    <div class="track-edit-panel-title">路线状态</div>
+                    <div class="track-edit-stat-grid">
+                      <div class="track-edit-stat">
+                        <span>点数</span>
+                        <strong>{{ routeEditPoints.length }}</strong>
+                      </div>
+                      <div class="track-edit-stat">
+                        <span>选区</span>
+                        <strong>{{ routeEditSelectedCount }}</strong>
+                      </div>
+                      <div class="track-edit-stat">
+                        <span>草稿点</span>
+                        <strong>{{ routeEditDraftPoints.length }}</strong>
+                      </div>
+                      <div class="track-edit-stat">
+                        <span>状态</span>
+                        <strong>{{ routeEditStateLabel }}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="track-edit-panel-section">
+                    <div class="track-edit-panel-title">编辑区间</div>
+                    <div class="track-edit-range-row">
+                      <label>起点</label>
+                      <input v-model.number="routeEditSelectionStart" type="number" min="0" :max="Math.max(routeEditPoints.length - 1, 0)" :disabled="!routeEditHasRoute || routeEditCreateMode" />
+                    </div>
+                    <div class="track-edit-range-row">
+                      <label>终点</label>
+                      <input v-model.number="routeEditSelectionEnd" type="number" min="0" :max="Math.max(routeEditPoints.length - 1, 0)" :disabled="!routeEditHasRoute || routeEditCreateMode" />
+                    </div>
+                    <div class="track-edit-action-grid">
+                      <button class="track-edit-action" :disabled="!routeEditHasSelection || routeEditCreateMode" @click="clearRouteEditSelection">清除选区</button>
+                      <button class="track-edit-action danger" :disabled="!routeEditHasSelection || routeEditCreateMode" v-permission-click-dialog="'nav-trackrecord-edit'" @click="deleteRouteEditSelection">删除选段</button>
+                    </div>
+                  </div>
+
+                  <div class="track-edit-panel-section">
+                    <div class="track-edit-panel-title">{{ routeEditCreateMode ? '新增绘制' : '重绘草稿' }}</div>
+                    <div v-if="routeEditCreateMode" class="track-edit-action-grid">
+                      <button class="track-edit-action" :disabled="routeEditPoints.length === 0" @click="undoRouteEditCreatePoint">撤销点</button>
+                      <button class="track-edit-action" :disabled="routeEditPoints.length === 0" @click="clearRouteEditCreatePoints">清空路线</button>
+                      <button class="track-edit-action primary" :disabled="!canSubmitRouteEditCreate" v-permission-click-dialog="'nav-trackrecord-create'" @click="openRouteEditCreateDialog">
+                        提交新增
+                      </button>
+                      <button class="track-edit-action" @click="cancelRouteEditCreate">取消新增</button>
+                    </div>
+                    <div v-else class="track-edit-action-grid">
+                      <button class="track-edit-action" :disabled="routeEditDraftPoints.length === 0" @click="undoRouteEditDraftPoint">撤销点</button>
+                      <button class="track-edit-action" :disabled="routeEditDraftPoints.length === 0" @click="clearRouteEditDraft">清空草稿</button>
+                      <button class="track-edit-action primary" :disabled="!canApplyRouteEditDraft" v-permission-click-dialog="'nav-trackrecord-edit'" @click="applyRouteEditDraft">
+                        {{ routeEditHasSelection ? '替换选段' : '追加草稿' }}
+                      </button>
+                      <button class="track-edit-action" :disabled="!canUndoRouteEdit" @click="undoRouteEditOperation">撤销操作</button>
+                    </div>
+                  </div>
+
+                  <div class="track-edit-panel-section">
+                    <div class="track-edit-panel-title">输出</div>
+                    <div class="track-edit-action-grid">
+                      <button class="track-edit-action" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="resetRouteEditRoute">还原路线</button>
+                      <button class="track-edit-action primary" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="generateRouteEditDraftText">生成草稿</button>
+                      <button class="track-edit-action disabled-action" disabled title="上传接口后续对接">保存路线</button>
+                    </div>
+                    <div class="track-edit-draft-box">
+                      <span>{{ routeEditDraftStatus }}</span>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </template>
+
           <!-- 文件管理 -->
           <template v-else-if="currentTab === 'file_manage'">
             <div class="nav-top-card card">
@@ -879,6 +1048,43 @@
       </div>
     </div>
 
+    <!-- 手动新增路线命名弹窗 -->
+    <div v-if="routeEditCreateDialog.visible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card route-create-dialog-card">
+        <div class="recording-dialog-header">
+          新增路线
+          <button class="dialog-close-btn" @click="cancelRouteEditCreateDialog">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="recording-dialog-body">
+          <div class="route-create-summary">
+            已绘制 {{ routeEditPoints.length }} 个点{{ routeEditIsClosedLoop ? '，已闭环' : '' }}
+          </div>
+          <div class="route-create-name-row">
+            <span>{{ trackEditMap }}_</span>
+            <input
+              v-model="routeEditCreateDialog.trackName"
+              placeholder="输入路线名称"
+              @input="routeEditCreateDialog.error = ''"
+              @keyup.enter="confirmRouteEditCreate"
+            />
+          </div>
+          <div v-if="routeEditCreateDialog.error" class="feature-area-name-error">
+            {{ routeEditCreateDialog.error }}
+          </div>
+        </div>
+        <div class="recording-dialog-actions">
+          <button class="map-btn map-btn-primary" v-permission-click-dialog="'nav-trackrecord-create'" @click="confirmRouteEditCreate">
+            确定
+          </button>
+          <button class="map-btn" @click="cancelRouteEditCreateDialog">取消</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 功能区命名弹窗 -->
     <div v-if="featureAreaNameDialog.visible" class="recording-dialog-overlay">
       <div class="recording-dialog-card card feature-area-name-dialog-card">
@@ -954,6 +1160,7 @@ import mapRecordIcon from '@/assets/source_data/svg_data/map_record.svg'
 import navIcon from '@/assets/source_data/svg_data/nav.svg'
 import mapEditIcon from '@/assets/source_data/svg_data/map_edit.svg'
 import trackRecordIcon from '@/assets/source_data/svg_data/track_record.svg'
+import trackEditIcon from '@/assets/source_data/svg_data/robot_source/track_edit.svg'
 import packageManageIcon from '@/assets/source_data/svg_data/package_manage.svg'
 import mapMoveIcon from '@/assets/source_data/svg_data/robot_source/map_move.svg'
 import mapMagnifyIcon from '@/assets/source_data/svg_data/robot_source/map_magnify.svg'
@@ -1082,6 +1289,7 @@ const sidebarTabs = [
   { key: 'nav', label: '导航', icon: navIcon, permission: 'nav-navmanage-show' },
   { key: 'map_edit', label: '地图编辑', icon: mapEditIcon, permission: 'nav-mapedit-show' },
   { key: 'track_record', label: '路线录制', icon: trackRecordIcon, permission: 'nav-trackrecord-show' },
+  { key: 'track_edit', label: '路线编辑', icon: trackEditIcon, permission: 'nav-trackrecord-show' },
   { key: 'file_manage', label: '文件管理', icon: packageManageIcon, permission: 'nav-file-show' }
 ]
 
@@ -1098,7 +1306,8 @@ const getDefaultNavManageTab = () => {
 }
 
 const currentTab = ref(getDefaultNavManageTab())
-const mapRefreshTabs = new Set(['nav', 'map_edit', 'track_record', 'file_manage'])
+const mapRefreshTabs = new Set(['nav', 'map_edit', 'track_record', 'track_edit', 'file_manage'])
+const pointCloudTabs = new Set(['nav', 'track_record', 'track_edit'])
 
 watch(currentTab, (tabKey) => {
   localStorage.setItem(NAV_MANAGE_TAB_STORAGE_KEY, tabKey)
@@ -1122,7 +1331,7 @@ const handleTabClick = async (tab: { key: string; permission?: string }) => {
   currentTab.value = key
   
   // 如果离开导航/路线录制标签，清理点云图状态
-  if ((previousTab === 'nav' || previousTab === 'track_record') && key !== 'nav' && key !== 'track_record') {
+  if (pointCloudTabs.has(previousTab) && !pointCloudTabs.has(key)) {
     cleanupNavPointCloud()
   }
 
@@ -1148,6 +1357,19 @@ const handleTabClick = async (tab: { key: string; permission?: string }) => {
       if (trackRecordMap.value && !trackRecordLine.value && trackLineList.value.length > 0) {
         trackRecordLine.value = trackLineList.value[0]
         // trackRecordLine 的 watcher 会自动加载任务组并选第一个
+      }
+    })
+  } else if (key === 'track_edit') {
+    nextTick(async () => {
+      initNavPointCloud()
+      fetchTrackMapList()
+      await fetchAllTrackList()
+      loadRouteEditLocalLineList()
+      if (trackEditMap.value && !trackEditLine.value && trackEditLineList.value.length > 0) {
+        trackEditLine.value = trackEditLineList.value[0]
+      }
+      if (trackEditLine.value) {
+        await loadTrackEditRoute()
       }
     })
   } else if (key === 'map_edit') {
@@ -1771,6 +1993,856 @@ const handleTrackSmooth = async () => {
   }
 }
 
+// 路线编辑相关状态（仅做前端草稿，上传保存后续对接）
+type RouteEditPoint = {
+  x: number
+  y: number
+  z: number
+  snappedIndex?: number
+}
+
+type RouteEditSnapshot = {
+  points: RouteEditPoint[]
+  breaks: number[]
+}
+
+type RouteEditFileFormat = {
+  headerLines: string[]
+  delimiter: 'comma' | 'space'
+  columnCount: 5 | 6
+  tailValues: string[]
+}
+
+const MANUAL_ROUTE_EDIT_STORAGE_PREFIX = 'manual_route_edit_tracks'
+const trackEditMap = computed({
+  get: () => taskExecutionStore.selectedMapName,
+  set: (v: string) => taskExecutionStore.setSelectedMapName(v)
+})
+const trackEditLine = ref('')
+const routeEditMode = ref<'view' | 'pick' | 'draw'>('view')
+const routeEditCreateMode = ref(false)
+const routeEditPoints = ref<RouteEditPoint[]>([])
+const routeEditOriginalPoints = ref<RouteEditPoint[]>([])
+const routeEditBreaks = ref<number[]>([])
+const routeEditOriginalBreaks = ref<number[]>([])
+const routeEditDraftPoints = ref<RouteEditPoint[]>([])
+const routeEditSelectionStart = ref(-1)
+const routeEditSelectionEnd = ref(-1)
+const routeEditLoading = ref(false)
+const routeEditError = ref('')
+const routeEditDirty = ref(false)
+const routeEditGeneratedText = ref('')
+const routeEditFileFormat = ref<RouteEditFileFormat | null>(null)
+const routeEditHistory = ref<RouteEditSnapshot[]>([])
+const routeEditLocalLineList = ref<string[]>([])
+const routeEditGeneratedTrackName = ref('')
+const routeEditCreateDialog = ref({
+  visible: false,
+  trackName: '',
+  error: '',
+})
+let suppressTrackEditLineReset = false
+
+const getRouteEditLocalTrackListKey = (mapName = trackEditMap.value) => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || 'default'
+  return `${MANUAL_ROUTE_EDIT_STORAGE_PREFIX}_${robotId}_${mapName || 'empty'}`
+}
+
+const readRouteEditLocalLineList = (mapName = trackEditMap.value) => {
+  try {
+    const raw = localStorage.getItem(getRouteEditLocalTrackListKey(mapName))
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed)
+      ? parsed.map(item => String(item || '').trim()).filter(Boolean)
+      : []
+  } catch {
+    return []
+  }
+}
+
+const loadRouteEditLocalLineList = (mapName = trackEditMap.value) => {
+  routeEditLocalLineList.value = readRouteEditLocalLineList(mapName)
+}
+
+const saveRouteEditLocalLineList = (list: string[], mapName = trackEditMap.value) => {
+  const normalizedList = Array.from(new Set(list.map(item => String(item || '').trim()).filter(Boolean)))
+  routeEditLocalLineList.value = normalizedList
+  localStorage.setItem(getRouteEditLocalTrackListKey(mapName), JSON.stringify(normalizedList))
+}
+
+const trackEditLineList = computed(() => {
+  if (!trackEditMap.value) return []
+
+  const routeNames = allTrackList.value
+    .filter(track => track.startsWith(trackEditMap.value + '_'))
+    .map(track => normalizeTrackName(String(track || '')))
+    .filter(Boolean)
+  const localRouteNames = routeEditLocalLineList.value
+    .filter(track => track.startsWith(trackEditMap.value + '_'))
+    .map(track => normalizeTrackName(String(track || '')))
+    .filter(Boolean)
+  return Array.from(new Set([...routeNames, ...localRouteNames]))
+})
+
+const routeEditHasRoute = computed(() => routeEditPoints.value.length > 0)
+const routeEditCanDraw = computed(() => routeEditHasRoute.value || routeEditCreateMode.value)
+const canUndoRouteEdit = computed(() => routeEditHistory.value.length > 0)
+const routeEditIsClosedLoop = computed(() => {
+  if (routeEditPoints.value.length < 3) return false
+  const first = routeEditPoints.value[0]
+  const last = routeEditPoints.value[routeEditPoints.value.length - 1]
+  if (!first || !last) return false
+  return Math.hypot(first.x - last.x, first.y - last.y, first.z - last.z) < 1e-5
+})
+const routeEditStateLabel = computed(() => {
+  if (routeEditCreateMode.value) return '新增中'
+  return routeEditDirty.value ? '已修改' : '未修改'
+})
+const routeEditDrawHint = computed(() => (
+  routeEditCreateMode.value
+    ? '点击点云地面按顺序绘制路线，靠近已绘制点时小范围吸附用于收尾闭环'
+    : '点击点云地面添加重绘点，靠近端点时小范围吸附'
+))
+const routeEditSnapPixelRadius = computed(() => routeEditCreateMode.value ? 16 : 14)
+const routeEditSnapPriorityIndex = computed(() => (
+  routeEditCreateMode.value && routeEditPoints.value.length >= 3 ? 0 : null
+))
+const canSubmitRouteEditCreate = computed(() => routeEditCreateMode.value && routeEditPoints.value.length >= 2)
+const routeEditDraftStatus = computed(() => {
+  if (routeEditGeneratedText.value) {
+    const nameText = routeEditGeneratedTrackName.value ? `${routeEditGeneratedTrackName.value}，` : ''
+    return `已生成本地草稿：${nameText}${routeEditPoints.value.length} 个点，${routeEditGeneratedText.value.length} 字符，等待上传接口对接`
+  }
+  if (routeEditCreateMode.value) {
+    if (routeEditPoints.value.length === 0) return '新增路线模式：请在点云上按顺序绘制路线点'
+    return routeEditIsClosedLoop.value
+      ? `新增路线模式：已绘制 ${routeEditPoints.value.length} 个点，已闭环，可提交命名`
+      : `新增路线模式：已绘制 ${routeEditPoints.value.length} 个点，可继续绘制或提交命名`
+  }
+  if (!routeEditHasRoute.value) return '请选择并加载一条路线'
+  if (routeEditBreaks.value.length > 0) return `当前存在 ${routeEditBreaks.value.length} 个断点，请绘制并连接后再生成草稿`
+  return routeEditDirty.value ? '当前修改仅在页面预览中生效，保存接口后续对接' : '路线已加载，可点选区间或绘制重绘段'
+})
+
+const cloneRouteEditPoints = (points: RouteEditPoint[]) => points.map(point => ({ ...point }))
+const cloneRouteEditBreaks = (breaks: number[]) => Array.from(new Set(breaks))
+  .filter(index => Number.isInteger(index) && index >= 0)
+  .sort((a, b) => a - b)
+
+const isValidRouteEditIndex = (value: number) => (
+  Number.isInteger(value) && value >= 0 && value < routeEditPoints.value.length
+)
+
+const getRouteEditSelectionRange = () => {
+  if (!isValidRouteEditIndex(routeEditSelectionStart.value) || !isValidRouteEditIndex(routeEditSelectionEnd.value)) {
+    return null
+  }
+  const start = Math.min(routeEditSelectionStart.value, routeEditSelectionEnd.value)
+  const end = Math.max(routeEditSelectionStart.value, routeEditSelectionEnd.value)
+  return { start, end }
+}
+
+const routeEditHasSelection = computed(() => !!getRouteEditSelectionRange())
+const routeEditSelectedCount = computed(() => {
+  const range = getRouteEditSelectionRange()
+  return range ? range.end - range.start + 1 : 0
+})
+const routeEditSelectedRangeForPreview = computed(() => {
+  const range = getRouteEditSelectionRange()
+  if (range) return range
+  if (isValidRouteEditIndex(routeEditSelectionStart.value)) {
+    return { start: routeEditSelectionStart.value, end: routeEditSelectionStart.value }
+  }
+  return null
+})
+
+const getRouteEditDrawPlaneRawZ = () => {
+  const range = getRouteEditSelectionRange()
+  if (range) {
+    const start = routeEditPoints.value[range.start]
+    const end = routeEditPoints.value[range.end]
+    return ((start?.z ?? 0) + (end?.z ?? 0)) / 2
+  }
+  const lastDraft = routeEditDraftPoints.value[routeEditDraftPoints.value.length - 1]
+  if (lastDraft) return lastDraft.z
+  const firstPoint = routeEditPoints.value[0]
+  return firstPoint?.z ?? 0
+}
+
+const routeEditInteractionPlaneZ = computed(() => {
+  const { centerZ, maxRange } = navPointCloudNormalizationParams.value
+  if (!Number.isFinite(maxRange) || maxRange <= 1e-6) return 0
+  return (getRouteEditDrawPlaneRawZ() - centerZ) / maxRange
+})
+
+const normalizeRouteEditPointsForPreview = (points: RouteEditPoint[], intensity: number) => {
+  const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
+  if (!Number.isFinite(maxRange) || maxRange <= 1e-6) return []
+  return points.map(point => ({
+    x: (point.x - centerX) / maxRange,
+    y: (point.y - centerY) / maxRange,
+    z: (point.z - centerZ) / maxRange,
+    intensity
+  }))
+}
+
+const routeEditPreviewPoints = computed(() => normalizeRouteEditPointsForPreview(routeEditPoints.value, 2.0))
+const routeEditDraftPreviewPoints = computed(() => normalizeRouteEditPointsForPreview(routeEditDraftPoints.value, 2.2))
+const routeEditDrawPointMarkers = computed(() => (
+  routeEditCreateMode.value ? routeEditPreviewPoints.value : routeEditDraftPreviewPoints.value
+))
+const canApplyRouteEditDraft = computed(() => !routeEditCreateMode.value && routeEditHasRoute.value && routeEditDraftPoints.value.length >= 2)
+
+const setRouteEditMode = (mode: 'view' | 'pick' | 'draw') => {
+  if (routeEditCreateMode.value && mode !== 'draw') return
+  routeEditMode.value = mode
+}
+
+const resetRouteEditWorkspace = () => {
+  routeEditMode.value = 'view'
+  routeEditCreateMode.value = false
+  routeEditPoints.value = []
+  routeEditOriginalPoints.value = []
+  routeEditBreaks.value = []
+  routeEditOriginalBreaks.value = []
+  routeEditDraftPoints.value = []
+  routeEditSelectionStart.value = -1
+  routeEditSelectionEnd.value = -1
+  routeEditError.value = ''
+  routeEditDirty.value = false
+  routeEditGeneratedText.value = ''
+  routeEditGeneratedTrackName.value = ''
+  routeEditFileFormat.value = null
+  routeEditHistory.value = []
+  routeEditCreateDialog.value.visible = false
+  routeEditCreateDialog.value.error = ''
+  if (baseNavPointCloudData.value.length > 0) {
+    navPointCloudData.value = [...baseNavPointCloudData.value]
+  }
+}
+
+const createDefaultRouteEditFileFormat = (): RouteEditFileFormat => ({
+  headerLines: [],
+  delimiter: 'space',
+  columnCount: 6,
+  tailValues: ['0', '0'],
+})
+
+const parseEditableTrajectoryText = (text: string): { points: RouteEditPoint[]; format: RouteEditFileFormat } => {
+  const lines = text.split(/\r?\n/)
+  const points: RouteEditPoint[] = []
+  const headerLines: string[] = []
+  let format: RouteEditFileFormat | null = null
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (trimmed.startsWith('#')) {
+      headerLines.push(line)
+      continue
+    }
+
+    const delimiter: 'comma' | 'space' = trimmed.includes(',') ? 'comma' : 'space'
+    const parts = delimiter === 'comma' ? trimmed.split(',').map(part => part.trim()) : trimmed.split(/\s+/)
+    const columnCount = parts.length === 6 ? 6 : parts.length === 5 ? 5 : 0
+    if (!columnCount) {
+      headerLines.push(line)
+      continue
+    }
+
+    const x = Number(parts[1])
+    const y = Number(parts[2])
+    const z = columnCount === 6 ? Number(parts[3]) : 0
+    if (![x, y, z].every(Number.isFinite)) {
+      headerLines.push(line)
+      continue
+    }
+
+    points.push({ x, y, z })
+    if (!format) {
+      format = {
+        headerLines,
+        delimiter,
+        columnCount,
+        tailValues: columnCount === 6 ? parts.slice(4) : parts.slice(3),
+      }
+    }
+  }
+
+  return {
+    points,
+    format: format || {
+      headerLines,
+      delimiter: 'space',
+      columnCount: 6,
+      tailValues: ['0', '0'],
+    }
+  }
+}
+
+const formatRouteEditNumber = (value: number) => {
+  if (!Number.isFinite(value)) return '0'
+  return Number(value.toFixed(6)).toString()
+}
+
+const serializeRouteEditPoints = () => {
+  const format = routeEditFileFormat.value || createDefaultRouteEditFileFormat()
+  const separator = format.delimiter === 'comma' ? ',' : ' '
+  const lines = [...format.headerLines]
+  routeEditPoints.value.forEach((point, index) => {
+    const core = format.columnCount === 6
+      ? [String(index), formatRouteEditNumber(point.x), formatRouteEditNumber(point.y), formatRouteEditNumber(point.z), ...(format.tailValues.length ? format.tailValues : ['0', '0'])]
+      : [String(index), formatRouteEditNumber(point.x), formatRouteEditNumber(point.y), ...(format.tailValues.length ? format.tailValues : ['0', '0'])]
+    lines.push(core.join(separator))
+  })
+  return lines.join('\n') + '\n'
+}
+
+const applyRouteEditPreview = async () => {
+  navPointCloudData.value = baseNavPointCloudData.value.length > 0 ? [...baseNavPointCloudData.value] : []
+  isNavPreviewMode.value = true
+  lastNavTrackOverlayKey.value = ''
+  await nextTick()
+  scheduleNavPointCloudRender()
+}
+
+const loadTrackEditRoute = async () => {
+  if (!trackEditLine.value) {
+    showErrorMessage('请先选择路线')
+    return
+  }
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    showErrorMessage('未选择机器人')
+    return
+  }
+
+  routeEditLoading.value = true
+  routeEditError.value = ''
+  try {
+    routeEditCreateMode.value = false
+    routeEditCreateDialog.value.visible = false
+    routeEditGeneratedTrackName.value = ''
+    if (trackEditMap.value) {
+      await refreshNavPointCloud(trackEditMap.value, { silent: true })
+    }
+
+    let blob = await getTrajectoryFile(trackEditLine.value)
+    if (!blob) {
+      blob = await mapFileApi.downloadTrajectoryFile(robotId, trackEditLine.value)
+      if (blob) await saveTrajectoryFile(trackEditLine.value, blob)
+    }
+    if (!blob) throw new Error('未找到轨迹文件')
+
+    const text = await blob.text()
+    if (text.trim().startsWith('<') || text.includes('error_code')) {
+      throw new Error('轨迹文件内容异常')
+    }
+    const parsed = parseEditableTrajectoryText(text)
+    if (parsed.points.length < 2) {
+      throw new Error('轨迹点数量不足，无法编辑')
+    }
+
+    routeEditPoints.value = cloneRouteEditPoints(parsed.points)
+    routeEditOriginalPoints.value = cloneRouteEditPoints(parsed.points)
+    routeEditBreaks.value = []
+    routeEditOriginalBreaks.value = []
+    routeEditFileFormat.value = parsed.format
+    routeEditDraftPoints.value = []
+    routeEditSelectionStart.value = -1
+    routeEditSelectionEnd.value = -1
+    routeEditHistory.value = []
+    routeEditDirty.value = false
+    routeEditGeneratedText.value = ''
+    routeEditGeneratedTrackName.value = ''
+    routeEditMode.value = 'pick'
+    await applyRouteEditPreview()
+    requestNavPointCloudRelayout()
+    showSuccessMessage(`路线已加载：${parsed.points.length} 个轨迹点`)
+  } catch (error) {
+    console.error('加载可编辑路线失败:', error)
+    routeEditError.value = (error as Error).message || '加载路线失败'
+    showErrorMessage('加载路线失败: ' + routeEditError.value)
+    resetRouteEditWorkspace()
+  } finally {
+    routeEditLoading.value = false
+  }
+}
+
+const handleRouteEditTrajectoryPick = (payload: { index: number }) => {
+  if (!routeEditHasRoute.value) return
+  const index = payload.index
+  if (!isValidRouteEditIndex(index)) return
+
+  if (!isValidRouteEditIndex(routeEditSelectionStart.value) || isValidRouteEditIndex(routeEditSelectionEnd.value)) {
+    routeEditSelectionStart.value = index
+    routeEditSelectionEnd.value = -1
+    return
+  }
+
+  routeEditSelectionEnd.value = index
+}
+
+const handleRouteEditPlaneClick = (payload: { x: number; y: number; z: number; snappedIndex?: number }) => {
+  if (routeEditCreateMode.value) {
+    const lastPointIndex = routeEditPoints.value.length - 1
+    const lastPoint = routeEditPoints.value[lastPointIndex]
+    if (
+      Number.isInteger(payload.snappedIndex) &&
+      Number.isInteger(lastPointIndex) &&
+      payload.snappedIndex === lastPointIndex
+    ) {
+      return
+    }
+    if (
+      lastPoint &&
+      Math.hypot(lastPoint.x - payload.x, lastPoint.y - payload.y, lastPoint.z - payload.z) < 1e-6
+    ) {
+      return
+    }
+
+    routeEditPoints.value = [
+      ...routeEditPoints.value,
+      {
+        x: Number(payload.x.toFixed(6)),
+        y: Number(payload.y.toFixed(6)),
+        z: Number(payload.z.toFixed(6)),
+        snappedIndex: payload.snappedIndex,
+      }
+    ]
+    routeEditDirty.value = routeEditPoints.value.length > 0
+    routeEditGeneratedText.value = ''
+    routeEditGeneratedTrackName.value = ''
+    return
+  }
+
+  if (!routeEditHasRoute.value) return
+  const lastDraft = routeEditDraftPoints.value[routeEditDraftPoints.value.length - 1]
+  if (
+    Number.isInteger(payload.snappedIndex) &&
+    Number.isInteger(lastDraft?.snappedIndex) &&
+    payload.snappedIndex === lastDraft?.snappedIndex
+  ) {
+    return
+  }
+
+  routeEditDraftPoints.value = [
+    ...routeEditDraftPoints.value,
+    {
+      x: Number(payload.x.toFixed(6)),
+      y: Number(payload.y.toFixed(6)),
+      z: Number(payload.z.toFixed(6)),
+      snappedIndex: payload.snappedIndex,
+    }
+  ]
+}
+
+const clearRouteEditSelection = () => {
+  routeEditSelectionStart.value = -1
+  routeEditSelectionEnd.value = -1
+}
+
+const pushRouteEditHistory = () => {
+  routeEditHistory.value = [
+    ...routeEditHistory.value.slice(-19),
+    {
+      points: cloneRouteEditPoints(routeEditPoints.value),
+      breaks: cloneRouteEditBreaks(routeEditBreaks.value),
+    }
+  ]
+}
+
+const deleteRouteEditSelection = async () => {
+  const range = getRouteEditSelectionRange()
+  if (!range) {
+    showErrorMessage('请先选择要删除的路线段')
+    return
+  }
+  if (range.start === range.end) {
+    showErrorMessage('请选择至少两个点形成路线段')
+    return
+  }
+
+  pushRouteEditHistory()
+  const removeInteriorCount = Math.max(0, range.end - range.start - 1)
+  const nextPoints = [
+    ...routeEditPoints.value.slice(0, range.start + 1),
+    ...routeEditPoints.value.slice(range.end)
+  ]
+  const nextBreaks = routeEditBreaks.value
+    .map(index => {
+      if (index < range.start) return index
+      if (index >= range.end) return index - removeInteriorCount
+      return -1
+    })
+    .filter(index => index >= 0)
+
+  if (range.start < nextPoints.length - 1) {
+    nextBreaks.push(range.start)
+  }
+
+  routeEditPoints.value = [
+    ...nextPoints
+  ]
+  routeEditBreaks.value = cloneRouteEditBreaks(nextBreaks)
+  clearRouteEditSelection()
+  routeEditMode.value = 'draw'
+  routeEditDirty.value = true
+  routeEditGeneratedText.value = ''
+  routeEditGeneratedTrackName.value = ''
+  await applyRouteEditPreview()
+}
+
+const undoRouteEditDraftPoint = () => {
+  routeEditDraftPoints.value = routeEditDraftPoints.value.slice(0, -1)
+}
+
+const clearRouteEditDraft = () => {
+  routeEditDraftPoints.value = []
+}
+
+const enterRouteEditCreateMode = async () => {
+  if (!trackEditMap.value) {
+    showErrorMessage('请先选择地图')
+    return
+  }
+
+  resetRouteEditWorkspace()
+  suppressTrackEditLineReset = true
+  trackEditLine.value = ''
+  routeEditCreateMode.value = true
+  routeEditMode.value = 'draw'
+  routeEditFileFormat.value = createDefaultRouteEditFileFormat()
+  routeEditDirty.value = false
+  routeEditGeneratedText.value = ''
+  routeEditGeneratedTrackName.value = ''
+
+  await refreshNavPointCloud(trackEditMap.value, { silent: true })
+  await applyRouteEditPreview()
+  requestNavPointCloudRelayout()
+}
+
+const startRouteEditCreate = () => {
+  if (!trackEditMap.value) {
+    showErrorMessage('请先选择地图')
+    return
+  }
+
+  const hasUnsavedEdit = routeEditDirty.value || routeEditDraftPoints.value.length > 0 || routeEditBreaks.value.length > 0
+  if (hasUnsavedEdit) {
+    showConfirmDialog({
+      title: '新增路线',
+      message: '当前路线编辑内容会被清空，确定要开始新增路线吗？',
+      confirmText: '确定',
+      cancelText: '取消',
+      type: 'warning',
+      onConfirm: () => {
+        closeConfirmDialog()
+        void enterRouteEditCreateMode()
+      },
+      onCancel: () => {
+        closeConfirmDialog()
+      }
+    })
+    return
+  }
+
+  void enterRouteEditCreateMode()
+}
+
+const undoRouteEditCreatePoint = () => {
+  if (!routeEditCreateMode.value) return
+  routeEditPoints.value = routeEditPoints.value.slice(0, -1)
+  routeEditDirty.value = routeEditPoints.value.length > 0
+  routeEditGeneratedText.value = ''
+  routeEditGeneratedTrackName.value = ''
+}
+
+const clearRouteEditCreatePoints = () => {
+  if (!routeEditCreateMode.value) return
+  routeEditPoints.value = []
+  routeEditDirty.value = false
+  routeEditGeneratedText.value = ''
+  routeEditGeneratedTrackName.value = ''
+}
+
+const cancelRouteEditCreate = () => {
+  if (!routeEditCreateMode.value) return
+  if (routeEditPoints.value.length > 0) {
+    showConfirmDialog({
+      title: '取消新增',
+      message: '当前手动绘制的路线会被清空，确定取消吗？',
+      confirmText: '确定',
+      cancelText: '取消',
+      type: 'warning',
+      onConfirm: () => {
+        closeConfirmDialog()
+        resetRouteEditWorkspace()
+      },
+      onCancel: () => {
+        closeConfirmDialog()
+      }
+    })
+    return
+  }
+  resetRouteEditWorkspace()
+}
+
+const openRouteEditCreateDialog = () => {
+  if (!canSubmitRouteEditCreate.value) {
+    showErrorMessage('请至少绘制两个路线点')
+    return
+  }
+  routeEditCreateDialog.value = {
+    visible: true,
+    trackName: '',
+    error: '',
+  }
+}
+
+const cancelRouteEditCreateDialog = () => {
+  routeEditCreateDialog.value.visible = false
+  routeEditCreateDialog.value.error = ''
+}
+
+const appendRouteEditLocalTrack = (trackName: string) => {
+  const mapName = trackEditMap.value
+  if (!mapName) return
+  saveRouteEditLocalLineList([...routeEditLocalLineList.value, trackName], mapName)
+  allTrackList.value = Array.from(new Set([...allTrackList.value, trackName]))
+}
+
+const confirmRouteEditCreate = async () => {
+  if (!routeEditCreateMode.value) return
+  if (routeEditPoints.value.length < 2) {
+    routeEditCreateDialog.value.error = '请至少绘制两个路线点'
+    return
+  }
+  const rawName = routeEditCreateDialog.value.trackName.trim()
+  if (!rawName) {
+    routeEditCreateDialog.value.error = '请输入路线名称'
+    return
+  }
+  if (!trackEditMap.value) {
+    routeEditCreateDialog.value.error = '请先选择地图'
+    return
+  }
+
+  const fullTrackName = rawName.startsWith(`${trackEditMap.value}_`)
+    ? rawName
+    : `${trackEditMap.value}_${rawName}`
+  const existingNames = new Set(trackEditLineList.value.map(item => normalizeTrackName(String(item || ''))))
+  if (existingNames.has(normalizeTrackName(fullTrackName))) {
+    routeEditCreateDialog.value.error = `路线名称已存在：${fullTrackName}`
+    return
+  }
+
+  routeEditFileFormat.value = routeEditFileFormat.value || createDefaultRouteEditFileFormat()
+  routeEditBreaks.value = []
+  const text = serializeRouteEditPoints()
+  const blob = new Blob([text], { type: 'text/plain' })
+
+  try {
+    await saveTrajectoryFile(fullTrackName, blob)
+    appendRouteEditLocalTrack(fullTrackName)
+    routeEditGeneratedText.value = text
+    routeEditGeneratedTrackName.value = fullTrackName
+    routeEditOriginalPoints.value = cloneRouteEditPoints(routeEditPoints.value)
+    routeEditOriginalBreaks.value = []
+    routeEditCreateMode.value = false
+    routeEditMode.value = 'pick'
+    routeEditDirty.value = false
+    routeEditCreateDialog.value.visible = false
+    routeEditCreateDialog.value.error = ''
+    suppressTrackEditLineReset = true
+    trackEditLine.value = fullTrackName
+    await applyRouteEditPreview()
+    showSuccessMessage('新增路线草稿已生成，上传保存接口后续对接')
+  } catch (error) {
+    console.error('生成新增路线草稿失败:', error)
+    routeEditCreateDialog.value.error = '生成草稿失败: ' + (error as Error).message
+  }
+}
+
+const remapRouteEditBreaksAfterReplace = (
+  breaks: number[],
+  start: number,
+  end: number,
+  insertedInteriorCount: number
+) => {
+  const removedInteriorCount = Math.max(0, end - start - 1)
+  const diff = insertedInteriorCount - removedInteriorCount
+  return cloneRouteEditBreaks(
+    breaks
+      .map(index => {
+        if (index < start) return index
+        if (index >= end) return index + diff
+        return -1
+      })
+      .filter(index => index >= 0)
+  )
+}
+
+const getRouteEditDraftSnappedEndpoints = () => {
+  const first = routeEditDraftPoints.value[0]
+  const last = routeEditDraftPoints.value[routeEditDraftPoints.value.length - 1]
+  const firstIndex = Number(first?.snappedIndex)
+  const lastIndex = Number(last?.snappedIndex)
+  if (!isValidRouteEditIndex(firstIndex) || !isValidRouteEditIndex(lastIndex) || firstIndex === lastIndex) {
+    return null
+  }
+
+  const reversed = firstIndex > lastIndex
+  return {
+    start: Math.min(firstIndex, lastIndex),
+    end: Math.max(firstIndex, lastIndex),
+    draft: reversed
+      ? cloneRouteEditPoints(routeEditDraftPoints.value).reverse()
+      : cloneRouteEditPoints(routeEditDraftPoints.value),
+  }
+}
+
+const applyRouteEditDraft = async () => {
+  if (!canApplyRouteEditDraft.value) return
+
+  pushRouteEditHistory()
+  const snappedEndpoints = getRouteEditDraftSnappedEndpoints()
+  const selectedRange = getRouteEditSelectionRange()
+
+  if (snappedEndpoints) {
+    const interiorDraft = snappedEndpoints.draft.slice(1, -1).map(point => ({
+      x: point.x,
+      y: point.y,
+      z: point.z,
+    }))
+    routeEditPoints.value = [
+      ...routeEditPoints.value.slice(0, snappedEndpoints.start + 1),
+      ...interiorDraft,
+      ...routeEditPoints.value.slice(snappedEndpoints.end)
+    ]
+    routeEditBreaks.value = remapRouteEditBreaksAfterReplace(
+      routeEditBreaks.value,
+      snappedEndpoints.start,
+      snappedEndpoints.end,
+      interiorDraft.length
+    )
+  } else if (selectedRange) {
+    const draft = cloneRouteEditPoints(routeEditDraftPoints.value).map(point => ({
+      x: point.x,
+      y: point.y,
+      z: point.z,
+    }))
+    routeEditPoints.value = [
+      ...routeEditPoints.value.slice(0, selectedRange.start + 1),
+      ...draft,
+      ...routeEditPoints.value.slice(selectedRange.end)
+    ]
+    routeEditBreaks.value = remapRouteEditBreaksAfterReplace(
+      routeEditBreaks.value,
+      selectedRange.start,
+      selectedRange.end,
+      draft.length
+    )
+  } else if (routeEditBreaks.value.length > 0) {
+    routeEditHistory.value = routeEditHistory.value.slice(0, -1)
+    showErrorMessage('当前存在断点，请从断点一端开始绘制并吸附到另一端后再应用')
+    return
+  } else {
+    const draft = cloneRouteEditPoints(routeEditDraftPoints.value).map(point => ({
+      x: point.x,
+      y: point.y,
+      z: point.z,
+    }))
+    routeEditPoints.value = [...routeEditPoints.value, ...draft]
+  }
+
+  routeEditDraftPoints.value = []
+  clearRouteEditSelection()
+  routeEditDirty.value = true
+  routeEditGeneratedText.value = ''
+  routeEditGeneratedTrackName.value = ''
+  routeEditMode.value = 'pick'
+  await applyRouteEditPreview()
+}
+
+const undoRouteEditOperation = async () => {
+  const previous = routeEditHistory.value[routeEditHistory.value.length - 1]
+  if (!previous) return
+  routeEditHistory.value = routeEditHistory.value.slice(0, -1)
+  routeEditPoints.value = cloneRouteEditPoints(previous.points)
+  routeEditBreaks.value = cloneRouteEditBreaks(previous.breaks)
+  routeEditDirty.value = true
+  routeEditGeneratedText.value = ''
+  routeEditGeneratedTrackName.value = ''
+  clearRouteEditSelection()
+  await applyRouteEditPreview()
+}
+
+const resetRouteEditRoute = async () => {
+  if (!routeEditOriginalPoints.value.length) return
+  routeEditPoints.value = cloneRouteEditPoints(routeEditOriginalPoints.value)
+  routeEditBreaks.value = cloneRouteEditBreaks(routeEditOriginalBreaks.value)
+  routeEditDraftPoints.value = []
+  clearRouteEditSelection()
+  routeEditHistory.value = []
+  routeEditDirty.value = false
+  routeEditGeneratedText.value = ''
+  routeEditGeneratedTrackName.value = ''
+  await applyRouteEditPreview()
+}
+
+const generateRouteEditDraftText = () => {
+  if (!routeEditHasRoute.value) {
+    showErrorMessage('请先加载路线')
+    return
+  }
+  if (routeEditBreaks.value.length > 0) {
+    showErrorMessage('当前路线仍有断点，请先绘制并连接断点')
+    return
+  }
+  routeEditGeneratedText.value = serializeRouteEditPoints()
+  routeEditGeneratedTrackName.value = trackEditLine.value
+  showSuccessMessage('本地草稿已生成，上传保存接口后续对接')
+}
+
+watch(trackEditLineList, (newLines) => {
+  if (currentTab.value !== 'track_edit') return
+  if (routeEditCreateMode.value) return
+  if (newLines.length === 0) {
+    trackEditLine.value = ''
+    resetRouteEditWorkspace()
+    return
+  }
+  if (!trackEditLine.value || !newLines.includes(trackEditLine.value)) {
+    trackEditLine.value = newLines[0]
+  }
+})
+
+watch(trackEditMap, async (newMap) => {
+  if (currentTab.value !== 'track_edit') return
+  resetRouteEditWorkspace()
+  loadRouteEditLocalLineList(newMap)
+  if (!newMap) {
+    trackEditLine.value = ''
+    return
+  }
+  await refreshNavPointCloud(newMap, { silent: true })
+  await fetchAllTrackList()
+  if (trackEditLineList.value.length > 0) {
+    trackEditLine.value = trackEditLineList.value[0]
+  }
+})
+
+watch(trackEditLine, () => {
+  if (currentTab.value !== 'track_edit') return
+  if (suppressTrackEditLineReset) {
+    suppressTrackEditLineReset = false
+    return
+  }
+  if (routeEditCreateMode.value) return
+  resetRouteEditWorkspace()
+})
+
 // 导航相关状态
 // selectedNavMap 与路线录制/地图编辑共用 taskExecutionStore.selectedMapName
 const selectedNavMap = computed({
@@ -2231,6 +3303,8 @@ const fetchTrackMapList = () => {
         trackRecordLine.value = ''
         trackRecordTask.value = ''
         trackTaskList.value = []
+        trackEditLine.value = ''
+        resetRouteEditWorkspace()
         return
       }
 
@@ -2246,6 +3320,8 @@ const fetchTrackMapList = () => {
       trackRecordLine.value = ''
       trackRecordTask.value = ''
       trackTaskList.value = []
+      trackEditLine.value = ''
+      resetRouteEditWorkspace()
       console.warn('缓存中没有地图列表数据')
     }
   } catch (err) {
@@ -2254,6 +3330,8 @@ const fetchTrackMapList = () => {
     trackRecordLine.value = ''
     trackRecordTask.value = ''
     trackTaskList.value = []
+    trackEditLine.value = ''
+    resetRouteEditWorkspace()
     console.error('读取路线录制地图列表缓存失败:', err)
   }
 }
@@ -3512,6 +4590,12 @@ watch(() => taskExecutionStore.selectedMapName, (newMap) => {
   if (currentTab.value === 'track_record') {
     if (!isMapInList(newMap, trackMapList.value)) return
     refreshNavPointCloud(newMap)
+    return
+  }
+  if (currentTab.value === 'track_edit') {
+    if (!isMapInList(newMap, trackMapList.value)) return
+    loadRouteEditLocalLineList(newMap)
+    refreshNavPointCloud(newMap)
   }
 }, { immediate: true })
 
@@ -3655,6 +4739,11 @@ onActivated(async () => {
     fetchEditMapList()
   } else if (currentTab.value === 'track_record') {
     fetchTrackMapList()
+    requestNavPointCloudRelayout()
+  } else if (currentTab.value === 'track_edit') {
+    fetchTrackMapList()
+    loadRouteEditLocalLineList()
+    void fetchAllTrackList()
     requestNavPointCloudRelayout()
   } else if (currentTab.value === 'file_manage') {
     fetchFileMapList()
@@ -4165,9 +5254,28 @@ type FeatureArea = {
   name: string
   mapName: string
   type: FeatureAreaType
+  taskTypeCode: number
   geometry: FeatureAreaGeometry
   points: GridMapPoint[]
 }
+
+type GridMapMeta = {
+  resolution: number
+  originX: number
+  originY: number
+}
+
+type TaskJsonArea = {
+  shape?: string
+  coordinates?: unknown
+}
+
+type TaskJsonEntry = {
+  type?: unknown
+  area?: TaskJsonArea
+}
+
+type TaskJsonContent = Record<string, TaskJsonEntry>
 
 const featureAreaTypes: Array<{ value: FeatureAreaType; label: string }> = [
   { value: 'forbidden', label: '禁行区' },
@@ -4177,7 +5285,17 @@ const featureAreaTypes: Array<{ value: FeatureAreaType; label: string }> = [
   { value: 'grass', label: '草地' },
 ]
 
-const FEATURE_AREA_STORAGE_PREFIX = 'map_feature_areas'
+const FEATURE_AREA_FILE_NAME = 'task.json'
+const featureAreaTypeCodeMap: Record<FeatureAreaType, number> = {
+  forbidden: 0,
+  stairs: 1,
+  slope: 2,
+  narrow: 3,
+  grass: 4,
+}
+const featureAreaTypeByCode = new Map<number, FeatureAreaType>(
+  Object.entries(featureAreaTypeCodeMap).map(([type, code]) => [code, type as FeatureAreaType])
+)
 const isFeatureAreaPanelOpen = ref(false)
 const isFeatureAreaDrawing = ref(false)
 const featureAreaPreviewVisible = ref(false)
@@ -4186,8 +5304,10 @@ const selectedFeatureAreaGeometry = ref<FeatureAreaGeometry>('area')
 const selectedFeatureAreaId = ref('')
 const featureAreaDraftPoints = ref<GridMapPoint[]>([])
 const featureAreas = ref<FeatureArea[]>([])
+const featureAreaLoadedNames = ref<Set<string>>(new Set())
 const featureAreaCanvasSize = ref({ width: 0, height: 0 })
 const featureAreaOverlayStyle = ref<Record<string, string>>({})
+const gridMapMeta = ref<GridMapMeta | null>(null)
 const featureAreaNameInput = ref<HTMLInputElement | null>(null)
 const featureAreaNameDialog = ref({
   visible: false,
@@ -4230,57 +5350,195 @@ const pointsToSvg = (points: GridMapPoint[]) => {
   return points.map(point => `${point.x},${point.y}`).join(' ')
 }
 
-const getFeatureAreaStorageKey = (mapName = selectedEditMap.value) => {
-  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || 'default'
-  return `${FEATURE_AREA_STORAGE_PREFIX}_${robotId}_${mapName || 'empty'}`
+const parseTaskJsonCoordinates = (rawCoordinates: unknown): Array<[number, number]> => {
+  if (!Array.isArray(rawCoordinates)) return []
+  return rawCoordinates
+    .map((point: any) => {
+      if (!Array.isArray(point) || point.length < 2) return null
+      const x = Number(point[0])
+      const y = Number(point[1])
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+      return [x, y] as [number, number]
+    })
+    .filter((point): point is [number, number] => !!point)
 }
 
-const normalizeFeatureAreaPoints = (rawPoints: unknown): GridMapPoint[] => {
-  if (!Array.isArray(rawPoints)) return []
-  return rawPoints
-    .map((point: any) => ({
-      x: Number(point?.x),
-      y: Number(point?.y),
-    }))
-    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+const parseGridMapYaml = (text: string): GridMapMeta | null => {
+  const resolutionMatch = text.match(/^\s*resolution\s*:\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)\s*$/im)
+  const originMatch = text.match(/^\s*origin\s*:\s*\[\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)\s*,\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)\s*(?:,\s*[-+]?\d*\.?\d+(?:e[-+]?\d+)?\s*)?\]\s*$/im)
+  const resolution = Number(resolutionMatch?.[1])
+  const originX = Number(originMatch?.[1])
+  const originY = Number(originMatch?.[2])
+  if (!Number.isFinite(resolution) || resolution <= 0 || !Number.isFinite(originX) || !Number.isFinite(originY)) {
+    return null
+  }
+  return { resolution, originX, originY }
 }
 
-const loadFeatureAreasForMap = (mapName = selectedEditMap.value) => {
+const loadGridMapMeta = async (mapName = selectedEditMap.value) => {
   if (!mapName) {
-    featureAreas.value = []
+    gridMapMeta.value = null
     return
   }
 
   try {
-    const raw = localStorage.getItem(getFeatureAreaStorageKey(mapName))
-    const parsed = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(parsed)) {
+    let blob = await getMapFile(mapName, 'gridMap.yaml')
+    if (!blob || blob.size === 0) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        const downloadedBlob = await mapFileApi.downloadMapFile(robotId, mapName, 'gridMap.yaml', true)
+        if (downloadedBlob) {
+          await saveMapFile(mapName, 'gridMap.yaml', downloadedBlob)
+          blob = downloadedBlob
+        }
+      }
+    }
+
+    if (!blob || blob.size === 0) {
+      gridMapMeta.value = null
+      return
+    }
+    gridMapMeta.value = parseGridMapYaml(await blob.text())
+  } catch (error) {
+    console.error('读取栅格地图配置失败:', error)
+    gridMapMeta.value = null
+  }
+}
+
+const canvasPointToMapCoordinate = (point: GridMapPoint): [number, number] => {
+  const canvas = gridMapCanvas.value
+  const meta = gridMapMeta.value
+  if (!canvas || !meta) return [point.x, point.y]
+
+  const x = meta.originX + point.x * meta.resolution
+  const y = meta.originY + (canvas.height - point.y) * meta.resolution
+  return [
+    Number(x.toFixed(6)),
+    Number(y.toFixed(6)),
+  ]
+}
+
+const mapCoordinateToCanvasPoint = (coordinate: [number, number]): GridMapPoint => {
+  const canvas = gridMapCanvas.value
+  const meta = gridMapMeta.value
+  if (!canvas || !meta) {
+    return { x: coordinate[0], y: coordinate[1] }
+  }
+
+  return {
+    x: Math.round((coordinate[0] - meta.originX) / meta.resolution),
+    y: Math.round(canvas.height - (coordinate[1] - meta.originY) / meta.resolution),
+  }
+}
+
+const normalizeTaskShape = (shape: unknown): FeatureAreaGeometry => {
+  return String(shape || '').toLowerCase() === 'polyline' ? 'line' : 'area'
+}
+
+const parseTaskJsonContentFromBlob = async (blob: Blob | null): Promise<TaskJsonContent> => {
+  if (!blob || blob.size === 0) return {}
+  try {
+    const parsed = JSON.parse(await blob.text())
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return parsed as TaskJsonContent
+  } catch (error) {
+    console.error('解析 task.json 失败:', error)
+    return {}
+  }
+}
+
+const readExistingTaskJsonContent = async (robotId: string, mapName: string): Promise<TaskJsonContent> => {
+  const serverBlob = await mapFileApi.downloadMapFile(robotId, mapName, FEATURE_AREA_FILE_NAME, true)
+  if (serverBlob) {
+    await saveMapFile(mapName, FEATURE_AREA_FILE_NAME, serverBlob)
+    return parseTaskJsonContentFromBlob(serverBlob)
+  }
+
+  const cachedBlob = await getMapFile(mapName, FEATURE_AREA_FILE_NAME)
+  return parseTaskJsonContentFromBlob(cachedBlob)
+}
+
+const buildTaskJsonContent = (baseContent: TaskJsonContent = {}): TaskJsonContent => {
+  const content: TaskJsonContent = { ...baseContent }
+  const currentNames = new Set(featureAreas.value.map(area => area.name))
+
+  featureAreaLoadedNames.value.forEach((name) => {
+    if (!currentNames.has(name)) {
+      delete content[name]
+    }
+  })
+
+  featureAreas.value.forEach((area) => {
+    content[area.name] = {
+      type: area.taskTypeCode,
+      area: {
+        shape: area.geometry === 'line' ? 'Polyline' : 'Polygon',
+        coordinates: area.points.map(canvasPointToMapCoordinate),
+      },
+    }
+  })
+
+  return content
+}
+
+const loadFeatureAreasForMap = async (mapName = selectedEditMap.value) => {
+  if (!mapName) {
+    featureAreas.value = []
+    featureAreaLoadedNames.value = new Set()
+    return
+  }
+
+  try {
+    let blob: Blob | null = null
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (robotId) {
+      const downloadedBlob = await mapFileApi.downloadMapFile(robotId, mapName, FEATURE_AREA_FILE_NAME, true)
+      if (downloadedBlob) {
+        await saveMapFile(mapName, FEATURE_AREA_FILE_NAME, downloadedBlob)
+        blob = downloadedBlob
+      }
+    }
+    if (!blob || blob.size === 0) {
+      blob = await getMapFile(mapName, FEATURE_AREA_FILE_NAME)
+    }
+
+    if (!blob || blob.size === 0) {
       featureAreas.value = []
+      featureAreaLoadedNames.value = new Set()
+      return
+    }
+    const parsed = await parseTaskJsonContentFromBlob(blob)
+    if (Object.keys(parsed).length === 0) {
+      featureAreas.value = []
+      featureAreaLoadedNames.value = new Set()
       return
     }
 
-    featureAreas.value = parsed
-      .map((area: any, index: number): FeatureArea | null => {
-        const type = featureAreaTypes.some(item => item.value === area?.type)
-          ? area.type as FeatureAreaType
-          : null
-        const geometry: FeatureAreaGeometry = area?.geometry === 'line' ? 'line' : 'area'
-        const points = normalizeFeatureAreaPoints(area?.points)
+    featureAreas.value = Object.entries(parsed)
+      .map(([name, entry], index): FeatureArea | null => {
+        const code = Number(entry?.type)
+        const type = featureAreaTypeByCode.get(code) || 'forbidden'
+        const taskTypeCode = Number.isFinite(code) ? code : featureAreaTypeCodeMap[type]
+        const geometry = normalizeTaskShape(entry?.area?.shape)
+        const points = parseTaskJsonCoordinates(entry?.area?.coordinates).map(mapCoordinateToCanvasPoint)
         if (!type || points.length < 2) return null
         const defaultName = `${geometry === 'line' ? '线段' : '区域'}-${featureAreaTypeLabelMap.value[type]} ${index + 1}`
         return {
-          id: String(area?.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
-          name: String(area?.name || defaultName),
+          id: `${mapName}:${name}`,
+          name: String(name || defaultName),
           mapName,
           type,
+          taskTypeCode,
           geometry,
           points,
         }
       })
       .filter((area): area is FeatureArea => !!area)
+    featureAreaLoadedNames.value = new Set(featureAreas.value.map(area => area.name))
   } catch (error) {
-    console.error('读取功能区缓存失败:', error)
+    console.error('读取功能区 task.json 失败:', error)
     featureAreas.value = []
+    featureAreaLoadedNames.value = new Set()
   }
 
   if (selectedFeatureAreaId.value && !featureAreas.value.some(area => area.id === selectedFeatureAreaId.value)) {
@@ -4288,9 +5546,29 @@ const loadFeatureAreasForMap = (mapName = selectedEditMap.value) => {
   }
 }
 
-const saveFeatureAreasForMap = () => {
+const saveFeatureAreasForMap = async () => {
   if (!selectedEditMap.value) return
-  localStorage.setItem(getFeatureAreaStorageKey(), JSON.stringify(featureAreas.value))
+
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    throw new Error('未选择机器人，无法上传功能区文件')
+  }
+
+  const mapName = selectedEditMap.value
+  const fileName = FEATURE_AREA_FILE_NAME
+  const existingContent = await readExistingTaskJsonContent(robotId, mapName)
+  const jsonText = JSON.stringify(buildTaskJsonContent(existingContent), null, 2)
+  const blob = new Blob([jsonText], { type: 'application/json' })
+
+  showSuccessMessage('正在上传功能区文件...')
+  const uploadSuccess = await mapFileApi.uploadMapFile(robotId, mapName, fileName, blob)
+  if (!uploadSuccess) {
+    throw new Error('上传功能区文件失败')
+  }
+
+  const downloadedBlob = await mapFileApi.downloadMapFile(robotId, mapName, fileName)
+  await saveMapFile(mapName, fileName, downloadedBlob || blob)
+  featureAreaLoadedNames.value = new Set(featureAreas.value.map(area => area.name))
 }
 
 const resetFeatureAreaDraft = () => {
@@ -4409,7 +5687,7 @@ const toggleFeatureAreaPreview = () => {
   featureAreaPreviewVisible.value = !featureAreaPreviewVisible.value
 }
 
-const undoFeatureAreaStep = () => {
+const undoFeatureAreaStep = async () => {
   if (featureAreaDraftPoints.value.length > 0) {
     featureAreaDraftPoints.value = featureAreaDraftPoints.value.slice(0, -1)
     featureAreaPreviewVisible.value = true
@@ -4418,18 +5696,29 @@ const undoFeatureAreaStep = () => {
 
   if (featureAreas.value.length > 0) {
     const removedArea = featureAreas.value[featureAreas.value.length - 1]
+    const previousAreas = [...featureAreas.value]
     featureAreas.value = featureAreas.value.slice(0, -1)
     if (selectedFeatureAreaId.value === removedArea.id) {
       selectedFeatureAreaId.value = ''
     }
     featureAreaPreviewVisible.value = true
-    saveFeatureAreasForMap()
+    try {
+      await saveFeatureAreasForMap()
+      showSuccessMessage('功能区已撤销')
+    } catch (error) {
+      featureAreas.value = previousAreas
+      selectedFeatureAreaId.value = removedArea.id
+      console.error('撤销功能区失败:', error)
+      showErrorMessage('撤销功能区失败: ' + (error as Error).message)
+    }
   }
 }
 
-const deleteSelectedFeatureArea = () => {
+const deleteSelectedFeatureArea = async () => {
   if (!selectedFeatureAreaId.value) return
 
+  const removedId = selectedFeatureAreaId.value
+  const previousAreas = [...featureAreas.value]
   const nextAreas = featureAreas.value.filter(area => area.id !== selectedFeatureAreaId.value)
   if (nextAreas.length === featureAreas.value.length) {
     selectedFeatureAreaId.value = ''
@@ -4439,7 +5728,15 @@ const deleteSelectedFeatureArea = () => {
   featureAreas.value = nextAreas
   selectedFeatureAreaId.value = ''
   featureAreaPreviewVisible.value = true
-  saveFeatureAreasForMap()
+  try {
+    await saveFeatureAreasForMap()
+    showSuccessMessage('功能区已删除')
+  } catch (error) {
+    featureAreas.value = previousAreas
+    selectedFeatureAreaId.value = removedId
+    console.error('删除功能区失败:', error)
+    showErrorMessage('删除功能区失败: ' + (error as Error).message)
+  }
 }
 
 const openFeatureAreaNameDialog = () => {
@@ -4458,7 +5755,7 @@ const cancelFeatureAreaNameDialog = () => {
   featureAreaNameDialog.value.error = ''
 }
 
-const confirmFeatureAreaNameDialog = () => {
+const confirmFeatureAreaNameDialog = async () => {
   const name = featureAreaNameDialog.value.name.trim()
   if (!name) {
     featureAreaNameDialog.value.error = '请输入功能区名称'
@@ -4476,25 +5773,34 @@ const confirmFeatureAreaNameDialog = () => {
     name,
     mapName: selectedEditMap.value,
     type: selectedFeatureAreaType.value,
+    taskTypeCode: featureAreaTypeCodeMap[selectedFeatureAreaType.value],
     geometry: selectedFeatureAreaGeometry.value,
     points: featureAreaDraftPoints.value.map(point => ({ ...point })),
   }
 
+  const previousAreas = [...featureAreas.value]
   featureAreas.value = [...featureAreas.value, area]
   selectedFeatureAreaId.value = area.id
-  saveFeatureAreasForMap()
-  featureAreaDraftPoints.value = []
-  isFeatureAreaDrawing.value = false
-  featureAreaPreviewVisible.value = true
-  featureAreaNameDialog.value.visible = false
-  featureAreaNameDialog.value.error = ''
+  try {
+    await saveFeatureAreasForMap()
+    featureAreaDraftPoints.value = []
+    isFeatureAreaDrawing.value = false
+    featureAreaPreviewVisible.value = true
+    featureAreaNameDialog.value.visible = false
+    featureAreaNameDialog.value.error = ''
 
-  const canvas = gridMapCanvas.value
-  if (canvas) {
-    canvas.style.cursor = getCanvasCursor()
+    const canvas = gridMapCanvas.value
+    if (canvas) {
+      canvas.style.cursor = getCanvasCursor()
+    }
+
+    showSuccessMessage('功能区已提交')
+  } catch (error) {
+    featureAreas.value = previousAreas
+    selectedFeatureAreaId.value = ''
+    console.error('提交功能区失败:', error)
+    featureAreaNameDialog.value.error = '提交功能区失败: ' + (error as Error).message
   }
-
-  showSuccessMessage('功能区已提交')
 }
 
 const startFeatureAreaDrawing = () => {
@@ -4754,6 +6060,7 @@ const loadGridMap = async (mapName: string) => {
     
     canvas.width = width
     canvas.height = height
+    await loadGridMapMeta(mapName)
     
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -4829,6 +6136,7 @@ const loadGridMap = async (mapName: string) => {
     
     // 绑定事件
     setupCanvasEvents()
+    await loadFeatureAreasForMap(mapName)
     
   } catch (err) {
     console.error('加载地图失败:', err)
@@ -4843,6 +6151,9 @@ const clearGridMapDisplay = (message = '暂无栅格图') => {
   gridMapError.value = message
   missionGridImageData = null
   gridImageData = null
+  gridMapMeta.value = null
+  featureAreas.value = []
+  featureAreaLoadedNames.value = new Set()
   editHistory.value = []
   if (canvasEventsController) {
     canvasEventsController.abort()
@@ -4872,7 +6183,6 @@ watch(selectedEditMap, (newMap) => {
   featureAreaNameDialog.value.visible = false
   featureAreaNameDialog.value.error = ''
   selectedFeatureAreaId.value = ''
-  loadFeatureAreasForMap(newMap)
   if (newMap) {
     loadGridMap(newMap)
   } else {
@@ -6950,6 +8260,228 @@ const handleDelete = (item: any) => {
   min-height: 420px;
 }
 
+.track-edit-content {
+  padding: 18px 20px 24px;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.track-edit-toolbar {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.track-edit-toolbar .map-btn.active,
+.track-edit-toolbar .map-btn-secondary.active {
+  border-color: rgba(103, 213, 253, 0.9);
+  background: rgba(31, 163, 211, 0.42);
+  color: #d8f7ff;
+}
+
+.track-edit-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: calc(100vh - 294px);
+  box-sizing: border-box;
+}
+
+.track-edit-map {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 420px;
+  background: rgba(10, 42, 58, 0.6);
+  border: 1px solid rgba(103, 213, 253, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.track-edit-mode-hint {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2;
+  color: #ffcf7a;
+  background: rgba(6, 18, 31, 0.78);
+  border: 1px solid rgba(255, 177, 59, 0.35);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.track-edit-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: rgba(7, 26, 39, 0.82);
+  border: 1px solid rgba(103, 213, 253, 0.22);
+  border-radius: 8px;
+  padding: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.5) transparent;
+}
+
+.track-edit-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.track-edit-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.track-edit-panel::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.54);
+  border-radius: 999px;
+}
+
+.track-edit-panel-section {
+  padding: 0 0 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.14);
+}
+
+.track-edit-panel-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.track-edit-panel-title {
+  color: #67d5fd;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.track-edit-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.track-edit-stat {
+  background: rgba(12, 60, 86, 0.45);
+  border: 1px solid rgba(103, 213, 253, 0.16);
+  border-radius: 6px;
+  padding: 8px;
+  min-width: 0;
+}
+
+.track-edit-stat span {
+  display: block;
+  color: rgba(184, 220, 245, 0.74);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.track-edit-stat strong {
+  display: block;
+  color: #e7f8ff;
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.track-edit-range-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.track-edit-range-row label {
+  color: #b8dcf5;
+  font-size: 12px;
+}
+
+.track-edit-range-row input {
+  min-width: 0;
+  height: 32px;
+  background: #0c3c56;
+  border: 1px solid rgba(38, 131, 182, 0.72);
+  color: #d8f7ff;
+  border-radius: 4px;
+  padding: 0 8px;
+  outline: none;
+}
+
+.track-edit-range-row input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.track-edit-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.track-edit-action {
+  height: 34px;
+  min-width: 0;
+  border: 1px solid rgba(103, 213, 253, 0.26);
+  border-radius: 4px;
+  background: rgba(12, 60, 86, 0.56);
+  color: #b8dcf5;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.18s ease;
+}
+
+.track-edit-action:hover:not(:disabled) {
+  border-color: rgba(103, 213, 253, 0.72);
+  color: #ffffff;
+  background: rgba(12, 70, 102, 0.72);
+}
+
+.track-edit-action.primary {
+  background: rgba(31, 163, 211, 0.38);
+  border-color: rgba(103, 213, 253, 0.5);
+  color: #d8f7ff;
+}
+
+.track-edit-action.danger {
+  background: rgba(86, 28, 28, 0.76);
+  border-color: rgba(253, 103, 103, 0.36);
+  color: #ff9a9a;
+}
+
+.track-edit-action:disabled,
+.track-edit-action.disabled-action {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.track-edit-draft-box {
+  margin-top: 10px;
+  color: rgba(184, 220, 245, 0.72);
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(2, 9, 21, 0.38);
+  border: 1px solid rgba(103, 213, 253, 0.12);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+@media (max-width: 1280px) {
+  .track-edit-workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .track-edit-panel {
+    max-height: none;
+  }
+}
+
 /* 点云图样式 */
 .pointcloud-wrapper {
   width: 100%;
@@ -7796,6 +9328,49 @@ select.recording-input option {
 
 .feature-area-name-dialog-card {
   width: 420px;
+}
+
+.route-create-dialog-card {
+  width: 460px;
+}
+
+.route-create-summary {
+  color: rgba(184, 220, 245, 0.82);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.route-create-name-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 1px solid #1fa3d3;
+  border-radius: 4px;
+  background: rgba(5, 26, 48, 0.6);
+  overflow: hidden;
+}
+
+.route-create-name-row span {
+  color: #67d5fd;
+  font-size: 14px;
+  padding: 0 12px;
+  background: rgba(31, 163, 211, 0.15);
+  height: 40px;
+  line-height: 40px;
+  border-right: 1px solid #1fa3d3;
+  white-space: nowrap;
+}
+
+.route-create-name-row input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: #fff;
+  padding: 0 12px;
+  height: 40px;
+  outline: none;
+  font-size: 14px;
 }
 
 .feature-area-name-error {

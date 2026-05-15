@@ -1511,7 +1511,8 @@ const logMapDownloadOnce = (key: string, message: string, error?: unknown) => {
 }
 
 export const mapFileApi = {
-  MAP_FILES: ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt', 'scancontext/odom_key_frames.txt'],
+  MAP_FILES: ['tinyMap.pcd', 'gridMap.pgm', 'gridMap.yaml', 'gnss_origin.txt', 'scancontext/odom_key_frames.txt', 'task.json'],
+  OPTIONAL_MAP_FILES: ['task.json'],
 
   downloadMapFile: async (
     robotId: string,
@@ -1583,7 +1584,7 @@ export const mapFileApi = {
       const blob = await mapFileApi.downloadMapFile(robotId, mapName, fileName, true)
       if (blob) {
         results.set(fileName, blob)
-      } else {
+      } else if (!mapFileApi.OPTIONAL_MAP_FILES.includes(fileName)) {
         failedFiles.push(fileName)
       }
     }

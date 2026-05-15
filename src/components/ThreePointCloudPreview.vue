@@ -3,12 +3,12 @@
     <div ref="containerRef" class="three-pointcloud-canvas"></div>
     <div v-if="loading" class="three-pointcloud-overlay">{{ loadingText || '点云加载中...' }}</div>
     <div v-else-if="error" class="three-pointcloud-overlay error">{{ error }}</div>
-    <div v-else-if="!points.length" class="three-pointcloud-overlay">暂无点云数据</div>
+    <div v-else-if="!hasDisplayData" class="three-pointcloud-overlay">暂无点云数据</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type {
@@ -28,6 +28,27 @@ const props = defineProps<{
   navigationOrigin?: { x: number; y: number; z: number } | null
   robotPose?: RobotPose | null
   robotMesh?: MeshData | null
+  interactionMode?: 'view' | 'pick' | 'draw'
+  interactionPlaneZ?: number
+  trajectoryPoints?: PointCloudPoint[]
+  selectedTrajectoryRange?: { start: number; end: number } | null
+  draftPoints?: PointCloudPoint[]
+  drawPointMarkers?: PointCloudPoint[]
+  trajectoryBreaks?: number[]
+  snapToTrajectory?: boolean
+  snapPixelRadius?: number
+  snapPriorityIndex?: number | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'trajectory-point-click', payload: { index: number; point: PointCloudPoint }): void
+  (e: 'plane-click', payload: {
+    x: number
+    y: number
+    z: number
+    normalized: { x: number; y: number; z: number }
+    snappedIndex?: number
+  }): void
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -50,6 +71,12 @@ const labelSprites: THREE.Sprite[] = []
 const lastFitSceneKey = ref<string>('')
 const hasUserInteracted = ref(false)
 const baseFitDistanceRef = ref(1)
+const hasDisplayData = computed(() =>
+  props.points.length > 0 ||
+  (props.trajectoryPoints?.length ?? 0) > 0 ||
+  (props.draftPoints?.length ?? 0) > 0 ||
+  (props.drawPointMarkers?.length ?? 0) > 0
+)
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0)
 const LABEL_TEXTURE_SCALE = Math.min(4, Math.max(2, window.devicePixelRatio || 1))
@@ -146,12 +173,18 @@ const createLabelSprite = (text: string, options: {
   return sprite
 }
 
-const createPointsObject = (points: PointCloudPoint[], filter: (point: PointCloudPoint) => boolean, size: number) => {
+const createPointsObject = (
+  points: PointCloudPoint[],
+  filter: (point: PointCloudPoint) => boolean,
+  size: number,
+  colorOverride?: string
+) => {
   const selected = points.filter(filter)
   if (!selected.length) return null
 
   const positions = new Float32Array(selected.length * 3)
   const colors = new Float32Array(selected.length * 3)
+  const overrideColor = colorOverride ? new THREE.Color(colorOverride) : null
 
   for (let index = 0; index < selected.length; index++) {
     const point = selected[index]
@@ -162,7 +195,9 @@ const createPointsObject = (points: PointCloudPoint[], filter: (point: PointClou
     positions[base + 2] = world.z
 
     const color = new THREE.Color()
-    if (point.intensity >= 1.9) {
+    if (overrideColor) {
+      color.copy(overrideColor)
+    } else if (point.intensity >= 1.9) {
       color.setRGB(0.08, 1, 0.28)
     } else if (point.intensity >= 1.7) {
       color.setRGB(1, 0.86, 0.15)
@@ -190,7 +225,7 @@ const createPointsObject = (points: PointCloudPoint[], filter: (point: PointClou
   return new THREE.Points(geometry, material)
 }
 
-const createTrajectoryLineObject = (points: PointCloudPoint[]) => {
+const createTrajectoryLineObject = (points: PointCloudPoint[], color = '#2bff6d', opacity = 0.85) => {
   if (points.length < 2) return null
 
   const positions = new Float32Array(points.length * 3)
@@ -207,15 +242,41 @@ const createTrajectoryLineObject = (points: PointCloudPoint[]) => {
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
 
   const material = new THREE.LineBasicMaterial({
-    color: '#2bff6d',
+    color,
     transparent: true,
-    opacity: 0.85,
+    opacity,
   })
 
   return new THREE.Line(geometry, material)
 }
 
-const createBullseyeMarkerSprite = (innerColor: string) => {
+const splitPointsByBreaks = (points: PointCloudPoint[], breaks: number[] | undefined) => {
+  if (points.length < 2) return []
+  const breakSet = new Set((breaks || []).filter(index => Number.isInteger(index) && index >= 0 && index < points.length - 1))
+  const segments: PointCloudPoint[][] = []
+  let segment: PointCloudPoint[] = [points[0]]
+
+  for (let index = 0; index < points.length - 1; index++) {
+    if (breakSet.has(index)) {
+      if (segment.length >= 2) segments.push(segment)
+      segment = [points[index + 1]]
+      continue
+    }
+    segment.push(points[index + 1])
+  }
+
+  if (segment.length >= 2) segments.push(segment)
+  return segments
+}
+
+const getTrajectoryPoints = () => (
+  props.trajectoryPoints ?? props.points.filter(point => point.intensity >= 1.9 && point.intensity < 3)
+)
+
+const createBullseyeMarkerSprite = (
+  innerColor: string,
+  options?: { scale?: number; depthTest?: boolean }
+) => {
   const markerCanvas = document.createElement('canvas')
   markerCanvas.width = 64
   markerCanvas.height = 64
@@ -237,12 +298,115 @@ const createBullseyeMarkerSprite = (innerColor: string) => {
   const markerMaterial = new THREE.SpriteMaterial({
     map: markerTexture,
     transparent: true,
-    depthTest: true,
+    depthTest: options?.depthTest ?? true,
     depthWrite: false,
   })
   const marker = new THREE.Sprite(markerMaterial)
-  marker.scale.set(MARKER_SPRITE_SCALE, MARKER_SPRITE_SCALE, 1)
+  const scale = options?.scale ?? MARKER_SPRITE_SCALE
+  marker.scale.set(scale, scale, 1)
   return marker
+}
+
+const createSelectedTrajectoryMarkerGroup = (selectedPoints: PointCloudPoint[]) => {
+  if (!selectedPoints.length) return null
+
+  const group = new THREE.Group()
+  const addMarker = (point: PointCloudPoint, labelText: string, innerColor: string) => {
+    const world = toWorldPosition(point.x, point.y, point.z)
+    const marker = createBullseyeMarkerSprite(innerColor, {
+      scale: MARKER_SPRITE_SCALE * 2.6,
+      depthTest: false,
+    })
+    marker.position.copy(world)
+    marker.renderOrder = 60
+    group.add(marker)
+
+    const label = createLabelSprite(labelText, {
+      textColor: '#ffe9e9',
+      borderColor: 'rgba(255, 95, 95, 0.78)',
+      backgroundColor: 'rgba(64, 10, 18, 0.76)',
+      heightPx: 15,
+      fontPx: 11,
+      paddingX: 4,
+      paddingY: 1,
+      strokeColor: 'rgba(20, 0, 4, 0.74)',
+      strokeWidth: 1.2,
+    })
+    if (label) {
+      label.position.copy(world.clone().add(new THREE.Vector3(0, 0.03, 0)))
+      label.renderOrder = 61
+      group.add(label)
+    }
+  }
+
+  if (selectedPoints.length === 1) {
+    addMarker(selectedPoints[0], '已选', '#ff4c4c')
+    return group
+  }
+
+  addMarker(selectedPoints[0], '起点', '#ff4c4c')
+  addMarker(selectedPoints[selectedPoints.length - 1], '终点', '#ffb13b')
+  return group
+}
+
+const createDrawPointMarkerSprite = (isLatest: boolean) => {
+  const markerCanvas = document.createElement('canvas')
+  markerCanvas.width = 64
+  markerCanvas.height = 64
+  const markerCtx = markerCanvas.getContext('2d')
+  if (markerCtx) {
+    markerCtx.clearRect(0, 0, 64, 64)
+
+    const glowRadius = isLatest ? 15 : 13
+    const ringRadius = isLatest ? 8.5 : 7.5
+    const coreRadius = isLatest ? 3 : 2.6
+    const gradient = markerCtx.createRadialGradient(32, 32, 2, 32, 32, glowRadius)
+    gradient.addColorStop(0, isLatest ? 'rgba(255, 241, 190, 0.88)' : 'rgba(255, 217, 145, 0.76)')
+    gradient.addColorStop(0.5, isLatest ? 'rgba(255, 177, 59, 0.34)' : 'rgba(255, 177, 59, 0.24)')
+    gradient.addColorStop(1, 'rgba(255, 177, 59, 0)')
+    markerCtx.fillStyle = gradient
+    markerCtx.beginPath()
+    markerCtx.arc(32, 32, glowRadius, 0, Math.PI * 2)
+    markerCtx.fill()
+
+    markerCtx.strokeStyle = isLatest ? 'rgba(255, 232, 154, 0.95)' : 'rgba(255, 185, 72, 0.86)'
+    markerCtx.lineWidth = isLatest ? 2.2 : 1.8
+    markerCtx.beginPath()
+    markerCtx.arc(32, 32, ringRadius, 0, Math.PI * 2)
+    markerCtx.stroke()
+
+    markerCtx.fillStyle = isLatest ? '#fff0b0' : '#ffb13b'
+    markerCtx.beginPath()
+    markerCtx.arc(32, 32, coreRadius, 0, Math.PI * 2)
+    markerCtx.fill()
+  }
+
+  const markerTexture = new THREE.CanvasTexture(markerCanvas)
+  markerTexture.needsUpdate = true
+  markerTexture.colorSpace = THREE.SRGBColorSpace
+  const markerMaterial = new THREE.SpriteMaterial({
+    map: markerTexture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  })
+  const marker = new THREE.Sprite(markerMaterial)
+  const scale = MARKER_SPRITE_SCALE * (isLatest ? 0.68 : 0.58)
+  marker.scale.set(scale, scale, 1)
+  marker.renderOrder = isLatest ? 52 : 51
+  return marker
+}
+
+const createDrawPointMarkerGroup = (points: PointCloudPoint[]) => {
+  if (!points.length) return null
+
+  const group = new THREE.Group()
+  points.forEach((point, index) => {
+    const marker = createDrawPointMarkerSprite(index === points.length - 1)
+    marker.position.copy(toWorldPosition(point.x, point.y, point.z))
+    group.add(marker)
+  })
+  return group
 }
 
 const createOriginMarker = () => {
@@ -601,12 +765,54 @@ const rebuildSceneContent = () => {
   const cloud = createPointsObject(props.points, point => point.intensity < 1.7, pointSize)
   if (cloud) group.add(cloud)
 
-  const trajectoryPoints = props.points.filter(point => point.intensity >= 1.9 && point.intensity < 3)
-  const trajectoryLine = createTrajectoryLineObject(trajectoryPoints)
-  if (trajectoryLine) group.add(trajectoryLine)
+  const trajectoryPoints = getTrajectoryPoints()
+  const trajectorySegments = splitPointsByBreaks(trajectoryPoints, props.trajectoryBreaks)
+  for (const segment of trajectorySegments) {
+    const trajectoryLine = createTrajectoryLineObject(segment)
+    if (trajectoryLine) group.add(trajectoryLine)
+  }
 
   const trajectory = createPointsObject(trajectoryPoints, () => true, 0.8)
   if (trajectory) group.add(trajectory)
+
+  const selectedRange = props.selectedTrajectoryRange
+  if (selectedRange && trajectoryPoints.length > 0) {
+    const start = Math.max(0, Math.min(selectedRange.start, selectedRange.end, trajectoryPoints.length - 1))
+    const end = Math.max(0, Math.min(Math.max(selectedRange.start, selectedRange.end), trajectoryPoints.length - 1))
+    const selectedPoints = start <= end ? trajectoryPoints.slice(start, end + 1) : []
+    const selectedBreaks = (props.trajectoryBreaks || [])
+      .filter(index => index >= start && index < end)
+      .map(index => index - start)
+    for (const segment of splitPointsByBreaks(selectedPoints, selectedBreaks)) {
+      const selectedLine = createTrajectoryLineObject(segment, '#ff5f5f', 0.98)
+      if (selectedLine) {
+        selectedLine.renderOrder = 20
+        group.add(selectedLine)
+      }
+    }
+    const selectedMarkers = createPointsObject(selectedPoints, () => true, 1.4, '#ff5f5f')
+    if (selectedMarkers) {
+      selectedMarkers.renderOrder = 21
+      group.add(selectedMarkers)
+    }
+    const selectedEndpointMarkers = createSelectedTrajectoryMarkerGroup(selectedPoints)
+    if (selectedEndpointMarkers) group.add(selectedEndpointMarkers)
+  }
+
+  const draftPoints = props.draftPoints || []
+  const draftLine = createTrajectoryLineObject(draftPoints, '#ffb13b', 0.95)
+  if (draftLine) {
+    draftLine.renderOrder = 30
+    group.add(draftLine)
+  }
+  const draftMarkers = createPointsObject(draftPoints, () => true, 1.15, '#ffb13b')
+  if (draftMarkers) {
+    draftMarkers.renderOrder = 31
+    group.add(draftMarkers)
+  }
+
+  const drawPointMarkers = createDrawPointMarkerGroup(props.drawPointMarkers || [])
+  if (drawPointMarkers) group.add(drawPointMarkers)
 
   const taskPoints = createTaskMarkers()
   if (taskPoints) group.add(taskPoints)
@@ -641,8 +847,7 @@ const fitCameraToScene = () => {
   controls.update()
 }
 
-const getPointSignature = () => {
-  const points = props.points
+const getPointSignature = (points: PointCloudPoint[]) => {
   if (!points.length) return 'empty'
 
   const pick = (index: number) => points[Math.max(0, Math.min(points.length - 1, index))]
@@ -662,12 +867,14 @@ const getPointSignature = () => {
 const getSceneFitKey = () => {
   const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
   return [
-    props.points.length > 0 ? 'ready' : 'empty',
+    hasDisplayData.value ? 'ready' : 'empty',
     centerX.toFixed(6),
     centerY.toFixed(6),
     centerZ.toFixed(6),
     maxRange.toFixed(6),
-    getPointSignature(),
+    getPointSignature(props.points),
+    getPointSignature(getTrajectoryPoints()),
+    getPointSignature(props.drawPointMarkers || []),
   ].join('|')
 }
 
@@ -687,6 +894,154 @@ const centerToRobot = () => {
   controls.target.copy(target)
   camera.position.copy(target.clone().add(offset))
   controls.update()
+}
+
+const toRawPosition = (normalized: { x: number; y: number; z: number }) => {
+  const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
+  return {
+    x: normalized.x * maxRange + centerX,
+    y: normalized.y * maxRange + centerY,
+    z: normalized.z * maxRange + centerZ,
+  }
+}
+
+const pickTrajectoryPoint = (clientX: number, clientY: number, maxDistance = 20) => {
+  const camera = cameraRef.value
+  const renderer = rendererRef.value
+  if (!camera || !renderer) return null
+
+  const rect = renderer.domElement.getBoundingClientRect()
+  if (!rect.width || !rect.height) return null
+
+  const trajectoryPoints = getTrajectoryPoints()
+  if (!trajectoryPoints.length) return null
+
+  const measurePointDistance = (point: PointCloudPoint) => {
+    const projected = new THREE.Vector3()
+    projected.copy(toWorldPosition(point.x, point.y, point.z)).project(camera)
+    if (projected.z < -1 || projected.z > 1) return Number.POSITIVE_INFINITY
+    const sx = (projected.x * 0.5 + 0.5) * rect.width + rect.left
+    const sy = (-projected.y * 0.5 + 0.5) * rect.height + rect.top
+    return Math.hypot(clientX - sx, clientY - sy)
+  }
+
+  const priorityIndex = Number(props.snapPriorityIndex)
+  if (Number.isInteger(priorityIndex) && priorityIndex >= 0 && priorityIndex < trajectoryPoints.length) {
+    const priorityPoint = trajectoryPoints[priorityIndex]
+    const priorityDistance = measurePointDistance(priorityPoint)
+    if (priorityDistance <= maxDistance) {
+      return { index: priorityIndex, point: priorityPoint, distance: priorityDistance }
+    }
+  }
+
+  let best: { index: number; point: PointCloudPoint; distance: number } | null = null
+  for (let index = 0; index < trajectoryPoints.length; index++) {
+    const point = trajectoryPoints[index]
+    const distance = measurePointDistance(point)
+    if (!Number.isFinite(distance)) continue
+    if (!best || distance < best.distance) {
+      best = { index, point, distance }
+    }
+  }
+
+  return best && best.distance <= maxDistance ? best : null
+}
+
+const projectPlaneClick = (clientX: number, clientY: number) => {
+  const camera = cameraRef.value
+  const renderer = rendererRef.value
+  if (!camera || !renderer) return null
+
+  const rect = renderer.domElement.getBoundingClientRect()
+  if (!rect.width || !rect.height) return null
+
+  const ndc = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -(((clientY - rect.top) / rect.height) * 2 - 1)
+  )
+  const raycaster = new THREE.Raycaster()
+  raycaster.setFromCamera(ndc, camera)
+  const planeY = Number.isFinite(props.interactionPlaneZ as number) ? Number(props.interactionPlaneZ) : 0
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY)
+  const world = new THREE.Vector3()
+  const hit = raycaster.ray.intersectPlane(plane, world)
+  if (!hit) return null
+
+  const normalized = {
+    x: world.x,
+    y: -world.z,
+    z: world.y,
+  }
+  return {
+    normalized,
+    raw: toRawPosition(normalized),
+  }
+}
+
+let interactionPointerDown: { x: number; y: number } | null = null
+
+const handleInteractionPointerDown = (event: PointerEvent) => {
+  const mode = props.interactionMode || 'view'
+  if (mode === 'view') return
+  interactionPointerDown = { x: event.clientX, y: event.clientY }
+}
+
+const handleInteractionPointerUp = (event: PointerEvent) => {
+  const mode = props.interactionMode || 'view'
+  if (mode === 'view' || !interactionPointerDown) return
+
+  const moved = Math.hypot(event.clientX - interactionPointerDown.x, event.clientY - interactionPointerDown.y)
+  interactionPointerDown = null
+  if (moved > 6) return
+
+  event.preventDefault()
+
+  if (mode === 'pick') {
+    const picked = pickTrajectoryPoint(event.clientX, event.clientY, 20)
+    if (picked) {
+      emit('trajectory-point-click', { index: picked.index, point: picked.point })
+    }
+    return
+  }
+
+  if (mode === 'draw') {
+    if (props.snapToTrajectory) {
+      const picked = pickTrajectoryPoint(event.clientX, event.clientY, props.snapPixelRadius ?? 14)
+      if (picked) {
+        const raw = toRawPosition(picked.point)
+        emit('plane-click', {
+          x: raw.x,
+          y: raw.y,
+          z: raw.z,
+          normalized: { x: picked.point.x, y: picked.point.y, z: picked.point.z },
+          snappedIndex: picked.index,
+        })
+        return
+      }
+    }
+
+    const projected = projectPlaneClick(event.clientX, event.clientY)
+    if (projected) {
+      emit('plane-click', {
+        x: projected.raw.x,
+        y: projected.raw.y,
+        z: projected.raw.z,
+        normalized: projected.normalized,
+      })
+    }
+  }
+}
+
+const syncInteractionState = () => {
+  const mode = props.interactionMode || 'view'
+  const controls = controlsRef.value
+  const renderer = rendererRef.value
+  if (controls) {
+    controls.enabled = true
+  }
+  if (renderer) {
+    renderer.domElement.style.cursor = mode === 'draw' ? 'crosshair' : mode === 'pick' ? 'pointer' : 'grab'
+  }
 }
 
 const resizeRenderer = () => {
@@ -732,7 +1087,7 @@ const ensureRendererReady = (retryCount = 16) => {
   if (resized) {
     startRenderLoop()
     // 尺寸恢复后的第一帧重新拟合，避免偶发视角跑飞导致“全黑”。
-    if (props.points.length > 0) {
+    if (hasDisplayData.value) {
       fitCameraToScene()
     }
     return
@@ -748,7 +1103,7 @@ const ensureRendererReady = (retryCount = 16) => {
 }
 
 watch(
-  () => [props.points, props.normalizationParams] as const,
+  () => [props.points, props.trajectoryPoints, props.normalizationParams, props.selectedTrajectoryRange, props.draftPoints, props.drawPointMarkers, props.trajectoryBreaks] as const,
   () => {
     rebuildSceneContent()
     rebuildRobotObject()
@@ -758,7 +1113,7 @@ watch(
       fitCameraToScene()
       lastFitSceneKey.value = sceneKey
       hasUserInteracted.value = false
-    } else if (shouldAutoFit && !hasUserInteracted.value && props.points.length > 0) {
+    } else if (shouldAutoFit && !hasUserInteracted.value && hasDisplayData.value) {
       // 首次加载期间若点云数据更新但 key 未变化，仍做一次保守拟合，避免偶发黑屏。
       fitCameraToScene()
     } else {
@@ -769,6 +1124,13 @@ watch(
     }
   },
   { deep: true }
+)
+
+watch(
+  () => props.interactionMode,
+  () => {
+    syncInteractionState()
+  }
 )
 
 watch(
@@ -804,6 +1166,8 @@ onMounted(() => {
   renderer.setClearColor('#020915', 1)
   renderer.sortObjects = true
   container.appendChild(renderer.domElement)
+  renderer.domElement.addEventListener('pointerdown', handleInteractionPointerDown, false)
+  renderer.domElement.addEventListener('pointerup', handleInteractionPointerUp, false)
 
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
@@ -825,6 +1189,7 @@ onMounted(() => {
   cameraRef.value = camera
   rendererRef.value = renderer
   controlsRef.value = controls
+  syncInteractionState()
 
   const hasValidSize = resizeRenderer()
   rebuildSceneContent()
@@ -883,6 +1248,10 @@ onBeforeUnmount(() => {
   clearRobotGroup()
   controlsRef.value?.dispose()
   const renderer = rendererRef.value
+  if (renderer) {
+    renderer.domElement.removeEventListener('pointerdown', handleInteractionPointerDown, false)
+    renderer.domElement.removeEventListener('pointerup', handleInteractionPointerUp, false)
+  }
   if (renderer && contextLostHandler) {
     renderer.domElement.removeEventListener('webglcontextlost', contextLostHandler, false)
   }
@@ -943,6 +1312,3 @@ defineExpose({
 }
 
 </style>
-
-
-
