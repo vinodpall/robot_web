@@ -1238,7 +1238,7 @@ export const navigationApi = {
     const params: Record<string, any> = { map_name: mapName }
     if (path) params.path = path
     return apiClient.get<{ code: number; msg: string; data: any[] }>(
-      `/proxy/${encodeURIComponent(robotId)}/http/5000/navigation_list`,
+      `/robots/${encodeURIComponent(robotId)}/http/5000/navigation_list`,
       params
     )
   },
@@ -1247,7 +1247,7 @@ export const navigationApi = {
     fieldArray = 'content,task_group,tracking_route'
   ) => {
     return apiClient.get<{ data?: { content?: string[]; task_group?: string[]; tracking_route?: string[] } }>(
-      `/proxy/${encodeURIComponent(robotId)}/http/81/api/dxr_api/get_lists`,
+      `/robots/${encodeURIComponent(robotId)}/http/81/api/dxr_api/get_lists`,
       { field_array: fieldArray }
     )
   },
@@ -1274,7 +1274,7 @@ export const navigationApi = {
         last_page?: number
       }
     }>(
-      `/proxy/${encodeURIComponent(robotId)}/http/81/api/dxr_api/getLog`,
+      `/robots/${encodeURIComponent(robotId)}/http/81/api/dxr_api/getLog`,
       params
     )
   },
@@ -1296,7 +1296,7 @@ export const navigationApi = {
     })
 
     return apiClient.post<{ code: number; msg: string }>(
-      `/proxy/${encodeURIComponent(robotId)}/http/5000/navigation_delete`,
+      `/robots/${encodeURIComponent(robotId)}/http/5000/navigation_delete`,
       params.toString(),
       {
       headers: {
@@ -1461,7 +1461,7 @@ const buildRobotHttpUrl = (
   }
 
   const encodedPath = encodeRobotHttpPath(cleanPath)
-  const base = `${API_BASE_URL}/proxy/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}`
+  const base = `${API_BASE_URL}/robots/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}`
   const search = new URLSearchParams()
   Object.entries(mergedQuery).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
@@ -1636,6 +1636,88 @@ export const mapFileApi = {
       }
       console.error(`[轨迹上传] 地图文件上传异常: ${fileName}`, error)
       return false
+    }
+  },
+
+  uploadTrajectoryFile: async (robotId: string, mapName: string, trajectoryName: string, file: Blob): Promise<boolean> => {
+    const remotePath = `/root/dxr_data/trajectory/${mapName}`
+    const fileName = trajectoryName.toLowerCase().endsWith('.txt') ? trajectoryName : `${trajectoryName}.txt`
+    const url = buildRobotHttpUrl(robotId, 5000, 'upload_single_file')
+
+    const formData = new FormData()
+    formData.append('file', file, fileName)
+    formData.append('remote_path', remotePath)
+
+    console.log('[轨迹上传] 开始上传文件:', {
+      url,
+      remotePath,
+      fileName,
+      fileSize: file.size
+    })
+
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        body: formData,
+        headers: buildAuthHeaders()
+      })
+
+      if (!response.ok) {
+        console.error(`[轨迹上传] 轨迹文件上传失败: ${fileName}, HTTP ${response.status}`)
+        const responseText = await response.text()
+        console.error('[轨迹上传] 服务端响应内容:', responseText)
+        return false
+      }
+      console.log('[轨迹上传] 上传成功')
+      return true
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.error(`[轨迹上传] 轨迹文件上传超时(${ROBOT_HTTP_FETCH_TIMEOUT_MS}ms): ${fileName}`)
+        return false
+      }
+      console.error(`[轨迹上传] 轨迹文件上传异常: ${fileName}`, error)
+      return false
+    }
+  },
+
+  downloadTrajectoryFileFromMap: async (
+    robotId: string,
+    mapName: string,
+    trajectoryName: string,
+    forceNoCache = false
+  ): Promise<Blob | null> => {
+    const fileName = trajectoryName.toLowerCase().endsWith('.txt') ? trajectoryName : `${trajectoryName}.txt`
+    const url = buildRobotHttpUrl(robotId, 5000, 'download_file', {
+      remote_path: `/root/dxr_data/trajectory/${mapName}/${fileName}`,
+      ...(forceNoCache ? { _t: Date.now() } : {})
+    })
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          ...buildAuthHeaders(),
+          ...(forceNoCache
+            ? {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                Pragma: 'no-cache',
+                Expires: '0'
+              }
+            : {})
+        }
+      })
+      if (!response.ok) {
+        console.error(`[轨迹下载] 轨迹文件下载失败: ${mapName}/${fileName}, HTTP ${response.status}`)
+        return null
+      }
+      return await response.blob()
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.error(`[轨迹下载] 轨迹文件下载超时(${ROBOT_HTTP_FETCH_TIMEOUT_MS}ms): ${mapName}/${fileName}`)
+        return null
+      }
+      console.error(`[轨迹下载] 轨迹文件下载异常: ${mapName}/${fileName}`, error)
+      return null
     }
   },
 

@@ -975,29 +975,105 @@ const formatCoord = (x: number | null, y: number | null, z: number | null): stri
   return `${fx}, ${fy}, ${fz}`
 }
 
-const getOutMessage = (row: any): Record<string, any> => {
-  const om = row?.outmessage
-  if (!om) return {}
-  if (typeof om === 'string') {
-    try { return JSON.parse(om) } catch { return {} }
+const parseLooseObjectString = (value: string): Record<string, any> => {
+  const text = value.trim()
+  if (!text) return {}
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed === 'string') return parseLooseObjectString(parsed)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {}
+
+  try {
+    const jsonLike = text
+      .replace(/\bNone\b/g, 'null')
+      .replace(/\bTrue\b/g, 'true')
+      .replace(/\bFalse\b/g, 'false')
+      .replace(/([{,]\s*)'([^']+)'\s*:/g, '$1"$2":')
+      .replace(/:\s*'([^']*)'/g, ': "$1"')
+    const parsed = JSON.parse(jsonLike)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return { raw: text }
   }
-  return om
+}
+
+const getOutMessage = (row: any): Record<string, any> => {
+  const om = row?.outmessage ?? row?.out_message ?? row?.outMessage
+  if (!om) return {}
+  if (typeof om === 'string') return parseLooseObjectString(om)
+  return typeof om === 'object' ? om : {}
+}
+
+const normalizeImageValue = (value: any): string => {
+  if (!value) return ''
+  if (typeof value === 'string') return value.trim()
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const normalized = normalizeImageValue(item)
+      if (normalized) return normalized
+    }
+    return ''
+  }
+  if (typeof value === 'object') {
+    return normalizeImageValue(
+      value.out_image ||
+      value.outImage ||
+      value.image_url ||
+      value.img_url ||
+      value.file_url ||
+      value.url ||
+      value.path ||
+      value.image ||
+      value.img
+    )
+  }
+  return ''
+}
+
+const extractImageFromRawText = (value: unknown): string => {
+  if (typeof value !== 'string') return ''
+  const match = value.match(/(?:out_image|outImage|image_url|img_url|file_url|image|img|url|path)['"]?\s*[:=]\s*['"]([^'"]+)['"]/i)
+  return match?.[1]?.trim() || ''
+}
+
+const getImagePath = (row: any): string => {
+  const outMessage = getOutMessage(row)
+  const img = normalizeImageValue([
+    outMessage.out_image,
+    outMessage.outImage,
+    outMessage.image_url,
+    outMessage.img_url,
+    outMessage.file_url,
+    outMessage.url,
+    outMessage.path,
+    outMessage.image,
+    outMessage.img,
+    row?.out_image,
+    row?.outImage,
+    row?.image_url,
+    row?.img_url,
+    row?.file_url,
+    row?.picture_url,
+    row?.pic_url,
+    row?.url,
+    row?.path,
+    row?.image,
+    row?.img,
+    row?.picture
+  ])
+  return img || extractImageFromRawText(row?.outmessage ?? row?.out_message ?? row?.outMessage)
 }
 
 const getImage = (row: any): string | null => {
-  const img = getOutMessage(row)?.out_image
+  const img = getImagePath(row)
   if (!img) return null
+  if (/^(data:|blob:)/i.test(img)) return img
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
   if (!robotId) return null
   const baseUrl = buildRobotHttpAssetUrl(robotId, 81, img, { preferDirectForPort81: false })
   return appendTokenToImageUrl(baseUrl)
 }
-const getThumbImage = (row: any): string | null => {
-  const original = getImage(row)
-  if (!original) return null
-  return original.replace(/\.(jpg|jpeg|png)(\?|$)/i, '_thumb.jpg$2')
-}
-
 const appendTokenToImageUrl = (url: string): string => {
   if (!url) return ''
   const token = localStorage.getItem('token') || ''
@@ -1016,10 +1092,7 @@ const appendTokenToImageUrl = (url: string): string => {
 const failedRecordImageUrls = ref<Set<string>>(new Set())
 
 const getDisplayImage = (row: any): string | null => {
-  const thumb = getThumbImage(row)
   const original = getImage(row)
-
-  if (thumb && !failedRecordImageUrls.value.has(thumb)) return thumb
   if (original && !failedRecordImageUrls.value.has(original)) return original
   return null
 }
@@ -1030,7 +1103,7 @@ const handleRecordImageError = (row: any, event: Event) => {
 
   const failedUrl = target.currentSrc || target.src
   if (failedUrl) {
-    failedRecordImageUrls.value.add(failedUrl)
+    failedRecordImageUrls.value = new Set([...failedRecordImageUrls.value, failedUrl])
   }
 
   const nextUrl = getDisplayImage(row)

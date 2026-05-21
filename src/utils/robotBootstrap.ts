@@ -15,9 +15,23 @@ const normalizeTaskGroupName = (raw: string) => {
 const extractTrackTaskList = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.data?.data)) return payload.data.data
+  if (Array.isArray(payload?.result)) return payload.result
+  if (Array.isArray(payload?.msg?.result)) return payload.msg.result
+  if (Array.isArray(payload?.msg?.data)) return payload.msg.data
   if (Array.isArray(payload?.response?.data)) return payload.response.data
+  if (Array.isArray(payload?.response?.msg?.result)) return payload.response.msg.result
   return []
 }
+
+const getTrackTaskGroupName = (task: any) => (
+  task?.track_point_name
+  || task?.track_pointname
+  || task?.taskpoint_name
+  || task?.task_point_name
+  || task?.task_pointname
+  || ''
+)
 
 interface RefreshRobotCacheOptions {
   forceResetMapSelection?: boolean
@@ -197,7 +211,7 @@ export const refreshRobotRelatedCache = async (
       const allTaskList = extractTrackTaskList(JSON.parse(cachedAllTaskListRaw))
       allTaskList.forEach((task: any) => {
         const trackName = normalizeTrackName(String(task.track_name || ''))
-        const groupName = normalizeTaskGroupName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+        const groupName = normalizeTaskGroupName(String(getTrackTaskGroupName(task)))
         if (!trackName || !groupName) return
         if (!taskGroupMap[trackName]) taskGroupMap[trackName] = []
         if (!taskGroupMap[trackName].includes(groupName)) {

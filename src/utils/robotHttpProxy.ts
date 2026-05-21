@@ -34,6 +34,9 @@ const withBackendOrigin = (pathOrUrl: string): string => {
   if (!value) return ''
   if (/^https?:\/\//i.test(value)) return value
   if (!value.startsWith('/')) return value
+  if (import.meta.env.PROD && typeof window !== 'undefined') {
+    return `${window.location.origin}${value}`
+  }
   const backend = String(getCurrentConfig().services.vision || '').replace(/\/+$/, '')
   if (!backend) return value
   return `${backend}${value}`
@@ -88,5 +91,5 @@ export const buildRobotHttpAssetUrl = (
     }
   }
 
-  return withBackendOrigin(`/v1/proxy/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}${search}`)
+  return withBackendOrigin(`/v1/robots/${encodeURIComponent(robotId)}/http/${port}/${encodedPath}${search}`)
 }

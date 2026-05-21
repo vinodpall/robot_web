@@ -311,41 +311,24 @@ const createSelectedTrajectoryMarkerGroup = (selectedPoints: PointCloudPoint[]) 
   if (!selectedPoints.length) return null
 
   const group = new THREE.Group()
-  const addMarker = (point: PointCloudPoint, labelText: string, innerColor: string) => {
+  const addMarker = (point: PointCloudPoint, innerColor: string) => {
     const world = toWorldPosition(point.x, point.y, point.z)
     const marker = createBullseyeMarkerSprite(innerColor, {
-      scale: MARKER_SPRITE_SCALE * 2.6,
+      scale: MARKER_SPRITE_SCALE * 0.48,
       depthTest: false,
     })
     marker.position.copy(world)
     marker.renderOrder = 60
     group.add(marker)
-
-    const label = createLabelSprite(labelText, {
-      textColor: '#ffe9e9',
-      borderColor: 'rgba(255, 95, 95, 0.78)',
-      backgroundColor: 'rgba(64, 10, 18, 0.76)',
-      heightPx: 15,
-      fontPx: 11,
-      paddingX: 4,
-      paddingY: 1,
-      strokeColor: 'rgba(20, 0, 4, 0.74)',
-      strokeWidth: 1.2,
-    })
-    if (label) {
-      label.position.copy(world.clone().add(new THREE.Vector3(0, 0.03, 0)))
-      label.renderOrder = 61
-      group.add(label)
-    }
   }
 
   if (selectedPoints.length === 1) {
-    addMarker(selectedPoints[0], '已选', '#ff4c4c')
+    addMarker(selectedPoints[0], '#ff4c4c')
     return group
   }
 
-  addMarker(selectedPoints[0], '起点', '#ff4c4c')
-  addMarker(selectedPoints[selectedPoints.length - 1], '终点', '#ffb13b')
+  addMarker(selectedPoints[0], '#ff4c4c')
+  addMarker(selectedPoints[selectedPoints.length - 1], '#ffb13b')
   return group
 }
 
@@ -790,7 +773,7 @@ const rebuildSceneContent = () => {
         group.add(selectedLine)
       }
     }
-    const selectedMarkers = createPointsObject(selectedPoints, () => true, 1.4, '#ff5f5f')
+    const selectedMarkers = createPointsObject(selectedPoints, () => true, 0.5, '#ff5f5f')
     if (selectedMarkers) {
       selectedMarkers.renderOrder = 21
       group.add(selectedMarkers)
@@ -1173,7 +1156,7 @@ onMounted(() => {
   controls.enableDamping = true
   controls.dampingFactor = 0.06
   controls.screenSpacePanning = true
-  controls.minDistance = 0.05
+  controls.minDistance = 0.005
   controls.maxDistance = 4
   controls.addEventListener('start', () => {
     hasUserInteracted.value = true

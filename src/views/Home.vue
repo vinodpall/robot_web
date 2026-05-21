@@ -1299,9 +1299,23 @@ const normalizeTaskPointName = (rawTaskPointName: string) => {
 const extractTrackTaskList = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.data?.data)) return payload.data.data
+  if (Array.isArray(payload?.result)) return payload.result
+  if (Array.isArray(payload?.msg?.result)) return payload.msg.result
+  if (Array.isArray(payload?.msg?.data)) return payload.msg.data
   if (Array.isArray(payload?.response?.data)) return payload.response.data
+  if (Array.isArray(payload?.response?.msg?.result)) return payload.response.msg.result
   return []
 }
+
+const getTrackTaskGroupName = (task: any) => (
+  task?.track_point_name
+  || task?.track_pointname
+  || task?.taskpoint_name
+  || task?.task_point_name
+  || task?.task_pointname
+  || ''
+)
 
 const activeOverlayTrackName = ref('')
 const activeOverlayPointTaskId = ref('')
@@ -1661,7 +1675,7 @@ const overlayTrackTrajectory = async (trackName: string) => {
     const collectTaskPoints = (allTaskList: any[]) => {
       let filteredTasks = allTaskList.filter((task: any) => {
         const taskTrackName = normalizeTrackName(String(task.track_name || ''))
-        const taskPointName = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+        const taskPointName = normalizeTaskPointName(String(getTrackTaskGroupName(task)))
         return taskTrackName === normalizedTrackName &&
                taskPointName === currentTaskPointName
       })
@@ -5010,6 +5024,45 @@ const applyPendingRunningTrackName = () => {
   return true
 }
 
+const persistTrackListCache = (list: string[]) => {
+  const normalizedList = Array.from(new Set(
+    list.map(item => String(item || '').trim()).filter(Boolean)
+  ))
+  trackList.value = normalizedList
+  const contextKeys = getCurrentRobotContextKeys()
+  if (contextKeys) {
+    localStorage.setItem(contextKeys.trackListKey, JSON.stringify(normalizedList))
+  }
+  localStorage.setItem('cached_track_list', JSON.stringify(normalizedList))
+}
+
+const deriveTrackListFromTaskList = (allTaskList: any[]) => {
+  const trackSet = new Set<string>()
+  allTaskList.forEach((task: any) => {
+    const trackName = String(task?.track_name || task?.trackName || '').trim()
+    if (trackName) trackSet.add(trackName)
+  })
+  return Array.from(trackSet)
+}
+
+const extractTrackListResponse = (response: any): string[] => {
+  const candidates = [
+    response?.msg?.result,
+    response?.result,
+    response?.data,
+    response?.response?.msg?.result,
+    response?.response?.data
+  ]
+  const rawList = candidates.find(Array.isArray) || []
+  return rawList
+    .map((item: any) => String(
+      typeof item === 'string'
+        ? item
+        : (item?.track_name || item?.trackName || item?.name || '')
+    ).trim())
+    .filter(Boolean)
+}
+
 const fetchTrackList = async (forceRefresh = false) => {
   const contextKeys = getCurrentRobotContextKeys()
   const robotId = deviceStore.selectedRobotId
@@ -5020,12 +5073,11 @@ const fetchTrackList = async (forceRefresh = false) => {
     trackListForceRefreshInFlight.value = true
     try {
       const response = await navigationApi.getTrackList(robotId)
-      const remoteList = Array.isArray(response?.msg?.result) ? response.msg.result : []
-      trackList.value = remoteList
-      if (contextKeys) {
-        localStorage.setItem(contextKeys.trackListKey, JSON.stringify(trackList.value))
+      let remoteList = extractTrackListResponse(response)
+      if (remoteList.length === 0) {
+        remoteList = deriveTrackListFromTaskList(await fetchTrackTaskListForCurrentRobot())
       }
-      localStorage.setItem('cached_track_list', JSON.stringify(trackList.value))
+      persistTrackListCache(remoteList)
       lastTrackListForceRefreshAt = Date.now()
       return
     } catch (error) {
@@ -5035,27 +5087,43 @@ const fetchTrackList = async (forceRefresh = false) => {
     }
   }
 
-  const cached = contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null
-  if (cached) {
-    trackList.value = JSON.parse(cached)
-    return
+  const cachedTrackListCandidates = [
+    contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null,
+    localStorage.getItem('cached_track_list')
+  ].filter(Boolean) as string[]
+  for (const cached of cachedTrackListCandidates) {
+    try {
+      const cachedList = JSON.parse(cached)
+      if (Array.isArray(cachedList) && cachedList.length > 0) {
+        trackList.value = cachedList
+        return
+      }
+    } catch (err) {
+      console.warn('[循迹缓存] 解析 cached_track_list 失败:', err)
+    }
   }
 
   // 兜底：从 all_track_task_list 推导轨迹列表
-  const cachedTaskListRaw = contextKeys ? localStorage.getItem(contextKeys.allTrackTaskListKey) : null
-  if (cachedTaskListRaw) {
+  const cachedTaskListCandidates = [
+    contextKeys ? localStorage.getItem(contextKeys.allTrackTaskListKey) : null,
+    localStorage.getItem('all_track_task_list')
+  ].filter(Boolean) as string[]
+  for (const cachedTaskListRaw of cachedTaskListCandidates) {
     try {
       const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
-      const trackSet = new Set<string>()
-      allTaskList.forEach((task: any) => {
-        const trackName = String(task.track_name || '').trim()
-        if (trackName) trackSet.add(trackName)
-      })
-      trackList.value = Array.from(trackSet)
+      const derivedList = deriveTrackListFromTaskList(allTaskList)
+      if (derivedList.length > 0) {
+        persistTrackListCache(derivedList)
+        return
+      }
     } catch (err) {
       console.warn('[循迹缓存] 从 all_track_task_list 推导失败:', err)
-      trackList.value = []
     }
+  }
+
+  if (robotId) {
+    const derivedList = deriveTrackListFromTaskList(await fetchTrackTaskListForCurrentRobot())
+    persistTrackListCache(derivedList)
   } else {
     trackList.value = []
   }
@@ -5063,13 +5131,30 @@ const fetchTrackList = async (forceRefresh = false) => {
 
 // 过滤后的循迹任务列表
 const filteredTrackList = computed(() => {
-  if (!selectedMap.value) return []
-  return trackList.value
+  const mapName = String(selectedMap.value || '').trim()
+  const mapMatchedList = mapName
+    ? trackList.value
     .filter(track => track.startsWith(selectedMap.value + '_'))
     .map(track => {
       const atIndex = track.indexOf('@')
       return atIndex > -1 ? track.substring(0, atIndex) : track
     })
+    : []
+
+  const runningTrackName = normalizeTrackName(
+    robotStore.cmdStatus?.track_info?.track_name
+    || pendingRunningTrackName.value
+    || activeOverlayTrackName.value
+    || ''
+  )
+  if (robotStore.isTracking && runningTrackName) {
+    const hasRunningTrack = mapMatchedList.some(track => normalizeTrackName(track) === runningTrackName)
+    if (!hasRunningTrack) {
+      mapMatchedList.unshift(runningTrackName)
+    }
+  }
+
+  return Array.from(new Set(mapMatchedList))
 })
 
 // 监听地图变化，重置选中的循迹任务并下载地图文件

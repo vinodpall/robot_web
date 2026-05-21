@@ -1140,6 +1140,7 @@ const isSameStringList = (a: string[], b: string[]) => {
 
 const runningTrackName = computed(() => normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || ''))
 const runningTaskGroupName = computed(() => normalizeTaskPointName(robotStore.cmdStatus?.track_info?.taskpoint_name || ''))
+const lastKnownRunningRouteName = ref('')
 
 const getCurrentRobotContextKeys = () => {
   const robotId = resolveSelectedRobotId() || ''
@@ -1170,9 +1171,23 @@ const setAllTrackTaskListCache = (taskList: any[]) => {
 const extractTrackTaskList = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.data?.data)) return payload.data.data
+  if (Array.isArray(payload?.result)) return payload.result
+  if (Array.isArray(payload?.msg?.result)) return payload.msg.result
+  if (Array.isArray(payload?.msg?.data)) return payload.msg.data
   if (Array.isArray(payload?.response?.data)) return payload.response.data
+  if (Array.isArray(payload?.response?.msg?.result)) return payload.response.msg.result
   return []
 }
+
+const getTrackTaskGroupName = (task: any) => (
+  task?.track_point_name
+  || task?.track_pointname
+  || task?.taskpoint_name
+  || task?.task_point_name
+  || task?.task_pointname
+  || ''
+)
 
 const getTaskGroupListFromCache = (trackName: string): string[] => {
   const normalizedTrack = normalizeTrackName(trackName)
@@ -1196,14 +1211,14 @@ const getTaskGroupListFromCache = (trackName: string): string[] => {
   }
 
   if (groupSet.size === 0) {
-    const cachedData = localStorage.getItem('all_track_task_list')
+    const cachedData = getAllTrackTaskListCacheRaw()
     if (cachedData) {
       try {
         const allTaskList = extractTrackTaskList(JSON.parse(cachedData))
         allTaskList.forEach((task: any) => {
           const taskTrack = normalizeTrackName(String(task.track_name || ''))
           if (taskTrack !== normalizedTrack) return
-          const taskGroup = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+          const taskGroup = normalizeTaskPointName(String(getTrackTaskGroupName(task)))
           if (taskGroup) groupSet.add(taskGroup)
         })
       } catch (err) {
@@ -1320,12 +1335,23 @@ const refreshAllTrackTaskListCache = async () => {
 const refreshTrackTaskListFromApi = async (robotId: string) => {
   try {
     const response = await navigationApi.getAllTrackTaskList(robotId)
-    const taskList = extractTrackTaskList(response?.data)
+    const taskList = extractTrackTaskList(response)
     setAllTrackTaskListCache(taskList)
     taskListRefreshKey.value++
   } catch (err) {
     console.warn('从接口刷新循迹任务列表失败:', err)
   }
+}
+
+const getRunningRouteSelection = () => {
+  if (!isTrackTaskRunning.value) return ''
+  return normalizeTrackName(
+    runningTrackName.value
+    || pendingRunningRouteName.value
+    || lastKnownRunningRouteName.value
+    || (hasValidSelectedRouteName.value ? selectedRouteName.value : '')
+    || ''
+  )
 }
 
 // 获取路线列表
@@ -1338,17 +1364,33 @@ const loadRouteList = async () => {
     }
 
     const contextKeys = getCurrentRobotContextKeys()
-    const cachedTrackListRaw =
-      (contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null)
-      || localStorage.getItem('cached_track_list')
-    let rawList: string[] = cachedTrackListRaw ? JSON.parse(cachedTrackListRaw) : []
+    let rawList: string[] = []
+    const cachedTrackListCandidates = [
+      contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null,
+      localStorage.getItem('cached_track_list')
+    ].filter(Boolean) as string[]
+    for (const cachedTrackListRaw of cachedTrackListCandidates) {
+      const parsed = JSON.parse(cachedTrackListRaw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        rawList = parsed
+          .map((item: any) => String(
+            typeof item === 'string'
+              ? item
+              : (item?.track_name || item?.trackName || item?.name || '')
+          ).trim())
+          .filter(Boolean)
+        if (rawList.length > 0) break
+      }
+    }
     if (rawList.length === 0) {
-      const cachedTaskListRaw =
-        (contextKeys ? localStorage.getItem(contextKeys.allTrackTaskListKey) : null)
-        || localStorage.getItem('all_track_task_list')
-      if (cachedTaskListRaw) {
+      const cachedTaskListCandidates = [
+        contextKeys ? localStorage.getItem(contextKeys.allTrackTaskListKey) : null,
+        localStorage.getItem('all_track_task_list')
+      ].filter(Boolean) as string[]
+      for (const cachedTaskListRaw of cachedTaskListCandidates) {
         const allTaskList = extractTrackTaskList(JSON.parse(cachedTaskListRaw))
-        rawList = allTaskList.map((task: any) => String(task.track_name || '')).filter(Boolean)
+        rawList = allTaskList.map((task: any) => String(task.track_name || task.trackName || '').trim()).filter(Boolean)
+        if (rawList.length > 0) break
       }
     }
     const processedSet = new Set<string>()
@@ -1356,6 +1398,10 @@ const loadRouteList = async () => {
       const name = normalizeTrackName(String(item || ''))
       if (name) processedSet.add(name)
     })
+    const runningRoute = getRunningRouteSelection()
+    if (runningRoute) {
+      processedSet.add(runningRoute)
+    }
     const nextRouteList = Array.from(processedSet)
     if (!isSameStringList(routeList.value, nextRouteList)) {
       routeList.value = nextRouteList
@@ -1363,8 +1409,15 @@ const loadRouteList = async () => {
 
     const mapPrefix = `${selectedMap.value}_`
     const visibleRouteList = nextRouteList.filter(route => route.startsWith(mapPrefix))
+    const runningRouteItem = runningRoute
+      ? nextRouteList.find(route => normalizeTrackName(route) === runningRoute) || runningRoute
+      : ''
 
-    if (visibleRouteList.length > 0) {
+    if (runningRouteItem) {
+      if (normalizeTrackName(selectedRouteName.value) !== runningRoute) {
+        selectedRouteName.value = runningRouteItem
+      }
+    } else if (visibleRouteList.length > 0) {
       if (
         selectedRouteName.value === NO_ROUTE_VALUE ||
         !visibleRouteList.includes(selectedRouteName.value)
@@ -1516,12 +1569,21 @@ const syncSelectedMapWithCache = () => {
 
 // 过滤后的路线列表（根据缓存的地图筛选）
 const filteredRouteList = computed(() => {
-  if (!selectedMap.value) return []
-  
+  const mapName = String(selectedMap.value || '').trim()
   // 根据地图名称筛选：路线名 以 "地图名称_" 开头
-  return routeList.value.filter(route => {
-    return route.startsWith(selectedMap.value + '_')
-  })
+  const mapMatchedList = mapName
+    ? routeList.value.filter(route => route.startsWith(`${mapName}_`))
+    : []
+
+  const runningRoute = getRunningRouteSelection()
+  if (runningRoute) {
+    const hasRunningRoute = mapMatchedList.some(route => normalizeTrackName(route) === runningRoute)
+    if (!hasRunningRoute) {
+      mapMatchedList.unshift(runningRoute)
+    }
+  }
+
+  return Array.from(new Set(mapMatchedList))
 })
 
 const pendingRunningRouteName = ref('')
@@ -1538,8 +1600,9 @@ const applyPendingRunningRouteSelection = () => {
 // 监听筛选后的路线列表变化，自动选择第一个
 watch(filteredRouteList, (newList) => {
   if (applyPendingRunningRouteSelection()) return
-  if (isTrackTaskRunning.value && runningTrackName.value) {
-    const normalizedRunningTrack = normalizeTrackName(runningTrackName.value)
+  const runningRoute = getRunningRouteSelection()
+  if (runningRoute) {
+    const normalizedRunningTrack = normalizeTrackName(runningRoute)
     const matched = newList.find(item => normalizeTrackName(item) === normalizedRunningTrack)
     if (matched) {
       selectedRouteName.value = matched
@@ -1565,9 +1628,13 @@ watch(selectedRouteName, async (newVal) => {
 watch(
   [isTrackTaskRunning, runningTrackName, runningTaskGroupName],
   async ([running]) => {
-    if (!running) return
+    if (!running) {
+      lastKnownRunningRouteName.value = ''
+      return
+    }
     const normalizedTrack = normalizeTrackName(runningTrackName.value)
     if (!normalizedTrack) return
+    lastKnownRunningRouteName.value = normalizedTrack
 
     pendingRunningRouteName.value = normalizedTrack
     const robotId = resolveSelectedRobotId() || ''
@@ -1840,7 +1907,7 @@ const handleDeleteTaskGroup = () => {
           allTaskList = allTaskList.filter((task: any) =>
             !(
               normalizeTrackName(String(task.track_name || '')) === selectedTrack &&
-              normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || '')) === selectedGroup
+              normalizeTaskPointName(String(getTrackTaskGroupName(task))) === selectedGroup
             )
           )
           setAllTrackTaskListCache(allTaskList)
@@ -2137,9 +2204,7 @@ const getPreviewTaskPoints = (trackName: string, taskGroupName: string) => {
       const taskTrack = normalizeTrackName(String(task.track_name || ''))
       const taskPoint = normalizeTaskPointName(
         String(
-          task.track_point_name ||
-          task.taskpoint_name ||
-          task.task_point_name ||
+          getTrackTaskGroupName(task) ||
           task.keypoint_name ||
           task.group_name ||
           ''
@@ -2413,7 +2478,7 @@ const waypointsData = computed(() => {
     const selectedTaskPoint = normalizeTaskPointName(String(selectedTaskGroupName.value || ''))
     const filteredTasks = allTaskList.filter((task: any) => {
       const taskTrack = normalizeTrackName(String(task.track_name || ''))
-      const taskPointRaw = String(task.track_point_name || task.taskpoint_name || task.task_point_name || '')
+      const taskPointRaw = String(getTrackTaskGroupName(task))
       const taskPoint = normalizeTaskPointName(taskPointRaw)
       return taskTrack === selectedTrack && taskPoint === selectedTaskPoint
     })
@@ -3664,7 +3729,7 @@ const confirmAddTask = async () => {
         const index = allTaskList.findIndex((task: any) => 
           task.task_id === editingTaskItem.value.rawData.task_id &&
           task.track_name === selectedRouteName.value &&
-          task.track_point_name === selectedTaskGroupName.value
+          normalizeTaskPointName(String(getTrackTaskGroupName(task))) === normalizeTaskPointName(selectedTaskGroupName.value)
         )
         if (index !== -1) {
           allTaskList[index] = taskData
@@ -3743,7 +3808,7 @@ const handleDeleteTask = (waypoint: any) => {
         allTaskList = allTaskList.filter((task: any) =>
           !(task.task_id === rawData.task_id &&
             task.track_name === selectedRouteName.value &&
-            task.track_point_name === selectedTaskGroupName.value)
+            normalizeTaskPointName(String(getTrackTaskGroupName(task))) === normalizeTaskPointName(selectedTaskGroupName.value))
         )
       }
 

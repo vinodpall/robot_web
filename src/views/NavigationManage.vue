@@ -613,15 +613,6 @@
                   <button class="map-btn map-btn-primary track-btn" :disabled="routeEditLoading || routeEditCreateMode || !trackEditLine" v-permission-click-dialog="'nav-trackrecord-preview'" @click="loadTrackEditRoute">
                     {{ routeEditLoading ? '加载中...' : '加载路线' }}
                   </button>
-                  <button class="map-btn map-btn-secondary track-btn" :class="{ active: routeEditMode === 'view' }" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="setRouteEditMode('view')">
-                    视图
-                  </button>
-                  <button class="map-btn map-btn-secondary track-btn" :class="{ active: routeEditMode === 'pick' }" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="setRouteEditMode('pick')">
-                    选段
-                  </button>
-                  <button class="map-btn map-btn-secondary track-btn" :class="{ active: routeEditMode === 'draw' }" :disabled="!routeEditCanDraw" @click="setRouteEditMode('draw')">
-                    绘制
-                  </button>
                 </div>
               </div>
 
@@ -655,7 +646,7 @@
                           @plane-click="handleRouteEditPlaneClick"
                         />
                         <div v-if="routeEditMode !== 'view' && routeEditCanDraw" class="track-edit-mode-hint">
-                          {{ routeEditMode === 'pick' ? '点击绿色路线点设置编辑区间' : routeEditDrawHint }}
+                          {{ routeEditMode === 'pick' ? '点击绿色路线点进行选择' : routeEditDrawHint }}
                         </div>
                       </div>
                     </div>
@@ -664,45 +655,46 @@
 
                 <aside class="track-edit-panel">
                   <div class="track-edit-panel-section">
-                    <div class="track-edit-panel-title">路线状态</div>
-                    <div class="track-edit-stat-grid">
-                      <div class="track-edit-stat">
-                        <span>点数</span>
-                        <strong>{{ routeEditPoints.length }}</strong>
-                      </div>
-                      <div class="track-edit-stat">
-                        <span>选区</span>
-                        <strong>{{ routeEditSelectedCount }}</strong>
-                      </div>
-                      <div class="track-edit-stat">
-                        <span>草稿点</span>
-                        <strong>{{ routeEditDraftPoints.length }}</strong>
-                      </div>
-                      <div class="track-edit-stat">
-                        <span>状态</span>
-                        <strong>{{ routeEditStateLabel }}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="track-edit-panel-section">
-                    <div class="track-edit-panel-title">编辑区间</div>
-                    <div class="track-edit-range-row">
-                      <label>起点</label>
-                      <input v-model.number="routeEditSelectionStart" type="number" min="0" :max="Math.max(routeEditPoints.length - 1, 0)" :disabled="!routeEditHasRoute || routeEditCreateMode" />
-                    </div>
-                    <div class="track-edit-range-row">
-                      <label>终点</label>
-                      <input v-model.number="routeEditSelectionEnd" type="number" min="0" :max="Math.max(routeEditPoints.length - 1, 0)" :disabled="!routeEditHasRoute || routeEditCreateMode" />
+                    <div class="track-edit-panel-heading">
+                      <div class="track-edit-panel-title">编辑模式</div>
                     </div>
                     <div class="track-edit-action-grid">
-                      <button class="track-edit-action" :disabled="!routeEditHasSelection || routeEditCreateMode" @click="clearRouteEditSelection">清除选区</button>
-                      <button class="track-edit-action danger" :disabled="!routeEditHasSelection || routeEditCreateMode" v-permission-click-dialog="'nav-trackrecord-edit'" @click="deleteRouteEditSelection">删除选段</button>
+                      <button class="track-edit-action" :class="{ active: routeEditMode === 'view' }" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="setRouteEditMode('view')">
+                        视图
+                      </button>
+                      <button class="track-edit-action" :class="{ active: routeEditMode === 'pick' }" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="setRouteEditMode('pick')">
+                        选段
+                      </button>
+                      <button class="track-edit-action" :class="{ active: routeEditMode === 'draw' }" :disabled="!routeEditCanDraw" @click="setRouteEditMode('draw')">
+                        绘制
+                      </button>
                     </div>
                   </div>
 
                   <div class="track-edit-panel-section">
-                    <div class="track-edit-panel-title">{{ routeEditCreateMode ? '新增绘制' : '重绘草稿' }}</div>
+                    <div class="track-edit-panel-heading">
+                      <div class="track-edit-panel-title">高度</div>
+                    </div>
+                    <div class="track-edit-range-row track-edit-z-row">
+                      <label>Z 值</label>
+                      <input
+                        v-model.number="routeEditManualZ"
+                        type="number"
+                        step="0.01"
+                        :disabled="!routeEditCanDraw"
+                        @blur="normalizeRouteEditManualZInput"
+                        @keyup.enter="normalizeRouteEditManualZInput"
+                      />
+                    </div>
+                    <div class="track-edit-action-grid">
+                      <button class="track-edit-action primary" :disabled="!routeEditHasRoute" v-permission-click-dialog="'nav-trackrecord-edit'" @click="confirmApplyRouteEditManualZToAll">全局应用</button>
+                    </div>
+                  </div>
+
+                  <div class="track-edit-panel-section">
+                    <div class="track-edit-panel-heading">
+                      <div class="track-edit-panel-title">{{ routeEditCreateMode ? '新增绘制' : '路线编辑' }}</div>
+                    </div>
                     <div v-if="routeEditCreateMode" class="track-edit-action-grid">
                       <button class="track-edit-action" :disabled="routeEditPoints.length === 0" @click="undoRouteEditCreatePoint">撤销点</button>
                       <button class="track-edit-action" :disabled="routeEditPoints.length === 0" @click="clearRouteEditCreatePoints">清空路线</button>
@@ -712,24 +704,12 @@
                       <button class="track-edit-action" @click="cancelRouteEditCreate">取消新增</button>
                     </div>
                     <div v-else class="track-edit-action-grid">
-                      <button class="track-edit-action" :disabled="routeEditDraftPoints.length === 0" @click="undoRouteEditDraftPoint">撤销点</button>
-                      <button class="track-edit-action" :disabled="routeEditDraftPoints.length === 0" @click="clearRouteEditDraft">清空草稿</button>
-                      <button class="track-edit-action primary" :disabled="!canApplyRouteEditDraft" v-permission-click-dialog="'nav-trackrecord-edit'" @click="applyRouteEditDraft">
-                        {{ routeEditHasSelection ? '替换选段' : '追加草稿' }}
-                      </button>
                       <button class="track-edit-action" :disabled="!canUndoRouteEdit" @click="undoRouteEditOperation">撤销操作</button>
-                    </div>
-                  </div>
-
-                  <div class="track-edit-panel-section">
-                    <div class="track-edit-panel-title">输出</div>
-                    <div class="track-edit-action-grid">
-                      <button class="track-edit-action" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="resetRouteEditRoute">还原路线</button>
-                      <button class="track-edit-action primary" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="generateRouteEditDraftText">生成草稿</button>
-                      <button class="track-edit-action disabled-action" disabled title="上传接口后续对接">保存路线</button>
-                    </div>
-                    <div class="track-edit-draft-box">
-                      <span>{{ routeEditDraftStatus }}</span>
+                      <button class="track-edit-action" :class="{ danger: routeEditHasDeletableSelection }" :disabled="!routeEditHasDeletableSelection" v-permission-click-dialog="'nav-trackrecord-edit'" @click="deleteRouteEditSelection">删除选段</button>
+                      <button class="track-edit-action track-edit-action-full" :disabled="!routeEditHasRoute || routeEditCreateMode" @click="resetRouteEditRoute">重置路线</button>
+                      <button class="track-edit-action primary track-edit-action-full" :disabled="routeEditUploading || !routeEditCanUpload" v-permission-click-dialog="'nav-trackrecord-edit'" @click="confirmUploadRouteEditRoute">
+                        {{ routeEditUploading ? '上传中...' : '保存上传' }}
+                      </button>
                     </div>
                   </div>
                 </aside>
@@ -1160,7 +1140,6 @@ import mapRecordIcon from '@/assets/source_data/svg_data/map_record.svg'
 import navIcon from '@/assets/source_data/svg_data/nav.svg'
 import mapEditIcon from '@/assets/source_data/svg_data/map_edit.svg'
 import trackRecordIcon from '@/assets/source_data/svg_data/track_record.svg'
-import trackEditIcon from '@/assets/source_data/svg_data/robot_source/track_edit.svg'
 import packageManageIcon from '@/assets/source_data/svg_data/package_manage.svg'
 import mapMoveIcon from '@/assets/source_data/svg_data/robot_source/map_move.svg'
 import mapMagnifyIcon from '@/assets/source_data/svg_data/robot_source/map_magnify.svg'
@@ -1289,7 +1268,6 @@ const sidebarTabs = [
   { key: 'nav', label: '导航', icon: navIcon, permission: 'nav-navmanage-show' },
   { key: 'map_edit', label: '地图编辑', icon: mapEditIcon, permission: 'nav-mapedit-show' },
   { key: 'track_record', label: '路线录制', icon: trackRecordIcon, permission: 'nav-trackrecord-show' },
-  { key: 'track_edit', label: '路线编辑', icon: trackEditIcon, permission: 'nav-trackrecord-show' },
   { key: 'file_manage', label: '文件管理', icon: packageManageIcon, permission: 'nav-file-show' }
 ]
 
@@ -1993,7 +1971,7 @@ const handleTrackSmooth = async () => {
   }
 }
 
-// 路线编辑相关状态（仅做前端草稿，上传保存后续对接）
+// 路线编辑相关状态
 type RouteEditPoint = {
   x: number
   y: number
@@ -2004,6 +1982,8 @@ type RouteEditPoint = {
 type RouteEditSnapshot = {
   points: RouteEditPoint[]
   breaks: number[]
+  draftPoints: RouteEditPoint[]
+  mode: 'view' | 'pick' | 'draw'
 }
 
 type RouteEditFileFormat = {
@@ -2031,17 +2011,31 @@ const routeEditSelectionEnd = ref(-1)
 const routeEditLoading = ref(false)
 const routeEditError = ref('')
 const routeEditDirty = ref(false)
-const routeEditGeneratedText = ref('')
 const routeEditFileFormat = ref<RouteEditFileFormat | null>(null)
 const routeEditHistory = ref<RouteEditSnapshot[]>([])
 const routeEditLocalLineList = ref<string[]>([])
-const routeEditGeneratedTrackName = ref('')
+const routeEditManualZ = ref(0)
+const routeEditUploading = ref(false)
 const routeEditCreateDialog = ref({
   visible: false,
   trackName: '',
   error: '',
 })
 let suppressTrackEditLineReset = false
+
+const normalizeRouteEditZValue = (value: unknown) => {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return 0
+  return Number(numericValue.toFixed(6))
+}
+
+const setRouteEditManualZ = (value: unknown) => {
+  routeEditManualZ.value = normalizeRouteEditZValue(value)
+}
+
+const normalizeRouteEditManualZInput = () => {
+  setRouteEditManualZ(routeEditManualZ.value)
+}
 
 const getRouteEditLocalTrackListKey = (mapName = trackEditMap.value) => {
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || 'default'
@@ -2086,17 +2080,13 @@ const trackEditLineList = computed(() => {
 
 const routeEditHasRoute = computed(() => routeEditPoints.value.length > 0)
 const routeEditCanDraw = computed(() => routeEditHasRoute.value || routeEditCreateMode.value)
-const canUndoRouteEdit = computed(() => routeEditHistory.value.length > 0)
+const canUndoRouteEdit = computed(() => routeEditHistory.value.length > 0 || routeEditDraftPoints.value.length > 0)
 const routeEditIsClosedLoop = computed(() => {
   if (routeEditPoints.value.length < 3) return false
   const first = routeEditPoints.value[0]
   const last = routeEditPoints.value[routeEditPoints.value.length - 1]
   if (!first || !last) return false
   return Math.hypot(first.x - last.x, first.y - last.y, first.z - last.z) < 1e-5
-})
-const routeEditStateLabel = computed(() => {
-  if (routeEditCreateMode.value) return '新增中'
-  return routeEditDirty.value ? '已修改' : '未修改'
 })
 const routeEditDrawHint = computed(() => (
   routeEditCreateMode.value
@@ -2108,21 +2098,14 @@ const routeEditSnapPriorityIndex = computed(() => (
   routeEditCreateMode.value && routeEditPoints.value.length >= 3 ? 0 : null
 ))
 const canSubmitRouteEditCreate = computed(() => routeEditCreateMode.value && routeEditPoints.value.length >= 2)
-const routeEditDraftStatus = computed(() => {
-  if (routeEditGeneratedText.value) {
-    const nameText = routeEditGeneratedTrackName.value ? `${routeEditGeneratedTrackName.value}，` : ''
-    return `已生成本地草稿：${nameText}${routeEditPoints.value.length} 个点，${routeEditGeneratedText.value.length} 字符，等待上传接口对接`
-  }
-  if (routeEditCreateMode.value) {
-    if (routeEditPoints.value.length === 0) return '新增路线模式：请在点云上按顺序绘制路线点'
-    return routeEditIsClosedLoop.value
-      ? `新增路线模式：已绘制 ${routeEditPoints.value.length} 个点，已闭环，可提交命名`
-      : `新增路线模式：已绘制 ${routeEditPoints.value.length} 个点，可继续绘制或提交命名`
-  }
-  if (!routeEditHasRoute.value) return '请选择并加载一条路线'
-  if (routeEditBreaks.value.length > 0) return `当前存在 ${routeEditBreaks.value.length} 个断点，请绘制并连接后再生成草稿`
-  return routeEditDirty.value ? '当前修改仅在页面预览中生效，保存接口后续对接' : '路线已加载，可点选区间或绘制重绘段'
-})
+const routeEditCanUpload = computed(() => (
+  !routeEditCreateMode.value &&
+  routeEditHasRoute.value &&
+  !!trackEditMap.value &&
+  !!trackEditLine.value &&
+  routeEditBreaks.value.length === 0 &&
+  routeEditDraftPoints.value.length === 0
+))
 
 const cloneRouteEditPoints = (points: RouteEditPoint[]) => points.map(point => ({ ...point }))
 const cloneRouteEditBreaks = (breaks: number[]) => Array.from(new Set(breaks))
@@ -2143,9 +2126,9 @@ const getRouteEditSelectionRange = () => {
 }
 
 const routeEditHasSelection = computed(() => !!getRouteEditSelectionRange())
-const routeEditSelectedCount = computed(() => {
+const routeEditHasDeletableSelection = computed(() => {
   const range = getRouteEditSelectionRange()
-  return range ? range.end - range.start + 1 : 0
+  return !!range && range.start !== range.end
 })
 const routeEditSelectedRangeForPreview = computed(() => {
   const range = getRouteEditSelectionRange()
@@ -2156,7 +2139,7 @@ const routeEditSelectedRangeForPreview = computed(() => {
   return null
 })
 
-const getRouteEditDrawPlaneRawZ = () => {
+const getRouteEditFallbackDrawPlaneRawZ = () => {
   const range = getRouteEditSelectionRange()
   if (range) {
     const start = routeEditPoints.value[range.start]
@@ -2168,6 +2151,8 @@ const getRouteEditDrawPlaneRawZ = () => {
   const firstPoint = routeEditPoints.value[0]
   return firstPoint?.z ?? 0
 }
+
+const getRouteEditDrawPlaneRawZ = () => normalizeRouteEditZValue(routeEditManualZ.value)
 
 const routeEditInteractionPlaneZ = computed(() => {
   const { centerZ, maxRange } = navPointCloudNormalizationParams.value
@@ -2210,10 +2195,9 @@ const resetRouteEditWorkspace = () => {
   routeEditSelectionEnd.value = -1
   routeEditError.value = ''
   routeEditDirty.value = false
-  routeEditGeneratedText.value = ''
-  routeEditGeneratedTrackName.value = ''
   routeEditFileFormat.value = null
   routeEditHistory.value = []
+  setRouteEditManualZ(0)
   routeEditCreateDialog.value.visible = false
   routeEditCreateDialog.value.error = ''
   if (baseNavPointCloudData.value.length > 0) {
@@ -2286,7 +2270,9 @@ const formatRouteEditNumber = (value: number) => {
 }
 
 const serializeRouteEditPoints = () => {
-  const format = routeEditFileFormat.value || createDefaultRouteEditFileFormat()
+  const baseFormat = routeEditFileFormat.value || createDefaultRouteEditFileFormat()
+  const shouldWriteZ = baseFormat.columnCount === 6 || routeEditPoints.value.some(point => Math.abs(point.z) > 1e-9)
+  const format = shouldWriteZ ? { ...baseFormat, columnCount: 6 as const } : baseFormat
   const separator = format.delimiter === 'comma' ? ',' : ' '
   const lines = [...format.headerLines]
   routeEditPoints.value.forEach((point, index) => {
@@ -2322,7 +2308,6 @@ const loadTrackEditRoute = async () => {
   try {
     routeEditCreateMode.value = false
     routeEditCreateDialog.value.visible = false
-    routeEditGeneratedTrackName.value = ''
     if (trackEditMap.value) {
       await refreshNavPointCloud(trackEditMap.value, { silent: true })
     }
@@ -2353,9 +2338,8 @@ const loadTrackEditRoute = async () => {
     routeEditSelectionEnd.value = -1
     routeEditHistory.value = []
     routeEditDirty.value = false
-    routeEditGeneratedText.value = ''
-    routeEditGeneratedTrackName.value = ''
     routeEditMode.value = 'pick'
+    setRouteEditManualZ(getRouteEditFallbackDrawPlaneRawZ())
     await applyRouteEditPreview()
     requestNavPointCloudRelayout()
     showSuccessMessage(`路线已加载：${parsed.points.length} 个轨迹点`)
@@ -2411,8 +2395,6 @@ const handleRouteEditPlaneClick = (payload: { x: number; y: number; z: number; s
       }
     ]
     routeEditDirty.value = routeEditPoints.value.length > 0
-    routeEditGeneratedText.value = ''
-    routeEditGeneratedTrackName.value = ''
     return
   }
 
@@ -2435,6 +2417,9 @@ const handleRouteEditPlaneClick = (payload: { x: number; y: number; z: number; s
       snappedIndex: payload.snappedIndex,
     }
   ]
+  if (getRouteEditDraftSnappedEndpoints()) {
+    void applyRouteEditDraft()
+  }
 }
 
 const clearRouteEditSelection = () => {
@@ -2448,8 +2433,59 @@ const pushRouteEditHistory = () => {
     {
       points: cloneRouteEditPoints(routeEditPoints.value),
       breaks: cloneRouteEditBreaks(routeEditBreaks.value),
+      draftPoints: cloneRouteEditPoints(routeEditDraftPoints.value),
+      mode: routeEditMode.value,
     }
   ]
+}
+
+const setRouteEditFileColumnCount = (columnCount: 5 | 6) => {
+  const baseFormat = routeEditFileFormat.value || createDefaultRouteEditFileFormat()
+  routeEditFileFormat.value = {
+    ...baseFormat,
+    columnCount,
+  }
+}
+
+const applyRouteEditManualZToAll = async () => {
+  if (!routeEditHasRoute.value) {
+    showErrorMessage('当前没有可修改的路线点')
+    return
+  }
+
+  if (!routeEditCreateMode.value) {
+    pushRouteEditHistory()
+  }
+  const nextZ = normalizeRouteEditZValue(routeEditManualZ.value)
+  setRouteEditManualZ(nextZ)
+  setRouteEditFileColumnCount(6)
+  routeEditPoints.value = routeEditPoints.value.map(point => ({ ...point, z: nextZ }))
+  routeEditDraftPoints.value = routeEditDraftPoints.value.map(point => ({ ...point, z: nextZ }))
+  routeEditDirty.value = true
+  await applyRouteEditPreview()
+}
+
+const confirmApplyRouteEditManualZToAll = () => {
+  if (!routeEditHasRoute.value) {
+    showErrorMessage('当前没有可修改的路线点')
+    return
+  }
+
+  const nextZ = normalizeRouteEditZValue(routeEditManualZ.value)
+  showConfirmDialog({
+    title: '全局应用 Z',
+    message: `确定将当前 Z 值应用到整条路线吗？\n\n路线：${trackEditLine.value || '未命名路线'}\nZ 值：${formatRouteEditNumber(nextZ)}\n\n该操作会覆盖当前路线所有点的 Z 值。`,
+    confirmText: '确认应用',
+    cancelText: '取消',
+    type: 'warning',
+    onConfirm: async () => {
+      closeConfirmDialog()
+      await applyRouteEditManualZToAll()
+    },
+    onCancel: () => {
+      closeConfirmDialog()
+    }
+  })
 }
 
 const deleteRouteEditSelection = async () => {
@@ -2481,24 +2517,13 @@ const deleteRouteEditSelection = async () => {
     nextBreaks.push(range.start)
   }
 
-  routeEditPoints.value = [
-    ...nextPoints
-  ]
+  routeEditPoints.value = nextPoints
   routeEditBreaks.value = cloneRouteEditBreaks(nextBreaks)
+  routeEditDraftPoints.value = []
   clearRouteEditSelection()
   routeEditMode.value = 'draw'
   routeEditDirty.value = true
-  routeEditGeneratedText.value = ''
-  routeEditGeneratedTrackName.value = ''
   await applyRouteEditPreview()
-}
-
-const undoRouteEditDraftPoint = () => {
-  routeEditDraftPoints.value = routeEditDraftPoints.value.slice(0, -1)
-}
-
-const clearRouteEditDraft = () => {
-  routeEditDraftPoints.value = []
 }
 
 const enterRouteEditCreateMode = async () => {
@@ -2514,8 +2539,6 @@ const enterRouteEditCreateMode = async () => {
   routeEditMode.value = 'draw'
   routeEditFileFormat.value = createDefaultRouteEditFileFormat()
   routeEditDirty.value = false
-  routeEditGeneratedText.value = ''
-  routeEditGeneratedTrackName.value = ''
 
   await refreshNavPointCloud(trackEditMap.value, { silent: true })
   await applyRouteEditPreview()
@@ -2554,16 +2577,12 @@ const undoRouteEditCreatePoint = () => {
   if (!routeEditCreateMode.value) return
   routeEditPoints.value = routeEditPoints.value.slice(0, -1)
   routeEditDirty.value = routeEditPoints.value.length > 0
-  routeEditGeneratedText.value = ''
-  routeEditGeneratedTrackName.value = ''
 }
 
 const clearRouteEditCreatePoints = () => {
   if (!routeEditCreateMode.value) return
   routeEditPoints.value = []
   routeEditDirty.value = false
-  routeEditGeneratedText.value = ''
-  routeEditGeneratedTrackName.value = ''
 }
 
 const cancelRouteEditCreate = () => {
@@ -2645,8 +2664,6 @@ const confirmRouteEditCreate = async () => {
   try {
     await saveTrajectoryFile(fullTrackName, blob)
     appendRouteEditLocalTrack(fullTrackName)
-    routeEditGeneratedText.value = text
-    routeEditGeneratedTrackName.value = fullTrackName
     routeEditOriginalPoints.value = cloneRouteEditPoints(routeEditPoints.value)
     routeEditOriginalBreaks.value = []
     routeEditCreateMode.value = false
@@ -2657,10 +2674,10 @@ const confirmRouteEditCreate = async () => {
     suppressTrackEditLineReset = true
     trackEditLine.value = fullTrackName
     await applyRouteEditPreview()
-    showSuccessMessage('新增路线草稿已生成，上传保存接口后续对接')
+    showSuccessMessage('新增路线已创建')
   } catch (error) {
-    console.error('生成新增路线草稿失败:', error)
-    routeEditCreateDialog.value.error = '生成草稿失败: ' + (error as Error).message
+    console.error('新增路线失败:', error)
+    routeEditCreateDialog.value.error = '新增路线失败: ' + (error as Error).message
   }
 }
 
@@ -2759,21 +2776,25 @@ const applyRouteEditDraft = async () => {
   routeEditDraftPoints.value = []
   clearRouteEditSelection()
   routeEditDirty.value = true
-  routeEditGeneratedText.value = ''
-  routeEditGeneratedTrackName.value = ''
   routeEditMode.value = 'pick'
   await applyRouteEditPreview()
 }
 
 const undoRouteEditOperation = async () => {
+  if (routeEditDraftPoints.value.length > 0) {
+    routeEditDraftPoints.value = routeEditDraftPoints.value.slice(0, -1)
+    await applyRouteEditPreview()
+    return
+  }
+
   const previous = routeEditHistory.value[routeEditHistory.value.length - 1]
   if (!previous) return
   routeEditHistory.value = routeEditHistory.value.slice(0, -1)
   routeEditPoints.value = cloneRouteEditPoints(previous.points)
   routeEditBreaks.value = cloneRouteEditBreaks(previous.breaks)
+  routeEditDraftPoints.value = cloneRouteEditPoints(previous.draftPoints || [])
+  routeEditMode.value = previous.mode || 'pick'
   routeEditDirty.value = true
-  routeEditGeneratedText.value = ''
-  routeEditGeneratedTrackName.value = ''
   clearRouteEditSelection()
   await applyRouteEditPreview()
 }
@@ -2786,23 +2807,115 @@ const resetRouteEditRoute = async () => {
   clearRouteEditSelection()
   routeEditHistory.value = []
   routeEditDirty.value = false
-  routeEditGeneratedText.value = ''
-  routeEditGeneratedTrackName.value = ''
   await applyRouteEditPreview()
 }
 
-const generateRouteEditDraftText = () => {
+const getRouteEditSelectedTrackName = () => normalizeTrackName(String(trackEditLine.value || ''))
+const getRouteEditUploadTrackName = () => getRouteEditSelectedTrackName().replace(/\.txt$/i, '')
+const getRouteEditUploadFileName = () => {
+  const trackName = getRouteEditUploadTrackName()
+  return trackName ? `${trackName}.txt` : ''
+}
+const getRouteEditUploadDisplayPath = (mapName = trackEditMap.value) => `/dxr_data/trajectory/${mapName || ''}`
+
+const uploadRouteEditRoute = async () => {
+  if (routeEditUploading.value) return
   if (!routeEditHasRoute.value) {
-    showErrorMessage('请先加载路线')
+    showErrorMessage('当前没有可上传的路线')
+    return
+  }
+  if (routeEditCreateMode.value) {
+    showErrorMessage('新增路线请先提交后再上传')
+    return
+  }
+  if (routeEditDraftPoints.value.length > 0) {
+    showErrorMessage('当前有未完成的绘制点，请先完成连接后再上传')
     return
   }
   if (routeEditBreaks.value.length > 0) {
-    showErrorMessage('当前路线仍有断点，请先绘制并连接断点')
+    showErrorMessage('当前路线仍有断点，请先补齐后再上传')
     return
   }
-  routeEditGeneratedText.value = serializeRouteEditPoints()
-  routeEditGeneratedTrackName.value = trackEditLine.value
-  showSuccessMessage('本地草稿已生成，上传保存接口后续对接')
+
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    showErrorMessage('未选择机器人，无法上传路线')
+    return
+  }
+  const mapName = normalizeMapName(trackEditMap.value)
+  const trackName = getRouteEditUploadTrackName()
+  const fileName = getRouteEditUploadFileName()
+  if (!mapName || !trackName || !fileName) {
+    showErrorMessage('请先选择地图和路线')
+    return
+  }
+
+  routeEditUploading.value = true
+  try {
+    const text = serializeRouteEditPoints()
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+
+    showSuccessMessage('正在上传路线文件...')
+    const uploadSuccess = await mapFileApi.uploadTrajectoryFile(robotId, mapName, trackName, blob)
+    if (!uploadSuccess) {
+      throw new Error('上传到服务器失败')
+    }
+
+    showSuccessMessage('正在从服务器下载验证...')
+    const downloadedBlob = await mapFileApi.downloadTrajectoryFileFromMap(robotId, mapName, trackName, true)
+    if (!downloadedBlob) {
+      throw new Error('从服务器下载验证失败')
+    }
+
+    if (downloadedBlob.size !== blob.size) {
+      console.warn(`轨迹文件大小不一致（可能被服务端规范化）: 原始=${blob.size}, 下载=${downloadedBlob.size}`)
+    }
+
+    await saveTrajectoryFile(getRouteEditSelectedTrackName(), downloadedBlob)
+    routeEditOriginalPoints.value = cloneRouteEditPoints(routeEditPoints.value)
+    routeEditOriginalBreaks.value = cloneRouteEditBreaks(routeEditBreaks.value)
+    routeEditHistory.value = []
+    routeEditDirty.value = false
+    showSuccessMessage('路线上传成功')
+  } catch (error) {
+    console.error('上传路线失败:', error)
+    showErrorMessage('上传路线失败: ' + (error as Error).message)
+  } finally {
+    routeEditUploading.value = false
+  }
+}
+
+const confirmUploadRouteEditRoute = () => {
+  if (!routeEditCanUpload.value) {
+    if (routeEditDraftPoints.value.length > 0) {
+      showErrorMessage('当前有未完成的绘制点，请先完成连接后再上传')
+      return
+    }
+    if (routeEditBreaks.value.length > 0) {
+      showErrorMessage('当前路线仍有断点，请先补齐后再上传')
+      return
+    }
+    showErrorMessage('当前没有可上传的路线')
+    return
+  }
+
+  const mapName = normalizeMapName(trackEditMap.value)
+  const trackName = getRouteEditUploadTrackName()
+  const fileName = getRouteEditUploadFileName()
+  showConfirmDialog({
+    title: '上传路线',
+    message: `确定上传当前路线到服务器吗？\n\n地图：${mapName}\n路线：${trackName}\n上传目录：${getRouteEditUploadDisplayPath(mapName)}\n文件：${fileName}\n\n上传后将覆盖服务器上的同名 txt 文件。`,
+    confirmText: '确认上传',
+    cancelText: '取消',
+    type: 'warning',
+    onConfirm: async () => {
+      closeConfirmDialog()
+      await uploadRouteEditRoute()
+    },
+    onCancel: () => {
+      closeConfirmDialog()
+    }
+  })
 }
 
 watch(trackEditLineList, (newLines) => {
@@ -4209,7 +4322,7 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
       const allTaskList = extractTrackTaskList(parsed)
       let filteredTasks = allTaskList.filter((task: any) => {
         const taskTrackName = normalizeTrackName(String(task.track_name || ''))
-        const taskPointName = normalizeTaskPointName(String(task.track_point_name || task.taskpoint_name || task.task_point_name || ''))
+        const taskPointName = normalizeTaskPointName(String(getTrackTaskGroupName(task)))
         return taskTrackName === normalizedTrackName && taskPointName === currentTaskPointName
       })
 
@@ -4291,9 +4404,23 @@ const isMapInList = (mapName: string, list: string[]) => {
 const extractTrackTaskList = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.data?.data)) return payload.data.data
+  if (Array.isArray(payload?.result)) return payload.result
+  if (Array.isArray(payload?.msg?.result)) return payload.msg.result
+  if (Array.isArray(payload?.msg?.data)) return payload.msg.data
   if (Array.isArray(payload?.response?.data)) return payload.response.data
+  if (Array.isArray(payload?.response?.msg?.result)) return payload.response.msg.result
   return []
 }
+
+const getTrackTaskGroupName = (task: any) => (
+  task?.track_point_name
+  || task?.track_pointname
+  || task?.taskpoint_name
+  || task?.task_point_name
+  || task?.task_pointname
+  || ''
+)
 
 interface NavPointTask {
   task_id: string
@@ -8281,8 +8408,8 @@ const handleDelete = (item: any) => {
 
 .track-edit-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 224px;
+  gap: 12px;
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
@@ -8317,15 +8444,21 @@ const handleDelete = (item: any) => {
 }
 
 .track-edit-panel {
+  align-self: stretch;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  max-height: 100%;
   overflow-y: auto;
-  background: rgba(7, 26, 39, 0.82);
-  border: 1px solid rgba(103, 213, 253, 0.22);
+  background:
+    linear-gradient(180deg, rgba(8, 35, 52, 0.94), rgba(5, 24, 38, 0.92));
+  border: 1px solid rgba(103, 213, 253, 0.2);
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px;
+  box-shadow: 0 12px 26px rgba(1, 10, 20, 0.28), inset 0 1px 0 rgba(162, 231, 255, 0.06);
   scrollbar-width: thin;
   scrollbar-color: rgba(103, 213, 253, 0.5) transparent;
+  box-sizing: border-box;
 }
 
 .track-edit-panel::-webkit-scrollbar {
@@ -8342,9 +8475,9 @@ const handleDelete = (item: any) => {
 }
 
 .track-edit-panel-section {
-  padding: 0 0 14px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid rgba(103, 213, 253, 0.14);
+  padding: 0 0 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.16);
 }
 
 .track-edit-panel-section:last-child {
@@ -8354,63 +8487,62 @@ const handleDelete = (item: any) => {
 }
 
 .track-edit-panel-title {
-  color: #67d5fd;
+  color: #d8f7ff;
   font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 10px;
+  font-weight: 700;
 }
 
-.track-edit-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+.track-edit-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 22px;
+  margin-bottom: 12px;
 }
 
-.track-edit-stat {
-  background: rgba(12, 60, 86, 0.45);
-  border: 1px solid rgba(103, 213, 253, 0.16);
-  border-radius: 6px;
-  padding: 8px;
-  min-width: 0;
+.track-edit-panel-heading::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  border-radius: 999px;
+  background: #67d5fd;
+  box-shadow: 0 0 10px rgba(103, 213, 253, 0.45);
+  margin-right: 8px;
 }
 
-.track-edit-stat span {
-  display: block;
-  color: rgba(184, 220, 245, 0.74);
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-
-.track-edit-stat strong {
-  display: block;
-  color: #e7f8ff;
-  font-size: 16px;
-  line-height: 20px;
-  font-weight: 600;
+.track-edit-panel-heading .track-edit-panel-title {
+  flex: 1;
 }
 
 .track-edit-range-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 38px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .track-edit-range-row label {
-  color: #b8dcf5;
+  color: rgba(184, 220, 245, 0.86);
   font-size: 12px;
 }
 
 .track-edit-range-row input {
   min-width: 0;
-  height: 32px;
-  background: #0c3c56;
-  border: 1px solid rgba(38, 131, 182, 0.72);
-  color: #d8f7ff;
-  border-radius: 4px;
-  padding: 0 8px;
+  height: 34px;
+  background: rgba(6, 36, 57, 0.86);
+  border: 1px solid rgba(103, 213, 253, 0.34);
+  color: #eefbff;
+  border-radius: 6px;
+  padding: 0 10px;
   outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.track-edit-range-row input:focus {
+  background: rgba(7, 45, 70, 0.96);
+  border-color: rgba(103, 213, 253, 0.82);
+  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.12);
 }
 
 .track-edit-range-row input:disabled {
@@ -8418,57 +8550,84 @@ const handleDelete = (item: any) => {
   cursor: not-allowed;
 }
 
+.track-edit-z-row input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.track-edit-z-row input[type='number']::-webkit-outer-spin-button,
+.track-edit-z-row input[type='number']::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 .track-edit-action-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
 .track-edit-action {
-  height: 34px;
+  height: 36px;
   min-width: 0;
-  border: 1px solid rgba(103, 213, 253, 0.26);
-  border-radius: 4px;
-  background: rgba(12, 60, 86, 0.56);
-  color: #b8dcf5;
+  border: 1px solid rgba(103, 213, 253, 0.28);
+  border-radius: 6px;
+  background: rgba(8, 42, 65, 0.7);
+  color: #cdefff;
   cursor: pointer;
   font-size: 12px;
-  transition: all 0.18s ease;
+  font-weight: 600;
+  transition: transform 0.16s ease, background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .track-edit-action:hover:not(:disabled) {
-  border-color: rgba(103, 213, 253, 0.72);
+  border-color: rgba(103, 213, 253, 0.64);
   color: #ffffff;
-  background: rgba(12, 70, 102, 0.72);
+  background: rgba(13, 63, 94, 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0, 12, 24, 0.24);
 }
 
 .track-edit-action.primary {
-  background: rgba(31, 163, 211, 0.38);
-  border-color: rgba(103, 213, 253, 0.5);
-  color: #d8f7ff;
+  background: linear-gradient(180deg, rgba(45, 149, 190, 0.7), rgba(21, 92, 128, 0.78));
+  border-color: rgba(127, 211, 251, 0.62);
+  color: #f2fcff;
+}
+
+.track-edit-action.active {
+  border-color: rgba(103, 213, 253, 0.9);
+  background: rgba(31, 163, 211, 0.42);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(103, 213, 253, 0.12);
 }
 
 .track-edit-action.danger {
-  background: rgba(86, 28, 28, 0.76);
-  border-color: rgba(253, 103, 103, 0.36);
-  color: #ff9a9a;
+  background: rgba(82, 24, 29, 0.42);
+  border-color: rgba(255, 112, 122, 0.42);
+  color: #ffc3c7;
 }
 
-.track-edit-action:disabled,
-.track-edit-action.disabled-action {
-  opacity: 0.48;
+.track-edit-action.danger:hover:not(:disabled) {
+  background: rgba(116, 34, 42, 0.76);
+  border-color: rgba(255, 125, 136, 0.68);
+  color: #fff0f1;
+}
+
+.track-edit-action:disabled {
+  background: rgba(64, 77, 88, 0.38);
+  border-color: rgba(150, 165, 178, 0.24);
+  color: rgba(196, 207, 216, 0.58);
+  box-shadow: none;
+  opacity: 1;
   cursor: not-allowed;
 }
 
-.track-edit-draft-box {
-  margin-top: 10px;
-  color: rgba(184, 220, 245, 0.72);
-  font-size: 12px;
-  line-height: 1.5;
-  background: rgba(2, 9, 21, 0.38);
-  border: 1px solid rgba(103, 213, 253, 0.12);
-  border-radius: 4px;
-  padding: 8px;
+.track-edit-action-full {
+  grid-column: 1 / -1;
+}
+
+.track-edit-z-row {
+  margin-bottom: 10px;
 }
 
 @media (max-width: 1280px) {
@@ -8478,6 +8637,7 @@ const handleDelete = (item: any) => {
   }
 
   .track-edit-panel {
+    height: auto;
     max-height: none;
   }
 }

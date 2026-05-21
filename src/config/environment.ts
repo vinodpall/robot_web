@@ -53,18 +53,18 @@ const internetConfig: EnvironmentConfig = {
     domain: '/v1'
   },
   websocket: {
-    host: '39.185.83.71',
+    host: '192.168.5.27',
     port: 8000,
-    fullUrl: 'ws://39.185.83.71:8000'
+    fullUrl: 'ws://192.168.5.27:8000'
   },
   video: {
-    webrtcDomain: 'webrtc://39.185.83.71:8000',
-    rtmpDomain: 'rtmp://39.185.83.71:8000'
+    webrtcDomain: 'webrtc://192.168.5.27:8000',
+    rtmpDomain: 'rtmp://192.168.5.27:8000'
   },
   services: {
-    vision: 'http://39.185.83.71:8000',
-    livestream: 'http://39.185.83.71:8000',
-    mapFile: 'http://39.185.83.71:5000'
+    vision: 'http://192.168.5.27:8000',
+    livestream: 'http://192.168.5.27:8000',
+    mapFile: 'http://192.168.5.27:5000'
   }
 }
 
