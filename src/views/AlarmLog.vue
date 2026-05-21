@@ -1074,6 +1074,11 @@ const getImage = (row: any): string | null => {
   const baseUrl = buildRobotHttpAssetUrl(robotId, 81, img, { preferDirectForPort81: false })
   return appendTokenToImageUrl(baseUrl)
 }
+const getThumbImage = (row: any): string | null => {
+  const original = getImage(row)
+  if (!original) return null
+  return original.replace(/\.(jpg|jpeg|png)(\?|$)/i, '_thumb.jpg$2')
+}
 const appendTokenToImageUrl = (url: string): string => {
   if (!url) return ''
   const token = localStorage.getItem('token') || ''
@@ -1092,7 +1097,10 @@ const appendTokenToImageUrl = (url: string): string => {
 const failedRecordImageUrls = ref<Set<string>>(new Set())
 
 const getDisplayImage = (row: any): string | null => {
+  const thumb = getThumbImage(row)
   const original = getImage(row)
+
+  if (thumb && !failedRecordImageUrls.value.has(thumb)) return thumb
   if (original && !failedRecordImageUrls.value.has(original)) return original
   return null
 }
