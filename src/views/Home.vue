@@ -1321,6 +1321,7 @@ const activeOverlayTrackName = ref('')
 const activeOverlayPointTaskId = ref('')
 const lastTrackOverlayKey = ref('')
 const lastTrackOverlayTaskPointCount = ref(0)
+const trackOverlayInFlightKey = ref('')
 const lastPointTaskOverlayKey = ref('')
 let trackTaskListRefreshPromise: Promise<any[]> | null = null
 
@@ -1458,8 +1459,8 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
     // 叠加路线轨迹到点云图
     const nextOverlayKey = `${normalizedTrackName}::${normalizedTaskPointName}`
     if (
-      nextOverlayKey !== lastTrackOverlayKey.value ||
-      pointCloudData.value.length === basePointCloudData.value.length
+      nextOverlayKey !== lastTrackOverlayKey.value &&
+      nextOverlayKey !== trackOverlayInFlightKey.value
     ) {
       overlayTrackTrajectory(normalizedTrackName)
     }
@@ -1471,6 +1472,7 @@ watch(() => robotStore.isTracking, (tracking) => {
   if (!tracking) {
     lastTrackOverlayKey.value = ''
     lastTrackOverlayTaskPointCount.value = 0
+    trackOverlayInFlightKey.value = ''
     activeOverlayTrackName.value = ''
     if (basePointCloudData.value.length > 0) {
       pointCloudData.value = basePointCloudData.value
@@ -1624,6 +1626,13 @@ const centerToRobot = () => {
 const overlayTrackTrajectory = async (trackName: string) => {
   const normalizedTrackName = normalizeTrackName(trackName)
   if (!normalizedTrackName || basePointCloudData.value.length === 0) return
+  const currentTaskPointName = normalizeTaskPointName(activeTrackInfo.value.taskpoint_name)
+  const overlayKey = `${normalizedTrackName}::${currentTaskPointName}`
+  if (lastTrackOverlayKey.value === overlayKey || trackOverlayInFlightKey.value === overlayKey) {
+    return
+  }
+
+  trackOverlayInFlightKey.value = overlayKey
   try {
     // 1. 读取轨迹路线数据
     const blob = await getTrajectoryFile(normalizedTrackName)
@@ -1662,15 +1671,6 @@ const overlayTrackTrajectory = async (trackName: string) => {
 
     // 2. 读取任务点数据（从 localStorage 的 all_track_task_list）
     const taskPointsData: Array<{x: number, y: number, z: number, name: string}> = []
-    const currentTaskPointName = normalizeTaskPointName(activeTrackInfo.value.taskpoint_name)
-    const overlayKey = `${normalizedTrackName}::${currentTaskPointName}`
-    if (
-      lastTrackOverlayKey.value === overlayKey &&
-      pointCloudData.value.length > basePointCloudData.value.length &&
-      lastTrackOverlayTaskPointCount.value > 0
-    ) {
-      return
-    }
 
     const collectTaskPoints = (allTaskList: any[]) => {
       let filteredTasks = allTaskList.filter((task: any) => {
@@ -1751,6 +1751,10 @@ const overlayTrackTrajectory = async (trackName: string) => {
     lastTrackOverlayTaskPointCount.value = normalizedTaskPoints.length
   } catch (e) {
     console.warn('叠加轨迹失败:', e)
+  } finally {
+    if (trackOverlayInFlightKey.value === overlayKey) {
+      trackOverlayInFlightKey.value = ''
+    }
   }
 }
 
@@ -1784,6 +1788,7 @@ const clearPointCloud = () => {
   lastPointCloudRefreshAt.value = 0
   lastTrackOverlayKey.value = ''
   lastTrackOverlayTaskPointCount.value = 0
+  trackOverlayInFlightKey.value = ''
   lastPointTaskOverlayKey.value = ''
   // 重置归一化参数，避免继续显示原场景辅助元素
   pointCloudNormalizationParams.value = { centerX: 0, centerY: 0, centerZ: 0, maxRange: 0 }
@@ -1813,6 +1818,7 @@ const syncPointCloudOverlayByRuntimeState = async () => {
 
   lastTrackOverlayKey.value = ''
   lastTrackOverlayTaskPointCount.value = 0
+  trackOverlayInFlightKey.value = ''
   lastPointTaskOverlayKey.value = ''
   pointCloudData.value = [...basePointCloudData.value]
 }
@@ -1922,6 +1928,7 @@ const refreshPointCloud = async (options?: { silent?: boolean; force?: boolean }
     basePointCloudData.value = points
     lastTrackOverlayKey.value = ''
     lastTrackOverlayTaskPointCount.value = 0
+    trackOverlayInFlightKey.value = ''
     lastPointTaskOverlayKey.value = ''
     await nextTick()
     threePointCloudRef.value?.fitCameraToScene?.()
@@ -7300,6 +7307,7 @@ const handleTrackTaskListUpdated = async (event: Event) => {
 
   lastTrackOverlayKey.value = ''
   lastTrackOverlayTaskPointCount.value = 0
+  trackOverlayInFlightKey.value = ''
   await overlayTrackTrajectory(runningTrackName)
 }
 
