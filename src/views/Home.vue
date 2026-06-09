@@ -1,4 +1,4 @@
-﻿
+
 <template>
   <div class="home-container">
     <!-- 左侧状态栏 -->
@@ -1021,6 +1021,70 @@
         </div>
       </div>
 
+    <!-- 实时警情警告大弹窗 -->
+    <div v-if="alarmAlertDialog.visible" class="custom-dialog-mask alarm-alert-mask" @click="alarmAlertDialog.visible = false">
+      <!-- 醒目的报警边缘光晕动画 -->
+      <div class="alarm-alert-frame">
+        <div class="alarm-alert-edge top"></div>
+        <div class="alarm-alert-edge right"></div>
+        <div class="alarm-alert-edge bottom"></div>
+        <div class="alarm-alert-edge left"></div>
+      </div>
+      
+      <div class="alarm-alert-dialog" @click.stop>
+        <div class="alarm-alert-title-bar">
+          <span class="alarm-alert-warning-icon">⚠️</span>
+          <span class="alarm-alert-title">实时警情报警提示</span>
+          <button class="alarm-alert-close-btn" @click="alarmAlertDialog.visible = false">&times;</button>
+        </div>
+        
+        <div class="alarm-alert-content" v-if="alarmAlertDialog.data">
+          <!-- 左侧：图片 -->
+          <div class="alarm-alert-left">
+            <div class="alarm-alert-img-wrapper" @click="handleAlertImageClick(alarmAlertDialog.data)">
+              <img 
+                :src="alarmAlertDialog.data.imageOriginalUrl || alarmAlertDialog.data.imageUrl" 
+                alt="警情图片" 
+                class="alarm-alert-img"
+                @error="handleAlertThumbError(alarmAlertDialog.data)"
+              />
+              <div class="alarm-alert-img-tip">点击查看大图</div>
+            </div>
+          </div>
+          
+          <!-- 右侧：详细信息 -->
+          <div class="alarm-alert-right">
+            <div class="alarm-info-grid">
+              <div class="alarm-info-item">
+                <span class="info-label">相机名称：</span>
+                <span class="info-value highlight-tag">{{ alarmAlertDialog.data.camera || '--' }}</span>
+              </div>
+              <div class="alarm-info-item">
+                <span class="info-label">警情类型：</span>
+                <span class="info-value type-tag">{{ alarmAlertDialog.data.type || '--' }}</span>
+              </div>
+              <div class="alarm-info-item">
+                <span class="info-label">内容详情：</span>
+                <span class="info-value content-tag">{{ alarmAlertDialog.data.content || '--' }}</span>
+              </div>
+              <div class="alarm-info-item">
+                <span class="info-label">警情描述：</span>
+                <span class="info-value desc-text">{{ alarmAlertDialog.data.description || '--' }}</span>
+              </div>
+              <div class="alarm-info-item">
+                <span class="info-label">报警时间：</span>
+                <span class="info-value time-text">{{ alarmAlertDialog.data.time || '--' }}</span>
+              </div>
+              <div class="alarm-info-item">
+                <span class="info-label">设备SN：</span>
+                <span class="info-value sn-text">{{ alarmAlertDialog.data.deviceName || '--' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 自定义成功/错误提示 -->
     <SuccessMessage :show="successToast.show" :message="successToast.message" @close="successToast.show = false" />
     <ErrorMessage :show="errorToast.show" :message="errorToast.message" @close="errorToast.show = false" />
@@ -1078,7 +1142,7 @@ const downloadAllTrajectoryFiles = async (robotId: string, trackList: string[]) 
     }
   }
 }
-import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted, nextTick, watch, reactive } from 'vue'
 import { useDevices, useWaylineJobs } from '../composables/useApi'
 import {
   navigationApi,
@@ -1170,6 +1234,12 @@ const isHomePageActive = ref(true)
 const isAlarmLogLoading = ref(false)
 const nextAlarmLogRetryAt = ref(0)
 const ALARM_LOG_RETRY_COOLDOWN_MS = 30_000
+
+// 实时警情报警弹窗状态
+const alarmAlertDialog = reactive({
+  visible: false,
+  data: null as any
+})
 
 // 机场位置信息（用于地图显示）
 const position = computed(() => {
@@ -2187,6 +2257,15 @@ const fetchLatestAlarmLogs = async () => {
         time: formatTs(row.create_time)
       }
     })
+
+    // 列表刷新完成后，若有警情数据，展示第一条内容的报警弹窗 (已暂时关闭自动触发逻辑，代码保留)
+    /*
+    if (deviceAlarmData.value.length > 0) {
+      alarmAlertDialog.data = deviceAlarmData.value[0]
+      alarmAlertDialog.visible = true
+    }
+    */
+
     nextAlarmLogRetryAt.value = 0
   } catch (err) {
     // 本地服务关闭等网络错误时进入冷却，避免请求刷屏
@@ -2194,6 +2273,18 @@ const fetchLatestAlarmLogs = async () => {
   } finally {
     isAlarmLogLoading.value = false
   }
+}
+
+// 手动刷新实时警情列表
+const handleManualRefreshAlarms = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    alert('请先选择机器人')
+    return
+  }
+  if (isAlarmLogLoading.value) return
+  nextAlarmLogRetryAt.value = 0 // 重置冷却时间
+  await fetchLatestAlarmLogs()
 }
 
 // 仅在 WebSocket 推入新的 alert 时，才重新拉取最新告警日志
@@ -10634,7 +10725,7 @@ const handlePageShow = () => {
 .on2-top span {
   padding: 0 12px;
   color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
+  cursor: default;
   font-size: 14px;
   height: 100%;
   display: flex;
@@ -12139,7 +12230,7 @@ const handlePageShow = () => {
   inset: 0;
   background: rgba(0,0,0,0.78);
   backdrop-filter: blur(2px);
-  z-index: 9999;
+  z-index: 100100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12466,5 +12557,232 @@ const handlePageShow = () => {
   background: rgba(255,255,255,0.18);
   border-color: rgba(99, 216, 255, 0.5);
 }
+
+/* ================= 实时警情报警弹窗样式 ================= */
+.alarm-alert-mask {
+  z-index: 99999;
+  background: rgba(18, 2, 2, 0.7);
+}
+
+.alarm-alert-frame {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100000;
+}
+
+.alarm-alert-edge {
+  position: absolute;
+  background: linear-gradient(90deg, rgba(255, 40, 40, 0) 0%, rgba(255, 40, 40, 0.95) 50%, rgba(255, 40, 40, 0) 100%);
+  box-shadow: 0 0 25px rgba(255, 0, 0, 0.85);
+  animation: alarm-alert-pulse 1s ease-in-out infinite;
+}
+
+.alarm-alert-edge.top,
+.alarm-alert-edge.bottom {
+  left: 0;
+  width: 100%;
+  height: 8px;
+}
+
+.alarm-alert-edge.left,
+.alarm-alert-edge.right {
+  top: 0;
+  width: 8px;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(255, 40, 40, 0) 0%, rgba(255, 40, 40, 0.95) 50%, rgba(255, 40, 40, 0) 100%);
+}
+
+.alarm-alert-edge.top { top: 0; }
+.alarm-alert-edge.right { right: 0; }
+.alarm-alert-edge.bottom { bottom: 0; }
+.alarm-alert-edge.left { left: 0; }
+
+@keyframes alarm-alert-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    filter: saturate(0.9);
+  }
+  50% {
+    opacity: 1;
+    filter: saturate(1.4);
+  }
+}
+
+.alarm-alert-dialog {
+  width: min(840px, calc(100vw - 32px));
+  border-radius: 12px;
+  border: 2px solid rgba(255, 70, 70, 0.8);
+  background: linear-gradient(180deg, rgba(38, 8, 8, 0.98) 0%, rgba(18, 5, 5, 0.99) 100%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 50, 50, 0.25);
+  overflow: hidden;
+  animation: alarm-bounce-in 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes alarm-bounce-in {
+  0% { transform: scale(0.9) translateY(20px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.alarm-alert-title-bar {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(255, 50, 50, 0.12);
+  border-bottom: 1px solid rgba(255, 70, 70, 0.3);
+}
+
+.alarm-alert-warning-icon {
+  font-size: 20px;
+  margin-right: 10px;
+  animation: alarm-blink 1s steps(2, start) infinite;
+}
+
+@keyframes alarm-blink {
+  to { visibility: hidden; }
+}
+
+.alarm-alert-title {
+  flex-grow: 1;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ff6b6b;
+  text-shadow: 0 0 10px rgba(255, 107, 107, 0.4);
+}
+
+.alarm-alert-close-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.alarm-alert-close-btn:hover {
+  color: #ff6b6b;
+}
+
+.alarm-alert-content {
+  display: flex;
+  gap: 20px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.alarm-alert-left {
+  width: 58%;
+  flex-shrink: 0;
+}
+
+.alarm-alert-img-wrapper {
+  position: relative;
+  width: 100%;
+  height: 360px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 70, 70, 0.3);
+  overflow: hidden;
+  cursor: pointer;
+  background: #000;
+}
+
+.alarm-alert-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.alarm-alert-img-wrapper:hover .alarm-alert-img {
+  transform: scale(1.08);
+}
+
+.alarm-alert-img-tip {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.alarm-alert-right {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  box-sizing: border-box;
+}
+
+.alarm-info-grid {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 360px;
+  box-sizing: border-box;
+  padding: 8px 0;
+}
+
+.alarm-info-item {
+  display: flex;
+  align-items: flex-start;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.info-label {
+  width: 75px;
+  color: rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+
+.info-value {
+  color: #fff;
+  word-break: break-all;
+}
+
+.info-value.highlight-tag {
+  background: rgba(89, 192, 252, 0.15);
+  color: #59c0fc;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(89, 192, 252, 0.3);
+  font-weight: 500;
+}
+
+.info-value.type-tag {
+  background: rgba(255, 107, 107, 0.15);
+  color: #ff6b6b;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  font-weight: 500;
+}
+
+.info-value.content-tag {
+  color: #ffd6d6;
+  font-weight: 500;
+}
+
+.info-value.desc-text {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.info-value.time-text {
+  color: #ffb8b8;
+  font-family: monospace;
+}
+
+.info-value.sn-text {
+  color: rgba(255, 255, 255, 0.7);
+  font-family: monospace;
+}
+
+
 
 </style>

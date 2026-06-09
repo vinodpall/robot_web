@@ -1284,7 +1284,7 @@ const prepareRobotForTaskStart = async (
 
   await waitForRobotState(
     () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
-    8000,
+    15000,
     '等待机器人切换到非手动模式超时'
   )
 
@@ -1294,7 +1294,7 @@ const prepareRobotForTaskStart = async (
     await sendDogCommand(robotId, 'action')
     await waitForRobotState(
       () => robotStore.motionState?.basic_state === 4,
-      10000,
+      15000,
       '等待机器人进入踏步状态超时'
     )
   }
@@ -1303,7 +1303,7 @@ const prepareRobotForTaskStart = async (
     await sendDogCommand(robotId, options.gaitConfig.command)
     await waitForRobotState(
       () => robotStore.gaitText === options.gaitConfig?.label,
-      10000,
+      15000,
       `等待机器人切换到${options.gaitConfig.label}超时`
     )
   }

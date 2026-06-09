@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <aside class="sidebar-menu">
       <div class="sidebar-tabs">
@@ -167,10 +167,10 @@ const jointMotorTemps = computed(() =>
 )
 
 const jointNamePrefixes = [
-  '左前侧摆', '左前高', '左前膝',
-  '右前侧摆', '右前高', '右前膝',
-  '左后侧摆', '左后高', '左后膝',
-  '右后侧摆', '右后高', '右后膝'
+  '左前侧摆', '左前髋', '左前膝',
+  '右前侧摆', '右前髋', '右前膝',
+  '左后侧摆', '左后髋', '左后膝',
+  '右后侧摆', '右后髋', '右后膝'
 ]
 
 const jointMotorLabels = jointNamePrefixes.map(name => `${name}关节温度`)

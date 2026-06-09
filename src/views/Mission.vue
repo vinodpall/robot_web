@@ -1810,14 +1810,20 @@ const waitForMissionRobotState = async (
 
       if (Date.now() - startedAt >= timeoutMs) {
         window.clearInterval(timer)
-        reject(new Error(errorMessage))
+        const elapsedSeconds = Math.ceil((Date.now() - startedAt) / 1000)
+        reject(new Error(`${errorMessage}（已等待${elapsedSeconds}秒）`))
       }
     }, 100)
   })
 }
 
-const sendMissionDogCommand = async (robotId: string, commandName: string) => {
-  await dogApi.sendCommand(robotId, { command_name: commandName })
+const sendMissionDogCommand = async (robotId: string, commandName: string, actionLabel?: string) => {
+  try {
+    await dogApi.sendCommand(robotId, { command_name: commandName })
+  } catch (error) {
+    const prefix = actionLabel ? `${actionLabel}失败` : `发送${commandName}指令失败`
+    throw new Error(`${prefix}：${parseMissionErrorMessage(error)}`)
+  }
 }
 
 const resolveCheckExitChargeResult = (response: any): boolean | null => {
@@ -2008,41 +2014,41 @@ const onTrackStartConfirm = async () => {
     pushTrackStartStep('开始准备循迹任务启动流程')
     if (robotStore.robotStatusText === 'RL状态') {
       pushTrackStartStep('检测到 RL状态，先切换到行走步态')
-      await sendMissionDogCommand(robotId, 'foot_walk')
+      await sendMissionDogCommand(robotId, 'foot_walk', '切换到行走步态')
     }
 
     pushTrackStartStep('发送非手动模式指令')
-    await sendMissionDogCommand(robotId, 'mode_auto')
+    await sendMissionDogCommand(robotId, 'mode_auto', '发送非手动模式指令')
     pushTrackStartStep('设置地形为实心地面')
-    await sendMissionDogCommand(robotId, 'ground_1')
+    await sendMissionDogCommand(robotId, 'ground_1', '设置地形为实心地面')
 
     pushTrackStartStep('等待机器人进入非手动模式')
     await waitForMissionRobotState(
       () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
-      8000,
+      15000,
       '等待机器人切换到非手动模式超时'
     )
 
     pushTrackStartStep('发送导航模块非手动模式指令')
-    await sendMissionDogCommand(robotId, 'mode_auto_2')
+    await sendMissionDogCommand(robotId, 'mode_auto_2', '发送导航模块非手动模式指令')
 
     if (robotStore.motionState?.basic_state !== 4) {
       pushTrackStartStep('机器人当前未处于踏步状态，发送踏步指令')
-      await sendMissionDogCommand(robotId, 'action')
+      await sendMissionDogCommand(robotId, 'action', '发送踏步指令')
       pushTrackStartStep('等待机器人进入踏步状态')
       await waitForMissionRobotState(
         () => robotStore.motionState?.basic_state === 4,
-        10000,
+        15000,
         '等待机器人进入踏步状态超时'
       )
     }
 
     pushTrackStartStep(`切换目标步态为${gaitConfig.label}`)
-    await sendMissionDogCommand(robotId, gaitConfig.command)
+    await sendMissionDogCommand(robotId, gaitConfig.command, `切换目标步态为${gaitConfig.label}`)
     pushTrackStartStep(`等待机器人切换到${gaitConfig.label}`)
     await waitForMissionRobotState(
       () => robotStore.gaitText === gaitConfig.label,
-      10000,
+      15000,
       `等待机器人切换到${gaitConfig.label}超时`
     )
 
@@ -3543,6 +3549,15 @@ const resolveStopAtPointFromTask = (task: any): boolean => {
   return false
 }
 
+const getNextTrackTaskTime = () => {
+  const validTimes = waypointsData.value
+    .map((waypoint: any) => Number(waypoint?.rawData?.time ?? waypoint?.time))
+    .filter((time: number) => Number.isFinite(time))
+
+  if (validTimes.length === 0) return 0
+  return Math.max(...validTimes) + 1
+}
+
 const handleEditTask = async (waypoint: any) => {
   resetAddTaskFieldErrors()
   await fetchTaskTypeList({ force: true })
@@ -3650,7 +3665,7 @@ const confirmAddTask = async () => {
   const timestamp = now.toString()
   const nextTimeValue = isEditMode.value
     ? Number(editingTaskItem.value?.rawData?.time ?? 0)
-    : waypointsData.value.length
+    : getNextTrackTaskTime()
 
   // 处理预置点信息：格式如 "4.测试点123"
   let presetValue = ''
