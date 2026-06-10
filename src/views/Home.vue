@@ -445,8 +445,34 @@
         </div>
       </div>
 
-      <!-- 机器人控制 -->
-      <div class="right-on2 robot-control-card">
+      <!-- 传感器数据 (仅在无人车模式下显示) -->
+      <div v-if="selectedVehicleType === 'four_wheel'" class="right-on2 sensor-data-card">
+        <div class="cardTitle">
+          <div class="cardTitle-left">
+            <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
+            传感器数据
+          </div>
+          <div class="sensor-toggler">
+            <span class="sensor-toggle-btn" @click="prevSensor">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M15 19L8 12L15 5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="sensor-current-name">{{ currentSensorLabel }}</span>
+            <span class="sensor-toggle-btn" @click="nextSensor">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 5L16 12L9 19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+        <div class="sensor-chart-container">
+          <div ref="sensorChartRef" class="sensor-chart"></div>
+        </div>
+      </div>
+
+      <!-- 机器人控制 (在机器狗模式下显示) -->
+      <div v-else class="right-on2 robot-control-card">
         <div class="cardTitle">
           <div class="cardTitle-left">
             <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
@@ -2578,6 +2604,33 @@ const alarmTrendChartRef = ref<HTMLElement | null>(null)
 const taskPieChart1Ref = ref<HTMLElement | null>(null)
 const taskPieChart2Ref = ref<HTMLElement | null>(null)
 const lineChartRef = ref<HTMLElement | null>(null)
+
+// 选中车辆类型与传感器监控相关变量
+const selectedVehicleType = computed(() => {
+  return localStorage.getItem('selected_vehicle_type') || 'dog'
+})
+const sensorChartRef = ref<HTMLElement | null>(null)
+let sensorChart: echarts.ECharts | null = null
+let sensorRefreshTimer: number | null = null
+
+// 传感器切换与阈值线相关数据
+const activeSensorIndex = ref(0)
+const sensorsList = [
+  { key: 'co2', label: 'CO2浓度 (ppm)', legendName: '二氧化碳(CO2) ppm', color: '#00e1ff', minVal: 350, maxVal: 800, rangeMin: 380, rangeMax: 900, step: 20 },
+  { key: 'pm25', label: 'PM2.5 (μg/m³)', legendName: '细颗粒物(PM2.5) μg/m³', color: '#39b54a', minVal: 10, maxVal: 75, rangeMin: 5, rangeMax: 120, step: 4 },
+  { key: 'noise', label: '环境噪音 (dB)', legendName: '环境噪音(Noise) dB', color: '#ff8000', minVal: 40, maxVal: 80, rangeMin: 35, rangeMax: 95, step: 6 }
+]
+
+const currentSensorLabel = computed(() => {
+  return sensorsList[activeSensorIndex.value].label.split(' ')[0]
+})
+
+const sensorDataHistories = reactive({
+  co2: [] as number[],
+  pm25: [] as number[],
+  noise: [] as number[]
+})
+const sensorTimeLabels = ref<string[]>([])
 
 // 地图容器ref和地图实例
 const mapContainer = ref<HTMLElement | null>(null)
@@ -7052,6 +7105,196 @@ const initLineChart = () => {
   updateFlightStatisticsChart()
 }
 
+// 更新车载传感器折线图的 Option
+const updateSensorChartOption = () => {
+  if (!sensorChart) return
+  
+  const activeSensor = sensorsList[activeSensorIndex.value]
+  const currentData = sensorDataHistories[activeSensor.key as keyof typeof sensorDataHistories]
+  
+  const maxLineData = Array(currentData.length).fill(activeSensor.maxVal)
+  const minLineData = Array(currentData.length).fill(activeSensor.minVal)
+  
+  const option = {
+    grid: {
+      top: '22%',
+      left: '2%',
+      right: '4%',
+      bottom: '2%',
+      containLabel: true
+    },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(15, 25, 45, 0.95)',
+      borderColor: 'rgba(0, 188, 212, 0.4)',
+      borderWidth: 1,
+      textStyle: {
+        color: '#fff',
+        fontSize: 11
+      },
+      axisPointer: {
+        type: 'cross',
+        label: {
+          backgroundColor: '#0a2a3a'
+        }
+      }
+    },
+    legend: {
+      data: [activeSensor.legendName, '最大阈值', '最小阈值'],
+      textStyle: {
+        color: '#b8c7d9',
+        fontSize: 10
+      },
+      itemWidth: 10,
+      itemHeight: 8,
+      top: '0%'
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: sensorTimeLabels.value,
+      axisLine: {
+        lineStyle: {
+          color: 'rgba(89, 192, 252, 0.2)'
+        }
+      },
+      axisLabel: {
+        color: '#b8c7d9',
+        fontSize: 9
+      }
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: {
+        show: false
+      },
+      splitLine: {
+        lineStyle: {
+          color: 'rgba(89, 192, 252, 0.08)'
+        }
+      },
+      axisLabel: {
+        color: '#b8c7d9',
+        fontSize: 9
+      }
+    },
+    series: [
+      {
+        name: activeSensor.legendName,
+        type: 'line',
+        showSymbol: false,
+        smooth: true,
+        data: currentData,
+        lineStyle: {
+          width: 2,
+          color: activeSensor.color
+        },
+        itemStyle: {
+          color: activeSensor.color
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: `${activeSensor.color}26` },
+            { offset: 1, color: `${activeSensor.color}00` }
+          ])
+        }
+      },
+      {
+        name: '最大阈值',
+        type: 'line',
+        showSymbol: false,
+        symbol: 'none',
+        data: maxLineData,
+        lineStyle: {
+          width: 1.5,
+          type: 'dashed',
+          color: '#ff4d4f'
+        },
+        itemStyle: {
+          color: '#ff4d4f'
+        }
+      },
+      {
+        name: '最小阈值',
+        type: 'line',
+        showSymbol: false,
+        symbol: 'none',
+        data: minLineData,
+        lineStyle: {
+          width: 1.5,
+          type: 'dashed',
+          color: '#2f54eb'
+        },
+        itemStyle: {
+          color: '#2f54eb'
+        }
+      }
+    ]
+  }
+  
+  sensorChart.setOption(option, true)
+}
+
+const prevSensor = () => {
+  activeSensorIndex.value = (activeSensorIndex.value - 1 + sensorsList.length) % sensorsList.length
+  updateSensorChartOption()
+}
+
+const nextSensor = () => {
+  activeSensorIndex.value = (activeSensorIndex.value + 1) % sensorsList.length
+  updateSensorChartOption()
+}
+
+// 初始化车载传感器折线图 (CO2浓度、PM2.5、环境噪音)
+const initSensorChart = () => {
+  if (!sensorChartRef.value) return
+  
+  sensorChart = echarts.init(sensorChartRef.value)
+  
+  const maxPoints = 10
+  sensorTimeLabels.value = []
+  sensorDataHistories.co2 = []
+  sensorDataHistories.pm25 = []
+  sensorDataHistories.noise = []
+  
+  const now = new Date()
+  for (let i = maxPoints - 1; i >= 0; i--) {
+    const t = new Date(now.getTime() - i * 3000)
+    sensorTimeLabels.value.push(t.toTimeString().split(' ')[0])
+    sensorDataHistories.co2.push(Math.round(420 + Math.random() * 60))
+    sensorDataHistories.pm25.push(Math.round(18 + Math.random() * 8))
+    sensorDataHistories.noise.push(Math.round(48 + Math.random() * 12))
+  }
+  
+  updateSensorChartOption()
+  
+  if (sensorRefreshTimer) {
+    clearInterval(sensorRefreshTimer)
+  }
+  
+  sensorRefreshTimer = window.setInterval(() => {
+    if (!sensorChart) return
+    
+    const time = new Date().toTimeString().split(' ')[0]
+    
+    sensorTimeLabels.value.shift()
+    sensorTimeLabels.value.push(time)
+    
+    sensorsList.forEach(sensor => {
+      const history = sensorDataHistories[sensor.key as keyof typeof sensorDataHistories]
+      const lastVal = history[history.length - 1]
+      const nextVal = Math.max(
+        sensor.rangeMin,
+        Math.min(sensor.rangeMax, Math.round(lastVal + (Math.random() - 0.5) * sensor.step))
+      )
+      history.shift()
+      history.push(nextVal)
+    })
+    
+    updateSensorChartOption()
+  }, 3000)
+}
+
 // 更新飞行统计图表
 const updateFlightStatisticsChart = () => {
   if (!lineChart || !flightStatistics.value) return
@@ -7222,6 +7465,9 @@ onMounted(async () => {
       initAlarmTrendChart()
       initTaskPieCharts()
       initLineChart()
+      if (selectedVehicleType.value === 'four_wheel') {
+        initSensorChart()
+      }
     }, 100)
   })
 
@@ -7234,6 +7480,7 @@ onMounted(async () => {
     taskPieChart1?.resize()
     taskPieChart2?.resize()
     lineChart?.resize()
+    sensorChart?.resize()
   })
 
   // 初始化地图
@@ -7527,6 +7774,14 @@ onUnmounted(() => {
   }
   if (lineChart) {
     lineChart.dispose()
+  }
+  
+  if (sensorChart) {
+    sensorChart.dispose()
+  }
+  if (sensorRefreshTimer) {
+    clearInterval(sensorRefreshTimer)
+    sensorRefreshTimer = null
   }
   
   // 停止并清理警报声
@@ -12783,6 +13038,84 @@ const handlePageShow = () => {
   font-family: monospace;
 }
 
+/* 传感器数据卡片样式 */
+.sensor-data-card .cardTitle {
+  width: calc(100% - 10px);
+  height: 41px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-left: 10px;
+  padding-right: 10px;
+  background-image: url('@/assets/source_data/bg_data/card_title.png');
+  background-size: 100% 100%;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
 
+.sensor-chart-container {
+  flex: 1;
+  width: 100%;
+  padding: 10px 15px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sensor-chart {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+}
+
+.sensor-toggler {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 188, 212, 0.08);
+  border: 1px solid rgba(0, 188, 212, 0.25);
+  border-radius: 12px;
+  padding: 2px 8px;
+  user-select: none;
+  margin-top: 6px;
+}
+
+.sensor-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  color: #00bcd4;
+  transition: all 0.2s ease;
+}
+
+.sensor-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sensor-toggle-btn:hover {
+  color: #ffffff;
+  transform: scale(1.25);
+  text-shadow: 0 0 8px rgba(0, 188, 212, 0.8);
+}
+
+.sensor-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+.sensor-current-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  min-width: 56px;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
 
 </style>

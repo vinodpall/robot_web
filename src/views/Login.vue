@@ -75,6 +75,105 @@
         </div>
       </div>
     </div>
+
+    <!-- 车辆/设备类型选择弹窗 -->
+    <div v-if="showVehicleDialog" class="vehicle-dialog-mask">
+      <div class="vehicle-dialog">
+        <div class="vehicle-dialog-header">
+          <div class="vehicle-dialog-title">请选择管控设备类型</div>
+          <div class="vehicle-dialog-subtitle">登录成功！请选择您当前需要管控的主体类型以进入系统</div>
+        </div>
+        
+        <div class="vehicle-dialog-content">
+          <div class="vehicle-grid">
+            <div 
+              class="vehicle-card" 
+              :class="{ 'active': selectedVehicle === 'four_wheel' }"
+              @click="selectVehicleType('four_wheel')"
+            >
+              <div class="vehicle-icon-wrap">
+                <svg viewBox="0 0 64 64" class="vehicle-svg">
+                  <rect x="8" y="24" width="48" height="16" rx="4" fill="rgba(0, 188, 212, 0.15)" stroke="currentColor" stroke-width="3"/>
+                  <path d="M24 24v-6h16v6" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+                  <circle cx="32" cy="14" r="5" fill="none" stroke="#00bcd4" stroke-width="3"/>
+                  <circle cx="18" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="4"/>
+                  <circle cx="18" cy="44" r="3" fill="currentColor"/>
+                  <circle cx="46" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="4"/>
+                  <circle cx="46" cy="44" r="3" fill="currentColor"/>
+                  <line x1="14" y1="32" x2="50" y2="32" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4"/>
+                </svg>
+              </div>
+              <div class="vehicle-name">无人车</div>
+              <div class="vehicle-desc">支持 four_wheel 底盘控制与导航规划</div>
+            </div>
+            
+            <div 
+              class="vehicle-card" 
+              :class="{ 'active': selectedVehicle === 'dog' }"
+              @click="selectVehicleType('dog')"
+            >
+              <div class="vehicle-icon-wrap">
+                <svg viewBox="0 0 64 64" class="vehicle-svg">
+                  <rect x="16" y="22" width="28" height="14" rx="3" fill="rgba(0, 188, 212, 0.15)" stroke="currentColor" stroke-width="3"/>
+                  <path d="M44 26l6-6h4v6l-4 4z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+                  <circle cx="50" cy="23" r="1.5" fill="currentColor"/>
+                  <path d="M40 34l2 8-4 8M36 34l1 7-3 9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M22 34l-2 8 3 8M18 34l-1 7 2 9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="vehicle-name">机器狗</div>
+              <div class="vehicle-desc">支持四足机器狗底盘控制与步态规划</div>
+            </div>
+            
+            <div class="vehicle-card disabled">
+              <div class="vehicle-icon-wrap">
+                <svg viewBox="0 0 64 64" class="vehicle-svg">
+                  <rect x="22" y="10" width="20" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="3"/>
+                  <line x1="32" y1="10" x2="32" y2="6" stroke="currentColor" stroke-width="2"/>
+                  <circle cx="32" cy="4" r="2" fill="currentColor"/>
+                  <circle cx="28" cy="18" r="2" fill="currentColor"/>
+                  <circle cx="36" cy="18" r="2" fill="currentColor"/>
+                  <rect x="16" y="29" width="32" height="22" rx="4" fill="none" stroke="currentColor" stroke-width="3"/>
+                  <line x1="24" y1="26" x2="24" y2="29" stroke="currentColor" stroke-width="3"/>
+                  <line x1="40" y1="26" x2="40" y2="29" stroke="currentColor" stroke-width="3"/>
+                  <path d="M16 34h-6v10l3 2" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M48 34h6v10l-3 2" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="24" cy="56" r="4" fill="none" stroke="currentColor" stroke-width="3"/>
+                  <circle cx="40" cy="56" r="4" fill="none" stroke="currentColor" stroke-width="3"/>
+                </svg>
+              </div>
+              <div class="vehicle-name">机器人</div>
+              <div class="vehicle-desc">人形与商用服务机器人（暂未开放）</div>
+            </div>
+            
+            <div class="vehicle-card disabled">
+              <div class="vehicle-icon-wrap">
+                <svg viewBox="0 0 64 64" class="vehicle-svg">
+                  <circle cx="32" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3"/>
+                  <line x1="24" y1="24" x2="14" y2="14" stroke="currentColor" stroke-width="3"/>
+                  <line x1="40" y1="24" x2="50" y2="14" stroke="currentColor" stroke-width="3"/>
+                  <line x1="24" y1="40" x2="14" y2="50" stroke="currentColor" stroke-width="3"/>
+                  <line x1="40" y1="40" x2="50" y2="50" stroke="currentColor" stroke-width="3"/>
+                  <ellipse cx="14" cy="14" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <ellipse cx="50" cy="14" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <ellipse cx="14" cy="50" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <ellipse cx="50" cy="50" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <path d="M32 40v6h-4" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <circle cx="28" cy="48" r="3" fill="currentColor"/>
+                </svg>
+              </div>
+              <div class="vehicle-name">无人机</div>
+              <div class="vehicle-desc">多旋翼与固定翼巡检无人机（暂未开放）</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="vehicle-dialog-actions">
+          <button class="vehicle-dialog-btn cancel" @click="cancelVehicleSelection">取消</button>
+          <button class="vehicle-dialog-btn confirm" :disabled="!selectedVehicle" @click="confirmVehicleSelection">进入系统</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -97,6 +196,64 @@ const loginForm = ref({
 
 const errorMessage = ref('')
 const showErrorDialog = ref(false)
+
+const showVehicleDialog = ref(false)
+const selectedVehicle = ref<'four_wheel' | 'dog' | ''>('')
+const loginResponse = ref<any>(null)
+
+const selectVehicleType = (type: 'four_wheel' | 'dog') => {
+  selectedVehicle.value = type
+}
+
+const cancelVehicleSelection = () => {
+  showVehicleDialog.value = false
+  selectedVehicle.value = ''
+  loginResponse.value = null
+}
+
+const confirmVehicleSelection = async () => {
+  if (!selectedVehicle.value || !loginResponse.value) return
+  
+  try {
+    const response = loginResponse.value
+    
+    // 存储车辆类型并清空原本的设备缓存，保证重新拉取时获取对应类型的默认设备
+    localStorage.setItem('selected_vehicle_type', selectedVehicle.value)
+    localStorage.removeItem('selected_robot_id')
+    localStorage.removeItem('selected_robot_info')
+
+    userStore.setUser((response as any).user)
+    userStore.setToken((response as any).token)
+    
+    // 根据是否勾选记住密码来保存或清除登录信息
+    if (loginForm.value.remember) {
+      const expireTime = Date.now() + (7 * 24 * 60 * 60 * 1000)
+      localStorage.setItem('savedUsername', loginForm.value.username)
+      localStorage.setItem('savedPassword', loginForm.value.password)
+      localStorage.setItem('savedExpireTime', expireTime.toString())
+    } else {
+      localStorage.removeItem('savedUsername')
+      localStorage.removeItem('savedPassword')
+      localStorage.removeItem('savedExpireTime')
+    }
+    
+    showVehicleDialog.value = false
+    
+    router.push('/dashboard/home')
+
+    ;(async () => {
+      try {
+        await initAllPermissions()
+        await initUserPermissions()
+      } catch (err) {
+        console.error('权限初始化失败:', err)
+      }
+    })()
+  } catch (err) {
+    errorMessage.value = err instanceof Error ? err.message : '进入系统失败'
+    showErrorDialog.value = true
+  }
+}
 
 const normalizeTrackName = (raw: string) => {
   const name = (raw || '').trim()
@@ -147,38 +304,12 @@ const handleLogin = async () => {
     errorMessage.value = ''
     showErrorDialog.value = false
     
-    // 正确的代码 👇
     const response = await login(loginForm.value)
     
-    userStore.setUser((response as any).user)
-    userStore.setToken((response as any).token)
-    
-    // 根据是否勾选记住密码来保存或清除登录信息
-    if (loginForm.value.remember) {
-      // 保存到 localStorage，设置7天过期时间
-      const expireTime = Date.now() + (7 * 24 * 60 * 60 * 1000) // 7天后过期
-      localStorage.setItem('savedUsername', loginForm.value.username)
-      localStorage.setItem('savedPassword', loginForm.value.password)
-      localStorage.setItem('savedExpireTime', expireTime.toString())
-    } else {
-      // 清除保存的信息
-      localStorage.removeItem('savedUsername')
-      localStorage.removeItem('savedPassword')
-      localStorage.removeItem('savedExpireTime')
-    }
-    
-    // 立即跳转，后台异步完成所有初始化（不阻塞界面）
-    router.push('/dashboard/home')
-
-    // 后台静默初始化权限
-    ;(async () => {
-      try {
-        await initAllPermissions()
-        await initUserPermissions()
-      } catch (err) {
-        console.error('权限初始化失败:', err)
-      }
-    })()
+    // 登录验证成功后，展示车辆选择弹窗
+    loginResponse.value = response
+    selectedVehicle.value = ''
+    showVehicleDialog.value = true
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '登录失败'
     showErrorDialog.value = true
@@ -478,6 +609,242 @@ const closeErrorDialog = () => {
   
   .title {
     font-size: 2rem;
+  }
+}
+
+/* 车辆选择弹窗样式 */
+.vehicle-dialog-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(4, 8, 16, 0.8);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+.vehicle-dialog {
+  background: rgba(15, 25, 45, 0.95);
+  border: 1px solid rgba(0, 188, 212, 0.4);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 680px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 188, 212, 0.15);
+  padding: 2rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.vehicle-dialog-header {
+  text-align: center;
+}
+
+.vehicle-dialog-title {
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 10px rgba(0, 188, 212, 0.5);
+  margin-bottom: 0.5rem;
+}
+
+.vehicle-dialog-subtitle {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.vehicle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+}
+
+.vehicle-card {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1.5px solid rgba(0, 188, 212, 0.15);
+  border-radius: 12px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.vehicle-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(0, 188, 212, 0.08), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.vehicle-card:hover:not(.disabled) {
+  border-color: rgba(0, 188, 212, 0.6);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 188, 212, 0.2);
+}
+
+.vehicle-card:hover:not(.disabled)::before {
+  opacity: 1;
+}
+
+.vehicle-card.active {
+  border-color: #00bcd4;
+  background: rgba(0, 188, 212, 0.08);
+  box-shadow: 0 0 20px rgba(0, 188, 212, 0.25), inset 0 0 15px rgba(0, 188, 212, 0.15);
+}
+
+.vehicle-card.active::after {
+  content: '✓';
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  background: #00bcd4;
+  border-radius: 50%;
+  color: white;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: bold;
+}
+
+.vehicle-card.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.vehicle-icon-wrap {
+  width: 70px;
+  height: 70px;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.vehicle-card:hover:not(.disabled) .vehicle-icon-wrap {
+  background: rgba(0, 188, 212, 0.1);
+  border-color: rgba(0, 188, 212, 0.3);
+  transform: scale(1.05);
+  color: #00bcd4;
+}
+
+.vehicle-card.active .vehicle-icon-wrap {
+  background: rgba(0, 188, 212, 0.15);
+  border-color: rgba(0, 188, 212, 0.4);
+  color: #00bcd4;
+}
+
+.vehicle-svg {
+  width: 36px;
+  height: 36px;
+}
+
+.vehicle-name {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 0.35rem;
+}
+
+.vehicle-desc {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.4;
+  padding: 0 0.5rem;
+}
+
+.vehicle-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.vehicle-dialog-btn {
+  padding: 0.65rem 1.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.vehicle-dialog-btn.cancel {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.vehicle-dialog-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+}
+
+.vehicle-dialog-btn.confirm {
+  background: linear-gradient(135deg, #00bcd4, #0097a7);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 188, 212, 0.25);
+}
+
+.vehicle-dialog-btn.confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #00acc1, #00838f);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 188, 212, 0.35);
+}
+
+.vehicle-dialog-btn.confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@media (max-width: 576px) {
+  .vehicle-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .vehicle-dialog {
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+  .vehicle-dialog-title {
+    font-size: 1.3rem;
   }
 }
 </style>

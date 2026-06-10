@@ -15,6 +15,7 @@ const TEMP_EXACT_KEYS = [
   'selected_dock_sn',
   'selected_robot_id',
   'selected_robot_info',
+  'selected_vehicle_type',
   'selected_map_name',
   'selected_point_task_id',
   'nav_confirmed_map',

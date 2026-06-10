@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="layout-container">
     <div v-if="globalFallAlertActive" class="global-fall-alert-frame" aria-hidden="true">
       <div class="global-fall-alert-edge top"></div>
@@ -371,9 +371,11 @@ const loadRobotList = async () => {
     if (robotList.length > 0) {
       deviceStore.setRobots(robotList as any)
 
-      const stillExists = robotList.some(robot => String(robot.robot_id) === String(deviceStore.selectedRobotId))
-      if (!stillExists) {
-        deviceStore.setSelectedRobot(robotList[0].robot_id)
+      const stillExists = deviceStore.robots.some(robot => String(robot.robot_id) === String(deviceStore.selectedRobotId))
+      if (!stillExists && deviceStore.robots.length > 0) {
+        deviceStore.setSelectedRobot(deviceStore.robots[0].robot_id)
+      } else if (deviceStore.robots.length === 0) {
+        deviceStore.setSelectedRobot('')
       }
 
       if (deviceStore.selectedRobotId) {

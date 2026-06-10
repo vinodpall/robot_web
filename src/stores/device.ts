@@ -35,10 +35,15 @@ export const useDeviceStore = defineStore('device', () => {
 
   // 设置机器人列表
   const setRobots = (robotList: Robot[]) => {
-    robots.value = robotList
+    const selectedType = localStorage.getItem('selected_vehicle_type')
+    const filteredList = selectedType
+      ? robotList.filter(robot => robot.robot_type === selectedType)
+      : robotList
+
+    robots.value = filteredList
     // 更新缓存中的选中机器人信息
     if (selectedRobotId.value) {
-      const robot = robotList.find(r => r.robot_id === selectedRobotId.value)
+      const robot = filteredList.find(r => r.robot_id === selectedRobotId.value)
       if (robot) {
         localStorage.setItem('selected_robot_info', JSON.stringify(robot))
       }
