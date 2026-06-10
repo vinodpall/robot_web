@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -246,7 +246,7 @@
             </select>
           </div>
 
-          <div class="mtg-form-grid-row">
+          <div class="mtg-form-grid-row" v-if="selectedVehicleType !== 'four_wheel'">
             <div class="mtg-task-form-row">
               <label class="mtg-task-form-label">步态切换</label>
               <select v-model="addTaskGroupDialog.form.gait" class="mtg-task-form-select">
@@ -359,6 +359,10 @@ const {
 const getCurrentRobotId = (): string => {
   return String(deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || '').trim()
 }
+
+const selectedVehicleType = computed(() => {
+  return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
+})
 
 const sidebarTabs = [
   { key: 'list', label: '循迹任务', icon: trackListIcon, path: '/dashboard/mission', permission: 'task-tracklist-show' },
@@ -885,8 +889,8 @@ const confirmAddTaskGroup = async () => {
       obs_mode: form.obsMode,
       is_origin_publish: form.originPublish ? 1 : 0,
       start_mode: startModeToNumber(form.startMode),
-      gait: normalizeGaitCode(form.gait),
-      ground: normalizeGroundCode(form.ground)
+      gait: selectedVehicleType.value === 'four_wheel' ? '' : normalizeGaitCode(form.gait),
+      ground: selectedVehicleType.value === 'four_wheel' ? '' : normalizeGroundCode(form.ground)
     }
     
     // 编辑模式时添加child_id和index

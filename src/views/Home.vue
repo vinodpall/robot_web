@@ -890,7 +890,7 @@
               </select>
             </div>
           </div>
-          <div class="dispatch-task-row">
+          <div class="dispatch-task-row" v-if="selectedVehicleType !== 'four_wheel'">
             <label>步态选择：</label>
             <div class="custom-select-wrapper">
               <select v-model="trackStartDialog.form.gait_type" class="mission-select" :disabled="trackStartDialog.loading">
@@ -2607,7 +2607,7 @@ const lineChartRef = ref<HTMLElement | null>(null)
 
 // 选中车辆类型与传感器监控相关变量
 const selectedVehicleType = computed(() => {
-  return localStorage.getItem('selected_vehicle_type') || 'dog'
+  return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
 })
 const sensorChartRef = ref<HTMLElement | null>(null)
 let sensorChart: echarts.ECharts | null = null
@@ -6401,7 +6401,7 @@ const onTrackStartConfirm = async () => {
   }
 
   const gaitConfig = trackGaitConfigMap[form.gait_type]
-  if (!gaitConfig) {
+  if (selectedVehicleType.value !== 'four_wheel' && !gaitConfig) {
     showError('请选择有效的步态')
     return
   }
@@ -6425,7 +6425,7 @@ const onTrackStartConfirm = async () => {
       obs_mode: form.obs_mode,
       track_name: form.track_name,
       taskpoint_name: form.taskpoint_name,
-      gait_name: gaitConfig.command,
+      gait_name: selectedVehicleType.value === 'four_wheel' ? '' : gaitConfig.command,
       ground: ''
     })
 
@@ -6435,18 +6435,20 @@ const onTrackStartConfirm = async () => {
       showSuccess('等待循迹启动', 8000)
       return
     }
-    if (canWaitDirectly === false && isRobotProneState()) {
+    if (selectedVehicleType.value !== 'four_wheel' && canWaitDirectly === false && isRobotProneState()) {
       pushTrackStartStep('机器狗处于趴下状态，请先起立', 'error')
       showError('机器狗处于趴下状态，请先将机器狗起立')
       return
     }
 
-    trackInitDialog.value.text = '机器狗初始化中...'
-    pushTrackStartStep('开始准备循迹任务启动流程')
-    await prepareRobotForTaskStart(robotId, {
-      gaitConfig,
-      stepLogger: pushTrackStartStep
-    })
+    if (selectedVehicleType.value !== 'four_wheel') {
+      trackInitDialog.value.text = '机器狗初始化中...'
+      pushTrackStartStep('开始准备循迹任务启动流程')
+      await prepareRobotForTaskStart(robotId, {
+        gaitConfig,
+        stepLogger: pushTrackStartStep
+      })
+    }
 
     pushTrackStartStep('发送循迹任务启动指令')
     const response = await navigationApi.stopTrack(robotId, {
@@ -6593,12 +6595,14 @@ const onPointTaskStartConfirm = async () => {
 
     // 点击确定立即关闭弹窗
     pointTaskStartDialog.value.visible = false
-    trackInitDialog.value.text = '机器狗初始化中...'
-    trackInitDialog.value.visible = true
+    if (selectedVehicleType.value !== 'four_wheel') {
+      trackInitDialog.value.text = '机器狗初始化中...'
+      trackInitDialog.value.visible = true
 
-    await prepareRobotForTaskStart(robotId, {
-      gaitConfig: trackGaitConfigMap[0]
-    })
+      await prepareRobotForTaskStart(robotId, {
+        gaitConfig: trackGaitConfigMap[0]
+      })
+    }
 
     // 调用启动发布点任务API
     const response = await navigationApi.startPointTask(robotId, {

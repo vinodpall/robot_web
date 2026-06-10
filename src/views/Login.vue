@@ -76,104 +76,7 @@
       </div>
     </div>
 
-    <!-- 车辆/设备类型选择弹窗 -->
-    <div v-if="showVehicleDialog" class="vehicle-dialog-mask">
-      <div class="vehicle-dialog">
-        <div class="vehicle-dialog-header">
-          <div class="vehicle-dialog-title">请选择管控设备类型</div>
-          <div class="vehicle-dialog-subtitle">登录成功！请选择您当前需要管控的主体类型以进入系统</div>
-        </div>
-        
-        <div class="vehicle-dialog-content">
-          <div class="vehicle-grid">
-            <div 
-              class="vehicle-card" 
-              :class="{ 'active': selectedVehicle === 'four_wheel' }"
-              @click="selectVehicleType('four_wheel')"
-            >
-              <div class="vehicle-icon-wrap">
-                <svg viewBox="0 0 64 64" class="vehicle-svg">
-                  <rect x="8" y="24" width="48" height="16" rx="4" fill="rgba(0, 188, 212, 0.15)" stroke="currentColor" stroke-width="3"/>
-                  <path d="M24 24v-6h16v6" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-                  <circle cx="32" cy="14" r="5" fill="none" stroke="#00bcd4" stroke-width="3"/>
-                  <circle cx="18" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="4"/>
-                  <circle cx="18" cy="44" r="3" fill="currentColor"/>
-                  <circle cx="46" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="4"/>
-                  <circle cx="46" cy="44" r="3" fill="currentColor"/>
-                  <line x1="14" y1="32" x2="50" y2="32" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4"/>
-                </svg>
-              </div>
-              <div class="vehicle-name">无人车</div>
-              <div class="vehicle-desc">支持 four_wheel 底盘控制与导航规划</div>
-            </div>
-            
-            <div 
-              class="vehicle-card" 
-              :class="{ 'active': selectedVehicle === 'dog' }"
-              @click="selectVehicleType('dog')"
-            >
-              <div class="vehicle-icon-wrap">
-                <svg viewBox="0 0 64 64" class="vehicle-svg">
-                  <rect x="16" y="22" width="28" height="14" rx="3" fill="rgba(0, 188, 212, 0.15)" stroke="currentColor" stroke-width="3"/>
-                  <path d="M44 26l6-6h4v6l-4 4z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-                  <circle cx="50" cy="23" r="1.5" fill="currentColor"/>
-                  <path d="M40 34l2 8-4 8M36 34l1 7-3 9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M22 34l-2 8 3 8M18 34l-1 7 2 9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </div>
-              <div class="vehicle-name">机器狗</div>
-              <div class="vehicle-desc">支持四足机器狗底盘控制与步态规划</div>
-            </div>
-            
-            <div class="vehicle-card disabled">
-              <div class="vehicle-icon-wrap">
-                <svg viewBox="0 0 64 64" class="vehicle-svg">
-                  <rect x="22" y="10" width="20" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="3"/>
-                  <line x1="32" y1="10" x2="32" y2="6" stroke="currentColor" stroke-width="2"/>
-                  <circle cx="32" cy="4" r="2" fill="currentColor"/>
-                  <circle cx="28" cy="18" r="2" fill="currentColor"/>
-                  <circle cx="36" cy="18" r="2" fill="currentColor"/>
-                  <rect x="16" y="29" width="32" height="22" rx="4" fill="none" stroke="currentColor" stroke-width="3"/>
-                  <line x1="24" y1="26" x2="24" y2="29" stroke="currentColor" stroke-width="3"/>
-                  <line x1="40" y1="26" x2="40" y2="29" stroke="currentColor" stroke-width="3"/>
-                  <path d="M16 34h-6v10l3 2" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M48 34h6v10l-3 2" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                  <circle cx="24" cy="56" r="4" fill="none" stroke="currentColor" stroke-width="3"/>
-                  <circle cx="40" cy="56" r="4" fill="none" stroke="currentColor" stroke-width="3"/>
-                </svg>
-              </div>
-              <div class="vehicle-name">机器人</div>
-              <div class="vehicle-desc">人形与商用服务机器人（暂未开放）</div>
-            </div>
-            
-            <div class="vehicle-card disabled">
-              <div class="vehicle-icon-wrap">
-                <svg viewBox="0 0 64 64" class="vehicle-svg">
-                  <circle cx="32" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3"/>
-                  <line x1="24" y1="24" x2="14" y2="14" stroke="currentColor" stroke-width="3"/>
-                  <line x1="40" y1="24" x2="50" y2="14" stroke="currentColor" stroke-width="3"/>
-                  <line x1="24" y1="40" x2="14" y2="50" stroke="currentColor" stroke-width="3"/>
-                  <line x1="40" y1="40" x2="50" y2="50" stroke="currentColor" stroke-width="3"/>
-                  <ellipse cx="14" cy="14" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
-                  <ellipse cx="50" cy="14" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
-                  <ellipse cx="14" cy="50" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
-                  <ellipse cx="50" cy="50" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="2"/>
-                  <path d="M32 40v6h-4" fill="none" stroke="currentColor" stroke-width="2"/>
-                  <circle cx="28" cy="48" r="3" fill="currentColor"/>
-                </svg>
-              </div>
-              <div class="vehicle-name">无人机</div>
-              <div class="vehicle-desc">多旋翼与固定翼巡检无人机（暂未开放）</div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="vehicle-dialog-actions">
-          <button class="vehicle-dialog-btn cancel" @click="cancelVehicleSelection">取消</button>
-          <button class="vehicle-dialog-btn confirm" :disabled="!selectedVehicle" @click="confirmVehicleSelection">进入系统</button>
-        </div>
-      </div>
-    </div>
+
   </div>
 </template>
 
@@ -197,63 +100,7 @@ const loginForm = ref({
 const errorMessage = ref('')
 const showErrorDialog = ref(false)
 
-const showVehicleDialog = ref(false)
-const selectedVehicle = ref<'four_wheel' | 'dog' | ''>('')
-const loginResponse = ref<any>(null)
 
-const selectVehicleType = (type: 'four_wheel' | 'dog') => {
-  selectedVehicle.value = type
-}
-
-const cancelVehicleSelection = () => {
-  showVehicleDialog.value = false
-  selectedVehicle.value = ''
-  loginResponse.value = null
-}
-
-const confirmVehicleSelection = async () => {
-  if (!selectedVehicle.value || !loginResponse.value) return
-  
-  try {
-    const response = loginResponse.value
-    
-    // 存储车辆类型并清空原本的设备缓存，保证重新拉取时获取对应类型的默认设备
-    localStorage.setItem('selected_vehicle_type', selectedVehicle.value)
-    localStorage.removeItem('selected_robot_id')
-    localStorage.removeItem('selected_robot_info')
-
-    userStore.setUser((response as any).user)
-    userStore.setToken((response as any).token)
-    
-    // 根据是否勾选记住密码来保存或清除登录信息
-    if (loginForm.value.remember) {
-      const expireTime = Date.now() + (7 * 24 * 60 * 60 * 1000)
-      localStorage.setItem('savedUsername', loginForm.value.username)
-      localStorage.setItem('savedPassword', loginForm.value.password)
-      localStorage.setItem('savedExpireTime', expireTime.toString())
-    } else {
-      localStorage.removeItem('savedUsername')
-      localStorage.removeItem('savedPassword')
-      localStorage.removeItem('savedExpireTime')
-    }
-    
-    showVehicleDialog.value = false
-    
-    router.push('/dashboard/home')
-
-    ;(async () => {
-      try {
-        await initAllPermissions()
-        await initUserPermissions()
-      } catch (err) {
-        console.error('权限初始化失败:', err)
-      }
-    })()
-  } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : '进入系统失败'
-    showErrorDialog.value = true
-  }
-}
 
 const normalizeTrackName = (raw: string) => {
   const name = (raw || '').trim()
@@ -306,10 +153,36 @@ const handleLogin = async () => {
     
     const response = await login(loginForm.value)
     
-    // 登录验证成功后，展示车辆选择弹窗
-    loginResponse.value = response
-    selectedVehicle.value = ''
-    showVehicleDialog.value = true
+    // 登录验证成功后，清除原设备缓存并直接进入系统
+    localStorage.removeItem('selected_vehicle_type')
+    localStorage.removeItem('selected_robot_id')
+    localStorage.removeItem('selected_robot_info')
+
+    userStore.setUser((response as any).user)
+    userStore.setToken((response as any).token)
+    
+    // 根据是否勾选记住密码来保存或清除登录信息
+    if (loginForm.value.remember) {
+      const expireTime = Date.now() + (7 * 24 * 60 * 60 * 1000)
+      localStorage.setItem('savedUsername', loginForm.value.username)
+      localStorage.setItem('savedPassword', loginForm.value.password)
+      localStorage.setItem('savedExpireTime', expireTime.toString())
+    } else {
+      localStorage.removeItem('savedUsername')
+      localStorage.removeItem('savedPassword')
+      localStorage.removeItem('savedExpireTime')
+    }
+    
+    router.push('/dashboard/home')
+
+    ;(async () => {
+      try {
+        await initAllPermissions()
+        await initUserPermissions()
+      } catch (err) {
+        console.error('权限初始化失败:', err)
+      }
+    })()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '登录失败'
     showErrorDialog.value = true

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main" @click="closeDropdown">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -392,7 +392,7 @@
             </div>
 
             <!-- 步态 & 地形 -->
-             <div class="simple-form-grid">
+             <div class="simple-form-grid" v-if="selectedVehicleType !== 'four_wheel'">
                <div class="simple-form-item">
                  <label class="simple-label">步态切换</label>
                   <select v-model="addTaskDialog.form.gait" class="simple-select">
@@ -661,12 +661,14 @@ import { useTaskExecutionStore } from '@/stores/taskExecution'
 import { useRobotStore } from '@/stores/robot'
 import { usePermissionStore } from '@/stores/permission'
 import { getRobotContextCacheKeys } from '@/utils/robotBootstrap'
+import { useDeviceStore } from '@/stores/device'
 
 const router = useRouter()
 const route = useRoute()
 const permissionStore = usePermissionStore()
 const taskExecutionStore = useTaskExecutionStore()
 const robotStore = useRobotStore()
+const deviceStore = useDeviceStore()
 const {
   isPointTaskRunning,
   canStartPointTask,
@@ -677,6 +679,10 @@ const {
 const hasNavInsMsfEnabled = computed(() => {
   const cmdStatus = robotStore.cmdStatus
   return cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
+})
+
+const selectedVehicleType = computed(() => {
+  return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
 })
 
 // 使用任务记录API
@@ -1693,12 +1699,14 @@ const handleStartTask = async () => {
   }
   
   try {
-    taskInitDialog.value.text = '任务初始化中...'
-    taskInitDialog.value.visible = true
+    if (selectedVehicleType.value !== 'four_wheel') {
+      taskInitDialog.value.text = '任务初始化中...'
+      taskInitDialog.value.visible = true
 
-    await prepareRobotForTaskStart(robotId, {
-      gaitConfig: trackGaitConfigMap[0]
-    })
+      await prepareRobotForTaskStart(robotId, {
+        gaitConfig: trackGaitConfigMap[0]
+      })
+    }
 
     const response = await navigationApi.startPointTask(robotId, {
       id: selectedPointTaskId.value,
@@ -2147,8 +2155,8 @@ const confirmAddTask = async () => {
     remark: addTaskDialog.value.form.description || '',
     extra: addTaskDialog.value.form.extraConfig || '',
     obs_mode: 2,
-    gait: addTaskDialog.value.form.gait || '1',
-    ground: addTaskDialog.value.form.ground || '1',
+    gait: selectedVehicleType.value === 'four_wheel' ? '' : (addTaskDialog.value.form.gait || '1'),
+    ground: selectedVehicleType.value === 'four_wheel' ? '' : (addTaskDialog.value.form.ground || '1'),
     nostop: !addTaskDialog.value.form.stopAtPoint
   }
   

@@ -41,7 +41,14 @@
                @click.stop="toggleSelect">
             <div class="el-select__selection">
               <div class="el-select__selected-item el-select__placeholder">
-                <span class="status-light" :class="isSelectedRobotOnline ? 'is-online' : 'is-offline'"></span>
+                <span 
+                  v-if="selectedRobot"
+                  class="robot-type-icon" 
+                  :class="[
+                    selectedRobot.robot_type === 'four_wheel' ? 'is-car' : 'is-dog',
+                    isSelectedRobotOnline ? 'is-online' : 'is-offline'
+                  ]"
+                ></span>
                 <span>{{ selectedRobot?.robot_id || '请选择' }}</span>
               </div>
             </div>
@@ -63,7 +70,13 @@
                 :class="{ 'is-selected': robot.robot_id === selectedRobotId }"
                 @click="selectRobot(robot.robot_id)"
               >
-                <span class="status-light" :class="isRobotItemOnline(robot) ? 'is-online' : 'is-offline'"></span>
+                <span 
+                  class="robot-type-icon" 
+                  :class="[
+                    robot.robot_type === 'four_wheel' ? 'is-car' : 'is-dog',
+                    isRobotItemOnline(robot) ? 'is-online' : 'is-offline'
+                  ]"
+                ></span>
                 {{ robot.robot_id }}
               </div>
             </div>
@@ -284,14 +297,9 @@ watch(
 )
 
 const user = computed(() => userStore.user)
-const robots = computed(() => deviceStore.robots)
 const selectedRobotId = computed({
   get: () => deviceStore.selectedRobotId,
   set: (value) => deviceStore.setSelectedRobot(value)
-})
-
-const selectedRobot = computed(() => {
-  return robots.value.find(robot => robot.robot_id === selectedRobotId.value)
 })
 
 const enrichSelectedRobotDetail = async (robotId: string) => {
@@ -327,6 +335,19 @@ const isRobotItemOnline = (robot: any) => {
   }
   return robot.status?.toLowerCase() === 'online'
 }
+
+const robots = computed(() => {
+  const list = [...deviceStore.robots]
+  return list.sort((a, b) => {
+    const aOnline = isRobotItemOnline(a) ? 1 : 0
+    const bOnline = isRobotItemOnline(b) ? 1 : 0
+    return bOnline - aOnline
+  })
+})
+
+const selectedRobot = computed(() => {
+  return robots.value.find(robot => robot.robot_id === selectedRobotId.value)
+})
 
 const isSelectActive = ref(false)
 const robotSwitching = ref(false)
@@ -1047,6 +1068,9 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .el-select__suffix {
@@ -1134,6 +1158,44 @@ onUnmounted(() => {
   background: rgba(0, 188, 212, 0.3);
   color: #00bcd4;
   font-weight: bold;
+}
+
+.robot-type-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  flex-shrink: 0;
+  transition: all 0.2s ease-in-out;
+  background-color: rgba(255, 255, 255, 0.35); /* 默认离线灰色 */
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.robot-type-icon.is-dog {
+  -webkit-mask-image: url('../assets/source_data/svg_data/robot_source/dog_icon.svg');
+  mask-image: url('../assets/source_data/svg_data/robot_source/dog_icon.svg');
+}
+
+.robot-type-icon.is-car {
+  -webkit-mask-image: url('../assets/source_data/svg_data/robot_source/car_icon.svg');
+  mask-image: url('../assets/source_data/svg_data/robot_source/car_icon.svg');
+}
+
+.robot-type-icon.is-online {
+  background-color: #2ed573; /* 在线绿色 */
+  filter: drop-shadow(0 0 4px rgba(46, 213, 115, 0.6));
+}
+
+.robot-type-icon.is-offline {
+  background-color: #ff4757; /* 离线红色 */
+}
+
+.el-select__dropdown-item:hover .robot-type-icon {
+  transform: scale(1.15);
 }
 
 .stop-btn {

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main" @click="closeDropdown">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -450,7 +450,7 @@
                 </span>
               </div>
             </div>
-            <div class="dispatch-task-row">
+            <div class="dispatch-task-row" v-if="selectedVehicleType !== 'four_wheel'">
               <label>步态选择：</label>
               <div class="custom-select-wrapper">
                 <select v-model="trackStartDialog.form.gait_type" class="mission-select" :disabled="trackStartDialog.loading">
@@ -586,7 +586,7 @@
             </div>
 
             <!-- 步态 & 地形 -->
-             <div class="simple-form-grid">
+             <div class="simple-form-grid" v-if="selectedVehicleType !== 'four_wheel'">
                <div class="simple-form-item">
                  <label class="simple-label">步态切换</label>
                   <select v-model="addTaskDialog.form.gait" class="simple-select">
@@ -957,6 +957,10 @@ const robotStore = useRobotStore()
 const hasNavInsMsfEnabled = computed(() => {
   const cmdStatus = robotStore.cmdStatus
   return cmdStatus?.nav === 1 || cmdStatus?.ins === 1 || cmdStatus?.msf === 1
+})
+
+const selectedVehicleType = computed(() => {
+  return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
 })
 
 // 航线文件相关
@@ -1970,7 +1974,7 @@ const onTrackStartConfirm = async () => {
   }
 
   const gaitConfig = missionTrackGaitConfigMap[form.gait_type]
-  if (!gaitConfig) {
+  if (selectedVehicleType.value !== 'four_wheel' && !gaitConfig) {
     showMissionError('请选择有效的步态')
     return
   }
@@ -1995,7 +1999,7 @@ const onTrackStartConfirm = async () => {
       obs_mode: form.obs_mode,
       track_name: form.track_name,
       taskpoint_name: form.taskpoint_name,
-      gait_name: gaitConfig.command,
+      gait_name: selectedVehicleType.value === 'four_wheel' ? '' : gaitConfig.command,
       ground: ''
     })
     const canWaitDirectly = resolveCheckExitChargeResult(checkResult)
@@ -2004,53 +2008,55 @@ const onTrackStartConfirm = async () => {
       showMissionSuccess('等待循迹启动', 8000)
       return
     }
-    if (canWaitDirectly === false && isMissionRobotProneState()) {
+    if (selectedVehicleType.value !== 'four_wheel' && canWaitDirectly === false && isMissionRobotProneState()) {
       pushTrackStartStep('机器狗处于趴下状态，请先起立', 'error')
       showMissionError('机器狗处于趴下状态，请先将机器狗起立')
       return
     }
 
-    trackInitDialog.value.text = '机器狗初始化中...'
-    pushTrackStartStep('开始准备循迹任务启动流程')
-    if (robotStore.robotStatusText === 'RL状态') {
-      pushTrackStartStep('检测到 RL状态，先切换到行走步态')
-      await sendMissionDogCommand(robotId, 'foot_walk', '切换到行走步态')
-    }
+    if (selectedVehicleType.value !== 'four_wheel') {
+      trackInitDialog.value.text = '机器狗初始化中...'
+      pushTrackStartStep('开始准备循迹任务启动流程')
+      if (robotStore.robotStatusText === 'RL状态') {
+        pushTrackStartStep('检测到 RL状态，先切换到行走步态')
+        await sendMissionDogCommand(robotId, 'foot_walk', '切换到行走步态')
+      }
 
-    pushTrackStartStep('发送非手动模式指令')
-    await sendMissionDogCommand(robotId, 'mode_auto', '发送非手动模式指令')
-    pushTrackStartStep('设置地形为实心地面')
-    await sendMissionDogCommand(robotId, 'ground_1', '设置地形为实心地面')
+      pushTrackStartStep('发送非手动模式指令')
+      await sendMissionDogCommand(robotId, 'mode_auto', '发送非手动模式指令')
+      pushTrackStartStep('设置地形为实心地面')
+      await sendMissionDogCommand(robotId, 'ground_1', '设置地形为实心地面')
 
-    pushTrackStartStep('等待机器人进入非手动模式')
-    await waitForMissionRobotState(
-      () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
-      15000,
-      '等待机器人切换到非手动模式超时'
-    )
-
-    pushTrackStartStep('发送导航模块非手动模式指令')
-    await sendMissionDogCommand(robotId, 'mode_auto_2', '发送导航模块非手动模式指令')
-
-    if (robotStore.motionState?.basic_state !== 4) {
-      pushTrackStartStep('机器人当前未处于踏步状态，发送踏步指令')
-      await sendMissionDogCommand(robotId, 'action', '发送踏步指令')
-      pushTrackStartStep('等待机器人进入踏步状态')
+      pushTrackStartStep('等待机器人进入非手动模式')
       await waitForMissionRobotState(
-        () => robotStore.motionState?.basic_state === 4,
+        () => Array.isArray(robotStore.rcsData?.rcs_state) && robotStore.rcsData.rcs_state[0] === 1,
         15000,
-        '等待机器人进入踏步状态超时'
+        '等待机器人切换到非手动模式超时'
+      )
+
+      pushTrackStartStep('发送导航模块非手动模式指令')
+      await sendMissionDogCommand(robotId, 'mode_auto_2', '发送导航模块非手动模式指令')
+
+      if (robotStore.motionState?.basic_state !== 4) {
+        pushTrackStartStep('机器人当前未处于踏步状态，发送踏步指令')
+        await sendMissionDogCommand(robotId, 'action', '发送踏步指令')
+        pushTrackStartStep('等待机器人进入踏步状态')
+        await waitForMissionRobotState(
+          () => robotStore.motionState?.basic_state === 4,
+          15000,
+          '等待机器人进入踏步状态超时'
+        )
+      }
+
+      pushTrackStartStep(`切换目标步态为${gaitConfig.label}`)
+      await sendMissionDogCommand(robotId, gaitConfig.command, `切换目标步态为${gaitConfig.label}`)
+      pushTrackStartStep(`等待机器人切换到${gaitConfig.label}`)
+      await waitForMissionRobotState(
+        () => robotStore.gaitText === gaitConfig.label,
+        15000,
+        `等待机器人切换到${gaitConfig.label}超时`
       )
     }
-
-    pushTrackStartStep(`切换目标步态为${gaitConfig.label}`)
-    await sendMissionDogCommand(robotId, gaitConfig.command, `切换目标步态为${gaitConfig.label}`)
-    pushTrackStartStep(`等待机器人切换到${gaitConfig.label}`)
-    await waitForMissionRobotState(
-      () => robotStore.gaitText === gaitConfig.label,
-      15000,
-      `等待机器人切换到${gaitConfig.label}超时`
-    )
 
     pushTrackStartStep('发送循迹任务启动指令')
     const response = await navigationApi.stopTrack(robotId, {
@@ -3700,8 +3706,8 @@ const confirmAddTask = async () => {
     extra: form.extraConfig || '',
     obs_mode: form.obsMode || '近障模式',
     nostop: form.stopAtPoint,
-    gait: form.gait,
-    ground: form.ground,
+    gait: selectedVehicleType.value === 'four_wheel' ? '' : form.gait,
+    ground: selectedVehicleType.value === 'four_wheel' ? '' : form.ground,
     createtime: isEditMode.value ? (editingTaskItem.value?.rawData?.createtime || timestamp) : timestamp
   }
 

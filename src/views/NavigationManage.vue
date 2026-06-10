@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -1140,6 +1140,7 @@ import mapRecordIcon from '@/assets/source_data/svg_data/map_record.svg'
 import navIcon from '@/assets/source_data/svg_data/nav.svg'
 import mapEditIcon from '@/assets/source_data/svg_data/map_edit.svg'
 import trackRecordIcon from '@/assets/source_data/svg_data/track_record.svg'
+import trackEditIcon from '@/assets/source_data/svg_data/edit.svg'
 import packageManageIcon from '@/assets/source_data/svg_data/package_manage.svg'
 import mapMoveIcon from '@/assets/source_data/svg_data/robot_source/map_move.svg'
 import mapMagnifyIcon from '@/assets/source_data/svg_data/robot_source/map_magnify.svg'
@@ -1268,6 +1269,7 @@ const sidebarTabs = [
   { key: 'nav', label: '导航', icon: navIcon, permission: 'nav-navmanage-show' },
   { key: 'map_edit', label: '地图编辑', icon: mapEditIcon, permission: 'nav-mapedit-show' },
   { key: 'track_record', label: '路线录制', icon: trackRecordIcon, permission: 'nav-trackrecord-show' },
+  { key: 'track_edit', label: '路线编辑', icon: trackEditIcon, permission: 'nav-trackrecord-show' },
   { key: 'file_manage', label: '文件管理', icon: packageManageIcon, permission: 'nav-file-show' }
 ]
 
