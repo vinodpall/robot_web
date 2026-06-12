@@ -3416,8 +3416,12 @@ const fetchTaskTypeList = async (options?: { force?: boolean }) => {
   try {
     const res = await navigationApi.getTaskTypeList(robotId)
     if (res && Array.isArray(res.data)) {
+      const newJson = JSON.stringify(res.data)
+      if (JSON.stringify(taskTypeList.value) === newJson) {
+        return
+      }
       taskTypeList.value = res.data
-      localStorage.setItem(cacheKey, JSON.stringify(res.data))
+      localStorage.setItem(cacheKey, newJson)
     }
   } catch (err) {
     console.error('获取任务类型列表失败', err)
@@ -3531,6 +3535,24 @@ const handleAddTask = () => {
 
   isEditMode.value = false
   editingTaskItem.value = null
+
+  // 同步加载/恢复缓存，确保 taskTypeList.value 有值
+  const robotId = resolveSelectedRobotId() || ''
+  if (robotId) {
+    const cacheKey = buildTaskTypeCacheKey(robotId)
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          taskTypeList.value = parsed
+        }
+      } catch (e) {
+        console.error('解析任务类型缓存失败', e)
+      }
+    }
+  }
+
   addTaskDialog.value.visible = true
   void fetchTaskTypeList({ force: true })
 }
@@ -3566,7 +3588,27 @@ const getNextTrackTaskTime = () => {
 
 const handleEditTask = async (waypoint: any) => {
   resetAddTaskFieldErrors()
-  await fetchTaskTypeList({ force: true })
+  
+  // 同步加载/恢复缓存，确保 taskTypeList.value 有值
+  const robotId = resolveSelectedRobotId() || ''
+  if (robotId) {
+    const cacheKey = buildTaskTypeCacheKey(robotId)
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          taskTypeList.value = parsed
+        }
+      } catch (e) {
+        console.error('解析任务类型缓存失败', e)
+      }
+    }
+  }
+
+  // 异步（后台）获取最新的任务类型列表，不阻塞弹窗弹出
+  void fetchTaskTypeList({ force: true })
+
   // Find the original item from key data if needed, or use waypoint if it has all data
   // waypoint here is the computed object for table display. We might need the raw object.
   // Assuming waypoint (from waypointsData) has necessary fields or we can find it.
