@@ -1,4 +1,4 @@
-﻿import { ref, onUnmounted } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { config } from '../config/environment'
 import { useRobotStore } from '../stores/robot'
 import { useDeviceStore } from '../stores/device'
@@ -216,6 +216,31 @@ export interface SystemTelemetryData {
   }
 }
 
+/** system_status 系统状态信息 */
+export interface SystemStatusData {
+  cpu_percent: number
+  memory_percent: number
+  disk_percent: number
+  latency_ms: number
+  reachable: boolean
+  soc: number
+  timestamp: string
+}
+
+/** speed_status 速度状态信息 */
+export interface SpeedStatusData {
+  v: number
+  w: number
+  timestamp: string
+}
+
+/** latency 延迟状态信息 */
+export interface LatencyStatusData {
+  latency_ms: number
+  reachable: boolean
+  timestamp: string
+}
+
 /** 0x3100EE01 地形模式 */
 export interface TerrainModeData {
   instruction_code: string
@@ -430,6 +455,40 @@ export function useRobotWebSocket() {
         }
         break
       }
+
+      // ---- 动态传感器数据 ----
+      case 'sensor_data':
+        if (typeof (robotStore as any).setRealtimeSensorData === 'function') {
+          ;(robotStore as any).setRealtimeSensorData(data)
+        }
+        break
+
+      // ---- 系统状态 ----
+      case 'system_status':
+        if (typeof (robotStore as any).setSystemStatus === 'function') {
+          ;(robotStore as any).setSystemStatus(data as SystemStatusData)
+        } else {
+          ;(robotStore as any).systemStatus = data as SystemStatusData
+        }
+        break
+
+      // ---- 速度状态 (用于无人车) ----
+      case 'speed_status':
+        if (typeof (robotStore as any).setSpeedStatus === 'function') {
+          ;(robotStore as any).setSpeedStatus(data as SpeedStatusData)
+        } else {
+          ;(robotStore as any).speedStatus = data as SpeedStatusData
+        }
+        break
+
+      // ---- 网络延迟 ----
+      case 'latency':
+        if (typeof (robotStore as any).setLatencyStatus === 'function') {
+          ;(robotStore as any).setLatencyStatus(data as LatencyStatusData)
+        } else {
+          ;(robotStore as any).latencyStatus = data as LatencyStatusData
+        }
+        break
 
       // ---- task_update（暂保留兼容） ----
       case 'task_update':

@@ -615,7 +615,8 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         }
         // 标注文字
         ;{
-          const lbl = '机器狗'
+          const isCar = typeof window !== 'undefined' && localStorage.getItem('selected_vehicle_type') === 'four_wheel'
+          const lbl = isCar ? '无人车' : '机器狗'
           const fontPx = Math.round(8 * labelZoomScale * dpr)
           ctx.font = `bold ${fontPx}px Arial`
           ctx.textAlign = 'center'

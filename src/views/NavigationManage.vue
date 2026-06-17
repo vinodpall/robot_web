@@ -146,10 +146,32 @@
                   <!-- 地图选择 -->
                   <div class="nav-info-item">
                     <label class="nav-label">地图：</label>
-                    <select v-model="selectedNavMap" class="nav-select" :disabled="isMapSelectionLocked">
-                      <option v-if="navMapList.length === 0" value="">暂无地图</option>
-                      <option v-for="map in navMapList" :key="map" :value="map">{{ map }}</option>
-                    </select>
+                    <div class="custom-select-container" style="width: 100%;">
+                      <div 
+                        class="nav-select custom-select-trigger" 
+                        :class="{ 'is-disabled': isMapSelectionLocked }"
+                        @click="!isMapSelectionLocked && (activeDropdown = activeDropdown === 'navMap' ? null : 'navMap')"
+                      >
+                        <span class="custom-select-value">{{ selectedNavMap || (navMapList.length === 0 ? '暂无地图' : '请选择地图') }}</span>
+                        <span class="nav-select-arrow" :style="{ transform: activeDropdown === 'navMap' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                          <svg width="10" height="10" viewBox="0 0 12 12">
+                            <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                          </svg>
+                        </span>
+                      </div>
+                      <div v-show="activeDropdown === 'navMap'" class="custom-select-dropdown">
+                        <div v-if="navMapList.length === 0" class="custom-select-option is-empty">暂无地图</div>
+                        <div 
+                          v-for="map in navMapList" 
+                          :key="map" 
+                          class="custom-select-option" 
+                          :class="{ 'is-selected': selectedNavMap === map }"
+                          @click="selectedNavMap = map; activeDropdown = null"
+                        >
+                          {{ map }}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- 任务速度设置 -->
@@ -245,6 +267,7 @@
                           :navigation-origin="navPointCloudNavigationOrigin"
                           :robot-pose="robotStore.pose"
                           :robot-mesh="arrowMesh"
+                          :robot-type="selectedVehicleType"
                         />
                       </div>
                     </div>
@@ -267,10 +290,31 @@
                 <div class="map-edit-toolbar-compact">
                   <div class="toolbar-left">
                     <span class="toolbar-label">地图：</span>
-                    <select v-model="selectedEditMap" class="map-edit-select">
-                      <option v-if="editMapList.length === 0" value="">暂无地图</option>
-                      <option v-for="map in editMapList" :key="map" :value="map">{{ map }}</option>
-                    </select>
+                    <div class="map-edit-select-wrapper custom-select-container" style="position: relative; display: inline-block;">
+                      <div 
+                        class="map-edit-select custom-select-trigger" 
+                        @click="activeDropdown = activeDropdown === 'editMap' ? null : 'editMap'"
+                      >
+                        <span class="custom-select-value">{{ selectedEditMap || (editMapList.length === 0 ? '暂无地图' : '请选择地图') }}</span>
+                        <span class="nav-select-arrow" :style="{ transform: activeDropdown === 'editMap' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                          <svg width="10" height="10" viewBox="0 0 12 12">
+                            <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                          </svg>
+                        </span>
+                      </div>
+                      <div v-show="activeDropdown === 'editMap'" class="custom-select-dropdown">
+                        <div v-if="editMapList.length === 0" class="custom-select-option is-empty">暂无地图</div>
+                        <div 
+                          v-for="map in editMapList" 
+                          :key="map" 
+                          class="custom-select-option" 
+                          :class="{ 'is-selected': selectedEditMap === map }"
+                          @click="selectedEditMap = map; activeDropdown = null"
+                        >
+                          {{ map }}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div class="toolbar-right">
                     <button class="toolbar-btn" :class="{ active: isFeatureAreaPanelOpen }" v-permission-click-dialog="'nav-mapedit-edit'" @click="toggleFeatureAreaPanel" title="功能区">
@@ -469,16 +513,31 @@
               <div class="track-record-toolbar">
                 <div class="track-toolbar-group">
                   <span class="track-label">地图:</span>
-                  <div class="track-select-wrapper">
-                    <select v-model="trackRecordMap" class="track-select" :disabled="isMapSelectionLocked">
-                      <option v-if="trackMapList.length === 0" value="">暂无地图</option>
-                      <option v-for="map in trackMapList" :key="map" :value="map">{{ map }}</option>
-                    </select>
-                    <span class="track-select-arrow">
-                      <svg width="10" height="10" viewBox="0 0 12 12">
-                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
-                      </svg>
-                    </span>
+                  <div class="track-select-wrapper custom-select-container">
+                    <div 
+                      class="track-select custom-select-trigger" 
+                      :class="{ 'is-disabled': isMapSelectionLocked }"
+                      @click="!isMapSelectionLocked && (activeDropdown = activeDropdown === 'trackRecordMap' ? null : 'trackRecordMap')"
+                    >
+                      <span class="custom-select-value">{{ trackRecordMap || (trackMapList.length === 0 ? '暂无地图' : '请选择地图') }}</span>
+                      <span class="track-select-arrow" :style="{ transform: activeDropdown === 'trackRecordMap' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                        <svg width="10" height="10" viewBox="0 0 12 12">
+                          <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                        </svg>
+                      </span>
+                    </div>
+                    <div v-show="activeDropdown === 'trackRecordMap'" class="custom-select-dropdown">
+                      <div v-if="trackMapList.length === 0" class="custom-select-option is-empty">暂无地图</div>
+                      <div 
+                        v-for="map in trackMapList" 
+                        :key="map" 
+                        class="custom-select-option" 
+                        :class="{ 'is-selected': trackRecordMap === map }"
+                        @click="trackRecordMap = map; activeDropdown = null"
+                      >
+                        {{ map }}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <button 
@@ -492,30 +551,59 @@
                 </button>
                 <div class="track-toolbar-group">
                   <span class="track-label">路线:</span>
-                  <div class="track-select-wrapper">
-                    <select v-model="trackRecordLine" class="track-select" :key="`track-line-${trackRecordMap}-${trackLineList.length}`">
-                      <option value="">{{ trackLineList.length === 0 ? '暂无路线' : '请选择路线' }}</option>
-                      <option v-for="line in trackLineList" :key="line" :value="line">{{ line }}</option>
-                    </select>
-                    <span class="track-select-arrow">
-                      <svg width="10" height="10" viewBox="0 0 12 12">
-                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
-                      </svg>
-                    </span>
+                  <div class="track-select-wrapper custom-select-container">
+                    <div 
+                      class="track-select custom-select-trigger" 
+                      @click="activeDropdown = activeDropdown === 'trackRecordLine' ? null : 'trackRecordLine'"
+                    >
+                      <span class="custom-select-value">{{ trackRecordLine || (trackLineList.length === 0 ? '暂无路线' : '请选择路线') }}</span>
+                      <span class="track-select-arrow" :style="{ transform: activeDropdown === 'trackRecordLine' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                        <svg width="10" height="10" viewBox="0 0 12 12">
+                          <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                        </svg>
+                      </span>
+                    </div>
+                    <div v-show="activeDropdown === 'trackRecordLine'" class="custom-select-dropdown">
+                      <div v-if="trackLineList.length === 0" class="custom-select-option is-empty">暂无路线</div>
+                      <div 
+                        v-for="line in trackLineList" 
+                        :key="line" 
+                        class="custom-select-option" 
+                        :class="{ 'is-selected': trackRecordLine === line }"
+                        @click="trackRecordLine = line; activeDropdown = null"
+                      >
+                        {{ line }}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="track-toolbar-group">
                   <span class="track-label">任务组:</span>
-                  <div class="track-select-wrapper">
-                    <select v-model="trackRecordTask" class="track-select" :disabled="!trackRecordLine" :key="`track-task-${trackRecordLine}-${trackTaskList.length}`">
-                      <option value="">{{ !trackRecordLine || trackTaskList.length === 0 ? '暂无任务组' : '请选择任务组' }}</option>
-                      <option v-for="task in trackTaskList" :key="task" :value="task">{{ task }}</option>
-                    </select>
-                    <span class="track-select-arrow">
-                      <svg width="10" height="10" viewBox="0 0 12 12">
-                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
-                      </svg>
-                    </span>
+                  <div class="track-select-wrapper custom-select-container">
+                    <div 
+                      class="track-select custom-select-trigger" 
+                      :class="{ 'is-disabled': !trackRecordLine }"
+                      @click="trackRecordLine && (activeDropdown = activeDropdown === 'trackRecordTask' ? null : 'trackRecordTask')"
+                    >
+                      <span class="custom-select-value">{{ trackRecordTask || (!trackRecordLine || trackTaskList.length === 0 ? '暂无任务组' : '请选择任务组') }}</span>
+                      <span class="track-select-arrow" :style="{ transform: activeDropdown === 'trackRecordTask' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                        <svg width="10" height="10" viewBox="0 0 12 12">
+                          <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                        </svg>
+                      </span>
+                    </div>
+                    <div v-show="activeDropdown === 'trackRecordTask'" class="custom-select-dropdown">
+                      <div v-if="!trackRecordLine || trackTaskList.length === 0" class="custom-select-option is-empty">暂无任务组</div>
+                      <div 
+                        v-for="task in trackTaskList" 
+                        :key="task" 
+                        class="custom-select-option" 
+                        :class="{ 'is-selected': trackRecordTask === task }"
+                        @click="trackRecordTask = task; activeDropdown = null"
+                      >
+                        {{ task }}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="track-toolbar-actions">
@@ -560,6 +648,7 @@
                         :navigation-origin="navPointCloudNavigationOrigin"
                         :robot-pose="robotStore.pose"
                         :robot-mesh="arrowMesh"
+                        :robot-type="selectedVehicleType"
                       />
                     </div>
                   </div>
@@ -580,30 +669,60 @@
               <div class="track-record-toolbar track-edit-toolbar">
                 <div class="track-toolbar-group">
                   <span class="track-label">地图:</span>
-                  <div class="track-select-wrapper">
-                    <select v-model="trackEditMap" class="track-select" :disabled="isMapSelectionLocked || routeEditLoading || routeEditCreateMode">
-                      <option v-if="trackMapList.length === 0" value="">暂无地图</option>
-                      <option v-for="map in trackMapList" :key="map" :value="map">{{ map }}</option>
-                    </select>
-                    <span class="track-select-arrow">
-                      <svg width="10" height="10" viewBox="0 0 12 12">
-                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
-                      </svg>
-                    </span>
+                  <div class="track-select-wrapper custom-select-container">
+                    <div 
+                      class="track-select custom-select-trigger" 
+                      :class="{ 'is-disabled': isMapSelectionLocked || routeEditLoading || routeEditCreateMode }"
+                      @click="!(isMapSelectionLocked || routeEditLoading || routeEditCreateMode) && (activeDropdown = activeDropdown === 'trackEditMap' ? null : 'trackEditMap')"
+                    >
+                      <span class="custom-select-value">{{ trackEditMap || (trackMapList.length === 0 ? '暂无地图' : '请选择地图') }}</span>
+                      <span class="track-select-arrow" :style="{ transform: activeDropdown === 'trackEditMap' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                        <svg width="10" height="10" viewBox="0 0 12 12">
+                          <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                        </svg>
+                      </span>
+                    </div>
+                    <div v-show="activeDropdown === 'trackEditMap'" class="custom-select-dropdown">
+                      <div v-if="trackMapList.length === 0" class="custom-select-option is-empty">暂无地图</div>
+                      <div 
+                        v-for="map in trackMapList" 
+                        :key="map" 
+                        class="custom-select-option" 
+                        :class="{ 'is-selected': trackEditMap === map }"
+                        @click="trackEditMap = map; activeDropdown = null"
+                      >
+                        {{ map }}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="track-toolbar-group">
                   <span class="track-label">路线:</span>
-                  <div class="track-select-wrapper">
-                    <select v-model="trackEditLine" class="track-select" :disabled="routeEditLoading || routeEditCreateMode" :key="`track-edit-line-${trackEditMap}-${trackEditLineList.length}`">
-                      <option value="">{{ trackEditLineList.length === 0 ? '暂无路线' : '请选择路线' }}</option>
-                      <option v-for="line in trackEditLineList" :key="line" :value="line">{{ line }}</option>
-                    </select>
-                    <span class="track-select-arrow">
-                      <svg width="10" height="10" viewBox="0 0 12 12">
-                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
-                      </svg>
-                    </span>
+                  <div class="track-select-wrapper custom-select-container">
+                    <div 
+                      class="track-select custom-select-trigger" 
+                      :class="{ 'is-disabled': routeEditLoading || routeEditCreateMode }"
+                      @click="!(routeEditLoading || routeEditCreateMode) && (activeDropdown = activeDropdown === 'trackEditLine' ? null : 'trackEditLine')"
+                    >
+                      <span class="custom-select-value">{{ trackEditLine || (trackEditLineList.length === 0 ? '暂无路线' : '请选择路线') }}</span>
+                      <span class="track-select-arrow" :style="{ transform: activeDropdown === 'trackEditLine' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                        <svg width="10" height="10" viewBox="0 0 12 12">
+                          <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                        </svg>
+                      </span>
+                    </div>
+                    <div v-show="activeDropdown === 'trackEditLine'" class="custom-select-dropdown">
+                      <div v-if="trackEditLineList.length === 0" class="custom-select-option is-empty">暂无路线</div>
+                      <div 
+                        v-for="line in trackEditLineList" 
+                        :key="line" 
+                        class="custom-select-option" 
+                        :class="{ 'is-selected': trackEditLine === line }"
+                        @click="trackEditLine = line; activeDropdown = null"
+                      >
+                        {{ line }}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="track-toolbar-actions">
@@ -632,6 +751,7 @@
                           :navigation-origin="navPointCloudNavigationOrigin"
                           :robot-pose="robotStore.pose"
                           :robot-mesh="arrowMesh"
+                          :robot-type="selectedVehicleType"
                           :interaction-mode="routeEditMode"
                           :interaction-plane-z="routeEditInteractionPlaneZ"
                           :trajectory-points="routeEditPreviewPoints"
@@ -728,10 +848,32 @@
             <div class="mission-content-wrapper">
               <div class="mission-toolbar">
                 <span class="mission-toolbar-label">地图:</span>
-                <select v-model="fileManageMap" class="mission-toolbar-select" style="min-width: 220px;">
-                  <option v-if="fileMapList.length === 0" value="">暂无地图</option>
-                  <option v-for="map in fileMapList" :key="map" :value="map">{{ map }}</option>
-                </select>
+                <div class="file-manage-select-wrapper custom-select-container" style="position: relative; display: inline-block; min-width: 220px;">
+                  <div 
+                    class="mission-toolbar-select custom-select-trigger" 
+                    :class="{ 'is-disabled': navigationEnabled }"
+                    @click="!navigationEnabled && (activeDropdown = activeDropdown === 'fileManageMap' ? null : 'fileManageMap')"
+                  >
+                    <span class="custom-select-value">{{ fileManageMap || (fileMapList.length === 0 ? '暂无地图' : '请选择地图') }}</span>
+                    <span class="nav-select-arrow" :style="{ transform: activeDropdown === 'fileManageMap' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                      <svg width="10" height="10" viewBox="0 0 12 12">
+                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                      </svg>
+                    </span>
+                  </div>
+                  <div v-show="activeDropdown === 'fileManageMap'" class="custom-select-dropdown">
+                    <div v-if="fileMapList.length === 0" class="custom-select-option is-empty">暂无地图</div>
+                    <div 
+                      v-for="map in fileMapList" 
+                      :key="map" 
+                      class="custom-select-option" 
+                      :class="{ 'is-selected': fileManageMap === map }"
+                      @click="fileManageMap = map; activeDropdown = null"
+                    >
+                      {{ map }}
+                    </div>
+                  </div>
+                </div>
                 <button
                   class="mission-btn mission-btn-stop"
                   :disabled="fileMapList.length === 0 || !fileManageMap || navigationEnabled"
@@ -741,10 +883,31 @@
                   删除地图
                 </button>
                 <span class="mission-toolbar-label" style="margin-left: 20px;">数据包:</span>
-                <select v-model="fileManagePackage" class="mission-toolbar-select" style="min-width: 220px;">
-                  <option v-if="dataPackageList.length === 0" value="">暂无数据包</option>
-                  <option v-for="pkg in dataPackageList" :key="pkg" :value="pkg">{{ pkg }}</option>
-                </select>
+                <div class="file-manage-select-wrapper custom-select-container" style="position: relative; display: inline-block; min-width: 220px;">
+                  <div 
+                    class="mission-toolbar-select custom-select-trigger" 
+                    @click="activeDropdown = activeDropdown === 'fileManagePackage' ? null : 'fileManagePackage'"
+                  >
+                    <span class="custom-select-value">{{ fileManagePackage || (dataPackageList.length === 0 ? '暂无数据包' : '请选择数据包') }}</span>
+                    <span class="nav-select-arrow" :style="{ transform: activeDropdown === 'fileManagePackage' ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }">
+                      <svg width="10" height="10" viewBox="0 0 12 12">
+                        <polygon points="2,4 6,8 10,4" fill="#9adfff"/>
+                      </svg>
+                    </span>
+                  </div>
+                  <div v-show="activeDropdown === 'fileManagePackage'" class="custom-select-dropdown">
+                    <div v-if="dataPackageList.length === 0" class="custom-select-option is-empty">暂无数据包</div>
+                    <div 
+                      v-for="pkg in dataPackageList" 
+                      :key="pkg" 
+                      class="custom-select-option" 
+                      :class="{ 'is-selected': fileManagePackage === pkg }"
+                      @click="fileManagePackage = pkg; activeDropdown = null"
+                    >
+                      {{ pkg }}
+                    </div>
+                  </div>
+                </div>
                 <button
                   class="mission-btn mission-btn-stop"
                   :disabled="dataPackageList.length === 0 || !fileManagePackage"
@@ -1393,6 +1556,15 @@ const cleanupNavPointCloud = () => {
   if (navResizeObserver) {
     (navResizeObserver as ResizeObserver | null)?.disconnect()
     navResizeObserver = null
+  }
+}
+
+// 自定义下拉选择框的打开状态与全局点击监听
+const activeDropdown = ref<string | null>(null)
+const handleGlobalClick = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (!target.closest('.custom-select-container')) {
+    activeDropdown.value = null
   }
 }
 
@@ -3015,6 +3187,9 @@ const navigationEnabled = computed(() => robotStore.cmdStatus?.nav === 1)
 const isTrackTaskRunning = computed(() => taskExecutionStore.isTrackTaskRunning)
 const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
+const selectedVehicleType = computed(() => {
+  return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
+})
 const hasRobotRtk = computed(() => {
   const robot = deviceStore.selectedRobot as any
   const extraRaw = robot?.extra_data ?? null
@@ -4222,7 +4397,7 @@ const drawNavPointCloud = () => {
     }
 
     ;{
-      const lbl = '机器狗'
+      const lbl = selectedVehicleType.value === 'four_wheel' ? '无人车' : '机器狗'
       const fontSize = Math.round(8 * labelZoomScale)
       ctx.font = `bold ${fontSize}px Arial`
       ctx.textAlign = 'center'
@@ -4846,6 +5021,7 @@ onMounted(async () => {
 
   // 监听机器人切换事件，刷新各 tab 的列表
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  document.addEventListener('click', handleGlobalClick)
   await fetchNavPointTaskList()
 })
 
@@ -4897,6 +5073,7 @@ const handleRobotContextRefreshed = () => {
 
 onUnmounted(() => {
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
+  document.removeEventListener('click', handleGlobalClick)
   clearNavPointCloudErrorTimer()
 })
 
@@ -9932,6 +10109,136 @@ select.recording-input option {
 .file-delete-btn img {
   width: 16px;
   height: 16px;
+}
+
+/* 自定义下拉选择框样式 */
+.custom-select-container {
+  position: relative;
+}
+
+.custom-select-trigger {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  user-select: none;
+  padding-right: 30px !important; /* 给绝对定位的箭头留出空间 */
+}
+
+.custom-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-select-arrow {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s ease;
+}
+
+.nav-select-arrow svg polygon {
+  fill: #67d5fd;
+}
+
+.custom-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #0a2a3a;
+  border: 1px solid rgba(103, 213, 253, 0.4);
+  border-radius: 4px;
+  max-height: 200px; /* 限制最大高度，防止顶到底部 */
+  overflow-y: auto;
+  z-index: 1000;
+  margin-top: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-sizing: border-box;
+}
+
+.custom-select-option {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #67d5fd;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.custom-select-option:hover {
+  background: rgba(103, 213, 253, 0.15);
+  color: #fff;
+}
+
+.custom-select-option.is-selected {
+  background: rgba(103, 213, 253, 0.3);
+  color: #fff;
+  font-weight: 500;
+}
+
+.custom-select-option.is-empty {
+  color: rgba(103, 213, 253, 0.5);
+  cursor: default;
+  text-align: center;
+}
+
+/* 兼容 disabled 触发器的样式 */
+.nav-select.is-disabled,
+.map-edit-select.is-disabled,
+.track-select.is-disabled,
+.mission-toolbar-select.is-disabled {
+  background:
+    linear-gradient(180deg, rgba(12, 60, 86, 0.42) 0%, rgba(10, 42, 58, 0.52) 100%) !important;
+  border-color: rgba(103, 213, 253, 0.3) !important;
+  color: rgba(180, 205, 220, 0.62) !important;
+  cursor: not-allowed !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(103, 213, 253, 0.08) !important;
+  filter: saturate(0.72) grayscale(0.22) !important;
+  opacity: 1 !important;
+}
+
+.nav-select.is-disabled .nav-select-arrow svg polygon,
+.map-edit-select.is-disabled .nav-select-arrow svg polygon,
+.track-select.is-disabled .track-select-arrow svg polygon,
+.mission-toolbar-select.is-disabled .nav-select-arrow svg polygon {
+  fill: rgba(168, 192, 210, 0.5) !important;
+}
+
+/* 细滚动条，契合网站风格 */
+.custom-select-dropdown::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-track {
+  background: rgba(10, 42, 58, 0.5);
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 3px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
+}
+
+.custom-select-dropdown {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.3) rgba(10, 42, 58, 0.5);
 }
 
 

@@ -163,6 +163,15 @@ const router = createRouter({
           }
         },
         {
+          path: 'robot-info',
+          name: 'RobotInfo',
+          component: () => import('../views/RobotInfo.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'system-robotinfo-show'
+          }
+        },
+        {
           path: 'navigation',
           name: 'NavigationManage',
           component: () => import('../views/NavigationManage.vue'),

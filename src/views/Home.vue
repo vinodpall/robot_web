@@ -326,8 +326,8 @@
                 <div class="zhuangtai4">
                   <div :class="isRobotOnline ? 'robot-status-online' : 'robot-status-offline'">{{ isRobotOnline ? '在线' : '离线' }}</div>
                 </div>
-                <div class="img">
-                  <img src="@/assets/source_data/dog.png" alt="" />
+                <div class="img" :class="{ 'is-car-img': selectedVehicleType === 'four_wheel' }">
+                  <img :src="selectedVehicleType === 'four_wheel' ? carImg : dogImg" alt="device" />
                 </div>
               </div>
               <div class="b-top-right">
@@ -352,11 +352,20 @@
                   </div>
                 </div>
                 <div class="b-top-rightDiv">
-                  <img class="metric-icon metric-icon-mileage" src="@/assets/source_data/svg_data/robot_mileage_card.svg" alt="里程" />
-                  <div>
-                    <p>{{ robotStore.totalMileage !== null ? (robotStore.totalMileage / 1000).toFixed(3) + ' km' : '0 km' }}</p>
+                  <template v-if="selectedVehicleType === 'four_wheel'">
+                    <img class="metric-icon metric-icon-latency" src="@/assets/source_data/svg_data/robot_source/signal.svg" alt="延迟" />
+                    <div>
+                      <p>{{ formatLatency() }}</p>
+                      <p>网络延迟</p>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <img class="metric-icon metric-icon-mileage" src="@/assets/source_data/svg_data/robot_mileage_card.svg" alt="里程" />
+                    <div>
+                      <p>{{ robotStore.totalMileage !== null ? (robotStore.totalMileage / 1000).toFixed(3) + ' km' : '0 km' }}</p>
                       <p>累计行走里程</p>
-                  </div>
+                    </div>
+                  </template>
                 </div>
                 </div>
               </div>
@@ -419,25 +428,52 @@
                   <span class="value">{{ formatRobotCurrent() }}</span>
                 </div>
                 <div class="status-item">
-                  <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/ground.svg" alt="地面" />
-                    <span class="label">地面</span>
-                  </div>
-                  <span class="value">{{ formatGroundType() }}</span>
+                  <template v-if="selectedVehicleType === 'four_wheel'">
+                    <div class="top-row">
+                      <img src="@/assets/source_data/svg_data/robot_source/cpu.svg" alt="CPU" />
+                      <span class="label">CPU</span>
+                    </div>
+                    <span class="value">{{ formatCPU() }}</span>
+                  </template>
+                  <template v-else>
+                    <div class="top-row">
+                      <img src="@/assets/source_data/svg_data/ground.svg" alt="地面" />
+                      <span class="label">地面</span>
+                    </div>
+                    <span class="value">{{ formatGroundType() }}</span>
+                  </template>
                 </div>
                 <div class="status-item">
-                  <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/foot.svg" alt="步态" />
-                    <span class="label">步态</span>
-                  </div>
-                  <span class="value">{{ formatGaitType() }}</span>
+                  <template v-if="selectedVehicleType === 'four_wheel'">
+                    <div class="top-row">
+                      <img src="@/assets/source_data/svg_data/robot_source/memory.svg" alt="内存" />
+                      <span class="label">内存</span>
+                    </div>
+                    <span class="value">{{ formatMemory() }}</span>
+                  </template>
+                  <template v-else>
+                    <div class="top-row">
+                      <img src="@/assets/source_data/svg_data/foot.svg" alt="步态" />
+                      <span class="label">步态</span>
+                    </div>
+                    <span class="value">{{ formatGaitType() }}</span>
+                  </template>
                 </div>
                 <div class="status-item">
-                  <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/height.svg" alt="姿态" />
-                    <span class="label">姿态</span>
-                  </div>
-                  <span class="value">{{ formatPosture() }}</span>
+                  <template v-if="selectedVehicleType === 'four_wheel'">
+                    <div class="top-row">
+                      <img src="@/assets/source_data/svg_data/robot_source/disk.svg" alt="磁盘" />
+                      <span class="label">磁盘</span>
+                    </div>
+                    <span class="value">{{ formatDisk() }}</span>
+                  </template>
+                  <template v-else>
+                    <div class="top-row">
+                      <img src="@/assets/source_data/svg_data/height.svg" alt="姿态" />
+                      <span class="label">姿态</span>
+                    </div>
+                    <span class="value">{{ formatPosture() }}</span>
+                  </template>
                 </div>
               </div>
             </div>
@@ -1177,6 +1213,7 @@ import {
   waylineApi,
   livestreamApi,
   dogApi,
+  robotApi,
 } from '../api/services'
 import type { CameraInfo } from '../api/services'
 import SuccessMessage from '../components/SuccessMessage.vue'
@@ -1205,6 +1242,8 @@ import droneBatteryIcon from '@/assets/source_data/svg_data/drone_battery.svg'
 import droneBatteryChargeIcon from '@/assets/source_data/svg_data/drone_battery_charge.svg'
 import mkfOnIcon from '@/assets/source_data/svg_data/mkf_on.svg'
 import mkfOffIcon from '@/assets/source_data/svg_data/mkf_off.svg'
+import dogImg from '@/assets/source_data/dog.png'
+import carImg from '@/assets/source_data/car.png'
 
 
 
@@ -1306,8 +1345,16 @@ let robotInfoTimer: number | null = null
 // 计算属性：机器人是否在线（来自 robot_status 或 dog_udp_message wifi_error 心跳）
 const isRobotOnline = computed(() => robotStore.isOnline)
 
-// 计算属性：机器人电量（来自 0x21050f0a battery_level）
-const robotBatteryLevel = computed(() => robotStore.batteryLevel)
+// 计算属性：机器人电量（来自 0x21050f0a battery_level 或 system_status soc）
+const robotBatteryLevel = computed(() => {
+  if (selectedVehicleType.value === 'four_wheel') {
+    const soc = robotStore.systemStatus?.soc
+    if (soc !== undefined && soc !== null) {
+      return soc
+    }
+  }
+  return robotStore.batteryLevel
+})
 
 // 计算属性：机器人是否处于充电中（来自 0x21050f0a current 正负值）
 const isRobotCharging = computed(() => {
@@ -1662,8 +1709,16 @@ const formatGroundType = () => robotStore.terrainModeText
 // 格式化步态（来自 robotStore.gaitText）
 const formatGaitType = () => robotStore.gaitText
 
-// 格式化当前速度（来自 0x1009 leg_odom_vel）
+// 格式化当前速度（来自 0x1009 leg_odom_vel 或 speed_status v）
 const formatRobotSpeed = () => {
+  if (selectedVehicleType.value === 'four_wheel') {
+    const v = robotStore.speedStatus?.v
+    if (v !== undefined && v !== null) {
+      const normalizedV = Math.abs(v) < 0.005 ? 0 : v
+      return `${normalizedV.toFixed(2)} m/s`
+    }
+    return '--'
+  }
   const velocity = robotStore.motionState?.leg_odom_vel
   const vx = Array.isArray(velocity) ? velocity[0] : undefined
   if (typeof vx !== 'number' || !Number.isFinite(vx)) return '--'
@@ -1694,6 +1749,33 @@ const formatRobotYaw = () => {
 
 // 格式化姿态（来自 robotStore.postureText: 0x11050f08 body_height_state.state）
 const formatPosture = () => robotStore.postureText
+
+// 格式化 CPU (含温度信息)
+const formatCPU = () => {
+  const temp = robotStore.systemTelemetry?.cpu_info?.temperature
+  const cpuPercent = robotStore.systemStatus?.cpu_percent
+  const hasCpu = cpuPercent !== undefined && cpuPercent !== null
+  const tempStr = temp && temp > 0 ? ` (${temp}℃)` : ''
+  return hasCpu ? `${cpuPercent}%${tempStr}` : `--%${tempStr}`
+}
+
+// 格式化内存
+const formatMemory = () => {
+  const memPercent = robotStore.systemStatus?.memory_percent
+  return memPercent !== undefined && memPercent !== null ? `${memPercent}%` : '--%'
+}
+
+// 格式化磁盘
+const formatDisk = () => {
+  const diskPercent = robotStore.systemStatus?.disk_percent
+  return diskPercent !== undefined && diskPercent !== null ? `${diskPercent}%` : '--%'
+}
+
+// 格式化网络延迟
+const formatLatency = () => {
+  const latency = robotStore.latencyStatus?.latency_ms
+  return latency !== undefined && latency !== null ? `${latency} ms` : '-- ms'
+}
 const pointCloudData = ref<PointCloudPoint[]>([])
 const basePointCloudData = ref<PointCloudPoint[]>([])
 const threePointCloudRef = ref<InstanceType<typeof ThreePointCloudPreview> | null>(null)
@@ -2613,23 +2695,161 @@ const sensorChartRef = ref<HTMLElement | null>(null)
 let sensorChart: echarts.ECharts | null = null
 let sensorRefreshTimer: number | null = null
 
+
+
+
+// 动态获取机器人详情，保证数据最新
+const currentRobotDetail = ref<any>(null)
+watch(() => deviceStore.selectedRobotId, async (newId) => {
+  if (newId) {
+    try {
+      currentRobotDetail.value = await robotApi.getRobotDetail(newId)
+    } catch (e) {
+      currentRobotDetail.value = null
+    }
+  } else {
+    currentRobotDetail.value = null
+  }
+}, { immediate: true })
+
 // 传感器切换与阈值线相关数据
 const activeSensorIndex = ref(0)
-const sensorsList = [
-  { key: 'co2', label: 'CO2浓度 (ppm)', legendName: '二氧化碳(CO2) ppm', color: '#00e1ff', minVal: 350, maxVal: 800, rangeMin: 380, rangeMax: 900, step: 20 },
-  { key: 'pm25', label: 'PM2.5 (μg/m³)', legendName: '细颗粒物(PM2.5) μg/m³', color: '#39b54a', minVal: 10, maxVal: 75, rangeMin: 5, rangeMax: 120, step: 4 },
-  { key: 'noise', label: '环境噪音 (dB)', legendName: '环境噪音(Noise) dB', color: '#ff8000', minVal: 40, maxVal: 80, rangeMin: 35, rangeMax: 95, step: 6 }
-]
+const sensorsList = computed(() => {
+  const robot = currentRobotDetail.value || deviceStore.selectedRobot
+  let parsedSensors: any[] = []
+  if (robot) {
+    let extra = robot.extra_data
+    if (typeof extra === 'string') {
+      try { extra = JSON.parse(extra) } catch { extra = {} }
+    }
+    parsedSensors = Array.isArray((extra as any)?.sensors) ? (extra as any).sensors : []
+  }
+
+  if (parsedSensors.length === 0) {
+    return [
+      { key: 'co2', label: 'CO2浓度 (ppm)', legendName: '二氧化碳(CO2) ppm', unit: 'ppm', color: '#00e1ff', minVal: 350, maxVal: 800, rangeMin: 380, rangeMax: 900, step: 20, initBase: 420, initRange: 60 },
+      { key: 'pm25', label: 'PM2.5 (μg/m³)', legendName: '细颗粒物(PM2.5) μg/m³', unit: 'μg/m³', color: '#39b54a', minVal: 10, maxVal: 75, rangeMin: 5, rangeMax: 120, step: 4, initBase: 18, initRange: 8 },
+      { key: 'noise', label: '环境噪音 (dB)', legendName: '环境噪音(Noise) dB', unit: 'dB', color: '#ff8000', minVal: 40, maxVal: 80, rangeMin: 35, rangeMax: 95, step: 6, initBase: 48, initRange: 12 }
+    ]
+  }
+
+  const colors = ['#00e1ff', '#39b54a', '#ff8000', '#ff4d4f', '#2f54eb', '#722ed1', '#faad14']
+
+  return (() => {
+    const result: any[] = []
+    
+    parsedSensors.forEach((s: any) => {
+      let en = '', cn = '', unit = ''
+      let sensorObj: any = null
+      if (typeof s === 'string') {
+        en = cn = s
+      } else {
+        sensorObj = s.sensor || s
+        en = sensorObj.en || ''
+        cn = sensorObj.cn || ''
+        unit = sensorObj.unit || ''
+      }
+      
+      // 如果是 p_h_t，需要拆分为三个：pressure, humidity, temperature
+      if (en.toLowerCase() === 'p_h_t') {
+        const pressUnit = robotStore.realtimeSensorUnits?.['pressure'] || 'mbar'
+        const humidUnit = robotStore.realtimeSensorUnits?.['humidity'] || '%RH'
+        const tempUnit = robotStore.realtimeSensorUnits?.['temperature'] || '°C'
+        result.push({
+          key: 'pressure',
+          label: `大气压 (${pressUnit})`,
+          legendName: `大气压(pressure) ${pressUnit}`,
+          unit: pressUnit,
+          minVal: 900, maxVal: 1100, rangeMin: 800, rangeMax: 1200, step: 5, initBase: 1010, initRange: 10
+        })
+        result.push({
+          key: 'humidity',
+          label: `湿度 (${humidUnit})`,
+          legendName: `湿度(humidity) ${humidUnit}`,
+          unit: humidUnit,
+          minVal: 20, maxVal: 80, rangeMin: 0, rangeMax: 100, step: 2, initBase: 60, initRange: 10
+        })
+        result.push({
+          key: 'temperature',
+          label: `温度 (${tempUnit})`,
+          legendName: `温度(temperature) ${tempUnit}`,
+          unit: tempUnit,
+          minVal: -10, maxVal: 50, rangeMin: -20, rangeMax: 60, step: 1, initBase: 25, initRange: 5
+        })
+      } else {
+        const dynamicUnit = robotStore.realtimeSensorUnits?.[en.toLowerCase()]
+        const currentUnit = dynamicUnit || unit
+        
+        let maxVal: number | null = null
+        let minVal: number | null = null
+        if (sensorObj) {
+          const parsedMax = sensorObj.max_val !== undefined && sensorObj.max_val !== null && sensorObj.max_val !== '' ? Number(sensorObj.max_val) : null
+          const parsedMin = sensorObj.min_val !== undefined && sensorObj.min_val !== null && sensorObj.min_val !== '' ? Number(sensorObj.min_val) : null
+          maxVal = Number.isNaN(parsedMax) ? null : parsedMax
+          minVal = Number.isNaN(parsedMin) ? null : parsedMin
+        }
+        
+        let rangeMin = 0
+        let rangeMax = 150
+        if (maxVal !== null) {
+          rangeMax = Math.ceil(maxVal * 1.5)
+        }
+        if (minVal !== null) {
+          rangeMin = Math.floor(minVal * 0.5)
+        }
+
+        result.push({
+          key: en.toLowerCase() || `sensor_${result.length}`,
+          label: `${cn} ${currentUnit ? '('+currentUnit+')' : ''}`,
+          legendName: `${cn}(${en}) ${currentUnit}`,
+          unit: currentUnit,
+          minVal: minVal,
+          maxVal: maxVal,
+          rangeMin: rangeMin,
+          rangeMax: rangeMax,
+          step: 5,
+          initBase: minVal !== null && maxVal !== null ? (minVal + maxVal) / 2 : 40,
+          initRange: minVal !== null && maxVal !== null ? (maxVal - minVal) / 4 : 20
+        })
+      }
+    })
+
+    // 为每个传感器分配颜色
+    return result.map((item, idx) => {
+      item.color = colors[idx % colors.length]
+      return item
+    })
+  })()
+})
 
 const currentSensorLabel = computed(() => {
-  return sensorsList[activeSensorIndex.value].label.split(' ')[0]
+  if (sensorsList.value.length === 0) return ''
+  if (activeSensorIndex.value >= sensorsList.value.length) {
+    activeSensorIndex.value = 0
+  }
+  return sensorsList.value[activeSensorIndex.value].label.split(' ')[0]
 })
 
-const sensorDataHistories = reactive({
-  co2: [] as number[],
-  pm25: [] as number[],
-  noise: [] as number[]
+const currentSensorValue = computed(() => {
+  if (sensorsList.value.length === 0) return null
+  if (activeSensorIndex.value >= sensorsList.value.length) {
+    return null
+  }
+  const sensor = sensorsList.value[activeSensorIndex.value]
+  const val = robotStore.realtimeSensorValues[sensor.key]
+  return val !== undefined ? val : null
 })
+
+const currentSensorUnit = computed(() => {
+  if (sensorsList.value.length === 0) return ''
+  if (activeSensorIndex.value >= sensorsList.value.length) {
+    return ''
+  }
+  const sensor = sensorsList.value[activeSensorIndex.value]
+  return robotStore.realtimeSensorUnits?.[sensor.key] || sensor.unit || ''
+})
+
+const sensorDataHistories = ref<Record<string, (number | null)[]>>({})
 const sensorTimeLabels = ref<string[]>([])
 
 // 地图容器ref和地图实例
@@ -7111,13 +7331,77 @@ const initLineChart = () => {
 
 // 更新车载传感器折线图的 Option
 const updateSensorChartOption = () => {
-  if (!sensorChart) return
+  if (!sensorChart || sensorsList.value.length === 0) return
   
-  const activeSensor = sensorsList[activeSensorIndex.value]
-  const currentData = sensorDataHistories[activeSensor.key as keyof typeof sensorDataHistories]
+  if (activeSensorIndex.value >= sensorsList.value.length) {
+    activeSensorIndex.value = 0
+  }
+  const activeSensor = sensorsList.value[activeSensorIndex.value]
+  const currentData = sensorDataHistories.value[activeSensor.key] || []
   
-  const maxLineData = Array(currentData.length).fill(activeSensor.maxVal)
-  const minLineData = Array(currentData.length).fill(activeSensor.minVal)
+  const legendData = [activeSensor.legendName]
+  const seriesData: any[] = [
+    {
+      name: activeSensor.legendName,
+      type: 'line',
+      showSymbol: false,
+      smooth: true,
+      data: currentData,
+      lineStyle: {
+        width: 2,
+        color: activeSensor.color
+      },
+      itemStyle: {
+        color: activeSensor.color
+      },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: `${activeSensor.color}26` },
+          { offset: 1, color: `${activeSensor.color}00` }
+        ])
+      }
+    }
+  ]
+
+  if (activeSensor.maxVal !== undefined && activeSensor.maxVal !== null) {
+    const maxLineData = Array(currentData.length).fill(activeSensor.maxVal)
+    legendData.push('最大阈值')
+    seriesData.push({
+      name: '最大阈值',
+      type: 'line',
+      showSymbol: false,
+      symbol: 'none',
+      data: maxLineData,
+      lineStyle: {
+        width: 1.5,
+        type: 'dashed',
+        color: '#ff4d4f'
+      },
+      itemStyle: {
+        color: '#ff4d4f'
+      }
+    })
+  }
+
+  if (activeSensor.minVal !== undefined && activeSensor.minVal !== null) {
+    const minLineData = Array(currentData.length).fill(activeSensor.minVal)
+    legendData.push('最小阈值')
+    seriesData.push({
+      name: '最小阈值',
+      type: 'line',
+      showSymbol: false,
+      symbol: 'none',
+      data: minLineData,
+      lineStyle: {
+        width: 1.5,
+        type: 'dashed',
+        color: '#2f54eb'
+      },
+      itemStyle: {
+        color: '#2f54eb'
+      }
+    })
+  }
   
   const option = {
     grid: {
@@ -7144,7 +7428,7 @@ const updateSensorChartOption = () => {
       }
     },
     legend: {
-      data: [activeSensor.legendName, '最大阈值', '最小阈值'],
+      data: legendData,
       textStyle: {
         color: '#b8c7d9',
         fontSize: 10
@@ -7169,6 +7453,14 @@ const updateSensorChartOption = () => {
     },
     yAxis: {
       type: 'value',
+      min: (value: any) => {
+        const defaultMin = activeSensor.rangeMin !== undefined && activeSensor.rangeMin !== null ? activeSensor.rangeMin : 0
+        return Number.isFinite(value.min) ? Math.min(value.min, defaultMin) : defaultMin
+      },
+      max: (value: any) => {
+        const defaultMax = activeSensor.rangeMax !== undefined && activeSensor.rangeMax !== null ? activeSensor.rangeMax : 100
+        return Number.isFinite(value.max) ? Math.max(value.max, defaultMax) : defaultMax
+      },
       axisLine: {
         show: false
       },
@@ -7182,92 +7474,48 @@ const updateSensorChartOption = () => {
         fontSize: 9
       }
     },
-    series: [
-      {
-        name: activeSensor.legendName,
-        type: 'line',
-        showSymbol: false,
-        smooth: true,
-        data: currentData,
-        lineStyle: {
-          width: 2,
-          color: activeSensor.color
-        },
-        itemStyle: {
-          color: activeSensor.color
-        },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: `${activeSensor.color}26` },
-            { offset: 1, color: `${activeSensor.color}00` }
-          ])
-        }
-      },
-      {
-        name: '最大阈值',
-        type: 'line',
-        showSymbol: false,
-        symbol: 'none',
-        data: maxLineData,
-        lineStyle: {
-          width: 1.5,
-          type: 'dashed',
-          color: '#ff4d4f'
-        },
-        itemStyle: {
-          color: '#ff4d4f'
-        }
-      },
-      {
-        name: '最小阈值',
-        type: 'line',
-        showSymbol: false,
-        symbol: 'none',
-        data: minLineData,
-        lineStyle: {
-          width: 1.5,
-          type: 'dashed',
-          color: '#2f54eb'
-        },
-        itemStyle: {
-          color: '#2f54eb'
-        }
-      }
-    ]
+    series: seriesData
   }
   
   sensorChart.setOption(option, true)
 }
 
 const prevSensor = () => {
-  activeSensorIndex.value = (activeSensorIndex.value - 1 + sensorsList.length) % sensorsList.length
+  if (sensorsList.value.length === 0) return
+  activeSensorIndex.value = (activeSensorIndex.value - 1 + sensorsList.value.length) % sensorsList.value.length
   updateSensorChartOption()
 }
 
 const nextSensor = () => {
-  activeSensorIndex.value = (activeSensorIndex.value + 1) % sensorsList.length
+  if (sensorsList.value.length === 0) return
+  activeSensorIndex.value = (activeSensorIndex.value + 1) % sensorsList.value.length
   updateSensorChartOption()
 }
 
-// 初始化车载传感器折线图 (CO2浓度、PM2.5、环境噪音)
+// 初始化车载传感器折线图
 const initSensorChart = () => {
   if (!sensorChartRef.value) return
   
+  if (sensorChart) {
+    sensorChart.dispose()
+  }
   sensorChart = echarts.init(sensorChartRef.value)
   
   const maxPoints = 10
   sensorTimeLabels.value = []
-  sensorDataHistories.co2 = []
-  sensorDataHistories.pm25 = []
-  sensorDataHistories.noise = []
+  sensorDataHistories.value = {}
+  
+  sensorsList.value.forEach(sensor => {
+    sensorDataHistories.value[sensor.key] = []
+  })
   
   const now = new Date()
   for (let i = maxPoints - 1; i >= 0; i--) {
     const t = new Date(now.getTime() - i * 3000)
     sensorTimeLabels.value.push(t.toTimeString().split(' ')[0])
-    sensorDataHistories.co2.push(Math.round(420 + Math.random() * 60))
-    sensorDataHistories.pm25.push(Math.round(18 + Math.random() * 8))
-    sensorDataHistories.noise.push(Math.round(48 + Math.random() * 12))
+    sensorsList.value.forEach(sensor => {
+      sensorDataHistories.value[sensor.key].push(null)
+    })
   }
   
   updateSensorChartOption()
@@ -7284,13 +7532,22 @@ const initSensorChart = () => {
     sensorTimeLabels.value.shift()
     sensorTimeLabels.value.push(time)
     
-    sensorsList.forEach(sensor => {
-      const history = sensorDataHistories[sensor.key as keyof typeof sensorDataHistories]
-      const lastVal = history[history.length - 1]
-      const nextVal = Math.max(
-        sensor.rangeMin,
-        Math.min(sensor.rangeMax, Math.round(lastVal + (Math.random() - 0.5) * sensor.step))
-      )
+    sensorsList.value.forEach(sensor => {
+      const history = sensorDataHistories.value[sensor.key]
+      if (!history || history.length === 0) return
+      
+      const realValue = robotStore.realtimeSensorValues[sensor.key]
+      let nextVal: number | null = null
+      if (realValue !== undefined) {
+        nextVal = realValue
+        
+        if (history.every(v => v === null)) {
+          for (let i = 0; i < history.length; i++) {
+            (history as any[])[i] = nextVal
+          }
+        }
+      }
+      
       history.shift()
       history.push(nextVal)
     })
@@ -7298,6 +7555,27 @@ const initSensorChart = () => {
     updateSensorChartOption()
   }, 3000)
 }
+
+// 监听车辆类型和传感器列表变化，如果是无人车（four_wheel），初始化/更新传感器图表
+watch(
+  [selectedVehicleType, () => sensorsList.value],
+  async ([newType]) => {
+    if (newType === 'four_wheel') {
+      await nextTick()
+      initSensorChart()
+    } else {
+      if (sensorRefreshTimer) {
+        clearInterval(sensorRefreshTimer)
+        sensorRefreshTimer = null
+      }
+      if (sensorChart) {
+        sensorChart.dispose()
+        sensorChart = null
+      }
+    }
+  },
+  { deep: true, immediate: true }
+)
 
 // 更新飞行统计图表
 const updateFlightStatisticsChart = () => {
@@ -7469,9 +7747,6 @@ onMounted(async () => {
       initAlarmTrendChart()
       initTaskPieCharts()
       initLineChart()
-      if (selectedVehicleType.value === 'four_wheel') {
-        initSensorChart()
-      }
     }, 100)
   })
 
@@ -8751,9 +9026,9 @@ onActivated(async () => {
     if (selectedMap.value) {
       const normalizedSelectedMap = String(selectedMap.value || '').trim().split('@')[0] || ''
       const hasReusablePointCloud =
-        !!normalizedSelectedMap &&
-        lastLoadedPointCloudMap.value === normalizedSelectedMap &&
-        basePointCloudData.value.length > 0
+          !!normalizedSelectedMap &&
+          lastLoadedPointCloudMap.value === normalizedSelectedMap &&
+          basePointCloudData.value.length > 0
 
       // 先让首页完成显示，再在后台同步点云，避免切页时被大点云重建卡住。
       requestAnimationFrame(() => {
@@ -9812,6 +10087,15 @@ const handlePageShow = () => {
   margin-left: 10px;
 }
 
+.img.is-car-img {
+  width: 78%;
+  aspect-ratio: 15/10;
+  max-width: 140px;
+  max-height: 100px;
+  transform: scale(1.5);
+  margin-left: 20px;
+}
+
 .img img {
   width: 100%;
   height: 100%;
@@ -9879,6 +10163,10 @@ const handlePageShow = () => {
 
 .b-top-rightDiv .metric-icon-mileage {
   transform: scale(1.18) translateY(-2px);
+}
+
+.b-top-rightDiv .metric-icon-latency {
+  transform: scale(1.02) translateY(1px);
 }
 
 .b-top-rightDiv .charging-text {

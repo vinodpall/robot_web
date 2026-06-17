@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="three-pointcloud-shell">
     <div ref="containerRef" class="three-pointcloud-canvas"></div>
     <div v-if="loading" class="three-pointcloud-overlay">{{ loadingText || '点云加载中...' }}</div>
@@ -38,6 +38,7 @@ const props = defineProps<{
   snapToTrajectory?: boolean
   snapPixelRadius?: number
   snapPriorityIndex?: number | null
+  robotType?: string
 }>()
 
 const emit = defineEmits<{
@@ -617,7 +618,8 @@ const createRobotObject = () => {
     group.userData.headingTargets = [cone, edges]
   }
 
-  const label = createLabelSprite('机器狗', {
+  const labelText = props.robotType === 'four_wheel' ? '无人车' : '机器狗'
+  const label = createLabelSprite(labelText, {
     textColor: '#FF88FF',
     borderColor: 'rgba(255, 150, 255, 0.55)',
     backgroundColor: 'rgba(5, 15, 35, 0.5)',
@@ -1130,6 +1132,13 @@ watch(
     rebuildRobotObject()
   },
   { deep: true }
+)
+
+watch(
+  () => props.robotType,
+  () => {
+    rebuildRobotObject()
+  }
 )
 
 onMounted(() => {

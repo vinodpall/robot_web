@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <aside class="sidebar-menu">
       <div class="sidebar-tabs">
@@ -162,6 +162,7 @@ import bodyInfoIcon from '@/assets/source_data/svg_data/robot_source/body_info.s
 import userIcon from '@/assets/source_data/svg_data/user.svg'
 import roleIcon from '@/assets/source_data/svg_data/role.svg'
 import permissionIcon from '@/assets/source_data/svg_data/permission.svg'
+import robotInfoIcon from '@/assets/source_data/svg_data/robot_source/robot_info.svg'
 import deleteIcon from '@/assets/source_data/svg_data/delete.svg'
 
 interface PermissionPayload {
@@ -225,7 +226,8 @@ const sidebarTabs = [
   { key: 'body', label: '本体参数', icon: bodyInfoIcon, path: '/dashboard/body-params', permission: 'system-body-show' },
   { key: 'user', label: '用户管理', icon: userIcon, path: '/dashboard/users', permission: 'system-user-show' },
   { key: 'role', label: '角色管理', icon: roleIcon, path: '/dashboard/roles', permission: 'system-role-show' },
-  { key: 'super', label: '超级管理员', icon: permissionIcon, path: '/dashboard/super-admin', permission: 'system-super-show' }
+  { key: 'super', label: '超级管理员', icon: permissionIcon, path: '/dashboard/super-admin', permission: 'system-super-show' },
+  { key: 'robotinfo', label: '设备详情', icon: robotInfoIcon, path: '/dashboard/robot-info', permission: 'system-robotinfo-show' }
 ]
 
 const MODULE_NAME_BY_CODE: Record<string, string> = {

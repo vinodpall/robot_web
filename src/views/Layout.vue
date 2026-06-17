@@ -29,7 +29,7 @@
         <router-link :to="logNavTarget" class="nav-item" :class="{ active: $route.path === '/dashboard/device-manage' || $route.path === '/dashboard/alarm-log' }">
           日志管理
         </router-link>
-        <router-link :to="systemNavTarget" class="nav-item" :class="{ active: $route.path.includes('body-params') || $route.path.includes('users') || $route.path.includes('roles') || $route.path.includes('super-admin') }">
+        <router-link :to="systemNavTarget" class="nav-item" :class="{ active: $route.path.includes('body-params') || $route.path.includes('users') || $route.path.includes('roles') || $route.path.includes('super-admin') || $route.path.includes('robot-info') }">
           系统管理
         </router-link>
       </nav>
@@ -241,7 +241,8 @@ const SYSTEM_MODULE_PATH_SET = new Set([
   '/dashboard/body-params',
   '/dashboard/users',
   '/dashboard/roles',
-  '/dashboard/super-admin'
+  '/dashboard/super-admin',
+  '/dashboard/robot-info'
 ])
 
 const normalizeTaskModulePath = (path: string | null | undefined) => {

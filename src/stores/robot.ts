@@ -20,6 +20,9 @@ import type {
   SystemTelemetryData,
   TerrainModeData,
   BodyHeightStateData,
+  SystemStatusData,
+  SpeedStatusData,
+  LatencyStatusData,
 } from '../composables/useRobotWebSocket'
 
 export const useRobotStore = defineStore('robot', () => {
@@ -67,6 +70,9 @@ export const useRobotStore = defineStore('robot', () => {
   // ===== 0x100a 传感器帧（IMU + 关节） =====
   const sensorData = ref<SensorData | null>(null)
   const systemTelemetry = ref<SystemTelemetryData | null>(null)
+  const systemStatus = ref<SystemStatusData | null>(null)
+  const speedStatus = ref<SpeedStatusData | null>(null)
+  const latencyStatus = ref<LatencyStatusData | null>(null)
 
   // ===== task_status 发布点任务运行状态 =====
   const taskStatus = ref<TaskStatusData | null>(null)
@@ -74,6 +80,10 @@ export const useRobotStore = defineStore('robot', () => {
 
   // ===== multitask_status 多任务组运行状态 =====
   const multitaskStatus = ref<MultiTaskStatusData | null>(null)
+
+  // ===== 实时传感器数据 =====
+  const realtimeSensorValues = ref<Record<string, number>>({})
+  const realtimeSensorUnits = ref<Record<string, string>>({})
 
   // ===== mutations =====
 
@@ -155,6 +165,21 @@ export const useRobotStore = defineStore('robot', () => {
     systemTelemetry.value = data
   }
 
+  const setSystemStatus = (data: SystemStatusData) => {
+    if (!data) return
+    systemStatus.value = data
+  }
+
+  const setSpeedStatus = (data: SpeedStatusData) => {
+    if (!data) return
+    speedStatus.value = data
+  }
+
+  const setLatencyStatus = (data: LatencyStatusData) => {
+    if (!data) return
+    latencyStatus.value = data
+  }
+
   const setTaskStatus = (data: TaskStatusData) => {
     taskStatus.value = data
   }
@@ -165,6 +190,20 @@ export const useRobotStore = defineStore('robot', () => {
 
   const setMultitaskStatus = (data: MultiTaskStatusData) => {
     multitaskStatus.value = data
+  }
+
+  const setRealtimeSensorData = (payload: any) => {
+    if (!payload || typeof payload !== 'object') return
+    Object.keys(payload).forEach(key => {
+      const item = payload[key]
+      if (item && typeof item.value === 'number') {
+        const lowerKey = key.toLowerCase()
+        realtimeSensorValues.value[lowerKey] = item.value
+        if (item.unit) {
+          realtimeSensorUnits.value[lowerKey] = String(item.unit)
+        }
+      }
+    })
   }
 
   const resetRuntimeState = () => {
@@ -188,6 +227,8 @@ export const useRobotStore = defineStore('robot', () => {
     taskStatus.value = null
     taskProgress.value = null
     multitaskStatus.value = null
+    realtimeSensorValues.value = {}
+    realtimeSensorUnits.value = {}
   }
 
   // ===== computed =====
@@ -382,6 +423,9 @@ export const useRobotStore = defineStore('robot', () => {
     bodyHeightState,
     sensorData,
     systemTelemetry,
+    systemStatus,
+    speedStatus,
+    latencyStatus,
     taskStatus,
     taskProgress,
     multitaskStatus,
@@ -403,9 +447,13 @@ export const useRobotStore = defineStore('robot', () => {
     setBodyHeightState,
     setSensorData,
     setSystemTelemetry,
+    setSystemStatus,
+    setSpeedStatus,
+    setLatencyStatus,
     setTaskStatus,
     setTaskProgress,
     setMultitaskStatus,
+    setRealtimeSensorData,
     resetRuntimeState,
     // computed
     batteryLevel,
@@ -437,5 +485,7 @@ export const useRobotStore = defineStore('robot', () => {
     isInsRunning,
     isCharging,
     isSlam,
+    realtimeSensorValues,
+    realtimeSensorUnits,
   }
 })

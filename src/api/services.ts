@@ -1,4 +1,4 @@
-﻿import { apiClient, API_BASE_URL, type ApiResponse, type PaginatedResponse } from './config'
+import { apiClient, API_BASE_URL, type ApiResponse, type PaginatedResponse } from './config'
 import type { User, Dock, Drone, Mission, MissionRecord, Alert, Role, Device, HmsAlert, VisionAlert, VisionAlertsResponse, Permission, Robot, RobotsResponse } from '../types'
 import { getCurrentConfig } from '../config/environment'
 
@@ -904,6 +904,9 @@ export const robotApi = {
   },
   getRobotDetail: (robotId: string) => {
     return apiClient.get<Robot>(`/robots/${encodeURIComponent(robotId)}`)
+  },
+  updateRobot: (robotId: number, data: Partial<Robot>) => {
+    return apiClient.put<Robot>(`/robots/${robotId}`, data)
   }
 }
 

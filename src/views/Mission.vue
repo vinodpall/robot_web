@@ -173,6 +173,7 @@
               :navigation-origin="previewNavigationOrigin"
               :robot-pose="robotStore.pose"
               :robot-mesh="previewPc.robotMesh.value"
+              :robot-type="selectedVehicleType"
             />
           </div>
         </div>
@@ -499,8 +500,11 @@
     <!-- Add Task Modal -->
     <Teleport to="body">
       <div v-if="addTaskDialog.visible" class="custom-dialog-mask">
-        <div class="simple-modal-card add-task-modal-card">
-          <div class="simple-modal-header">
+        <div 
+          class="simple-modal-card add-task-modal-card"
+          :style="{ transform: `translate(${modalOffset.x}px, ${modalOffset.y}px)` }"
+        >
+          <div class="simple-modal-header" @mousedown="startDrag">
             <span>{{ isEditMode ? '编辑任务' : '添加任务' }}</span>
             <span class="simple-close-icon" @click="cancelAddTask">×</span>
           </div>
@@ -1994,24 +1998,26 @@ const onTrackStartConfirm = async () => {
     }
 
     resetTrackStartProgress()
-    pushTrackStartStep('检查循迹启动前置状态')
-    const checkResult = await navigationApi.startTrack(robotId, {
-      obs_mode: form.obs_mode,
-      track_name: form.track_name,
-      taskpoint_name: form.taskpoint_name,
-      gait_name: selectedVehicleType.value === 'four_wheel' ? '' : gaitConfig.command,
-      ground: ''
-    })
-    const canWaitDirectly = resolveCheckExitChargeResult(checkResult)
-    if (canWaitDirectly === true) {
-      pushTrackStartStep('检测到可直接启动，等待循迹启动', 'success')
-      showMissionSuccess('等待循迹启动', 8000)
-      return
-    }
-    if (selectedVehicleType.value !== 'four_wheel' && canWaitDirectly === false && isMissionRobotProneState()) {
-      pushTrackStartStep('机器狗处于趴下状态，请先起立', 'error')
-      showMissionError('机器狗处于趴下状态，请先将机器狗起立')
-      return
+    if (selectedVehicleType.value !== 'four_wheel') {
+      pushTrackStartStep('检查循迹启动前置状态')
+      const checkResult = await navigationApi.startTrack(robotId, {
+        obs_mode: form.obs_mode,
+        track_name: form.track_name,
+        taskpoint_name: form.taskpoint_name,
+        gait_name: selectedVehicleType.value === 'four_wheel' ? '' : gaitConfig.command,
+        ground: ''
+      })
+      const canWaitDirectly = resolveCheckExitChargeResult(checkResult)
+      if (canWaitDirectly === true) {
+        pushTrackStartStep('检测到可直接启动，等待循迹启动', 'success')
+        showMissionSuccess('等待循迹启动', 8000)
+        return
+      }
+      if (canWaitDirectly === false && isMissionRobotProneState()) {
+        pushTrackStartStep('机器狗处于趴下状态，请先起立', 'error')
+        showMissionError('机器狗处于趴下状态，请先将机器狗起立')
+        return
+      }
     }
 
     if (selectedVehicleType.value !== 'four_wheel') {
@@ -3258,6 +3264,45 @@ const addTaskFieldErrors = ref({
   z: '',
   angle: ''
 })
+
+/* Add Task Logic Drag Offset */
+const modalOffset = ref({ x: 0, y: 0 })
+
+// 监听弹窗打开状态，在打开时重置位置偏移量
+watch(() => addTaskDialog.value.visible, (visible) => {
+  if (visible) {
+    modalOffset.value = { x: 0, y: 0 }
+  }
+})
+
+// 鼠标拖动处理逻辑
+const startDrag = (e: MouseEvent) => {
+  if (e.button !== 0) return // 仅允许鼠标左键拖动
+  const target = e.target as HTMLElement
+  if (target.closest('.simple-close-icon') || target.closest('button') || target.closest('input') || target.closest('select')) {
+    return // 如果点击的是关闭按钮或表单控件，不触发拖动
+  }
+
+  const startX = e.clientX
+  const startY = e.clientY
+  const initialX = modalOffset.value.x
+  const initialY = modalOffset.value.y
+
+  const handleMouseMove = (moveEvent: MouseEvent) => {
+    modalOffset.value = {
+      x: initialX + (moveEvent.clientX - startX),
+      y: initialY + (moveEvent.clientY - startY)
+    }
+  }
+
+  const handleMouseUp = () => {
+    document.removeEventListener('mousemove', handleMouseMove)
+    document.removeEventListener('mouseup', handleMouseUp)
+  }
+
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
+}
 const resetAddTaskFieldErrors = () => {
   addTaskFieldErrors.value = {
     taskType: '',
@@ -5686,6 +5731,7 @@ const confirmExtraConfig = () => {
 .custom-dialog-mask { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; justify-content: center; align-items: center; }
 .simple-modal-card { width: 440px; margin: auto; background: #102a43; border: 1px solid #244f78; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); display: flex; flex-direction: column; max-height: 85vh; overflow: hidden; }
 .add-task-modal-card { width: 760px; max-width: calc(100vw - 40px); max-height: none; }
+.add-task-modal-card .simple-modal-header { cursor: move; user-select: none; }
 .simple-modal-header { height: 48px; background: #163654; border-bottom: 1px solid #244f78; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; color: #fff; font-size: 16px; font-weight: 500; flex-shrink: 0; }
 .simple-close-icon { cursor: pointer; font-size: 20px; color: #909399; }
 .simple-close-icon:hover { color: #fff; }

@@ -154,6 +154,7 @@
               :navigation-origin="previewNavigationOrigin"
               :robot-pose="robotStore.pose"
               :robot-mesh="previewPc.robotMesh.value"
+              :robot-type="selectedVehicleType"
             />
           </div>
         </div>
