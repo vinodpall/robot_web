@@ -87,6 +87,14 @@
           <div class="stop-content">
             <span>{{ isStopActive ? '启动' : '急停' }}</span>
           </div>
+          <!-- 悬浮提示框 -->
+          <div v-if="isStopActive && selectedRobot?.robot_type === 'four_wheel' && activeStopLabels.length" class="stop-tooltip">
+            <div class="stop-tooltip-title">急停触发源</div>
+            <div class="stop-tooltip-item" v-for="label in activeStopLabels" :key="label">
+              <span class="stop-tooltip-dot"></span>
+              {{ label }}
+            </div>
+          </div>
         </span>
 
         <div class="user-info" @click="toggleUserMenu">
@@ -205,7 +213,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useDeviceStore } from '../stores/device'
 import { useRobotStore } from '../stores/robot'
-import { robotApi, userApi, dogApi } from '../api/services'
+import { robotApi, userApi, dogApi, navigationApi } from '../api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { refreshRobotRelatedCache, refreshCameraCache, refreshMapCache } from '../utils/robotBootstrap'
 import ErrorMessage from '../components/ErrorMessage.vue'
@@ -564,7 +572,61 @@ const closeUserMenu = () => {
 document.addEventListener('click', closeUserMenu)
 
 const isStopActive = computed(() => {
+  if (selectedRobot.value?.robot_type === 'four_wheel') {
+    const s = robotStore.stopState
+    if (s) {
+      return s.state === 1 || s.button === 1 || s.collision === 1 || s.sonic === 1 || s.soft === 1
+    }
+    return false
+  }
   return robotStore.motionState?.basic_state === 6
+})
+
+const activeStopLabels = computed(() => {
+  const labels: string[] = []
+  const s = robotStore.stopState
+  if (!s) return labels
+
+  if (s.button === 1) {
+    labels.push('物理按钮急停')
+  }
+
+  if (s.collision !== 0) {
+    if ((s.collision & 1) !== 0) {
+      labels.push('前触边急停')
+    }
+    if ((s.collision & 2) !== 0) {
+      labels.push('后触边急停')
+    }
+    if ((s.collision & 1) === 0 && (s.collision & 2) === 0) {
+      labels.push('触边急停')
+    }
+  }
+
+  if (s.sonic !== 0) {
+    const activeSonics: number[] = []
+    for (let i = 0; i < 16; i++) {
+      if (((s.sonic >> i) & 1) !== 0) {
+        activeSonics.push(i + 1)
+      }
+    }
+    if (activeSonics.length > 0) {
+      labels.push(`超声急停 (传感器 ${activeSonics.join(',')})`)
+    } else {
+      labels.push('超声急停')
+    }
+  }
+
+  if (s.soft === 1) {
+    labels.push('软件急停')
+  }
+
+  // 如果 state 是 1 但上面都没有，作为一个兜底显示
+  if (s.state === 1 && labels.length === 0) {
+    labels.push('系统状态急停')
+  }
+
+  return labels
 })
 
 const globalFallAlertActive = ref(false)
@@ -617,7 +679,12 @@ const toggleStop = async () => {
   }
 
   try {
-    await dogApi.sendCommand(selectedRobotId.value, { command_name: 'stop' })
+    if (selectedRobot.value?.robot_type === 'four_wheel') {
+      const controlVal = isStopActive.value ? 0 : 1
+      await navigationApi.softwareStop(selectedRobotId.value, { control: controlVal })
+    } else {
+      await dogApi.sendCommand(selectedRobotId.value, { command_name: 'stop' })
+    }
   } catch (error) {
     console.error('急停操作失败:', error)
   }
@@ -1222,6 +1289,76 @@ onUnmounted(() => {
 
 .stop-btn.is-active {
   background-image: url('/src/assets/source_data/stop_click.png');
+}
+
+/* 悬浮提示框样式 */
+.stop-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 1000;
+  min-width: 150px;
+  background: rgba(10, 25, 48, 0.96);
+  border: 1px solid rgba(255, 77, 79, 0.75); /* 红色警示边框 */
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 8px rgba(255, 77, 79, 0.3);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+}
+
+/* 小三角 */
+.stop-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: rgba(10, 25, 48, 0.96);
+  border-top: 1px solid rgba(255, 77, 79, 0.75);
+  border-left: 1px solid rgba(255, 77, 79, 0.75);
+}
+
+/* 悬浮显示 */
+.stop-btn:hover .stop-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(12px);
+}
+
+.stop-tooltip-title {
+  font-size: 12px;
+  color: #ff7875;
+  font-weight: bold;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.stop-tooltip-item {
+  font-size: 12px;
+  color: #eaf7ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.stop-tooltip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  box-shadow: 0 0 4px #ff4d4f;
+  flex-shrink: 0;
 }
 
 .stop-content {

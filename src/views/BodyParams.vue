@@ -25,7 +25,54 @@
           </div>
 
           <div class="mission-content-wrapper">
-            <div class="body-params-card card">
+            <!-- 无人车本体参数 -->
+            <div v-if="isFourWheel" class="body-params-card card">
+              <!-- 温度信息 -->
+              <div class="body-params-section">
+                <div class="body-params-title">设备温度</div>
+                <div class="body-params-grid">
+                  <div
+                    v-for="(item, idx) in carTemperatures"
+                    :key="`temp-${idx}`"
+                    :class="['body-params-item', getTempLevelClass(item.value)]"
+                  >
+                    <span class="body-params-label">{{ item.name }}</span>
+                    <span class="body-params-value">{{ formatCarTempValue(item.value) }}℃</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 电机信息 -->
+              <div class="body-params-section">
+                <div class="body-params-title">电机运行状态</div>
+                <div class="motor-info-grid">
+                  <div
+                    v-for="motorIdx in [0, 1, 2, 3]"
+                    :key="`motor-${motorIdx}`"
+                    class="motor-info-card"
+                  >
+                    <div class="motor-info-header">电机 {{ motorIdx + 1 }}</div>
+                    <div class="motor-info-row">
+                      <span class="motor-info-label">转速 (RPM)</span>
+                      <span class="motor-info-value">{{ formatMotorValue(robotStore.carMotorInfo?.rpm?.[motorIdx]) }}</span>
+                    </div>
+                    <div class="motor-info-row">
+                      <span class="motor-info-label">电流 (A)</span>
+                      <span class="motor-info-value">{{ formatMotorValue(robotStore.carMotorInfo?.current?.[motorIdx], true) }}</span>
+                    </div>
+                    <div class="motor-info-row">
+                      <span class="motor-info-label">状态</span>
+                      <span class="motor-info-value" :class="getMotorStateClass(robotStore.carMotorInfo?.state?.[motorIdx])">
+                        {{ formatMotorState(robotStore.carMotorInfo?.state?.[motorIdx]) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 原有机器狗本体参数 -->
+            <div v-else class="body-params-card card">
               <div class="body-params-section">
                 <div class="body-params-title">关节电机温度</div>
                 <div class="body-params-grid">
@@ -123,11 +170,15 @@ import permissionIcon from '@/assets/source_data/svg_data/permission.svg'
 import robotInfoIcon from '@/assets/source_data/svg_data/robot_source/robot_info.svg'
 import { useRobotStore } from '@/stores/robot'
 import { usePermissionStore } from '@/stores/permission'
+import { useDeviceStore } from '@/stores/device'
 
 const router = useRouter()
 const route = useRoute()
 const robotStore = useRobotStore()
 const permissionStore = usePermissionStore()
+const deviceStore = useDeviceStore()
+
+const isFourWheel = computed(() => deviceStore.selectedRobot?.robot_type === 'four_wheel')
 
 const sidebarTabs = [
   { key: 'body', label: '本体参数', icon: bodyInfoIcon, path: '/dashboard/body-params', permission: 'system-body-show' },
@@ -258,6 +309,32 @@ const batteryTempsText = computed(() => {
   return typeof firstTemp === 'number' ? `${firstTemp.toFixed(1)}°C` : '--'
 })
 
+// ---- 无人车本体参数相关计算与方法 ----
+const carTemperatures = computed(() => {
+  return robotStore.carTemperature?.temperature || []
+})
+
+const formatCarTempValue = (value: number | undefined | null) => {
+  if (value === undefined || value === null || value <= -1000) return '--'
+  return value.toFixed(1)
+}
+
+const formatMotorValue = (value: number | undefined | null, isCurrent = false) => {
+  if (value === undefined || value === null) return '--'
+  if (isCurrent) return value.toFixed(1)
+  return String(Math.round(value))
+}
+
+const formatMotorState = (state: number | undefined | null) => {
+  if (state === undefined || state === null) return '--'
+  return state === 0 ? '正常' : `故障 (${state})`
+}
+
+const getMotorStateClass = (state: number | undefined | null) => {
+  if (state === undefined || state === null) return ''
+  return state === 0 ? 'motor-state-ok' : 'motor-state-error'
+}
+
 const emitPermissionDenied = (permission: string) => {
   if (typeof document !== 'undefined') {
     document.dispatchEvent(new CustomEvent('permission-denied', {
@@ -359,5 +436,62 @@ const handleTabClick = (tab: { key: string; path: string; permission?: string })
 
 .temp-danger {
   border-color: rgba(255, 88, 88, 0.9);
+}
+
+/* 无人车电机信息样式 */
+.motor-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.motor-info-card {
+  border: 1px solid rgba(90, 164, 206, 0.45);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(22, 58, 88, 0.72) 0%, rgba(16, 42, 66, 0.88) 100%);
+  box-shadow: inset 0 0 10px rgba(5, 18, 30, 0.4), 0 6px 14px rgba(4, 12, 22, 0.25);
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.motor-info-card:hover {
+  border-color: rgba(103, 213, 253, 0.75);
+}
+
+.motor-info-header {
+  font-size: 14px;
+  font-weight: bold;
+  color: #67d5fd;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.25);
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.motor-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.motor-info-label {
+  color: #b6d2e5;
+  font-size: 12px;
+}
+
+.motor-info-value {
+  color: #eef7ff;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.motor-state-ok {
+  color: #52c41a;
+}
+
+.motor-state-error {
+  color: #ff4d4f;
+  text-shadow: 0 0 4px rgba(255, 77, 79, 0.5);
 }
 </style>

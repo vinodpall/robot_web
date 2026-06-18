@@ -241,6 +241,47 @@ export interface LatencyStatusData {
   timestamp: string
 }
 
+/** gps_message GPS/RTK 定位消息 */
+export interface GpsMessageData {
+  latitude: string | number
+  longitude: string | number
+  altitude: string | number
+  status: number
+  status_text: string
+  sat_num: number
+  timestamp: string
+}
+
+/** stop_state 无人车急停状态消息 */
+export interface StopStateData {
+  state: number
+  button: number
+  collision: number
+  sonic: number
+  soft: number
+  timestamp: string
+}
+
+/** temperature 无人车温度上报 */
+export interface CarTemperatureItem {
+  name: string
+  value: number
+}
+
+export interface CarTemperatureData {
+  temperature: CarTemperatureItem[]
+  timestamp: string
+}
+
+/** motor_info 无人车电机信息 */
+export interface CarMotorInfoData {
+  rpm: number[]
+  current: number[]
+  state: number[]
+  timestamp: string
+}
+
+
 /** 0x3100EE01 地形模式 */
 export interface TerrainModeData {
   instruction_code: string
@@ -463,6 +504,41 @@ export function useRobotWebSocket() {
         }
         break
 
+      // ---- 电池状态 (用于无人车) ----
+      case 'battery': {
+        const rawData = data
+        if (rawData) {
+          const rawVol = Array.isArray(rawData.voltage) ? rawData.voltage[0] : (typeof rawData.voltage === 'number' ? rawData.voltage : 0)
+          const rawCur = Array.isArray(rawData.current) ? rawData.current[0] : (typeof rawData.current === 'number' ? rawData.current : 0)
+          
+          // 根据 charging_state 处理正负电流以指示充电状态（0为放电，非0为充电）
+          const isCharging = rawData.charging_state !== undefined && rawData.charging_state !== null
+            ? rawData.charging_state !== 0
+            : rawCur > 0
+          const currentVal = isCharging ? Math.abs(rawCur) : -Math.abs(rawCur)
+
+          const mappedBattery: BatteryData = {
+            battery_level: typeof rawData.soc === 'number' ? rawData.soc : (rawData.now_percent || 0),
+            voltage: rawVol / 10,  // 从 100mV 转换为 V
+            current: currentVal / 10,  // 从 100mA 转换为 A
+            remaining_capacity: rawData.now_capacity || 0,
+            nominal_capacity: rawData.max_capacity || 0,
+            cycles: 0,
+            production_date: 0,
+            balanced_low: 0,
+            balanced_high: 0,
+            protected_state: rawData.state || 0,
+            software_version: 0,
+            mos_state: 0,
+            battery_quantity: 0,
+            battery_ntc: 0,
+            battery_temperature: typeof rawData.temperature === 'number' ? [rawData.temperature] : [],
+          }
+          robotStore.setBatteryData(mappedBattery)
+        }
+        break
+      }
+
       // ---- 系统状态 ----
       case 'system_status':
         if (typeof (robotStore as any).setSystemStatus === 'function') {
@@ -487,6 +563,42 @@ export function useRobotWebSocket() {
           ;(robotStore as any).setLatencyStatus(data as LatencyStatusData)
         } else {
           ;(robotStore as any).latencyStatus = data as LatencyStatusData
+        }
+        break
+
+      // ---- GPS/RTK 定位消息 ----
+      case 'gps_message':
+        if (typeof (robotStore as any).setGpsMessage === 'function') {
+          ;(robotStore as any).setGpsMessage(data as GpsMessageData)
+        } else {
+          ;(robotStore as any).gpsMessage = data as GpsMessageData
+        }
+        break
+
+      // ---- 无人车急停状态 ----
+      case 'stop_state':
+        if (typeof (robotStore as any).setStopState === 'function') {
+          ;(robotStore as any).setStopState(data as StopStateData)
+        } else {
+          ;(robotStore as any).stopState = data as StopStateData
+        }
+        break
+
+      // ---- 无人车温度数据 ----
+      case 'temperature':
+        if (typeof (robotStore as any).setCarTemperature === 'function') {
+          ;(robotStore as any).setCarTemperature(data as CarTemperatureData)
+        } else {
+          ;(robotStore as any).carTemperature = data as CarTemperatureData
+        }
+        break
+
+      // ---- 无人车电机信息 ----
+      case 'motor_info':
+        if (typeof (robotStore as any).setCarMotorInfo === 'function') {
+          ;(robotStore as any).setCarMotorInfo(data as CarMotorInfoData)
+        } else {
+          ;(robotStore as any).carMotorInfo = data as CarMotorInfoData
         }
         break
 

@@ -1094,6 +1094,9 @@ export const navigationApi = {
   getCurrentSpeed: (robotId: string) => {
     return apiClient.get(`/speed/${robotId}/current_speed`)
   },
+  softwareStop: (robotId: string, data: { control: number }) => {
+    return apiClient.post(`/speed/${robotId}/software_stop`, data)
+  },
   startMultiTaskGroup: (robotId: string, data: {
     multitask_name: string;
     multitask_id: string;

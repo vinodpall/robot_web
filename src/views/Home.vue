@@ -404,12 +404,19 @@
                   </div>
                   <span class="value">{{ formatRobotYaw() }}</span>
                 </div>
-                <div class="status-item">
-                  <div class="top-row">
-                    <img src="@/assets/source_data/svg_data/status.svg" alt="状态" />
-                    <span class="label">状态</span>
-                  </div>
-                  <span class="value">{{ formatRobotStatus() }}</span>
+                <div class="status-item rtk-status-item" v-if="selectedVehicleType === 'four_wheel'" ref="rtkItemRef" @click.stop="toggleRtkPopup" style="cursor:pointer;">
+                    <div class="top-row">
+                      <img src="@/assets/source_data/svg_data/robot_source/rtk.svg" alt="RTK" />
+                      <span class="label">RTK</span>
+                    </div>
+                    <span class="value" :class="getRtkStatusClass()">{{ formatRtkStatus() }}</span>
+                </div>
+                <div class="status-item" v-else>
+                    <div class="top-row">
+                      <img src="@/assets/source_data/svg_data/status.svg" alt="状态" />
+                      <span class="label">状态</span>
+                    </div>
+                    <span class="value">{{ formatRobotStatus() }}</span>
                 </div>
                 
                 <!-- 第二行 -->
@@ -433,7 +440,7 @@
                       <img src="@/assets/source_data/svg_data/robot_source/cpu.svg" alt="CPU" />
                       <span class="label">CPU</span>
                     </div>
-                    <span class="value">{{ formatCPU() }}</span>
+                    <span class="value" :class="getResourceStatusClass(robotStore.systemStatus?.cpu_percent)">{{ formatCPU() }}</span>
                   </template>
                   <template v-else>
                     <div class="top-row">
@@ -449,7 +456,7 @@
                       <img src="@/assets/source_data/svg_data/robot_source/memory.svg" alt="内存" />
                       <span class="label">内存</span>
                     </div>
-                    <span class="value">{{ formatMemory() }}</span>
+                    <span class="value" :class="getResourceStatusClass(robotStore.systemStatus?.memory_percent)">{{ formatMemory() }}</span>
                   </template>
                   <template v-else>
                     <div class="top-row">
@@ -465,7 +472,7 @@
                       <img src="@/assets/source_data/svg_data/robot_source/disk.svg" alt="磁盘" />
                       <span class="label">磁盘</span>
                     </div>
-                    <span class="value">{{ formatDisk() }}</span>
+                    <span class="value" :class="getResourceStatusClass(robotStore.systemStatus?.disk_percent)">{{ formatDisk() }}</span>
                   </template>
                   <template v-else>
                     <div class="top-row">
@@ -488,7 +495,7 @@
             <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
             传感器数据
           </div>
-          <div class="sensor-toggler">
+          <div v-if="sensorsList.length > 0" class="sensor-toggler">
             <span class="sensor-toggle-btn" @click="prevSensor">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M15 19L8 12L15 5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -503,7 +510,10 @@
           </div>
         </div>
         <div class="sensor-chart-container">
-          <div ref="sensorChartRef" class="sensor-chart"></div>
+          <div v-if="sensorsList.length > 0" ref="sensorChartRef" class="sensor-chart"></div>
+          <div v-else class="sensor-empty-state">
+            未配置传感器
+          </div>
         </div>
       </div>
 
@@ -1151,6 +1161,34 @@
     <SuccessMessage :show="successToast.show" :message="successToast.message" @close="successToast.show = false" />
     <ErrorMessage :show="errorToast.show" :message="errorToast.message" @close="errorToast.show = false" />
 
+    <!-- RTK 定位气泡弹窗（Teleport 到 body，避免被父容器裁剪） -->
+    <Teleport to="body">
+      <transition name="rtk-popup-fade">
+        <div
+          v-if="showRtkPopup"
+          class="rtk-popup"
+          :style="{ top: rtkPopupStyle.top, left: rtkPopupStyle.left }"
+          @click.stop
+        >
+          <div class="rtk-popup-arrow"></div>
+          <div class="rtk-popup-content">
+            <div class="rtk-popup-row">
+              <span class="rtk-popup-label">经度</span>
+              <span class="rtk-popup-value">{{ formatRtkCoord(robotStore.gpsMessage?.longitude) }}°</span>
+            </div>
+            <div class="rtk-popup-row">
+              <span class="rtk-popup-label">纬度</span>
+              <span class="rtk-popup-value">{{ formatRtkCoord(robotStore.gpsMessage?.latitude) }}°</span>
+            </div>
+            <div class="rtk-popup-row">
+              <span class="rtk-popup-label">海拔</span>
+              <span class="rtk-popup-value">{{ formatRtkAlt(robotStore.gpsMessage?.altitude) }} m</span>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
+
   </div>
 </template>
 
@@ -1347,13 +1385,17 @@ const isRobotOnline = computed(() => robotStore.isOnline)
 
 // 计算属性：机器人电量（来自 0x21050f0a battery_level 或 system_status soc）
 const robotBatteryLevel = computed(() => {
+  const level = robotStore.batteryLevel
+  if (level !== undefined && level !== null) {
+    return level
+  }
   if (selectedVehicleType.value === 'four_wheel') {
     const soc = robotStore.systemStatus?.soc
     if (soc !== undefined && soc !== null) {
       return soc
     }
   }
-  return robotStore.batteryLevel
+  return null
 })
 
 // 计算属性：机器人是否处于充电中（来自 0x21050f0a current 正负值）
@@ -1771,10 +1813,81 @@ const formatDisk = () => {
   return diskPercent !== undefined && diskPercent !== null ? `${diskPercent}%` : '--%'
 }
 
+// 根据资源百分比获取颜色 class（三档：>=90% 红色, >=70% 黄色, <70% 正常浅蓝/绿色）
+const getResourceStatusClass = (percent: number | undefined | null) => {
+  if (percent === undefined || percent === null) return ''
+  if (percent >= 90) return 'status-level-danger'
+  if (percent >= 70) return 'status-level-warning'
+  return 'status-level-normal'
+}
+
 // 格式化网络延迟
 const formatLatency = () => {
   const latency = robotStore.latencyStatus?.latency_ms
-  return latency !== undefined && latency !== null ? `${latency} ms` : '-- ms'
+  return latency !== undefined && latency !== null ? `${Math.round(latency)} ms` : '-- ms'
+}
+
+// 格式化 RTK 状态
+const formatRtkStatus = () => {
+  const gps = robotStore.gpsMessage
+  if (!gps) return '--'
+  const statusText = gps.status_text || '--'
+  const satNum = gps.sat_num != null ? gps.sat_num : '--'
+  return `${statusText} (${satNum}星)`
+}
+
+// RTK 状态对应颜色 class
+const getRtkStatusClass = () => {
+  const status = robotStore.gpsMessage?.status
+  if (status === undefined || status === null) return ''
+  if (status >= 4) return 'rtk-status-good'   // RTK固定解/浮点解
+  if (status >= 1) return 'rtk-status-warn'   // 普通定位
+  return 'rtk-status-bad'                      // 无效定位
+}
+
+// RTK 气泡弹窗
+const showRtkPopup = ref(false)
+const rtkItemRef = ref<HTMLElement | null>(null)
+const rtkPopupStyle = ref<{ top: string; left: string }>(({ top: '0px', left: '0px' }))
+
+const updateRtkPopupPosition = () => {
+  const el = rtkItemRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  // 显示在元素正左方，12px 间距，垂直居中
+  rtkPopupStyle.value = {
+    top: `${rect.top + rect.height / 2 + window.scrollY}px`,
+    left: `${rect.left + window.scrollX - 12}px`,
+  }
+}
+
+const toggleRtkPopup = () => {
+  if (!showRtkPopup.value) {
+    updateRtkPopupPosition()
+  }
+  showRtkPopup.value = !showRtkPopup.value
+}
+
+// 点击外部关闭气泡
+const closeRtkPopupOnOutside = (e: MouseEvent) => {
+  const el = (e.target as HTMLElement).closest('.rtk-status-item')
+  if (!el) showRtkPopup.value = false
+}
+onMounted(() => document.addEventListener('click', closeRtkPopupOnOutside))
+onUnmounted(() => document.removeEventListener('click', closeRtkPopupOnOutside))
+
+// 格式化经纬度坐标（nan 显示 --）
+const formatRtkCoord = (val: string | number | undefined | null): string => {
+  if (val === undefined || val === null || val === '' || String(val).toLowerCase() === 'nan') return '--'
+  const n = Number(val)
+  return isNaN(n) ? '--' : n.toFixed(7)
+}
+
+// 格式化海拔
+const formatRtkAlt = (val: string | number | undefined | null): string => {
+  if (val === undefined || val === null || val === '' || String(val).toLowerCase() === 'nan') return '--'
+  const n = Number(val)
+  return isNaN(n) ? '--' : n.toFixed(2)
 }
 const pointCloudData = ref<PointCloudPoint[]>([])
 const basePointCloudData = ref<PointCloudPoint[]>([])
@@ -2726,11 +2839,7 @@ const sensorsList = computed(() => {
   }
 
   if (parsedSensors.length === 0) {
-    return [
-      { key: 'co2', label: 'CO2浓度 (ppm)', legendName: '二氧化碳(CO2) ppm', unit: 'ppm', color: '#00e1ff', minVal: 350, maxVal: 800, rangeMin: 380, rangeMax: 900, step: 20, initBase: 420, initRange: 60 },
-      { key: 'pm25', label: 'PM2.5 (μg/m³)', legendName: '细颗粒物(PM2.5) μg/m³', unit: 'μg/m³', color: '#39b54a', minVal: 10, maxVal: 75, rangeMin: 5, rangeMax: 120, step: 4, initBase: 18, initRange: 8 },
-      { key: 'noise', label: '环境噪音 (dB)', legendName: '环境噪音(Noise) dB', unit: 'dB', color: '#ff8000', minVal: 40, maxVal: 80, rangeMin: 35, rangeMax: 95, step: 6, initBase: 48, initRange: 12 }
-    ]
+    return []
   }
 
   const colors = ['#00e1ff', '#39b54a', '#ff8000', '#ff4d4f', '#2f54eb', '#722ed1', '#faad14']
@@ -4243,16 +4352,15 @@ const stopVideoPlayback = () => {
 }
 
 // 重新加载视频
-const reloadVideo = () => {
+const reloadVideo = async () => {
   if (visibleManualReconnectRunning) return
   visibleManualReconnectRunning = true
   webrtcReconnectCount = 0  // 手动重载，重置重连计数
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
   const stream = robotId ? getRobotVideoStreamByType(robotId, 'drone_visible') : getVideoStream('drone_visible')
-  const streamUrl = stream?.url || videoStreamUrl.value
-  if (!streamUrl) {
+  if (!stream || !stream.camera_index) {
     visibleManualReconnectRunning = false
-    showError('未找到可见光视频流')
+    showError('未找到可见光视频流配置')
     return
   }
 
@@ -4263,7 +4371,41 @@ const reloadVideo = () => {
   visibleBootstrapRetryCount = 0
   webrtcReconnecting.value = true
   stopWebRTCPlaybackForReconnect()
-  videoStreamUrl.value = streamUrl
+
+  try {
+    try {
+      await cameraApi.stopCameraStream(robotId, stream.camera_index)
+    } catch (stopError) {
+      console.warn('手动重连停止旧流失败，继续尝试启动新流:', stopError)
+    }
+
+    const response = await cameraApi.startCameraStream(robotId, stream.camera_index, stream.use_sub_stream || false)
+    if (response?.stream_url) {
+      videoStreamUrl.value = response.stream_url
+      const updatedStream = {
+        ...stream,
+        url: response.stream_url
+      }
+      if (robotId) {
+        const streams = getRobotVideoStreams(robotId)
+        const updated = streams.map(item =>
+          item.type === updatedStream.type ? { ...item, ...updatedStream } : item
+        )
+        setRobotVideoStreams(robotId, updated)
+      } else {
+        const streams = getVideoStreams()
+        const updated = streams.map(item =>
+          item.type === updatedStream.type ? { ...item, ...updatedStream } : item
+        )
+        setVideoStreams(updated)
+      }
+    } else {
+      throw new Error('未获取到视频流地址')
+    }
+  } catch (err) {
+    console.error('[手动重连] 重置视频流失败:', err)
+    showError('重置视频流失败')
+  }
 
   nextTick(() => {
     startVideoPlayback()
@@ -4552,13 +4694,13 @@ const stopInfraredPlayback = () => {
   hasInfraredVideoFrame.value = false
 }
 
-const reloadInfraredStream = () => {
+const reloadInfraredStream = async () => {
   if (infraredManualReconnectRunning) return
   infraredManualReconnectRunning = true
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
   const stream = robotId ? getRobotVideoStreamByType(robotId, 'drone_infrared') : getVideoStream('drone_infrared')
-  if (!stream) {
-    infraredError.value = '未找到红外视频流'
+  if (!stream || !stream.camera_index) {
+    infraredError.value = '未找到红外视频流配置'
     infraredManualReconnectRunning = false
     return
   }
@@ -4570,7 +4712,42 @@ const reloadInfraredStream = () => {
   infraredBootstrapRetryCount = 0
   infraredReconnecting.value = true
   stopInfraredWebRTCPlaybackForReconnect()
-  infraredStreamUrl.value = stream.url
+
+  try {
+    try {
+      await cameraApi.stopCameraStream(robotId, stream.camera_index)
+    } catch (stopError) {
+      console.warn('手动重连停止红外旧流失败，继续尝试启动新流:', stopError)
+    }
+
+    const response = await cameraApi.startCameraStream(robotId, stream.camera_index, stream.use_sub_stream || false)
+    if (response?.stream_url) {
+      infraredStreamUrl.value = response.stream_url
+      const updatedStream = {
+        ...stream,
+        url: response.stream_url
+      }
+      if (robotId) {
+        const streams = getRobotVideoStreams(robotId)
+        const updated = streams.map(item =>
+          item.type === updatedStream.type ? { ...item, ...updatedStream } : item
+        )
+        setRobotVideoStreams(robotId, updated)
+      } else {
+        const streams = getVideoStreams()
+        const updated = streams.map(item =>
+          item.type === updatedStream.type ? { ...item, ...updatedStream } : item
+        )
+        setVideoStreams(updated)
+      }
+    } else {
+      throw new Error('未获取到红外视频流地址')
+    }
+  } catch (err) {
+    console.error('[手动重连] 重置红外视频流失败:', err)
+    infraredError.value = '重置红外视频流失败'
+  }
+
   nextTick(() => {
     startInfraredPlayback(true)
     infraredManualReconnectRunning = false
@@ -7562,7 +7739,18 @@ watch(
   async ([newType]) => {
     if (newType === 'four_wheel') {
       await nextTick()
-      initSensorChart()
+      if (sensorsList.value.length > 0) {
+        initSensorChart()
+      } else {
+        if (sensorRefreshTimer) {
+          clearInterval(sensorRefreshTimer)
+          sensorRefreshTimer = null
+        }
+        if (sensorChart) {
+          sensorChart.dispose()
+          sensorChart = null
+        }
+      }
     } else {
       if (sensorRefreshTimer) {
         clearInterval(sensorRefreshTimer)
@@ -9087,18 +9275,22 @@ const recoverVideoStreamsOnForeground = async () => {
     }
 
     if (!mainConnAlive) {
-      initVideoPlayer()
-      await nextTick()
-      if (videoStreamUrl.value) startVideoPlayback()
-    } else if (videoElement.value && videoElement.value.paused) {
+      if (!visibleManualReconnectRunning) {
+        initVideoPlayer()
+        await nextTick()
+        if (videoStreamUrl.value) startVideoPlayback()
+      }
+    } else if (videoElement.value && videoElement.value.paused && !visibleManualReconnectRunning) {
       videoElement.value.play().catch(() => {})
     }
 
     if (!infraredConnAlive) {
-      initInfraredVideo()
-      await nextTick()
-      if (infraredStreamUrl.value) startInfraredPlayback()
-    } else if (infraredVideoElement.value && infraredVideoElement.value.paused) {
+      if (!infraredManualReconnectRunning) {
+        initInfraredVideo()
+        await nextTick()
+        if (infraredStreamUrl.value) startInfraredPlayback()
+      }
+    } else if (infraredVideoElement.value && infraredVideoElement.value.paused && !infraredManualReconnectRunning) {
       infraredVideoElement.value.play().catch(() => {})
     }
   } finally {
@@ -10169,6 +10361,10 @@ const handlePageShow = () => {
   transform: scale(1.02) translateY(1px);
 }
 
+.b-top-rightDiv .metric-icon-rtk {
+  transform: scale(1.05) translateY(1px);
+}
+
 .b-top-rightDiv .charging-text {
   display: none;
 }
@@ -10289,6 +10485,96 @@ const handlePageShow = () => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.status-item .value.rtk-status-good {
+  color: #4ade80;
+}
+.status-item .value.rtk-status-warn {
+  color: #fbbf24;
+}
+.status-item .value.rtk-status-bad {
+  color: #f87171;
+}
+
+.status-item .value.status-level-normal {
+  color: #4ade80; /* 正常使用显示绿色 */
+}
+.status-item .value.status-level-warning {
+  color: #fbbf24; /* 告警显示黄色 */
+}
+.status-item .value.status-level-danger {
+  color: #f87171; /* 危险显示红色 */
+}
+
+/* RTK 气泡弹窗（fixed 定位，Teleport 到 body） */
+.rtk-popup {
+  position: fixed;
+  /* top/left 由 JS 动态注入，transform 向左偏移自身宽度，垂直居中 */
+  transform: translateX(-100%) translateY(-50%);
+  z-index: 99999;
+  min-width: 210px;
+  background: rgba(8, 20, 44, 0.98);
+  border: 1px solid rgba(103, 213, 253, 0.55);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.65), 0 0 16px rgba(103, 213, 253, 0.25);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+.rtk-popup-arrow {
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: rgba(8, 20, 44, 0.98);
+  border-top: 1px solid rgba(103, 213, 253, 0.55);
+  border-right: 1px solid rgba(103, 213, 253, 0.55);
+}
+.rtk-popup-content {
+  padding: 12px 16px;
+}
+.rtk-popup-title {
+  font-size: 13px;
+  color: #67d5fd;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.25);
+  padding-bottom: 4px;
+}
+.rtk-popup-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+.rtk-popup-row:first-child {
+  margin-top: 0;
+}
+.rtk-popup-label {
+  font-size: 13px;
+  color: rgba(212, 237, 253, 0.85);
+  white-space: nowrap;
+}
+.rtk-popup-value {
+  font-size: 13px;
+  color: #67d5fd;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: 'Courier New', monospace;
+}
+/* 弹窗入场/离场动画 */
+.rtk-popup-fade-enter-active,
+.rtk-popup-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.rtk-popup-fade-enter-from,
+.rtk-popup-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-100%) translateY(-50%) translateX(6px);
 }
 
 .icon-back {
@@ -13361,6 +13647,20 @@ const handlePageShow = () => {
   width: 100%;
   height: 100%;
   flex: 1;
+}
+
+.sensor-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  flex: 1;
+  color: rgba(212, 237, 253, 0.45);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  border: 1px dashed rgba(0, 188, 212, 0.15);
+  border-radius: 6px;
+  background: rgba(0, 188, 212, 0.02);
 }
 
 .sensor-toggler {

@@ -23,6 +23,10 @@ import type {
   SystemStatusData,
   SpeedStatusData,
   LatencyStatusData,
+  GpsMessageData,
+  StopStateData,
+  CarTemperatureData,
+  CarMotorInfoData,
 } from '../composables/useRobotWebSocket'
 
 export const useRobotStore = defineStore('robot', () => {
@@ -73,6 +77,10 @@ export const useRobotStore = defineStore('robot', () => {
   const systemStatus = ref<SystemStatusData | null>(null)
   const speedStatus = ref<SpeedStatusData | null>(null)
   const latencyStatus = ref<LatencyStatusData | null>(null)
+  const gpsMessage = ref<GpsMessageData | null>(null)
+  const stopState = ref<StopStateData | null>(null)
+  const carTemperature = ref<CarTemperatureData | null>(null)
+  const carMotorInfo = ref<CarMotorInfoData | null>(null)
 
   // ===== task_status 发布点任务运行状态 =====
   const taskStatus = ref<TaskStatusData | null>(null)
@@ -180,6 +188,26 @@ export const useRobotStore = defineStore('robot', () => {
     latencyStatus.value = data
   }
 
+  const setGpsMessage = (data: GpsMessageData) => {
+    if (!data) return
+    gpsMessage.value = data
+  }
+
+  const setStopState = (data: StopStateData) => {
+    if (!data) return
+    stopState.value = data
+  }
+
+  const setCarTemperature = (data: CarTemperatureData) => {
+    if (!data) return
+    carTemperature.value = data
+  }
+
+  const setCarMotorInfo = (data: CarMotorInfoData) => {
+    if (!data) return
+    carMotorInfo.value = data
+  }
+
   const setTaskStatus = (data: TaskStatusData) => {
     taskStatus.value = data
   }
@@ -229,6 +257,10 @@ export const useRobotStore = defineStore('robot', () => {
     multitaskStatus.value = null
     realtimeSensorValues.value = {}
     realtimeSensorUnits.value = {}
+    gpsMessage.value = null
+    stopState.value = null
+    carTemperature.value = null
+    carMotorInfo.value = null
   }
 
   // ===== computed =====
@@ -426,6 +458,10 @@ export const useRobotStore = defineStore('robot', () => {
     systemStatus,
     speedStatus,
     latencyStatus,
+    gpsMessage,
+    stopState,
+    carTemperature,
+    carMotorInfo,
     taskStatus,
     taskProgress,
     multitaskStatus,
@@ -450,6 +486,10 @@ export const useRobotStore = defineStore('robot', () => {
     setSystemStatus,
     setSpeedStatus,
     setLatencyStatus,
+    setGpsMessage,
+    setStopState,
+    setCarTemperature,
+    setCarMotorInfo,
     setTaskStatus,
     setTaskProgress,
     setMultitaskStatus,
