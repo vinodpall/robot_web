@@ -594,13 +594,26 @@ export function useRobotWebSocket() {
         break
 
       // ---- 无人车电机信息 ----
-      case 'motor_info':
+      case 'motor_info': {
+        let motorData = data
+        if (typeof motorData === 'string') {
+          try {
+            motorData = JSON.parse(motorData)
+          } catch (e) {
+            console.error('Failed to parse motor_info json string', e)
+          }
+        }
+        if (motorData && motorData.msg) {
+          const innerMsg = typeof motorData.msg === 'string' ? JSON.parse(motorData.msg) : motorData.msg
+          motorData = { ...innerMsg, timestamp: motorData.timestamp }
+        }
         if (typeof (robotStore as any).setCarMotorInfo === 'function') {
-          ;(robotStore as any).setCarMotorInfo(data as CarMotorInfoData)
+          ;(robotStore as any).setCarMotorInfo(motorData as CarMotorInfoData)
         } else {
-          ;(robotStore as any).carMotorInfo = data as CarMotorInfoData
+          ;(robotStore as any).carMotorInfo = motorData as CarMotorInfoData
         }
         break
+      }
 
       // ---- task_update（暂保留兼容） ----
       case 'task_update':

@@ -2415,8 +2415,7 @@ const fetchLatestAlarmLogs = async () => {
     if (!robotId) return
     const res = await navigationApi.getTrackLogList(robotId, {
       page: 1,
-      page_size: 4,
-      type: 'track'
+      page_size: 4
     })
     const rows: any[] = res?.data?.data || []
     const formatTs = (ts: number | null) => {

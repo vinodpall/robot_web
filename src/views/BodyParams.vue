@@ -54,16 +54,32 @@
                     <div class="motor-info-header">电机 {{ motorIdx + 1 }}</div>
                     <div class="motor-info-row">
                       <span class="motor-info-label">转速 (RPM)</span>
-                      <span class="motor-info-value">{{ formatMotorValue(robotStore.carMotorInfo?.rpm?.[motorIdx]) }}</span>
+                      <span class="motor-info-value">{{ formatMotorValue(normalizedMotorInfo.rpm[motorIdx]) }}</span>
                     </div>
                     <div class="motor-info-row">
                       <span class="motor-info-label">电流 (A)</span>
-                      <span class="motor-info-value">{{ formatMotorValue(robotStore.carMotorInfo?.current?.[motorIdx], true) }}</span>
+                      <span class="motor-info-value">{{ formatMotorValue(normalizedMotorInfo.current[motorIdx], true) }}</span>
                     </div>
                     <div class="motor-info-row">
-                      <span class="motor-info-label">状态</span>
-                      <span class="motor-info-value" :class="getMotorStateClass(robotStore.carMotorInfo?.state?.[motorIdx])">
-                        {{ formatMotorState(robotStore.carMotorInfo?.state?.[motorIdx]) }}
+                      <span class="motor-info-label">运行状态</span>
+                      <span class="motor-info-value" :class="getMotorRunClass(normalizedMotorInfo.state[motorIdx])">
+                        {{ getMotorParsedState(normalizedMotorInfo.state[motorIdx]).runStatusText }}
+                      </span>
+                    </div>
+                    <div class="motor-info-row">
+                      <span class="motor-info-label">控制模式</span>
+                      <span class="motor-info-value">
+                        {{ getMotorParsedState(normalizedMotorInfo.state[motorIdx]).conModeText }}
+                      </span>
+                    </div>
+                    <div class="motor-info-row">
+                      <span class="motor-info-label">健康状态</span>
+                      <span
+                        class="motor-info-value"
+                        :class="getMotorFaultClass(normalizedMotorInfo.state[motorIdx])"
+                        :title="getMotorParsedState(normalizedMotorInfo.state[motorIdx]).faultText"
+                      >
+                        {{ getMotorParsedState(normalizedMotorInfo.state[motorIdx]).faultText }}
                       </span>
                     </div>
                   </div>
@@ -314,6 +330,27 @@ const carTemperatures = computed(() => {
   return robotStore.carTemperature?.temperature || []
 })
 
+const normalizedMotorInfo = computed(() => {
+  const raw = robotStore.carMotorInfo as any
+  if (!raw) return { rpm: [], current: [], state: [] }
+  let target = raw
+  if (typeof raw === 'string') {
+    try {
+      target = JSON.parse(raw)
+    } catch (e) {
+      return { rpm: [], current: [], state: [] }
+    }
+  }
+  if (target && target.msg) {
+    target = typeof target.msg === 'string' ? JSON.parse(target.msg) : target.msg
+  }
+  return {
+    rpm: Array.isArray(target?.rpm) ? target.rpm : [],
+    current: Array.isArray(target?.current) ? target.current : [],
+    state: Array.isArray(target?.state) ? target.state : [],
+  }
+})
+
 const formatCarTempValue = (value: number | undefined | null) => {
   if (value === undefined || value === null || value <= -1000) return '--'
   return value.toFixed(1)
@@ -325,14 +362,52 @@ const formatMotorValue = (value: number | undefined | null, isCurrent = false) =
   return String(Math.round(value))
 }
 
-const formatMotorState = (state: number | undefined | null) => {
-  if (state === undefined || state === null) return '--'
-  return state === 0 ? '正常' : `故障 (${state})`
+const getMotorParsedState = (state: number | undefined | null) => {
+  if (state === undefined || state === null || isNaN(state)) {
+    return {
+      runStatusText: '--',
+      conModeText: '--',
+      faultText: '--',
+      hasFault: false,
+      isRun: false
+    }
+  }
+  const val = Math.floor(state)
+  const isRun = (val & 1) !== 0
+  const runStatusText = isRun ? '启动' : '停机'
+  const conModeText = (val & (1 << 7)) !== 0 ? '外部PLC' : 'PC'
+
+  const faults: string[] = []
+  if ((val & (1 << 1)) !== 0) faults.push('过流')
+  if ((val & (1 << 2)) !== 0) faults.push('过压')
+  if ((val & (1 << 3)) !== 0) faults.push('编码器故障')
+  if ((val & (1 << 4)) !== 0) faults.push('位置偏差过大')
+  if ((val & (1 << 5)) !== 0) faults.push('欠压')
+  if ((val & (1 << 6)) !== 0) faults.push('过载')
+  if ((val & (1 << 15)) !== 0) faults.push('CAN1通讯超时')
+
+  const hasFault = faults.length > 0
+  const faultText = hasFault ? faults.join(', ') : '正常'
+
+  return {
+    runStatusText,
+    conModeText,
+    faultText,
+    hasFault,
+    isRun
+  }
 }
 
-const getMotorStateClass = (state: number | undefined | null) => {
-  if (state === undefined || state === null) return ''
-  return state === 0 ? 'motor-state-ok' : 'motor-state-error'
+const getMotorRunClass = (state: number | undefined | null) => {
+  const parsed = getMotorParsedState(state)
+  if (parsed.runStatusText === '--') return ''
+  return parsed.isRun ? 'motor-run-on' : 'motor-run-off'
+}
+
+const getMotorFaultClass = (state: number | undefined | null) => {
+  const parsed = getMotorParsedState(state)
+  if (parsed.faultText === '--') return ''
+  return parsed.hasFault ? 'motor-fault-error' : 'motor-fault-ok'
 }
 
 const emitPermissionDenied = (permission: string) => {
@@ -486,11 +561,19 @@ const handleTabClick = (tab: { key: string; path: string; permission?: string })
   font-weight: bold;
 }
 
-.motor-state-ok {
+.motor-run-on {
+  color: #67d5fd;
+}
+
+.motor-run-off {
+  color: #a0aab0;
+}
+
+.motor-fault-ok {
   color: #52c41a;
 }
 
-.motor-state-error {
+.motor-fault-error {
   color: #ff4d4f;
   text-shadow: 0 0 4px rgba(255, 77, 79, 0.5);
 }

@@ -1262,7 +1262,7 @@ export const navigationApi = {
     params: {
       page: number
       page_size: number
-      type: 'track'
+      type?: string
       map_name?: string
       content?: string
       tracking_route?: string

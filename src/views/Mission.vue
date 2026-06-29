@@ -1289,21 +1289,32 @@ const applyTaskGroupSelection = (groups: string[]) => {
   }
 }
 
-const fetchTaskGroupListByRoute = async (routeName: string) => {
+let lastTaskGroupFetchSignature = ''
+let lastTaskGroupFetchTime = 0
+
+const fetchTaskGroupListByRoute = async (routeName: string, force = false) => {
   const normalizedRouteName = normalizeTrackName(routeName)
   if (!normalizedRouteName || routeName === NO_ROUTE_VALUE) {
     applyTaskGroupSelection([])
     return
   }
 
-  const cachedGroups = getTaskGroupListFromCache(normalizedRouteName)
-  applyTaskGroupSelection(cachedGroups)
-
   const robotId = resolveSelectedRobotId()
   if (!robotId) {
     await refreshAllTrackTaskListCache()
     return
   }
+
+  const signature = `${robotId}:${normalizedRouteName}`
+  const now = Date.now()
+  if (!force && signature === lastTaskGroupFetchSignature && now - lastTaskGroupFetchTime < 1000) {
+    return
+  }
+  lastTaskGroupFetchSignature = signature
+  lastTaskGroupFetchTime = now
+
+  const cachedGroups = getTaskGroupListFromCache(normalizedRouteName)
+  applyTaskGroupSelection(cachedGroups)
 
   const requestToken = ++taskGroupRequestToken
   try {
@@ -1371,23 +1382,50 @@ const loadRouteList = async () => {
       return
     }
 
+    const robotId = resolveSelectedRobotId() || ''
     const contextKeys = getCurrentRobotContextKeys()
     let rawList: string[] = []
-    const cachedTrackListCandidates = [
-      contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null,
-      localStorage.getItem('cached_track_list')
-    ].filter(Boolean) as string[]
-    for (const cachedTrackListRaw of cachedTrackListCandidates) {
-      const parsed = JSON.parse(cachedTrackListRaw)
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        rawList = parsed
-          .map((item: any) => String(
-            typeof item === 'string'
-              ? item
-              : (item?.track_name || item?.trackName || item?.name || '')
-          ).trim())
-          .filter(Boolean)
-        if (rawList.length > 0) break
+
+    if (robotId) {
+      try {
+        const response = await navigationApi.getTrackList(robotId)
+        if (response && response.msg && response.msg.error_code === 0 && Array.isArray(response.msg.result)) {
+          rawList = response.msg.result
+            .map((item: any) => String(
+              typeof item === 'string'
+                ? item
+                : (item?.track_name || item?.trackName || item?.name || '')
+            ).trim())
+            .filter(Boolean)
+          if (rawList.length > 0) {
+            if (contextKeys) {
+              localStorage.setItem(contextKeys.trackListKey, JSON.stringify(rawList))
+            }
+            localStorage.setItem('cached_track_list', JSON.stringify(rawList))
+          }
+        }
+      } catch (apiErr) {
+        console.warn('从接口刷新路线列表失败:', apiErr)
+      }
+    }
+
+    if (rawList.length === 0) {
+      const cachedTrackListCandidates = [
+        contextKeys ? localStorage.getItem(contextKeys.trackListKey) : null,
+        localStorage.getItem('cached_track_list')
+      ].filter(Boolean) as string[]
+      for (const cachedTrackListRaw of cachedTrackListCandidates) {
+        const parsed = JSON.parse(cachedTrackListRaw)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          rawList = parsed
+            .map((item: any) => String(
+              typeof item === 'string'
+                ? item
+                : (item?.track_name || item?.trackName || item?.name || '')
+            ).trim())
+            .filter(Boolean)
+          if (rawList.length > 0) break
+        }
       }
     }
     if (rawList.length === 0) {
@@ -1415,8 +1453,14 @@ const loadRouteList = async () => {
       routeList.value = nextRouteList
     }
 
-    const mapPrefix = `${selectedMap.value}_`
-    const visibleRouteList = nextRouteList.filter(route => route.startsWith(mapPrefix))
+    const rawMap = String(selectedMap.value || '').trim()
+    const cleanMapName = rawMap.split('@')[0]
+    let visibleRouteList = nextRouteList.filter(route =>
+      route.startsWith(`${cleanMapName}_`) || (rawMap && route.startsWith(`${rawMap}_`))
+    )
+    if (visibleRouteList.length === 0 && nextRouteList.length > 0) {
+      visibleRouteList = nextRouteList
+    }
     const runningRouteItem = runningRoute
       ? nextRouteList.find(route => normalizeTrackName(route) === runningRoute) || runningRoute
       : ''
@@ -1436,7 +1480,7 @@ const loadRouteList = async () => {
       clearRouteAndTaskGroupState(false)
     }
   } catch (err) {
-    console.error('读取路线缓存失败:', err)
+    console.error('读取路线列表失败:', err)
     clearRouteAndTaskGroupState(true)
   }
 }
@@ -1577,11 +1621,15 @@ const syncSelectedMapWithCache = () => {
 
 // 过滤后的路线列表（根据缓存的地图筛选）
 const filteredRouteList = computed(() => {
-  const mapName = String(selectedMap.value || '').trim()
-  // 根据地图名称筛选：路线名 以 "地图名称_" 开头
-  const mapMatchedList = mapName
-    ? routeList.value.filter(route => route.startsWith(`${mapName}_`))
+  const rawMap = String(selectedMap.value || '').trim()
+  const mapName = rawMap.split('@')[0]
+  let mapMatchedList = mapName
+    ? routeList.value.filter(route => route.startsWith(`${mapName}_`) || (rawMap && route.startsWith(`${rawMap}_`)))
     : []
+
+  if (mapMatchedList.length === 0 && routeList.value.length > 0) {
+    mapMatchedList = [...routeList.value]
+  }
 
   const runningRoute = getRunningRouteSelection()
   if (runningRoute) {
@@ -2409,8 +2457,6 @@ watch(
 )
 
 onMounted(() => {
-  loadRouteList()
-  refreshAllTrackTaskListCache()
   load3MF('/jiantou.3mf').then(mesh => {
     if (mesh) previewPc.robotMesh.value = mesh
   })
