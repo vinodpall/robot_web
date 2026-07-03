@@ -136,6 +136,7 @@
                   <button class="map-btn" :class="isTrackTaskRunning ? 'map-btn-primary' : 'map-btn-secondary'" :disabled="!isTrackTaskRunning" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handleCircleMode">循迹避障模式</button>
                   <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
                   <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleSetOrigin">原点设置</button>
+                  <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled || !selectedNavMap" v-permission-click-dialog="'nav-navmanage-startnav'" @click="openReloModal">重定位</button>
                 </div>
               </div>
 
@@ -328,6 +329,28 @@
               </div>
               <div class="map-edit-grid-main">
                 <div ref="gridmapContainerEl" class="gridmap-container">
+                  <!-- 区域图例 Legend Overlay -->
+                  <div v-show="isFeatureAreaPanelOpen" class="feature-area-legend">
+                    <div class="legend-title">区域图例</div>
+                    <div class="legend-list">
+                      <div v-for="type in featureAreaTypes" :key="type.value" class="legend-item">
+                        <svg class="legend-item-icon" width="24" height="12" viewBox="0 0 24 12">
+                          <defs>
+                            <pattern :id="`pattern-legend-${type.value}`" width="5" height="5" patternUnits="userSpaceOnUse">
+                              <path v-if="type.value === 'forbidden'" d="M0,5 L5,0" stroke="#ef4444" stroke-width="1" fill="none" />
+                              <path v-else-if="type.value === 'stairs'" d="M0,2.5 H5" stroke="#f59e0b" stroke-width="1" fill="none" />
+                              <path v-else-if="type.value === 'slope'" d="M2.5,0 V5" stroke="#8b5cf6" stroke-width="1" fill="none" />
+                              <path v-else-if="type.value === 'narrow'" d="M0,2.5 H5 M2.5,0 V5" stroke="#06b6d4" stroke-width="0.9" fill="none" />
+                              <path v-else-if="type.value === 'grass'" d="M0,0 L5,5 M0,5 L5,0" stroke="#22c55e" stroke-width="0.9" fill="none" />
+                            </pattern>
+                          </defs>
+                          <rect width="24" height="12" rx="2" ry="2" :class="[`feature-area-${type.value}`]" fill-opacity="0.15" stroke="none" />
+                          <rect width="24" height="12" rx="2" ry="2" :class="['feature-area-shape', `feature-area-${type.value}`]" :style="{ fill: `url(#pattern-legend-${type.value})` }" stroke-width="1.5" />
+                        </svg>
+                        <span class="legend-item-label">{{ type.label }}</span>
+                      </div>
+                    </div>
+                  </div>
                   <canvas ref="gridMapCanvas" class="grid-canvas"></canvas>
                   <svg
                     v-if="shouldShowFeatureAreaOverlay"
@@ -336,31 +359,63 @@
                     :viewBox="`0 0 ${featureAreaCanvasSize.width} ${featureAreaCanvasSize.height}`"
                     preserveAspectRatio="none"
                   >
+                    <defs>
+                      <!-- 禁行区 Pattern: red diagonal lines, 8×8 tile -->
+                      <pattern id="pattern-forbidden" width="8" height="8" patternUnits="userSpaceOnUse">
+                        <path d="M0,8 L8,0" stroke="#ef4444" stroke-width="1.5" fill="none" />
+                      </pattern>
+                      
+                      <!-- 楼梯 Pattern: orange evenly-spaced horizontal lines, 8×8 tile -->
+                      <pattern id="pattern-stairs" width="8" height="8" patternUnits="userSpaceOnUse">
+                        <path d="M0,4 H8" stroke="#f59e0b" stroke-width="1.5" fill="none" />
+                      </pattern>
+                      
+                      <!-- 斜坡 Pattern: purple evenly-spaced vertical lines, 8×8 tile -->
+                      <pattern id="pattern-slope" width="8" height="8" patternUnits="userSpaceOnUse">
+                        <path d="M4,0 V8" stroke="#8b5cf6" stroke-width="1.5" fill="none" />
+                      </pattern>
+                      
+                      <!-- 窄通道 Pattern: cyan regular grid, 8×8 tile -->
+                      <pattern id="pattern-narrow" width="8" height="8" patternUnits="userSpaceOnUse">
+                        <path d="M0,4 H8 M4,0 V8" stroke="#06b6d4" stroke-width="1.2" fill="none" />
+                      </pattern>
+                      
+                      <!-- 草地 Pattern: green crosshatch (X), 8×8 tile -->
+                      <pattern id="pattern-grass" width="8" height="8" patternUnits="userSpaceOnUse">
+                        <path d="M0,0 L8,8 M0,8 L8,0" stroke="#22c55e" stroke-width="1.2" fill="none" />
+                      </pattern>
+                    </defs>
                     <template v-for="area in visibleFeatureAreas" :key="area.id">
                       <polygon
                         v-if="area.geometry !== 'line' && area.points.length >= 3"
                         :points="pointsToSvg(area.points)"
                         :class="['feature-area-shape', `feature-area-${area.type}`]"
+                        :style="{ fill: `url(#pattern-${area.type})` }"
                       />
                       <polyline
                         v-else-if="area.points.length >= 2"
                         :points="pointsToSvg(area.points)"
                         :class="['feature-area-line', `feature-area-${area.type}`]"
                       />
-                      <circle
-                        v-for="(point, pointIndex) in area.points"
-                        :key="`${area.id}-point-${pointIndex}`"
-                        :cx="point.x"
-                        :cy="point.y"
-                        r="2"
-                        :class="['feature-area-marker', `feature-area-${area.type}`]"
-                      />
+
+                      <!-- Name label in the center/centroid of the area -->
+                      <text
+                        v-if="area.name && area.points.length > 0"
+                        :x="getAreaCenter(area.points).x"
+                        :y="getAreaCenter(area.points).y"
+                        :class="['feature-area-label', `feature-area-${area.type}`]"
+                        text-anchor="middle"
+                        dominant-baseline="central"
+                      >
+                        {{ area.name }}
+                      </text>
                     </template>
                     <g v-if="featureAreaDraftPoints.length > 0">
                       <polygon
                         v-if="selectedFeatureAreaGeometry === 'area' && featureAreaDraftPoints.length >= 3"
                         :points="pointsToSvg(featureAreaDraftPoints)"
                         :class="['feature-area-shape', 'feature-area-draft', `feature-area-${selectedFeatureAreaType}`]"
+                        :style="{ fill: `url(#pattern-${selectedFeatureAreaType})` }"
                       />
                       <polyline
                         v-else-if="featureAreaDraftPoints.length >= 2"
@@ -372,7 +427,7 @@
                         :key="`feature-draft-point-${index}`"
                         :cx="point.x"
                         :cy="point.y"
-                        r="2.5"
+                        r="1.5"
                         :class="['feature-area-marker', 'feature-area-draft-marker', `feature-area-${selectedFeatureAreaType}`]"
                       />
                     </g>
@@ -429,6 +484,20 @@
                               name="feature-area-type"
                               :value="type.value"
                             />
+                             <!-- Preview icon showing the specific pattern style of the zone type -->
+                             <svg class="feature-area-type-icon" width="20" height="12" viewBox="0 0 20 12">
+                               <defs>
+                                 <pattern :id="`pattern-sidebar-${type.value}`" width="5" height="5" patternUnits="userSpaceOnUse">
+                                   <path v-if="type.value === 'forbidden'" d="M0,5 L5,0" stroke="#ef4444" stroke-width="1" fill="none" />
+                                   <path v-else-if="type.value === 'stairs'" d="M0,2.5 H5" stroke="#f59e0b" stroke-width="1" fill="none" />
+                                   <path v-else-if="type.value === 'slope'" d="M2.5,0 V5" stroke="#8b5cf6" stroke-width="1" fill="none" />
+                                   <path v-else-if="type.value === 'narrow'" d="M0,2.5 H5 M2.5,0 V5" stroke="#06b6d4" stroke-width="0.9" fill="none" />
+                                   <path v-else-if="type.value === 'grass'" d="M0,0 L5,5 M0,5 L5,0" stroke="#22c55e" stroke-width="0.9" fill="none" />
+                                 </pattern>
+                               </defs>
+                               <rect width="20" height="12" rx="2" ry="2" :class="[`feature-area-${type.value}`]" fill-opacity="0.15" stroke="none" />
+                               <rect width="20" height="12" rx="2" ry="2" :class="['feature-area-shape', `feature-area-${type.value}`]" :style="{ fill: `url(#pattern-sidebar-${type.value})` }" stroke-width="1.5" />
+                             </svg>
                             <span>{{ type.label }}</span>
                           </label>
                         </div>
@@ -1139,7 +1208,7 @@
               @click="selectedObsMode = 1"
             >
               <input type="radio" name="obs_mode" :value="1" v-model="selectedObsMode" />
-              <span>近障模式</span>
+              <span>停障模式</span>
             </label>
             <label 
               class="obs-mode-option" 
@@ -1262,6 +1331,37 @@
       </div>
     </div>
 
+    <!-- 重定位弹窗 -->
+    <div v-if="reloModalVisible" class="recording-dialog-overlay" @contextmenu.prevent>
+      <div class="recording-dialog-card card relo-dialog-card">
+        <div class="recording-dialog-header">
+          重定位
+          <button class="dialog-close-btn" @click="closeReloModal">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="recording-dialog-body relo-dialog-body">
+          <div class="relo-instructions">
+            提示：左键拖动可平移地图，滚轮可缩放。<strong>鼠标右键点击并拖动</strong>会在地图上画出红色方向箭头，松开右键即自动提交重定位数据。
+          </div>
+          <div ref="reloContainer" class="relo-map-container" @wheel.prevent="onReloWheel">
+            <canvas
+              ref="reloCanvas"
+              class="relo-canvas"
+              @mousedown="onReloMouseDown"
+              @mousemove="onReloMouseMove"
+              @mouseup="onReloMouseUp"
+              @mouseleave="onReloMouseLeave"
+            ></canvas>
+            <div v-if="reloMapLoading" class="map-overlay loading">地图加载中...</div>
+            <div v-else-if="reloMapError" class="map-overlay error">{{ reloMapError }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 确认对话框 -->
     <ConfirmDialog
       :show="confirmDialog.show"
@@ -1313,7 +1413,7 @@ import mapEraserIcon from '@/assets/source_data/svg_data/robot_source/map_eraser
 import mapRollbackIcon from '@/assets/source_data/svg_data/robot_source/map_rollback.svg'
 import mapInitIcon from '@/assets/source_data/svg_data/robot_source/map_init.svg'
 import mapUploadIcon from '@/assets/source_data/svg_data/robot_source/map_upload.svg'
-import { saveTrajectoryFile, getTrajectoryFile } from '@/utils/trajectoryDB'
+import { saveTrajectoryFile, getTrajectoryFile, deleteTrajectoryFile } from '@/utils/trajectoryDB'
 import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import { load3MF } from '../utils/threemfParser'
 import type { MeshData } from '../utils/threemfParser'
@@ -1973,10 +2073,13 @@ const handleTrackDelete = () => {
       if (!robotId) return
       
       try {
+        const deletedTrackName = trackRecordLine.value
         await navigationApi.deleteTrack(robotId, {
-          track_name: trackRecordLine.value
+          track_name: deletedTrackName
         })
         showSuccessMessage('删除成功')
+        // 同步删除 IndexedDB 中的轨迹缓存文件
+        await deleteTrajectoryFile(deletedTrackName)
         // 刷新列表
         await fetchAllTrackList()
         if (trackLineList.value.length > 0) {
@@ -3267,7 +3370,7 @@ const gpsEnabled = ref(false)
 
 // 循迹避障模式对话框状态
 const obsHandleDialogVisible = ref(false)
-const selectedObsMode = ref(1) // 0: 无避障, 1: 近障模式, 2: 绕障模式
+const selectedObsMode = ref(1) // 0: 无避障, 1: 停障模式, 2: 绕障模式
 const obsHandleLoading = ref(false)
 const resolveCurrentObsMode = () => {
   const rawMode = (robotStore.cmdStatus as any)?.track_info?.obs_mode
@@ -3477,7 +3580,7 @@ const confirmObsHandleDialog = async () => {
       action: selectedObsMode.value
     })
 
-    const modeNames = ['无避障', '近障模式', '绕障模式']
+    const modeNames = ['无避障', '停障模式', '绕障模式']
     showSuccessMessage(`已设置为${modeNames[selectedObsMode.value]}`)
     obsHandleDialogVisible.value = false
   } catch (err) {
@@ -3833,12 +3936,14 @@ const submitTaskSpeed = async (previousSpeed: number) => {
 
 const decreaseSpeed = async () => {
   if (setSpeedLoading.value) return
-  if (taskSpeed.value > MIN_TASK_SPEED) {
-    const previousSpeed = taskSpeed.value
-    const nextSpeed = Math.round((taskSpeed.value - 0.1) * 10) / 10
-    taskSpeed.value = Math.max(nextSpeed, MIN_TASK_SPEED)
-    await submitTaskSpeed(previousSpeed)
+  if (taskSpeed.value <= MIN_TASK_SPEED) {
+    showErrorMessage(`已是最小速度（${MIN_TASK_SPEED} m/s），无法继续减小`)
+    return
   }
+  const previousSpeed = taskSpeed.value
+  const nextSpeed = Math.round((taskSpeed.value - 0.1) * 10) / 10
+  taskSpeed.value = Math.max(nextSpeed, MIN_TASK_SPEED)
+  await submitTaskSpeed(previousSpeed)
 }
 
 const refreshRelatedTaskListsAfterDelete = async (robotId?: string) => {
@@ -3872,12 +3977,14 @@ const refreshRelatedTaskListsAfterDelete = async (robotId?: string) => {
 
 const increaseSpeed = async () => {
   if (setSpeedLoading.value) return
-  if (taskSpeed.value < MAX_TASK_SPEED) {
-    const previousSpeed = taskSpeed.value
-    const nextSpeed = Math.round((taskSpeed.value + 0.1) * 10) / 10
-    taskSpeed.value = Math.min(nextSpeed, MAX_TASK_SPEED)
-    await submitTaskSpeed(previousSpeed)
+  if (taskSpeed.value >= MAX_TASK_SPEED) {
+    showErrorMessage(`已是最大速度（${MAX_TASK_SPEED} m/s），无法继续增大`)
+    return
   }
+  const previousSpeed = taskSpeed.value
+  const nextSpeed = Math.round((taskSpeed.value + 0.1) * 10) / 10
+  taskSpeed.value = Math.min(nextSpeed, MAX_TASK_SPEED)
+  await submitTaskSpeed(previousSpeed)
 }
 
 // 导航点云图相关
@@ -5621,7 +5728,7 @@ const featureAreaNameDialog = ref({
   error: '',
 })
 const canSubmitFeatureArea = computed(() => featureAreaDraftPoints.value.length >= 2 && !!selectedEditMap.value)
-const canUndoFeatureAreaStep = computed(() => featureAreaDraftPoints.value.length > 0 || featureAreas.value.length > 0)
+const canUndoFeatureAreaStep = computed(() => featureAreaDraftPoints.value.length > 0)
 const canDeleteSelectedFeatureArea = computed(() => {
   return Boolean(selectedFeatureAreaId.value && featureAreas.value.some(area => area.id === selectedFeatureAreaId.value))
 })
@@ -5654,6 +5761,20 @@ const shouldShowFeatureAreaOverlay = computed(() => {
 
 const pointsToSvg = (points: GridMapPoint[]) => {
   return points.map(point => `${point.x},${point.y}`).join(' ')
+}
+
+const getAreaCenter = (points: GridMapPoint[]) => {
+  if (!points || points.length === 0) return { x: 0, y: 0 }
+  let sumX = 0
+  let sumY = 0
+  for (const p of points) {
+    sumX += p.x
+    sumY += p.y
+  }
+  return {
+    x: sumX / points.length,
+    y: sumY / points.length,
+  }
 }
 
 const parseTaskJsonCoordinates = (rawCoordinates: unknown): Array<[number, number]> => {
@@ -5993,30 +6114,10 @@ const toggleFeatureAreaPreview = () => {
   featureAreaPreviewVisible.value = !featureAreaPreviewVisible.value
 }
 
-const undoFeatureAreaStep = async () => {
+const undoFeatureAreaStep = () => {
   if (featureAreaDraftPoints.value.length > 0) {
     featureAreaDraftPoints.value = featureAreaDraftPoints.value.slice(0, -1)
     featureAreaPreviewVisible.value = true
-    return
-  }
-
-  if (featureAreas.value.length > 0) {
-    const removedArea = featureAreas.value[featureAreas.value.length - 1]
-    const previousAreas = [...featureAreas.value]
-    featureAreas.value = featureAreas.value.slice(0, -1)
-    if (selectedFeatureAreaId.value === removedArea.id) {
-      selectedFeatureAreaId.value = ''
-    }
-    featureAreaPreviewVisible.value = true
-    try {
-      await saveFeatureAreasForMap()
-      showSuccessMessage('功能区已撤销')
-    } catch (error) {
-      featureAreas.value = previousAreas
-      selectedFeatureAreaId.value = removedArea.id
-      console.error('撤销功能区失败:', error)
-      showErrorMessage('撤销功能区失败: ' + (error as Error).message)
-    }
   }
 }
 
@@ -6245,6 +6346,525 @@ const saveMapFile = async (mapName: string, fileName: string, blob: Blob): Promi
     tx.onerror = () => reject(tx.error)
   })
 }
+
+// ==================== 重定位 (Relocate) 相关逻辑 ====================
+const reloModalVisible = ref(false)
+const reloCanvas = ref<HTMLCanvasElement | null>(null)
+const reloContainer = ref<HTMLElement | null>(null)
+const reloMapLoading = ref(false)
+const reloMapError = ref('')
+const reloMapMeta = ref<GridMapMeta | null>(null)
+
+// 缩放和偏移
+let reloScale = 1
+let reloOffsetX = 0
+let reloOffsetY = 0
+
+// 拖动平移地图状态
+let reloIsPanning = false
+let reloPanStartX = 0
+let reloPanStartY = 0
+
+// 绘制方向箭头状态
+const reloArrow = ref<{ startX: number; startY: number; endX: number; endY: number } | null>(null)
+let reloIsDrawingArrow = false
+
+// 用于保存静态地图背景的离屏 canvas
+let reloOffscreenCanvas: HTMLCanvasElement | null = null
+
+// 居中显示车辆
+const reloCenterOnRobot = () => {
+  const pose = robotStore.pose
+  const meta = reloMapMeta.value
+  const canvas = reloCanvas.value
+  const parent = reloContainer.value
+  if (!pose || !meta || !canvas || !parent || !reloOffscreenCanvas) return
+
+  const mapWidth = reloOffscreenCanvas.width
+  const mapHeight = reloOffscreenCanvas.height
+
+  // PGM 坐标
+  const px = (pose.x - meta.originX) / meta.resolution
+  const py = mapHeight - (pose.y - meta.originY) / meta.resolution
+
+  const sw = parent.clientWidth
+  const sh = parent.clientHeight
+  const baseScale = Math.min(sw / mapWidth, sh / mapHeight)
+  const finalScale = baseScale * reloScale
+
+  reloOffsetX = (mapWidth / 2 - px) * finalScale
+  reloOffsetY = (mapHeight / 2 - py) * finalScale
+  applyReloTransform()
+}
+
+// 应用 transform
+const applyReloTransform = () => {
+  const canvas = reloCanvas.value
+  if (!canvas) return
+  const parent = reloContainer.value
+  if (!parent) return
+
+  const sw = parent.clientWidth
+  const sh = parent.clientHeight
+
+  // 重置 Canvas 物理尺寸，实现 1:1 像素清晰绘制
+  if (canvas.width !== sw || canvas.height !== sh) {
+    canvas.width = sw
+    canvas.height = sh
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.transform = ''
+  }
+
+  drawReloCanvas()
+}
+
+// 获取重定位 Canvas 上的坐标 (逆变换)
+const getReloCanvasCoords = (e: MouseEvent) => {
+  const canvas = reloCanvas.value
+  if (!canvas || !reloOffscreenCanvas) return { x: 0, y: 0 }
+
+  const rect = canvas.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+
+  const sw = rect.width
+  const sh = rect.height
+  const mapWidth = reloOffscreenCanvas.width
+  const mapHeight = reloOffscreenCanvas.height
+
+  const baseScale = Math.min(sw / mapWidth, sh / mapHeight)
+  const finalScale = baseScale * reloScale
+
+  const centerX = (sw - mapWidth * finalScale) / 2 + reloOffsetX
+  const centerY = (sh - mapHeight * finalScale) / 2 + reloOffsetY
+
+  return {
+    x: Math.floor((mx - centerX) / finalScale),
+    y: Math.floor((my - centerY) / finalScale)
+  }
+}
+
+// 绘制车辆图标 (在屏幕 1:1 像素坐标系下绘制，保证极其清晰)
+const drawRobot = (ctx: CanvasRenderingContext2D, px: number, py: number, theta: number) => {
+  ctx.save()
+  ctx.translate(px, py)
+  ctx.rotate(-theta) // Canvas 与地图 Y 轴方向相反，旋转方向取反
+
+  // 绘制一个三角箭头，参考点云图风格
+  ctx.fillStyle = '#ff00ff' // 洋红色 (与点云图中的小车图标一致)
+  ctx.strokeStyle = '#ffffff' // 白色描边使箭头轮廓清晰
+  ctx.lineWidth = 2 // 使用 2px 绘制边缘保证无半像素模糊
+
+  ctx.beginPath()
+  ctx.moveTo(10, 0)      // 箭头顶点
+  ctx.lineTo(-10, -7)    // 左下角
+  ctx.lineTo(-6, 0)     // 尾端收缩点
+  ctx.lineTo(-10, 7)     // 右下角
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+
+  ctx.restore()
+}
+
+// 绘制方向箭头 (拖拽时在屏幕 1:1 像素坐标系下绘制)
+const drawArrow = (ctx: CanvasRenderingContext2D, startX: number, startY: number, endX: number, endY: number) => {
+  ctx.save()
+  ctx.strokeStyle = '#ff3366'
+  ctx.fillStyle = '#ff3366'
+  ctx.lineWidth = 3
+  ctx.lineCap = 'round'
+  ctx.shadowBlur = 4
+  ctx.shadowColor = 'rgba(255, 51, 102, 0.4)' // 增加轻微发光立体感
+
+  // 画主干线
+  ctx.beginPath()
+  ctx.moveTo(startX, startY)
+  ctx.lineTo(endX, endY)
+  ctx.stroke()
+
+  // 画箭头头部
+  const angle = Math.atan2(endY - startY, endX - startX)
+  const arrowLength = 12
+  ctx.beginPath()
+  ctx.moveTo(endX, endY)
+  ctx.lineTo(endX - arrowLength * Math.cos(angle - Math.PI / 6), endY - arrowLength * Math.sin(angle - Math.PI / 6))
+  ctx.lineTo(endX - arrowLength * Math.cos(angle + Math.PI / 6), endY - arrowLength * Math.sin(angle + Math.PI / 6))
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+// 绘制重定位 Canvas
+const drawReloCanvas = () => {
+  const canvas = reloCanvas.value
+  const ctx = canvas?.getContext('2d')
+  if (!canvas || !ctx || !reloOffscreenCanvas) return
+
+  const sw = canvas.width
+  const sh = canvas.height
+  const mapWidth = reloOffscreenCanvas.width
+  const mapHeight = reloOffscreenCanvas.height
+
+  const baseScale = Math.min(sw / mapWidth, sh / mapHeight)
+  const finalScale = baseScale * reloScale
+
+  const centerX = (sw - mapWidth * finalScale) / 2 + reloOffsetX
+  const centerY = (sh - mapHeight * finalScale) / 2 + reloOffsetY
+
+  // 1. 清理
+  ctx.clearRect(0, 0, sw, sh)
+
+  // 2. 绘制静态地图 (进行缩放和偏移)
+  ctx.save()
+  ctx.translate(centerX, centerY)
+  ctx.scale(finalScale, finalScale)
+  ctx.imageSmoothingEnabled = finalScale < 1.0 // 放大时保留边缘，缩小时开启平滑避免噪点
+  ctx.drawImage(reloOffscreenCanvas, 0, 0)
+  ctx.restore()
+
+  // 3. 绘制车辆当前位置 (1:1 物理像素绘制，杜绝拉伸模糊)
+  const pose = robotStore.pose
+  const meta = reloMapMeta.value
+  if (pose && meta) {
+    const px = (pose.x - meta.originX) / meta.resolution
+    const py = mapHeight - (pose.y - meta.originY) / meta.resolution
+    const sx = centerX + px * finalScale
+    const sy = centerY + py * finalScale
+    drawRobot(ctx, sx, sy, pose.theta)
+  }
+
+  // 4. 绘制重定位拖拽方向箭头 (1:1 物理像素绘制，杜绝拉伸模糊)
+  if (reloArrow.value) {
+    const arrow = reloArrow.value
+    const sx0 = centerX + arrow.startX * finalScale
+    const sy0 = centerY + arrow.startY * finalScale
+    const sx1 = centerX + arrow.endX * finalScale
+    const sy1 = centerY + arrow.endY * finalScale
+    drawArrow(ctx, sx0, sy0, sx1, sy1)
+  }
+}
+
+// 加载地图
+const loadReloGridMap = async (mapName: string) => {
+  if (!mapName) return
+
+  try {
+    reloMapLoading.value = true
+    reloMapError.value = ''
+
+    await nextTick()
+    const canvas = reloCanvas.value
+    if (!canvas) {
+      reloMapLoading.value = false
+      return
+    }
+
+    // 获取地图元数据
+    let yamlBlob = await getMapFile(mapName, 'gridMap.yaml')
+    if (!yamlBlob) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        yamlBlob = await mapFileApi.downloadMapFile(robotId, mapName, 'gridMap.yaml', true)
+        if (yamlBlob) {
+          await saveMapFile(mapName, 'gridMap.yaml', yamlBlob)
+        }
+      }
+    }
+    if (yamlBlob) {
+      reloMapMeta.value = parseGridMapYaml(await yamlBlob.text())
+    } else {
+      reloMapMeta.value = null
+    }
+
+    // 获取地图图像
+    let pgmBlob = await getMapFile(mapName, 'gridMap.pgm')
+    if (!pgmBlob) {
+      try {
+        await downloadMapFiles(mapName)
+        pgmBlob = await getMapFile(mapName, 'gridMap.pgm')
+      } catch (err) {
+        console.error('下载重定位地图失败:', err)
+      }
+    }
+
+    if (!pgmBlob) {
+      reloMapError.value = '未找到地图文件，且下载失败'
+      reloMapLoading.value = false
+      return
+    }
+
+    const buffer = await pgmBlob.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+
+    // PGM 头部解析
+    let ptr = 0
+    let tokenCount = 0
+    let inComment = false
+    let headerTokens: string[] = []
+
+    while (ptr < bytes.length && tokenCount < 4) {
+      const char = String.fromCharCode(bytes[ptr])
+      if (inComment) {
+        if (char === '\n') inComment = false
+        ptr++
+        continue
+      }
+      if (char === '#') {
+        inComment = true
+        ptr++
+        continue
+      }
+      if (/\s/.test(char)) {
+        ptr++
+        continue
+      }
+      let tokenStart = ptr
+      while (ptr < bytes.length && !/\s/.test(String.fromCharCode(bytes[ptr]))) {
+        ptr++
+      }
+      let token = String.fromCharCode(...bytes.subarray(tokenStart, ptr))
+      headerTokens.push(token)
+      tokenCount++
+    }
+
+    if (ptr < bytes.length && /\s/.test(String.fromCharCode(bytes[ptr]))) {
+      ptr++
+    }
+    let dataStart = ptr
+
+    const magic = headerTokens[0]
+    const width = parseInt(headerTokens[1])
+    const height = parseInt(headerTokens[2])
+    const maxVal = parseInt(headerTokens[3]) || 255
+
+    canvas.width = width
+    canvas.height = height
+
+    // 创建离屏 canvas 用于缓存静态地图
+    reloOffscreenCanvas = document.createElement('canvas')
+    reloOffscreenCanvas.width = width
+    reloOffscreenCanvas.height = height
+    const offscreenCtx = reloOffscreenCanvas.getContext('2d')
+    if (!offscreenCtx) return
+
+    const imageData = offscreenCtx.createImageData(width, height)
+
+    if (magic === 'P5') {
+      let p = dataStart
+      for (let idx = 0; idx < width * height; idx++) {
+        if (p >= bytes.length) break
+        const v = bytes[p++]
+        const off = idx * 4
+        imageData.data[off] = v
+        imageData.data[off + 1] = v
+        imageData.data[off + 2] = v
+        imageData.data[off + 3] = 255
+      }
+    } else if (magic === 'P2') {
+      const textDecoder = new TextDecoder()
+      const asciiData = textDecoder.decode(bytes.subarray(dataStart))
+      const tokens = asciiData.trim().split(/\s+/)
+      for (let idx = 0; idx < width * height; idx++) {
+        if (idx >= tokens.length) break
+        const v = parseInt(tokens[idx], 10)
+        const c = Math.floor((v / maxVal) * 255)
+        const off = idx * 4
+        imageData.data[off] = c
+        imageData.data[off + 1] = c
+        imageData.data[off + 2] = c
+        imageData.data[off + 3] = 255
+      }
+    } else {
+      throw new Error('不支持的PGM格式: ' + magic)
+    }
+
+    // 黑白优化映射
+    for (let k = 0; k < imageData.data.length; k += 4) {
+      const g = imageData.data[k]
+      if (g === 205) {
+        imageData.data[k] = 205
+        imageData.data[k + 1] = 205
+        imageData.data[k + 2] = 205
+      } else if (g < 128) {
+        imageData.data[k] = 0
+        imageData.data[k + 1] = 0
+        imageData.data[k + 2] = 0
+      } else {
+        imageData.data[k] = 255
+        imageData.data[k + 1] = 255
+        imageData.data[k + 2] = 255
+      }
+    }
+
+    offscreenCtx.putImageData(imageData, 0, 0)
+
+    reloScale = 1
+    reloOffsetX = 0
+    reloOffsetY = 0
+    applyReloTransform()
+
+    // 延时让容器布局稳定后居中
+    setTimeout(() => {
+      reloCenterOnRobot()
+      drawReloCanvas()
+    }, 100)
+
+  } catch (err) {
+    console.error('加载重定位地图失败:', err)
+    reloMapError.value = '加载地图失败: ' + (err as Error).message
+  } finally {
+    reloMapLoading.value = false
+  }
+}
+
+// 鼠标操作逻辑
+const onReloMouseDown = (e: MouseEvent) => {
+  if (e.button === 0) {
+    // 左键拖动平移
+    reloIsPanning = true
+    reloPanStartX = e.clientX - reloOffsetX
+    reloPanStartY = e.clientY - reloOffsetY
+    e.preventDefault()
+  } else if (e.button === 2) {
+    // 右键画方向箭头
+    reloIsDrawingArrow = true
+    const coords = getReloCanvasCoords(e)
+    reloArrow.value = {
+      startX: coords.x,
+      startY: coords.y,
+      endX: coords.x,
+      endY: coords.y
+    }
+    e.preventDefault()
+  }
+}
+
+const onReloMouseMove = (e: MouseEvent) => {
+  if (reloIsPanning) {
+    reloOffsetX = e.clientX - reloPanStartX
+    reloOffsetY = e.clientY - reloPanStartY
+    applyReloTransform()
+  } else if (reloIsDrawingArrow && reloArrow.value) {
+    const coords = getReloCanvasCoords(e)
+    reloArrow.value.endX = coords.x
+    reloArrow.value.endY = coords.y
+    drawReloCanvas()
+  }
+}
+
+const onReloMouseUp = async (e: MouseEvent) => {
+  if (e.button === 0) {
+    reloIsPanning = false
+  } else if (e.button === 2 && reloIsDrawingArrow && reloArrow.value) {
+    reloIsDrawingArrow = false
+    const arrow = reloArrow.value
+    reloArrow.value = null
+
+    const canvas = reloCanvas.value
+    const meta = reloMapMeta.value
+    if (!canvas || !meta || !reloOffscreenCanvas) return
+
+    const mapHeight = reloOffscreenCanvas.height
+
+    // 1. 计算重定位地图坐标
+    const startX = meta.originX + arrow.startX * meta.resolution
+    const startY = meta.originY + (mapHeight - arrow.startY) * meta.resolution
+
+    // 计算朝向 theta
+    // Canvas y 轴朝下，Map y 轴朝上，计算角度时 dy 取反
+    const dx = arrow.endX - arrow.startX
+    const dy = arrow.startY - arrow.endY
+    let theta = 0
+    if (Math.hypot(dx, dy) > 5) {
+      theta = Math.atan2(dy, dx)
+    } else {
+      // 拖拽距离太小，使用当前机器人朝向，或默认为 0
+      theta = robotStore.pose?.theta || 0
+    }
+
+    // 2. 提交数据到 API
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人，无法重定位')
+      return
+    }
+
+    try {
+      showSuccessMessage('正在提交重定位指令...')
+      await navigationApi.setReloPose(robotId, {
+        x: Number(startX.toFixed(6)),
+        y: Number(startY.toFixed(6)),
+        theta: Number(theta.toFixed(6))
+      })
+      showSuccessMessage('重定位设置成功')
+      closeReloModal()
+    } catch (err: any) {
+      console.error('重定位失败:', err)
+      showErrorMessage(err?.detail || err?.msg || err?.message || '网络请求错误，请重试')
+      drawReloCanvas()
+    }
+  }
+}
+
+const onReloMouseLeave = () => {
+  reloIsPanning = false
+  if (reloIsDrawingArrow) {
+    reloIsDrawingArrow = false
+    reloArrow.value = null
+    drawReloCanvas()
+  }
+}
+
+const onReloWheel = (e: WheelEvent) => {
+  const delta = e.deltaY > 0 ? 0.9 : 1.1
+  reloScale = Math.max(0.2, Math.min(5, reloScale * delta))
+  applyReloTransform()
+}
+
+// 放大/缩小/重置
+const reloZoomIn = () => {
+  reloScale = Math.min(5, reloScale * 1.2)
+  applyReloTransform()
+}
+
+const reloZoomOut = () => {
+  reloScale = Math.max(0.2, reloScale / 1.2)
+  applyReloTransform()
+}
+
+const reloResetZoom = () => {
+  reloScale = 1
+  reloOffsetX = 0
+  reloOffsetY = 0
+  applyReloTransform()
+  reloCenterOnRobot()
+  drawReloCanvas()
+}
+
+// 打开 / 关闭重定位弹窗
+const openReloModal = () => {
+  if (!selectedNavMap.value) {
+    showErrorMessage('当前没有选择的导航地图，无法开启重定位')
+    return
+  }
+  reloModalVisible.value = true
+  loadReloGridMap(selectedNavMap.value)
+}
+
+const closeReloModal = () => {
+  reloModalVisible.value = false
+  reloArrow.value = null
+  reloOffscreenCanvas = null
+}
+
+// 监听机器人位置变化，实时更新重定位画面中的车辆图标
+watch(() => robotStore.pose, () => {
+  if (reloModalVisible.value) {
+    drawReloCanvas()
+  }
+}, { deep: true })
 
 // 下载地图文件
 const mapDownloadInFlight = new Map<string, Promise<void>>()
@@ -9033,16 +9653,23 @@ const handleDelete = (item: any) => {
   overflow: visible;
 }
 
-.feature-area-shape,
-.feature-area-line {
-  fill-opacity: 0.18;
+.feature-area-shape {
+  fill-opacity: 1;
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 
-.feature-area-line,
+.feature-area-line {
+  fill: none;
+  fill-opacity: 0;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
 .feature-area-line.feature-area-draft,
 .feature-area-line.feature-area-forbidden,
 .feature-area-line.feature-area-stairs,
@@ -9061,13 +9688,14 @@ const handleDelete = (item: any) => {
 
 .feature-area-draft {
   stroke-dasharray: 8 6;
-  fill-opacity: 0.2;
+  fill-opacity: 0.25;
 }
 
 .feature-area-draft-marker {
   stroke-width: 1;
 }
 
+/* Base styles for markers and lines */
 .feature-area-forbidden {
   fill: #ef4444;
   stroke: #ef4444;
@@ -9091,6 +9719,148 @@ const handleDelete = (item: any) => {
 .feature-area-grass {
   fill: #22c55e;
   stroke: #22c55e;
+}
+
+/* Polygons shape style (using patterns) */
+.feature-area-shape.feature-area-forbidden {
+  fill: url(#pattern-forbidden);
+}
+
+.feature-area-shape.feature-area-stairs {
+  fill: url(#pattern-stairs);
+}
+
+.feature-area-shape.feature-area-slope {
+  fill: url(#pattern-slope);
+}
+
+.feature-area-shape.feature-area-narrow {
+  fill: url(#pattern-narrow);
+}
+
+.feature-area-shape.feature-area-grass {
+  fill: url(#pattern-grass);
+}
+
+/* Marker solid fill override (so markers are not filled with patterns) */
+.feature-area-marker.feature-area-forbidden {
+  fill: #ef4444;
+}
+
+.feature-area-marker.feature-area-stairs {
+  fill: #f59e0b;
+}
+
+.feature-area-marker.feature-area-slope {
+  fill: #8b5cf6;
+}
+
+.feature-area-marker.feature-area-narrow {
+  fill: #06b6d4;
+}
+
+.feature-area-marker.feature-area-grass {
+  fill: #22c55e;
+}
+
+/* Sidebar preview icon custom styles */
+.feature-area-type-icon {
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.feature-area-type-icon rect:last-child {
+  fill-opacity: 1;
+}
+
+/* Map area text label styles */
+.feature-area-label {
+  font-size: 14px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-weight: 600;
+  pointer-events: none;
+  paint-order: stroke fill;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.feature-area-label.feature-area-forbidden {
+  fill: #ef4444;
+}
+
+.feature-area-label.feature-area-stairs {
+  fill: #f59e0b;
+}
+
+.feature-area-label.feature-area-slope {
+  fill: #8b5cf6;
+}
+
+.feature-area-label.feature-area-narrow {
+  fill: #06b6d4;
+}
+
+.feature-area-label.feature-area-grass {
+  fill: #22c55e;
+}
+
+/* Floating legend overlay custom styles */
+.feature-area-legend {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 100px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.legend-title {
+  color: #2563eb;
+  font-weight: bold;
+  font-size: 13px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding-bottom: 4px;
+  text-align: left;
+}
+
+.legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-item-icon {
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+
+.legend-item-icon rect:last-child {
+  fill-opacity: 1;
+}
+
+.legend-item-label {
+  font-size: 12px;
+  color: #333333;
+  font-weight: 500;
 }
 
 .map-overlay {
@@ -10241,5 +11011,73 @@ select.recording-input option {
   scrollbar-color: rgba(103, 213, 253, 0.3) rgba(10, 42, 58, 0.5);
 }
 
+/* ==================== 重定位弹窗样式 ==================== */
+.relo-dialog-card {
+  min-width: 800px;
+  max-width: 90%;
+  width: 850px;
+}
+
+.relo-dialog-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.relo-instructions {
+  color: #9adfff;
+  font-size: 13px;
+  line-height: 1.4;
+  background: rgba(10, 42, 58, 0.5);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(103, 213, 253, 0.15);
+}
+
+.relo-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.relo-btn {
+  background: rgba(103, 213, 253, 0.1);
+  border: 1px solid rgba(103, 213, 253, 0.3);
+  color: #67d5fd;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.relo-btn:hover {
+  background: rgba(103, 213, 253, 0.2);
+  border-color: #67d5fd;
+}
+
+.relo-map-container {
+  position: relative;
+  width: 100%;
+  height: 500px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid rgba(103, 213, 253, 0.2);
+  overflow: hidden;
+  cursor: grab;
+}
+
+.relo-map-container:active {
+  cursor: grabbing;
+}
+
+.relo-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
 
 </style>

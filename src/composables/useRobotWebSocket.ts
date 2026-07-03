@@ -40,6 +40,7 @@ export interface CmdStatusData {
   msf: number
   app_nav_pause?: CmdStatusActionResult
   app_stop_navtrack?: CmdStatusActionResult
+  app_nav_stop?: CmdStatusActionResult
   map_name: string
   track_info: CmdStatusTrackInfo
 }

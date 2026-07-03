@@ -89,6 +89,11 @@ export const useRobotStore = defineStore('robot', () => {
   // ===== multitask_status 多任务组运行状态 =====
   const multitaskStatus = ref<MultiTaskStatusData | null>(null)
 
+  // ===== 停障避障报警（遇到障碍物连续3次） =====
+  const globalObstacleAlertActive = ref(false)
+  let consecutiveObstacleCount = 0
+
+
   // ===== 实时传感器数据 =====
   const realtimeSensorValues = ref<Record<string, number>>({})
   const realtimeSensorUnits = ref<Record<string, string>>({})
@@ -108,6 +113,20 @@ export const useRobotStore = defineStore('robot', () => {
       cmdStatus.value = data
     } else {
       cmdStatus.value = { ...cmdStatus.value, ...Object.fromEntries(Object.entries(data as Record<string, any>).filter(([, v]) => v !== undefined)) } as CmdStatusData
+    }
+
+    // 检查是否遇到障碍物（app_nav_stop 的 result 连续3次为 1）
+    if (data.app_nav_stop !== undefined && data.app_nav_stop !== null) {
+      const resultVal = Number(data.app_nav_stop.result)
+      if (resultVal === 1) {
+        consecutiveObstacleCount++
+        if (consecutiveObstacleCount >= 3) {
+          globalObstacleAlertActive.value = true
+        }
+      } else {
+        consecutiveObstacleCount = 0
+        globalObstacleAlertActive.value = false
+      }
     }
   }
 
@@ -261,6 +280,8 @@ export const useRobotStore = defineStore('robot', () => {
     stopState.value = null
     carTemperature.value = null
     carMotorInfo.value = null
+    globalObstacleAlertActive.value = false
+    consecutiveObstacleCount = 0
   }
 
   // ===== computed =====
@@ -465,6 +486,7 @@ export const useRobotStore = defineStore('robot', () => {
     taskStatus,
     taskProgress,
     multitaskStatus,
+    globalObstacleAlertActive,
     // mutations
     setOnlineStatus,
     setPose,

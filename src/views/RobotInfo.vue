@@ -79,9 +79,7 @@
               
               <div class="info-row space-between">
                 <span class="info-label">在线状态</span>
-                <div class="cyber-switch" :class="{ 'is-active': form.status === 'online' }" @click="form.status = form.status === 'online' ? 'offline' : 'online'">
-                  <div class="switch-slider"></div>
-                </div>
+                <span class="info-val status-text-badge" :class="form.status">{{ getStatusLabel(form.status) }}</span>
               </div>
 
               <div class="form-group flex-1">
@@ -99,11 +97,7 @@
             <div class="db-card stat-card">
               <div class="stat-title">在线状态</div>
               <div class="stat-body">
-                <select v-model="form.status" class="dash-select" :class="form.status">
-                  <option value="online">● 在线</option>
-                  <option value="offline">● 离线</option>
-                  <option value="maintenance">● 维护</option>
-                </select>
+                <span class="stat-val status-text-badge" :class="form.status">{{ getStatusLabel(form.status) }}</span>
               </div>
             </div>
             <div class="db-card stat-card">
@@ -554,7 +548,7 @@ const onSave = async () => {
       extra_data
     }
 
-    await robotApi.updateRobot(robotData.value.id, payload)
+    await robotApi.updateRobot(robotData.value.robot_id, payload)
     showSuccess('配置保存成功')
     await loadRobotDetail()
   } catch (error: any) {
@@ -856,6 +850,29 @@ onUnmounted(() => {
   transform: translateX(16px);
   background: #00D084;
   box-shadow: 0 0 4px #00D084;
+}
+
+/* --- 在线状态只读标签 --- */
+.status-text-badge {
+  font-size: 13px;
+  font-weight: bold;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgba(255, 77, 79, 0.12);
+  color: #FF4D4F;
+  border: 1px solid rgba(255, 77, 79, 0.35);
+  display: inline-block;
+  letter-spacing: 0.5px;
+}
+.status-text-badge.online {
+  background: rgba(0, 208, 132, 0.12);
+  color: #00D084;
+  border-color: rgba(0, 208, 132, 0.35);
+}
+.status-text-badge.maintenance {
+  background: rgba(255, 176, 32, 0.12);
+  color: #FFB020;
+  border-color: rgba(255, 176, 32, 0.35);
 }
 
 /* --- 右侧状态驾驶舱 --- */

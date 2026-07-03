@@ -905,8 +905,8 @@ export const robotApi = {
   getRobotDetail: (robotId: string) => {
     return apiClient.get<Robot>(`/robots/${encodeURIComponent(robotId)}`)
   },
-  updateRobot: (robotId: number, data: Partial<Robot>) => {
-    return apiClient.put<Robot>(`/robots/${robotId}`, data)
+  updateRobot: (robotId: string, data: Partial<Robot>) => {
+    return apiClient.put<Robot>(`/robots/${encodeURIComponent(robotId)}`, data)
   }
 }
 
@@ -1381,6 +1381,9 @@ export const navigationApi = {
     }
   ) => {
     return apiClient.post(`/ptz/${robotId}/speed/set`, data)
+  },
+  setReloPose: (robotId: string, data: { x: number; y: number; theta: number }) => {
+    return apiClient.post(`/navigation/${robotId}/set_relo_pose`, data)
   }
 }
 

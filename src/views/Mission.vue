@@ -441,7 +441,7 @@
               <div class="custom-select-wrapper">
                 <select v-model="trackStartDialog.form.obs_mode" class="mission-select" :disabled="trackStartDialog.loading">
                   <option :value="0">无避障</option>
-                  <option :value="1">近障模式</option>
+                  <option :value="1">停障模式</option>
                   <option :value="2">绕障模式</option>
                 </select>
                 <span class="custom-select-arrow">
@@ -618,19 +618,19 @@
 
              <div class="simple-form-grid">
                <div class="simple-form-item stop-switch-item">
-                 <label class="simple-label">到点停止运动</label>
+                 <label class="simple-label">是否到点不停</label>
                  <div class="simple-flex-row stop-switch-row">
-                   <div class="simple-switch" @click="addTaskDialog.form.stopAtPoint = !addTaskDialog.form.stopAtPoint" :class="{active: addTaskDialog.form.stopAtPoint}">
+                   <div class="simple-switch" @click="addTaskDialog.form.no_switch = !addTaskDialog.form.no_switch" :class="{active: addTaskDialog.form.no_switch}">
                       <div class="simple-switch-dot"></div>
                    </div>
-                   <img :src="addTaskDialog.form.stopAtPoint ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
+                   <img :src="addTaskDialog.form.no_switch ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
                  </div>
               </div>
                <div class="simple-form-item">
                  <label class="simple-label">避障模式</label>
                   <select v-model="addTaskDialog.form.obsMode" class="simple-select">
                     <option value="无避障">无避障</option>
-                    <option value="近障模式">近障模式</option>
+                    <option value="停障模式">停障模式</option>
                     <option value="绕障模式">绕障模式</option>
                   </select>
               </div>
@@ -1458,9 +1458,7 @@ const loadRouteList = async () => {
     let visibleRouteList = nextRouteList.filter(route =>
       route.startsWith(`${cleanMapName}_`) || (rawMap && route.startsWith(`${rawMap}_`))
     )
-    if (visibleRouteList.length === 0 && nextRouteList.length > 0) {
-      visibleRouteList = nextRouteList
-    }
+    // 有地图选中时不允许 fallback 到全部路线，严格按地图前缀过滤
     const runningRouteItem = runningRoute
       ? nextRouteList.find(route => normalizeTrackName(route) === runningRoute) || runningRoute
       : ''
@@ -1627,9 +1625,7 @@ const filteredRouteList = computed(() => {
     ? routeList.value.filter(route => route.startsWith(`${mapName}_`) || (rawMap && route.startsWith(`${rawMap}_`)))
     : []
 
-  if (mapMatchedList.length === 0 && routeList.value.length > 0) {
-    mapMatchedList = [...routeList.value]
-  }
+  // 有地图选中时不允许 fallback 到全部路线，严格按地图前缀过滤
 
   const runningRoute = getRunningRouteSelection()
   if (runningRoute) {
@@ -1743,7 +1739,7 @@ const trackStartDialog = ref({
   form: {
     action: 1, // 固定为1，表示启动
     wait: 0, // 0=立即启动, 1=不立即启动
-    obs_mode: 1, // 0=无避障, 1=近障模式, 2=绕障模式
+    obs_mode: 1, // 0=无避障, 1=停障模式, 2=绕障模式
     track_name: '',
     taskpoint_name: '',
     gait_type: 0 // 0=行走步态, 1=斜坡步态, 2=越障步态, 3=楼梯步态, 4=帧楼梯步态, 5=帧45°楼梯步态, 6=L行走步态, 7=山地步态, 8=静音步态
@@ -3297,10 +3293,10 @@ const addTaskDialog = ref({
     preset: '',
     extraConfig: '',
     description: '',
-    obsMode: '近障模式',
+    obsMode: '停障模式',
     gait: '1',
     ground: '1',
-    stopAtPoint: false
+    no_switch: false
   }
 })
 const addTaskFieldErrors = ref({
@@ -3361,12 +3357,12 @@ const resetAddTaskFieldErrors = () => {
 
 const normalizeTrackTaskObsModeText = (rawValue: any) => {
   const text = String(rawValue ?? '').trim()
-  if (!text) return '近障模式'
+  if (!text) return '停障模式'
   if (text === '0') return '无避障'
-  if (text === '1') return '近障模式'
+  if (text === '1') return '停障模式'
   if (text === '2') return '绕障模式'
   if (text === '无障碍') return '无避障'
-  if (text === '无避障' || text === '近障模式' || text === '绕障模式') return text
+  if (text === '无避障' || text === '停障模式' || text === '绕障模式') return text
   return text
 }
 const validateAddTaskRequiredFields = () => {
@@ -3618,10 +3614,10 @@ const handleAddTask = () => {
   addTaskDialog.value.form.preset = ''
   addTaskDialog.value.form.description = ''
   addTaskDialog.value.form.extraConfig = ''
-  addTaskDialog.value.form.obsMode = '近障模式'
+  addTaskDialog.value.form.obsMode = '停障模式'
   addTaskDialog.value.form.gait = '1'
   addTaskDialog.value.form.ground = '1'
-  addTaskDialog.value.form.stopAtPoint = false
+  addTaskDialog.value.form.no_switch = false
   addTaskDialog.value.form.isMulti = '0'
 
   isEditMode.value = false
@@ -3654,16 +3650,15 @@ const parseBooleanLike = (value: unknown): boolean | null => {
   return null
 }
 
-const resolveStopAtPointFromTask = (task: any): boolean => {
-  // 循迹任务接口返回值与UI开关语义保持一致：false=关闭，true=开启
-  const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
-  if (noStop !== null) return noStop
-
+const resolveNoSwitchFromTask = (task: any): boolean => {
   const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
   if (noSwitch !== null) return noSwitch
 
+  const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
+  if (noStop !== null) return noStop
+
   const stopAtPoint = parseBooleanLike(task?.stopAtPoint ?? task?.stop_at_point)
-  if (stopAtPoint !== null) return stopAtPoint
+  if (stopAtPoint !== null) return !stopAtPoint
 
   return false
 }
@@ -3773,7 +3768,7 @@ const handleEditTask = async (waypoint: any) => {
     addTaskDialog.value.form.obsMode = normalizeTrackTaskObsModeText(waypoint.rawData?.obs_mode)
     addTaskDialog.value.form.gait = waypoint.gait || waypoint.rawData?.gait || '1'
     addTaskDialog.value.form.ground = waypoint.ground || waypoint.rawData?.ground || '1'
-    addTaskDialog.value.form.stopAtPoint = resolveStopAtPointFromTask(waypoint.rawData || waypoint)
+    addTaskDialog.value.form.no_switch = resolveNoSwitchFromTask(waypoint.rawData || waypoint)
 
     addTaskDialog.value.visible = true
     await nextTick()
@@ -3837,8 +3832,9 @@ const confirmAddTask = async () => {
     track_name: selectedRouteName.value,
     track_point_name: selectedTaskGroupName.value,
     extra: form.extraConfig || '',
-    obs_mode: form.obsMode || '近障模式',
-    nostop: form.stopAtPoint,
+    obs_mode: form.obsMode || '停障模式',
+    no_switch: form.no_switch,
+    nostop: false,
     gait: selectedVehicleType.value === 'four_wheel' ? '' : form.gait,
     ground: selectedVehicleType.value === 'four_wheel' ? '' : form.ground,
     createtime: isEditMode.value ? (editingTaskItem.value?.rawData?.createtime || timestamp) : timestamp
@@ -3970,6 +3966,9 @@ const handleDeleteTask = (waypoint: any) => {
       
       // 触发列表刷新
       taskListRefreshKey.value++
+      
+      // 重新调用接口刷新列表数据
+      await refreshTrackTaskListFromApi(robotId)
       
       successMessage.value = { show: true, text: '删除成功' }
       setTimeout(() => {

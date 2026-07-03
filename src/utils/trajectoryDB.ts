@@ -43,3 +43,19 @@ export const getTrajectoryFile = async (trackName: string): Promise<Blob | null>
         return null
     }
 }
+
+// 删除轨迹文件缓存
+export const deleteTrajectoryFile = async (trackName: string): Promise<void> => {
+    try {
+        const db = await openTrajectoryDB()
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction([TRAJECTORY_STORE_NAME], 'readwrite')
+            const store = tx.objectStore(TRAJECTORY_STORE_NAME)
+            store.delete(trackName)
+            tx.oncomplete = () => resolve()
+            tx.onerror = () => reject(tx.error)
+        })
+    } catch {
+        // 缓存不存在或删除失败时静默处理
+    }
+}

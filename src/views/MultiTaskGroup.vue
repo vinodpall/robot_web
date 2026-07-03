@@ -241,7 +241,7 @@
             <label class="mtg-task-form-label">避障模式</label>
             <select v-model="addTaskGroupDialog.form.obsMode" class="mtg-task-form-select">
               <option value="无避障">无避障</option>
-              <option value="近障模式">近障模式</option>
+              <option value="停障模式">停障模式</option>
               <option value="绕障模式">绕障模式</option>
             </select>
           </div>
@@ -527,7 +527,7 @@ const addTaskGroupDialog = ref({
     trackName: '',
     taskGroup: '',
     circle: 1,
-    obsMode: '近障模式',
+    obsMode: '停障模式',
     gait: '1',
     ground: '1',
     originPublish: true
@@ -802,7 +802,7 @@ const handleAddTaskGroup = () => {
     trackName: '',
     taskGroup: '',
     circle: 1,
-    obsMode: '近障模式',
+    obsMode: '停障模式',
     gait: '1',
     ground: '1',
     originPublish: true
@@ -1251,10 +1251,10 @@ const handleEditTaskGroup = async (task: any) => {
   const normalizeObsMode = (raw: any) => {
     const v = String(raw ?? '').trim()
     if (v === '0' || v === '无障碍' || v === '无避障' || v === '停障模式') return '无避障'
-    if (v === '1') return '近障模式'
+    if (v === '1') return '停障模式'
     if (v === '2') return '绕障模式'
     if (v === '3') return '绕障模式'
-    return v || '近障模式'
+    return v || '停障模式'
   }
 
   const rawTaskType = pick(taskPayload.task_type, task.task_type)

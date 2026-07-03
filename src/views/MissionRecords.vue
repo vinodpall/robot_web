@@ -421,12 +421,12 @@
 
              <div class="simple-form-grid">
                <div class="simple-form-item stop-switch-item">
-                 <label class="simple-label">到点停止运动</label>
+                 <label class="simple-label">是否到点不停</label>
                  <div class="simple-flex-row stop-switch-row">
-                   <div class="simple-switch" @click="addTaskDialog.form.stopAtPoint = !addTaskDialog.form.stopAtPoint" :class="{active: addTaskDialog.form.stopAtPoint}">
+                   <div class="simple-switch" @click="addTaskDialog.form.no_switch = !addTaskDialog.form.no_switch" :class="{active: addTaskDialog.form.no_switch}">
                       <div class="simple-switch-dot"></div>
                    </div>
-                   <img :src="addTaskDialog.form.stopAtPoint ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
+                   <img :src="addTaskDialog.form.no_switch ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
                  </div>
               </div>
             </div>
@@ -1794,10 +1794,10 @@ const addTaskDialog = ref({
     preset: '',
     extraConfig: '', // 未配置
     description: '',
-    obsMode: '近障模式',
+    obsMode: '停障模式',
     gait: '1', // 行走步态
     ground: '1', // 实心地面
-    stopAtPoint: false,
+    no_switch: false,
     remark: '' // 备注
   }
 })
@@ -1836,12 +1836,12 @@ const validateAddTaskRequiredFields = () => {
 
 const normalizeTrackTaskObsModeText = (rawValue: any) => {
   const text = String(rawValue ?? '').trim()
-  if (!text) return '近障模式'
+  if (!text) return '停障模式'
   if (text === '0') return '无避障'
-  if (text === '1') return '近障模式'
+  if (text === '1') return '停障模式'
   if (text === '2') return '绕障模式'
   if (text === '无障碍') return '无避障'
-  if (text === '无避障' || text === '近障模式' || text === '绕障模式') return text
+  if (text === '无避障' || text === '停障模式' || text === '绕障模式') return text
   return text
 }
 
@@ -1854,15 +1854,15 @@ const parseBooleanLike = (value: any): boolean | null => {
   return null
 }
 
-const resolveStopAtPointFromTask = (task: any): boolean => {
-  const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
-  if (noStop !== null) return !noStop
-
+const resolveNoSwitchFromTask = (task: any): boolean => {
   const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
-  if (noSwitch !== null) return !noSwitch
+  if (noSwitch !== null) return noSwitch
+
+  const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
+  if (noStop !== null) return noStop
 
   const stopAtPoint = parseBooleanLike(task?.stopAtPoint ?? task?.stop_at_point)
-  if (stopAtPoint !== null) return stopAtPoint
+  if (stopAtPoint !== null) return !stopAtPoint
 
   return false
 }
@@ -2104,10 +2104,10 @@ const handleAddTask = () => {
     preset: '',
     extraConfig: '',
     description: '',
-    obsMode: '近障模式',
+    obsMode: '停障模式',
     gait: '1',
     ground: '1',
-    stopAtPoint: false,
+    no_switch: false,
     remark: ''
   }
   resetAddTaskFieldErrors()
@@ -2180,7 +2180,8 @@ const confirmAddTask = async () => {
     obs_mode: 2,
     gait: selectedVehicleType.value === 'four_wheel' ? '' : (addTaskDialog.value.form.gait || '1'),
     ground: selectedVehicleType.value === 'four_wheel' ? '' : (addTaskDialog.value.form.ground || '1'),
-    nostop: !addTaskDialog.value.form.stopAtPoint
+    no_switch: addTaskDialog.value.form.no_switch,
+    nostop: false
   }
   
   console.log('准备提交的 taskData:', taskData)
@@ -2279,7 +2280,7 @@ const handleEditTask = async (waypoint: any) => {
       obsMode: normalizeTrackTaskObsModeText(taskData.obs_mode),
       gait: taskData.gait || '1',
       ground: taskData.ground || '1',
-      stopAtPoint: resolveStopAtPointFromTask(taskData)
+      no_switch: resolveNoSwitchFromTask(taskData)
     }
     addTaskDialog.value.visible = true
     await nextTick()

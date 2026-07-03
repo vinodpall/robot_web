@@ -6,10 +6,16 @@
       <div class="global-fall-alert-edge bottom"></div>
       <div class="global-fall-alert-edge left"></div>
     </div>
+    <div v-if="robotStore.globalObstacleAlertActive" class="global-obstacle-alert-frame" aria-hidden="true">
+      <div class="global-obstacle-alert-edge top"></div>
+      <div class="global-obstacle-alert-edge right"></div>
+      <div class="global-obstacle-alert-edge bottom"></div>
+      <div class="global-obstacle-alert-edge left"></div>
+    </div>
     <div class="header">
       <div class="header-left">
-        <img src="/src/assets/source_data/dog_logo.svg" alt="logo" class="logo" />
-        <span class="title">机器人控制平台</span>
+        <img :src="selectedVehicleType === 'four_wheel' ? carLogo : dogLogo" alt="logo" class="logo" />
+        <span class="title">{{ selectedVehicleType === 'four_wheel' ? '无人车控制平台' : '机器狗控制平台' }}</span>
       </div>
       
       <nav class="nav-menu">
@@ -220,6 +226,8 @@ import ErrorMessage from '../components/ErrorMessage.vue'
 import SuccessMessage from '../components/SuccessMessage.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import titleBg from '/src/assets/source_data/bg_data/title.png'
+import dogLogo from '/src/assets/source_data/dog_logo.svg'
+import carLogo from '/src/assets/source_data/car_logo.svg'
 
 const router = useRouter()
 const route = useRoute()
@@ -356,6 +364,10 @@ const robots = computed(() => {
 
 const selectedRobot = computed(() => {
   return robots.value.find(robot => robot.robot_id === selectedRobotId.value)
+})
+
+const selectedVehicleType = computed(() => {
+  return selectedRobot.value?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
 })
 
 const isSelectActive = ref(false)
@@ -530,17 +542,10 @@ const confirmChangePassword = async () => {
     return
   }
 
-  const isActive = typeof currentUser?.is_active === 'boolean'
-    ? currentUser.is_active
-    : String(currentUser?.is_activate ?? 'true') === 'true'
-
   try {
     changePasswordSubmitting.value = true
     await userApi.updateUser(userId, {
-      email: currentUser?.email || '',
-      full_name: currentUser?.full_name || currentUser?.userfullname || '',
-      password,
-      is_active: isActive
+      password
     })
     changePasswordDialogVisible.value = false
     changePasswordForm.value.password = ''
@@ -628,6 +633,8 @@ const activeStopLabels = computed(() => {
 
   return labels
 })
+
+const globalObstacleAlertActive = computed(() => robotStore.globalObstacleAlertActive)
 
 const globalFallAlertActive = ref(false)
 const globalFallAlertDialogVisible = ref(false)
@@ -769,8 +776,42 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 2100;
+  z-index: 999999;
 }
+
+.global-obstacle-alert-frame {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999999;
+}
+
+.global-obstacle-alert-edge {
+  position: absolute;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0) 0%, rgba(245, 158, 11, 0.95) 50%, rgba(245, 158, 11, 0) 100%);
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.65);
+  animation: global-obstacle-alert-pulse 0.9s ease-in-out infinite;
+}
+
+.global-obstacle-alert-edge.top,
+.global-obstacle-alert-edge.bottom {
+  left: 0;
+  width: 100%;
+  height: 12px;
+}
+
+.global-obstacle-alert-edge.left,
+.global-obstacle-alert-edge.right {
+  top: 0;
+  width: 12px;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0) 0%, rgba(245, 158, 11, 0.95) 50%, rgba(245, 158, 11, 0) 100%);
+}
+
+.global-obstacle-alert-edge.top { top: 0; }
+.global-obstacle-alert-edge.right { right: 0; }
+.global-obstacle-alert-edge.bottom { bottom: 0; }
+.global-obstacle-alert-edge.left { left: 0; }
 
 .global-fall-alert-edge {
   position: absolute;
@@ -876,6 +917,17 @@ onUnmounted(() => {
 }
 
 @keyframes global-fall-alert-pulse {
+  0%, 100% {
+    opacity: 0.35;
+    filter: saturate(0.85);
+  }
+  50% {
+    opacity: 1;
+    filter: saturate(1.2);
+  }
+}
+
+@keyframes global-obstacle-alert-pulse {
   0%, 100% {
     opacity: 0.35;
     filter: saturate(0.85);

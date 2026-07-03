@@ -225,6 +225,7 @@
               :navigation-origin="pointCloudNavigationOrigin"
               :robot-pose="robotStore.pose"
               :robot-mesh="arrowMesh"
+              :robot-type="selectedVehicleType"
             />
           </div>
           <!-- 工具按鈕组 -->
@@ -317,7 +318,7 @@
       <div class="right-on1 drone-status-card">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          机器人状态
+          {{ selectedVehicleType === 'four_wheel' ? '无人车状态' : '机器狗状态' }}
         </div>
         <div class="drone-card-body">
           <div class="on1-bottom">
@@ -931,7 +932,7 @@
             <div class="custom-select-wrapper">
               <select v-model="trackStartDialog.form.obs_mode" class="mission-select" :disabled="trackStartDialog.loading">
                 <option :value="0">无避障</option>
-                <option :value="1">近障模式</option>
+                <option :value="1">停障模式</option>
                 <option :value="2">绕障模式</option>
               </select>
             </div>
@@ -1652,9 +1653,14 @@ watch(() => robotStore.cmdStatus?.track_info, (info) => {
   }
 }, { deep: true })
 
-// 循迹任务结束时，还原点云图（移除轨迹叠加），并重置下拉为第一条
-watch(() => robotStore.isTracking, (tracking) => {
-  if (!tracking) {
+// 循迹任务状态变化时，同步点云图叠加层
+watch(() => robotStore.isTracking, async (tracking) => {
+  if (tracking) {
+    lastTrackOverlayKey.value = ''
+    lastTrackOverlayTaskPointCount.value = 0
+    trackOverlayInFlightKey.value = ''
+    await syncPointCloudOverlayByRuntimeState()
+  } else {
     lastTrackOverlayKey.value = ''
     lastTrackOverlayTaskPointCount.value = 0
     trackOverlayInFlightKey.value = ''
@@ -2221,6 +2227,7 @@ const refreshPointCloud = async (options?: { silent?: boolean; force?: boolean }
     lastTrackOverlayTaskPointCount.value = 0
     trackOverlayInFlightKey.value = ''
     lastPointTaskOverlayKey.value = ''
+    await syncPointCloudOverlayByRuntimeState()
     await nextTick()
     threePointCloudRef.value?.fitCameraToScene?.()
   } catch (error) {
@@ -5027,7 +5034,7 @@ const trackStartDialog = ref({
   form: {
     action: 1, // 固定为1，表示启动
     wait: 0, // 0=立即启动, 1=不立即启动
-    obs_mode: 1, // 0=无避障, 1=近障模式, 2=绕障模式
+    obs_mode: 1, // 0=无避障, 1=停障模式, 2=绕障模式
     track_name: '',
     taskpoint_name: '',
     gait_type: 0 // 0=行走步态, 1=斜坡步态, 2=越障步态, 3=楼梯步态, 4=帧楼梯步态, 5=帧45°楼梯步态, 6=L行走步态, 7=山地步态, 8=静音步态
@@ -6762,6 +6769,11 @@ const finalizeTrackTaskStart = async (trackName: string, taskpointName: string, 
   selectedTrack.value = normalizedTrackName
   activeTrackInfo.value = { track_name: normalizedTrackName, taskpoint_name: taskpointName }
   activeOverlayTrackName.value = normalizedTrackName
+  
+  // 强制清除旧轨迹的缓存键，确保再次启动同名路线时能重新渲染叠加层
+  lastTrackOverlayKey.value = ''
+  trackOverlayInFlightKey.value = ''
+  
   await overlayTrackTrajectory(normalizedTrackName)
   showSuccess(successMessage || '循迹任务启动成功')
 }
@@ -6816,25 +6828,27 @@ const onTrackStartConfirm = async () => {
     }
 
     resetTrackStartProgress()
-    pushTrackStartStep('检查循迹启动前置状态')
-    const checkResult = await navigationApi.startTrack(robotId, {
-      obs_mode: form.obs_mode,
-      track_name: form.track_name,
-      taskpoint_name: form.taskpoint_name,
-      gait_name: selectedVehicleType.value === 'four_wheel' ? '' : gaitConfig.command,
-      ground: ''
-    })
+    if (selectedVehicleType.value !== 'four_wheel') {
+      pushTrackStartStep('检查循迹启动前置状态')
+      const checkResult = await navigationApi.startTrack(robotId, {
+        obs_mode: form.obs_mode,
+        track_name: form.track_name,
+        taskpoint_name: form.taskpoint_name,
+        gait_name: selectedVehicleType.value === 'four_wheel' ? '' : gaitConfig.command,
+        ground: ''
+      })
 
-    const canWaitDirectly = resolveCheckExitChargeResult(checkResult)
-    if (canWaitDirectly === true) {
-      pushTrackStartStep('检测到可直接启动，等待循迹启动', 'success')
-      showSuccess('等待循迹启动', 8000)
-      return
-    }
-    if (selectedVehicleType.value !== 'four_wheel' && canWaitDirectly === false && isRobotProneState()) {
-      pushTrackStartStep('机器狗处于趴下状态，请先起立', 'error')
-      showError('机器狗处于趴下状态，请先将机器狗起立')
-      return
+      const canWaitDirectly = resolveCheckExitChargeResult(checkResult)
+      if (canWaitDirectly === true) {
+        pushTrackStartStep('检测到可直接启动，等待循迹启动', 'success')
+        showSuccess('等待循迹启动', 8000)
+        return
+      }
+      if (canWaitDirectly === false && isRobotProneState()) {
+        pushTrackStartStep('机器狗处于趴下状态，请先起立', 'error')
+        showError('机器狗处于趴下状态，请先将机器狗起立')
+        return
+      }
     }
 
     if (selectedVehicleType.value !== 'four_wheel') {
@@ -7580,6 +7594,7 @@ const updateSensorChartOption = () => {
   }
   
   const option = {
+    animation: false,
     grid: {
       top: '22%',
       left: '2%',
@@ -7690,7 +7705,9 @@ const initSensorChart = () => {
     const t = new Date(now.getTime() - i * 3000)
     sensorTimeLabels.value.push(t.toTimeString().split(' ')[0])
     sensorsList.value.forEach(sensor => {
-      sensorDataHistories.value[sensor.key].push(null)
+      const curVal = robotStore.realtimeSensorValues[sensor.key]
+      const val = (curVal !== undefined && curVal !== null) ? curVal : null
+      sensorDataHistories.value[sensor.key].push(val)
     })
   }
   
@@ -7714,13 +7731,22 @@ const initSensorChart = () => {
       
       const realValue = robotStore.realtimeSensorValues[sensor.key]
       let nextVal: number | null = null
-      if (realValue !== undefined) {
+      if (realValue !== undefined && realValue !== null) {
         nextVal = realValue
         
-        if (history.every(v => v === null)) {
+        // 如果历史数据中有 null，用当前有效的第一个值填充，以保证图表曲线连贯不留白
+        if (history.some(v => v === null)) {
           for (let i = 0; i < history.length; i++) {
-            (history as any[])[i] = nextVal
+            if (history[i] === null) {
+              (history as any[])[i] = nextVal
+            }
           }
+        }
+      } else {
+        // 如果当前没有获取到值，使用历史中最后一个有效值，防止图表出现断线/空白
+        const lastVal = history[history.length - 1]
+        if (lastVal !== null && lastVal !== undefined) {
+          nextVal = lastVal
         }
       }
       
