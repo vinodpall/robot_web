@@ -213,7 +213,7 @@
       <!-- 视频播放区域 -->
       <div class="content-on1" @click="closeMenus">
         <div class="pointcloud-wrapper" :class="{ 'pointcloud-fullscreen': isPointCloudFullscreen }">
-          <div class="pointcloud-view">
+          <div class="pointcloud-view" v-show="currentViewType === 'pointcloud'">
             <ThreePointCloudPreview
               ref="threePointCloudRef"
               :points="pointCloudData"
@@ -228,6 +228,114 @@
               :robot-type="selectedVehicleType"
             />
           </div>
+          <div class="pointcloud-view grid-view" v-show="currentViewType === 'grid'">
+            <div class="grid-map-container" ref="gridMapContainerRef">
+              <canvas 
+                ref="gridMapCanvasRef" 
+                class="grid-map-canvas"
+                @wheel="handleGridMapWheel"
+                @mousedown="handleGridMapMouseDown"
+                @mousemove="handleGridMapMouseMove"
+                @mouseup="handleGridMapMouseUp"
+                @mouseleave="handleGridMapMouseUp"
+                style="cursor: grab;"
+              ></canvas>
+              <div v-if="gridMapLoading" class="grid-map-overlay">栅格地图加载中...</div>
+              <div v-else-if="gridMapError" class="grid-map-overlay error">{{ gridMapError }}</div>
+            </div>
+          </div>
+          <div class="pointcloud-view map-view" v-show="currentViewType === 'map'">
+            <div ref="mapContainer" style="width: 100%; height: 100%;"></div>
+            
+            <!-- 地图图层切换器 -->
+            <div class="map-layer-switcher">
+              <button class="layer-switch-trigger" @click.stop="toggleLayerMenu">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>图层</span>
+              </button>
+              <transition name="layer-menu-fade">
+                <div v-show="showLayerMenu" class="layer-menu-dropdown">
+                  <div class="layer-option" :class="{ active: currentMapType === 'standard' }" @click.stop="setMapType('standard')">
+                    <span class="option-icon standard-icon"></span>
+                    <span>标准地图</span>
+                  </div>
+                  <div class="layer-option" :class="{ active: currentMapType === 'satellite' }" @click.stop="setMapType('satellite')">
+                    <span class="option-icon satellite-icon"></span>
+                    <span>卫星地图</span>
+                  </div>
+
+                  <div class="layer-divider"></div>
+                  <div class="layer-option" :class="{ active: showTraffic }" @click.stop="toggleTraffic">
+                    <span class="option-checkbox" :class="{ checked: showTraffic }"></span>
+                    <span>实时路况</span>
+                  </div>
+                </div>
+              </transition>
+            </div>
+          </div>
+          <!-- 视图模式切换组 (靠左侧) -->
+          <div class="map-view-switcher-group">
+            <button 
+              class="view-switch-btn" 
+              :class="{ active: currentViewType === 'pointcloud' }" 
+              @click.stop="setViewType('pointcloud')"
+              title="点云图"
+            >
+              <!-- 3D点云空间立方体与点阵结合 -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z" stroke-dasharray="2 2"/>
+                <path d="M12 3v18" stroke-dasharray="2 2"/>
+                <path d="M12 12L4 7.5" stroke-dasharray="2 2"/>
+                <path d="M12 12l8-4.5" stroke-dasharray="2 2"/>
+                <circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="4" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="20" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="4" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="20" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="12" cy="21" r="1.5" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
+            <button 
+              class="view-switch-btn" 
+              :class="{ active: currentViewType === 'grid' }" 
+              @click.stop="setViewType('grid')"
+              title="栅格图"
+            >
+              <!-- 2D栅格占用概率图 -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="1.5"/>
+                <path d="M9 3v18"/>
+                <path d="M15 3v18"/>
+                <path d="M3 9h18"/>
+                <path d="M3 15h18"/>
+                <rect x="3.5" y="3.5" width="5" height="5" fill="currentColor" stroke="none"/>
+                <rect x="15.5" y="9.5" width="5" height="5" fill="currentColor" stroke="none"/>
+                <rect x="9.5" y="15.5" width="5" height="5" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
+            <button 
+              class="view-switch-btn" 
+              :class="{ active: currentViewType === 'map' }" 
+              @click.stop="setViewType('map')"
+              title="卫星图"
+            >
+              <!-- 轨道卫星与信号波 -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"/>
+                <rect x="2" y="10" width="4" height="4" rx="0.5"/>
+                <rect x="18" y="10" width="4" height="4" rx="0.5"/>
+                <line x1="6" y1="12" x2="9" y2="12"/>
+                <line x1="15" y1="12" x2="18" y2="12"/>
+                <path d="M12 15v3"/>
+                <path d="M9 18h6"/>
+              </svg>
+            </button>
+          </div>
+
           <!-- 工具按鈕组 -->
           <div class="pcd-btn-group">
             <button class="pcd-tool-btn" @click.stop="centerToRobot" title="定位机器人">
@@ -1243,7 +1351,7 @@ const downloadAllTrajectoryFiles = async (robotId: string, trackList: string[]) 
     }
   }
 }
-import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted, nextTick, watch, reactive } from 'vue'
+import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted, nextTick, watch, reactive, shallowRef } from 'vue'
 import { useDevices, useWaylineJobs } from '../composables/useApi'
 import {
   navigationApi,
@@ -1283,6 +1391,8 @@ import mkfOnIcon from '@/assets/source_data/svg_data/mkf_on.svg'
 import mkfOffIcon from '@/assets/source_data/svg_data/mkf_off.svg'
 import dogImg from '@/assets/source_data/dog.png'
 import carImg from '@/assets/source_data/car.png'
+import carMapIcon from '@/assets/source_data/svg_data/robot_source/car_icon.svg'
+import dogMapIcon from '@/assets/source_data/svg_data/robot_source/dog_icon.svg'
 
 
 
@@ -1668,6 +1778,7 @@ watch(() => robotStore.isTracking, async (tracking) => {
     if (basePointCloudData.value.length > 0) {
       pointCloudData.value = basePointCloudData.value
     }
+    clearRobotTrajectoryOnMap()
     // 恢复显示列表第一项
     if (filteredTrackList.value.length > 0) {
       selectedTrack.value = filteredTrackList.value[0]
@@ -1879,14 +1990,93 @@ const closeRtkPopupOnOutside = (e: MouseEvent) => {
   const el = (e.target as HTMLElement).closest('.rtk-status-item')
   if (!el) showRtkPopup.value = false
 }
-onMounted(() => document.addEventListener('click', closeRtkPopupOnOutside))
-onUnmounted(() => document.removeEventListener('click', closeRtkPopupOnOutside))
+onMounted(() => {
+  document.addEventListener('click', closeRtkPopupOnOutside)
+  document.addEventListener('click', closeLayerMenuOnOutside)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', closeRtkPopupOnOutside)
+  document.removeEventListener('click', closeLayerMenuOnOutside)
+})
+
+// 归一化/转换 GPS 坐标单位
+const normalizeGpsCoordinate = (val: string | number | undefined | null): number => {
+  if (val === undefined || val === null || val === '') return 0
+  let n = Number(val)
+  if (isNaN(n)) return 0
+  // 如果坐标绝对值大于 10000，说明是乘以 1e7 或 1e6 后的微度表示
+  if (Math.abs(n) > 10000) {
+    if (Math.abs(n) > 10000000) {
+      n = n / 10000000.0
+    } else {
+      n = n / 1000000.0
+    }
+  }
+  return n
+}
+
+// 加载地图的 GNSS 原点
+const loadGnssOrigin = async (mapName: string): Promise<{ latitude: number; longitude: number } | null> => {
+  if (!mapName) return null
+  try {
+    const blob = await getMapFile(mapName, 'gnss_origin.txt')
+    if (!blob) return null
+    const text = await blob.text()
+    const parts = text.trim().split(/[\s,]+/)
+    if (parts.length >= 2) {
+      const p0 = parseFloat(parts[0])
+      const p1 = parseFloat(parts[1])
+      if (!isNaN(p0) && !isNaN(p1) && p0 !== 0 && p1 !== 0) {
+        // 通常纬度较小，经度较大，以此区分
+        const lat = Math.min(Math.abs(p0), Math.abs(p1)) * (p0 < p1 ? Math.sign(p0) : Math.sign(p1))
+        const lng = Math.max(Math.abs(p0), Math.abs(p1)) * (p0 > p1 ? Math.sign(p0) : Math.sign(p1))
+        return { latitude: lat, longitude: lng }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load gnss_origin:', err)
+  }
+  return null
+}
+
+// 转换本地 relative x/y 坐标到 GPS WGS84
+const convertLocalToGps = (x: number, y: number, gnssOrigin: { latitude: number; longitude: number } | null) => {
+  let lat0 = 0
+  let lng0 = 0
+  
+  if (gnssOrigin) {
+    lat0 = gnssOrigin.latitude
+    lng0 = gnssOrigin.longitude
+  } else {
+    // 动态回退：使用机器人当前位置和经纬度进行估算
+    const gps = robotStore.gpsMessage
+    const pose = robotStore.pose
+    if (gps && gps.longitude && gps.latitude && pose) {
+      const rlng = normalizeGpsCoordinate(gps.longitude)
+      const rlat = normalizeGpsCoordinate(gps.latitude)
+      const rx = pose.x
+      const ry = pose.y
+      if (rlng !== 0 && rlat !== 0 && !isNaN(rx) && !isNaN(ry)) {
+        lat0 = rlat - ry / 111319.0
+        lng0 = rlng - rx / (111319.0 * Math.cos(rlat * Math.PI / 180))
+      }
+    }
+  }
+
+  if (lat0 === 0 || lng0 === 0) {
+    return null
+  }
+
+  const lat = lat0 + y / 111319.0
+  const lng = lng0 + x / (111319.0 * Math.cos(lat0 * Math.PI / 180))
+  return { longitude: lng, latitude: lat }
+}
 
 // 格式化经纬度坐标（nan 显示 --）
 const formatRtkCoord = (val: string | number | undefined | null): string => {
   if (val === undefined || val === null || val === '' || String(val).toLowerCase() === 'nan') return '--'
-  const n = Number(val)
-  return isNaN(n) ? '--' : n.toFixed(7)
+  const n = normalizeGpsCoordinate(val)
+  return n === 0 ? '--' : n.toFixed(7)
 }
 
 // 格式化海拔
@@ -1916,13 +2106,19 @@ const togglePointCloudFullscreen = () => {
 
 // 将视图居中到机器人当前位置
 const centerToRobot = () => {
-  threePointCloudRef.value?.centerToRobot?.()
+  if (currentViewType.value === 'map') {
+    updateRobotMapMarker(true)
+  } else if (currentViewType.value === 'pointcloud') {
+    threePointCloudRef.value?.centerToRobot?.()
+  } else if (currentViewType.value === 'grid') {
+    drawGridMapCanvas()
+  }
 }
 
 // 叠加循迹轨迹到点云图
 const overlayTrackTrajectory = async (trackName: string) => {
   const normalizedTrackName = normalizeTrackName(trackName)
-  if (!normalizedTrackName || basePointCloudData.value.length === 0) return
+  if (!normalizedTrackName) return
   const currentTaskPointName = normalizeTaskPointName(activeTrackInfo.value.taskpoint_name)
   const overlayKey = `${normalizedTrackName}::${currentTaskPointName}`
   if (lastTrackOverlayKey.value === overlayKey || trackOverlayInFlightKey.value === overlayKey) {
@@ -2021,31 +2217,98 @@ const overlayTrackTrajectory = async (trackName: string) => {
       console.warn('[任务点] 未找到有效的任务点坐标数据')
     }
 
-    // 3. 归一化并合并数据
-    const { centerX, centerY, centerZ, maxRange } = pointCloudNormalizationParams.value
-    
-    const normalizedTrajectory = trajectoryPoints.map(p => ({
-      x: (p.x - centerX) / maxRange,
-      y: (p.y - centerY) / maxRange,
-      z: (p.z - centerZ) / maxRange,
-      intensity: 2.0  // 特殊值，渲染时识别为轨迹点（绿色）
-    }))
+    // 3. 归一化并合并数据 (仅当点云基础数据加载完成时才进行点云图的渲染叠加)
+    if (basePointCloudData.value.length > 0 && pointCloudNormalizationParams.value) {
+      const { centerX, centerY, centerZ, maxRange } = pointCloudNormalizationParams.value
+      
+      const normalizedTrajectory = trajectoryPoints.map(p => ({
+        x: (p.x - centerX) / maxRange,
+        y: (p.y - centerY) / maxRange,
+        z: (p.z - centerZ) / maxRange,
+        intensity: 2.0  // 特殊值，渲染时识别为轨迹点（绿色）
+      }))
 
-    const normalizedTaskPoints = taskPointsData.map(p => ({
-      x: (p.x - centerX) / maxRange,
-      y: (p.y - centerY) / maxRange,
-      z: (p.z - centerZ) / maxRange,
-      intensity: 3.0,  // 特殊值，渲染时识别为任务点（绿色）
-      name: p.name      // 保留名称用于显示
-    }))
+      const normalizedTaskPoints = taskPointsData.map(p => ({
+        x: (p.x - centerX) / maxRange,
+        y: (p.y - centerY) / maxRange,
+        z: (p.z - centerZ) / maxRange,
+        intensity: 3.0,  // 特殊值，渲染时识别为任务点（绿色）
+        name: p.name      // 保留名称用于显示
+      }))
 
-    pointCloudData.value = [
-      ...basePointCloudData.value, 
-      ...normalizedTrajectory,
-      ...normalizedTaskPoints
-    ]
+      pointCloudData.value = [
+        ...basePointCloudData.value, 
+        ...normalizedTrajectory,
+        ...normalizedTaskPoints
+      ]
+    }
+
+    // 如果地图已初始化，也在地图上渲染轨迹和任务点
+    if (amapInstance && amapApiRef) {
+      clearRobotTrajectoryOnMap()
+      
+      const AMap = amapApiRef
+      const gnssOrigin = await loadGnssOrigin(selectedMap.value)
+      
+      // 转换轨迹点
+      const mapPath: [number, number][] = []
+      trajectoryPoints.forEach(p => {
+        const gps = convertLocalToGps(p.x, p.y, gnssOrigin)
+        if (gps) {
+          const gcjCoords = transformWGS84ToGCJ02(gps.longitude, gps.latitude)
+          mapPath.push([gcjCoords.longitude, gcjCoords.latitude])
+        }
+      })
+      
+      // 画轨迹线
+      if (mapPath.length > 1) {
+        robotTrajectoryPolyline.value = new AMap.Polyline({
+          path: mapPath,
+          strokeColor: '#39b54a', // 亮绿色
+          strokeWeight: 4,
+          strokeOpacity: 0.85,
+          strokeStyle: 'solid',
+          lineJoin: 'round',
+          showDir: true,
+          zIndex: 105 // 确保折线层级低于底图的文字标注图层 (115)
+        })
+        amapInstance.add(robotTrajectoryPolyline.value)
+      }
+      
+      // 画任务点 Marker
+      const markers: any[] = []
+      taskPointsData.forEach((p, index) => {
+        const gps = convertLocalToGps(p.x, p.y, gnssOrigin)
+        if (gps) {
+          const gcjCoords = transformWGS84ToGCJ02(gps.longitude, gps.latitude)
+          const marker = new AMap.Marker({
+            position: [gcjCoords.longitude, gcjCoords.latitude],
+            offset: new AMap.Pixel(0, 0),
+            anchor: 'center',
+            content: `
+              <div class="robot-map-taskpoint" title="${p.name}">
+                <div class="taskpoint-dot">${index + 1}</div>
+                <div class="taskpoint-label">${p.name}</div>
+              </div>
+            `
+          })
+          amapInstance.add(marker)
+          markers.push(marker)
+        }
+      })
+      robotTaskpointMarkers.value = markers
+    }
+
+    // 将轨迹与任务点坐标保存到全局 ref 中，方便 2D 栅格图及其他组件使用
+    currentTrajectoryPoints.value = trajectoryPoints
+    currentTaskPoints.value = taskPointsData
+
+    if (currentViewType.value === 'grid') {
+      drawGridMapCanvas()
+    }
+
     lastTrackOverlayKey.value = overlayKey
-    lastTrackOverlayTaskPointCount.value = normalizedTaskPoints.length
+    lastTrackOverlayTaskPointCount.value = taskPointsData.length
   } catch (e) {
     console.warn('叠加轨迹失败:', e)
   } finally {
@@ -2974,6 +3237,543 @@ let amapApiRef: any = null
 const dockMarkers = ref<any[]>([])
 const droneMarkers = ref<any[]>([])
 
+const currentViewType = ref<'pointcloud' | 'grid' | 'map'>('pointcloud')
+const showSatelliteMap = computed(() => currentViewType.value === 'map')
+let robotMarker: any = null
+let originMapMarker: any = null
+const setViewType = (type: 'pointcloud' | 'grid' | 'map') => {
+  currentViewType.value = type
+}
+
+const gridMapCanvasRef = ref<HTMLCanvasElement | null>(null)
+const gridMapContainerRef = ref<HTMLDivElement | null>(null)
+const gridMapLoading = ref(false)
+const gridMapError = ref('')
+const gridMapMeta = ref<{ resolution: number; originX: number; originY: number } | null>(null)
+const gridMapWidth = ref(0)
+const gridMapHeight = ref(0)
+const gridMapOffscreenCanvas = shallowRef<HTMLCanvasElement | null>(null)
+
+const currentTrajectoryPoints = ref<any[]>([])
+const currentTaskPoints = ref<any[]>([])
+
+const gridMapZoom = ref(1.0)
+const gridMapPanX = ref(0)
+const gridMapPanY = ref(0)
+
+// 地图图层类型和状态
+const currentMapType = ref('standard') // 'standard' | '3d' | 'satellite'
+const showTraffic = ref(false)
+const showLayerMenu = ref(false)
+let trafficLayer: any = null
+
+const toggleLayerMenu = () => {
+  showLayerMenu.value = !showLayerMenu.value
+}
+
+// 栅格图 PGM / YAML 解析与渲染
+const parseGridMapYaml = (text: string): { resolution: number; originX: number; originY: number } | null => {
+  const resolutionMatch = text.match(/^\s*resolution\s*:\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)\s*$/im)
+  const originMatch = text.match(/^\s*origin\s*:\s*\[\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)\s*,\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)\s*(?:,\s*[-+]?\d*\.?\d+(?:e[-+]?\d+)?\s*)?\]\s*$/im)
+  const resolution = Number(resolutionMatch?.[1])
+  const originX = Number(originMatch?.[1])
+  const originY = Number(originMatch?.[2])
+  if (!Number.isFinite(resolution) || resolution <= 0 || !Number.isFinite(originX) || !Number.isFinite(originY)) {
+    return null
+  }
+  return { resolution, originX, originY }
+}
+
+const loadAndDrawGridMap = async () => {
+  const mapName = selectedMap.value
+  if (!mapName) {
+    gridMapMeta.value = null
+    gridMapError.value = '未选择地图'
+    return
+  }
+  
+  try {
+    gridMapLoading.value = true
+    gridMapError.value = ''
+    
+    // 1. 获取 yaml 元数据
+    let yamlBlob = await getMapFile(mapName, 'gridMap.yaml')
+    if (!yamlBlob) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        yamlBlob = await mapFileApi.downloadMapFile(robotId, mapName, 'gridMap.yaml', true)
+        if (yamlBlob) {
+          await saveMapFile(mapName, 'gridMap.yaml', yamlBlob)
+        }
+      }
+    }
+    if (yamlBlob) {
+      gridMapMeta.value = parseGridMapYaml(await yamlBlob.text())
+    } else {
+      gridMapMeta.value = null
+    }
+    
+    // 2. 获取 pgm 图像
+    let pgmBlob = await getMapFile(mapName, 'gridMap.pgm')
+    if (!pgmBlob) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        pgmBlob = await mapFileApi.downloadMapFile(robotId, mapName, 'gridMap.pgm', true)
+        if (pgmBlob) {
+          await saveMapFile(mapName, 'gridMap.pgm', pgmBlob)
+        }
+      }
+    }
+    
+    if (!pgmBlob) {
+      gridMapError.value = '未找到栅格地图文件'
+      gridMapLoading.value = false
+      return
+    }
+    
+    const buffer = await pgmBlob.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    
+    // 解析 PGM 头部
+    let ptr = 0
+    let tokenCount = 0
+    let inComment = false
+    const headerTokens: string[] = []
+    while (ptr < bytes.length && tokenCount < 4) {
+      const char = String.fromCharCode(bytes[ptr])
+      if (inComment) {
+        if (char === '\n') inComment = false
+        ptr++
+        continue
+      }
+      if (char === '#') {
+        inComment = true
+        ptr++
+        continue
+      }
+      if (/\s/.test(char)) {
+        ptr++
+        continue
+      }
+      const tokenStart = ptr
+      while (ptr < bytes.length && !/\s/.test(String.fromCharCode(bytes[ptr]))) {
+        ptr++
+      }
+      const token = String.fromCharCode(...bytes.subarray(tokenStart, ptr))
+      headerTokens.push(token)
+      tokenCount++
+    }
+    
+    if (ptr < bytes.length && /\s/.test(String.fromCharCode(bytes[ptr]))) {
+      ptr++
+    }
+    const dataStart = ptr
+    
+    const magic = headerTokens[0]
+    const width = parseInt(headerTokens[1])
+    const height = parseInt(headerTokens[2])
+    const maxVal = parseInt(headerTokens[3]) || 255
+    
+    gridMapWidth.value = width
+    gridMapHeight.value = height
+    
+    const offscreen = document.createElement('canvas')
+    offscreen.width = width
+    offscreen.height = height
+    const offscreenCtx = offscreen.getContext('2d')
+    if (!offscreenCtx) return
+    
+    const imageData = offscreenCtx.createImageData(width, height)
+    if (magic === 'P5') {
+      let p = dataStart
+      for (let idx = 0; idx < width * height; idx++) {
+        if (p >= bytes.length) break
+        const v = bytes[p++]
+        const off = idx * 4
+        imageData.data[off] = v
+        imageData.data[off + 1] = v
+        imageData.data[off + 2] = v
+        imageData.data[off + 3] = 255
+      }
+    } else if (magic === 'P2') {
+      const textDecoder = new TextDecoder()
+      const asciiData = textDecoder.decode(bytes.subarray(dataStart))
+      const tokens = asciiData.trim().split(/\s+/)
+      for (let idx = 0; idx < width * height; idx++) {
+        if (idx >= tokens.length) break
+        const v = parseInt(tokens[idx]) || 0
+        const off = idx * 4
+        imageData.data[off] = v
+        imageData.data[off + 1] = v
+        imageData.data[off + 2] = v
+        imageData.data[off + 3] = 255
+      }
+    }
+    
+    offscreenCtx.putImageData(imageData, 0, 0)
+    gridMapOffscreenCanvas.value = offscreen
+    gridMapLoading.value = false
+    
+    resetGridMapViewport()
+    drawGridMapCanvas()
+  } catch (err) {
+    console.error('Failed to load grid map:', err)
+    gridMapError.value = '加载栅格图失败'
+    gridMapLoading.value = false
+  }
+}
+
+const resetGridMapViewport = () => {
+  gridMapZoom.value = 1.0
+  gridMapPanX.value = 0
+  gridMapPanY.value = 0
+}
+
+const drawGridMapCanvas = () => {
+  const canvas = gridMapCanvasRef.value
+  const container = gridMapContainerRef.value
+  const offscreen = gridMapOffscreenCanvas.value
+  if (!canvas || !container || !offscreen) return
+  
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  
+  const containerWidth = container.clientWidth || 800
+  const containerHeight = container.clientHeight || 500
+  
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = containerWidth * dpr
+  canvas.height = containerHeight * dpr
+  canvas.style.width = containerWidth + 'px'
+  canvas.style.height = containerHeight + 'px'
+  
+  ctx.scale(dpr, dpr)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, containerWidth, containerHeight)
+  
+  const mapW = gridMapWidth.value
+  const mapH = gridMapHeight.value
+  if (mapW <= 0 || mapH <= 0) return
+  
+  const scaleX = containerWidth / mapW
+  const scaleY = containerHeight / mapH
+  const baseScale = Math.min(scaleX, scaleY)
+  
+  const baseOffsetX = (containerWidth - mapW * baseScale) / 2
+  const baseOffsetY = (containerHeight - mapH * baseScale) / 2
+  
+  const zoom = gridMapZoom.value
+  const panX = gridMapPanX.value
+  const panY = gridMapPanY.value
+  
+  // 应用用户平移与缩放 (缩放中心为容器中心)
+  ctx.save()
+  ctx.translate(panX, panY)
+  
+  const centerX = containerWidth / 2
+  const centerY = containerHeight / 2
+  ctx.translate(centerX, centerY)
+  ctx.scale(zoom, zoom)
+  ctx.translate(-centerX, -centerY)
+  
+  // 1. 绘制底图
+  ctx.save()
+  ctx.translate(baseOffsetX, baseOffsetY)
+  ctx.scale(baseScale, baseScale)
+  ctx.imageSmoothingEnabled = (baseScale * zoom) < 1.0
+  ctx.drawImage(offscreen, 0, 0)
+  ctx.restore()
+  
+  const meta = gridMapMeta.value
+  if (!meta) {
+    ctx.restore()
+    return
+  }
+  
+  // 2. 绘制循迹轨迹 (轨迹宽度随缩放变细以保持极佳观感)
+  if (currentTrajectoryPoints.value.length > 1) {
+    ctx.save()
+    ctx.beginPath()
+    currentTrajectoryPoints.value.forEach((p, index) => {
+      const px = (p.x - meta.originX) / meta.resolution
+      const py = mapH - (p.y - meta.originY) / meta.resolution
+      const cx = baseOffsetX + px * baseScale
+      const cy = baseOffsetY + py * baseScale
+      if (index === 0) {
+        ctx.moveTo(cx, cy)
+      } else {
+        ctx.lineTo(cx, cy)
+      }
+    })
+    ctx.strokeStyle = '#39b54a'
+    ctx.lineWidth = Math.max(1.0, 2.5 / zoom)
+    ctx.stroke()
+    ctx.restore()
+  }
+  
+  // 2.5 绘制地图原点 (0, 0)
+  ctx.save()
+  const ox = -meta.originX / meta.resolution
+  const oy = mapH + meta.originY / meta.resolution
+  const rxOrigin = baseOffsetX + ox * baseScale
+  const ryOrigin = baseOffsetY + oy * baseScale
+  
+  ctx.translate(rxOrigin, ryOrigin)
+  ctx.scale(1 / zoom, 1 / zoom) // 缩放补偿，保持原点标志大小恒定
+  
+  // A. 绘制原点红色圆点 (半径 5px)
+  ctx.beginPath()
+  ctx.arc(0, 0, 5, 0, Math.PI * 2)
+  ctx.fillStyle = '#ff3b30' // 红色
+  ctx.fill()
+  
+  // B. 绘制原点文字标签 (无黑色背景，字体调大到 13px 粗体并带白色外轮廓)
+  ctx.font = 'bold 13px Arial'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  const originText = '原点'
+  
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 3
+  ctx.strokeText(originText, 0, 8)
+  
+  ctx.fillStyle = '#ff3b30'
+  ctx.fillText(originText, 0, 8)
+  
+  ctx.restore()
+  
+  // 3. 绘制机器人位置 (在屏幕上的尺寸保持固定，不受 zoom 影响)
+  const pose = robotStore.pose
+  if (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y)) {
+    const px = (pose.x - meta.originX) / meta.resolution
+    const py = mapH - (pose.y - meta.originY) / meta.resolution
+    const rx = baseOffsetX + px * baseScale
+    const ry = baseOffsetY + py * baseScale
+    
+    ctx.save()
+    ctx.translate(rx, ry)
+    ctx.scale(1 / zoom, 1 / zoom) // 缩放补偿，保证图标大小恒定
+    
+    ctx.save()
+    // 机器人朝向角度
+    const angle = typeof pose.theta === 'number' && Number.isFinite(pose.theta) ? pose.theta : 0
+    ctx.rotate(-angle)
+    
+    // A. 绘制指向前方的蓝色箭头
+    ctx.beginPath()
+    ctx.moveTo(15, 0)
+    ctx.lineTo(6, -6)
+    ctx.lineTo(6, 6)
+    ctx.closePath()
+    ctx.fillStyle = '#00a0e9'
+    ctx.fill()
+    
+    // B. 绘制外层白色圆形边框
+    ctx.beginPath()
+    ctx.arc(0, 0, 9.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
+    ctx.shadowBlur = 4
+    ctx.shadowOffsetY = 1
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    
+    // C. 绘制内部蓝色圆形
+    ctx.beginPath()
+    ctx.arc(0, 0, 7.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#00a0e9'
+    ctx.fill()
+    ctx.restore()
+    
+    // D. 绘制机器人文本标签 (直接显示文字，无黑色背景，字号调大至 13px 粗体加白色描边)
+    ctx.font = 'bold 13px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    const labelText = selectedVehicleType.value === 'four_wheel' ? '无人车' : '机器狗'
+    
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 3
+    ctx.strokeText(labelText, 0, 16)
+    
+    ctx.fillStyle = '#00a0e9'
+    ctx.fillText(labelText, 0, 16)
+    
+    ctx.restore()
+  }
+
+  // 4. 绘制任务点 (在屏幕上的尺寸保持固定，不受 zoom 影响)
+  if (currentTaskPoints.value.length > 0) {
+    currentTaskPoints.value.forEach((p, index) => {
+      const px = (p.x - meta.originX) / meta.resolution
+      const py = mapH - (p.y - meta.originY) / meta.resolution
+      const tx = baseOffsetX + px * baseScale
+      const ty = baseOffsetY + py * baseScale
+      
+      ctx.save()
+      ctx.translate(tx, ty)
+      ctx.scale(1 / zoom, 1 / zoom) // 缩放补偿，保证图标和文字标签大小恒定
+      
+      ctx.beginPath()
+      ctx.arc(0, 0, 9, 0, Math.PI * 2)
+      ctx.fillStyle = '#39b54a'
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 1.5
+      ctx.fill()
+      ctx.stroke()
+      
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'bold 10px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(index + 1), 0, 0)
+      
+      ctx.font = 'bold 12px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 3
+      ctx.strokeText(p.name, 0, 11)
+      
+      ctx.fillStyle = '#39b54a'
+      ctx.fillText(p.name, 0, 11)
+      ctx.restore()
+    })
+  }
+  
+  ctx.restore()
+}
+
+let isDraggingGridMap = false
+let startDragX = 0
+let startDragY = 0
+
+const handleGridMapWheel = (e: WheelEvent) => {
+  e.preventDefault()
+  const zoomFactor = 1.1
+  let newZoom = gridMapZoom.value
+  if (e.deltaY < 0) {
+    newZoom = Math.min(10.0, newZoom * zoomFactor)
+  } else {
+    newZoom = Math.max(0.3, newZoom / zoomFactor)
+  }
+  
+  gridMapZoom.value = newZoom
+  drawGridMapCanvas()
+}
+
+const handleGridMapMouseDown = (e: MouseEvent) => {
+  if (e.button !== 0) return
+  isDraggingGridMap = true
+  startDragX = e.clientX - gridMapPanX.value
+  startDragY = e.clientY - gridMapPanY.value
+  if (gridMapCanvasRef.value) {
+    gridMapCanvasRef.value.style.cursor = 'grabbing'
+  }
+}
+
+const handleGridMapMouseMove = (e: MouseEvent) => {
+  if (!isDraggingGridMap) return
+  gridMapPanX.value = e.clientX - startDragX
+  gridMapPanY.value = e.clientY - startDragY
+  drawGridMapCanvas()
+}
+
+const handleGridMapMouseUp = () => {
+  if (!isDraggingGridMap) return
+  isDraggingGridMap = false
+  if (gridMapCanvasRef.value) {
+    gridMapCanvasRef.value.style.cursor = 'grab'
+  }
+}
+
+const applyMapType = () => {
+  if (!amapInstance || !amapApiRef) return
+  const AMap = amapApiRef
+
+  // 清理路况覆盖物
+  if (trafficLayer) {
+    amapInstance.remove(trafficLayer)
+  }
+
+  if (currentMapType.value === 'standard') {
+    amapInstance.setLayers([AMap.createDefaultLayer()])
+    amapInstance.setMapStyle('amap://styles/normal')
+    amapInstance.setPitch(0)
+    amapInstance.setFeatures(['bg', 'road', 'building', 'point'])
+  } else if (currentMapType.value === 'satellite') {
+    amapInstance.setLayers([
+      new AMap.TileLayer.Satellite({ detectRetina: true }),
+      new AMap.TileLayer.RoadNet({ detectRetina: true })
+    ])
+    // 重置为 normal 样式，确保路网标注文字清晰可见（dark 样式会让标注变灰）
+    amapInstance.setMapStyle('amap://styles/normal')
+    amapInstance.setPitch(0)
+    amapInstance.setFeatures(['bg', 'road', 'point'])
+  }
+
+  // 确保底图标注层（LabelsLayer）的 zIndex 高于折线，防止折线盖住路名和 POI
+  try {
+    const layers = amapInstance.getLayers()
+    layers.forEach((layer: any) => {
+      const cls = layer.CLASS_NAME || ''
+      if (cls.includes('LabelsLayer')) {
+        layer.setzIndex(115)
+      }
+    })
+  } catch (err) {
+    console.warn('Set LabelsLayer zIndex failed:', err)
+  }
+
+  // 实时路况
+  if (showTraffic.value) {
+    if (!trafficLayer) {
+      trafficLayer = new AMap.TileLayer.Traffic({
+        zIndex: 10
+      })
+    }
+    amapInstance.add(trafficLayer)
+  }
+}
+
+const setMapType = (type: 'standard' | '3d' | 'satellite') => {
+  currentMapType.value = type
+  applyMapType()
+  
+  // 切换图层后重新加载原点、车辆定位和循迹路线，避免其在图层切换后被覆盖或清除
+  updateRobotMapMarker(false)
+  if (selectedMap.value) {
+    loadGnssOrigin(selectedMap.value).then(gnssOrigin => {
+      updateOriginMapMarker(gnssOrigin)
+    })
+  }
+  const runningTrackName = normalizeTrackName(
+    robotStore.cmdStatus?.track_info?.track_name
+    || activeOverlayTrackName.value
+    || selectedTrack.value
+    || ''
+  )
+  if (runningTrackName) {
+    lastTrackOverlayKey.value = ''
+    lastTrackOverlayTaskPointCount.value = 0
+    trackOverlayInFlightKey.value = ''
+    overlayTrackTrajectory(runningTrackName)
+  }
+  
+  showLayerMenu.value = false
+}
+
+const toggleTraffic = () => {
+  showTraffic.value = !showTraffic.value
+  applyMapType()
+}
+
+// 点击地图外面其他地方关闭图层菜单
+const closeLayerMenuOnOutside = (e: MouseEvent) => {
+  const el = (e.target as HTMLElement).closest('.map-layer-switcher')
+  if (!el) showLayerMenu.value = false
+}
+
 // 无人机动画相关状态
 const droneAnimationState = ref({
   currentPosition: { longitude: 0, latitude: 0, height: 0 },
@@ -3344,6 +4144,118 @@ const clearDroneMarkers = () => {
   }
 }
 
+// 清除机器人标记
+const clearRobotMarker = () => {
+  if (robotMarker) {
+    if (amapInstance) {
+      amapInstance.remove(robotMarker)
+    }
+    robotMarker = null
+  }
+  if (originMapMarker) {
+    if (amapInstance) {
+      amapInstance.remove(originMapMarker)
+    }
+    originMapMarker = null
+  }
+}
+
+// 在 AMap 上更新原点 Marker
+const updateOriginMapMarker = (gnssOrigin: { latitude: number; longitude: number } | null) => {
+  if (!amapInstance || !amapApiRef) return
+  
+  if (originMapMarker) {
+    amapInstance.remove(originMapMarker)
+    originMapMarker = null
+  }
+  
+  if (!gnssOrigin) return
+  
+  const AMap = amapApiRef
+  const gcjCoords = transformWGS84ToGCJ02(gnssOrigin.longitude, gnssOrigin.latitude)
+  
+  originMapMarker = new AMap.Marker({
+    position: [gcjCoords.longitude, gcjCoords.latitude],
+    anchor: 'center',
+    zIndex: 108, // 比底图高，比机器人(120)低
+    content: `
+      <div class="map-origin-marker">
+        <svg width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="6" cy="6" r="5" fill="#ff3b30" stroke="#ffffff" stroke-width="1"/>
+        </svg>
+        <div class="map-origin-label">原点</div>
+      </div>
+    `
+  })
+  
+  amapInstance.add(originMapMarker)
+}
+
+// 更新机器人地图标记
+const updateRobotMapMarker = (shouldCenter = false) => {
+  if (!amapInstance || !amapApiRef || !showSatelliteMap.value) {
+    return
+  }
+
+  const gps = robotStore.gpsMessage
+  if (!gps || !gps.longitude || !gps.latitude) {
+    return
+  }
+
+  const wgsLng = normalizeGpsCoordinate(gps.longitude)
+  const wgsLat = normalizeGpsCoordinate(gps.latitude)
+  if (wgsLng === 0 || wgsLat === 0) {
+    return
+  }
+
+  const gcj = transformWGS84ToGCJ02(wgsLng, wgsLat)
+  const AMap = amapApiRef
+
+  // 机器人朝向角度 (从弧度转换为度数)
+  const theta = robotStore.pose?.theta
+  const angle = typeof theta === 'number' && Number.isFinite(theta) ? theta * (180 / Math.PI) : 0
+
+  const labelText = selectedVehicleType.value === 'four_wheel' ? '无人车' : '机器狗'
+
+  if (!robotMarker) {
+    robotMarker = new AMap.Marker({
+      position: [gcj.longitude, gcj.latitude],
+      title: labelText,
+      content: `
+        <div class="robot-location-indicator">
+          <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${angle}deg); transform-origin: center; display: block;">
+            <path d="M18 5L12 14H24Z" fill="#00a0e9"/>
+            <circle cx="18" cy="18" r="9.5" fill="#ffffff" stroke="rgba(0,0,0,0.1)" stroke-width="0.5"/>
+            <circle cx="18" cy="18" r="7.5" fill="#00a0e9"/>
+          </svg>
+          <div class="robot-location-label">${labelText}</div>
+        </div>
+      `,
+      autoRotation: false,
+      anchor: 'center',
+      offset: new AMap.Pixel(0, 0)
+    })
+    amapInstance.add(robotMarker)
+  } else {
+    robotMarker.setPosition([gcj.longitude, gcj.latitude])
+    robotMarker.setAngle(0) // 不使用 AMap 的 Marker 旋转，使文字保持水平
+    robotMarker.setContent(`
+      <div class="robot-location-indicator">
+        <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${angle}deg); transform-origin: center; display: block;">
+          <path d="M18 5L12 14H24Z" fill="#00a0e9"/>
+          <circle cx="18" cy="18" r="9.5" fill="#ffffff" stroke="rgba(0,0,0,0.1)" stroke-width="0.5"/>
+          <circle cx="18" cy="18" r="7.5" fill="#00a0e9"/>
+        </svg>
+        <div class="robot-location-label">${labelText}</div>
+      </div>
+    `)
+  }
+
+  if (shouldCenter) {
+    amapInstance.setCenter([gcj.longitude, gcj.latitude])
+  }
+}
+
 // 更新地图标记（机场和无人机）
 const updateMapMarkers = (shouldCenter = false) => {
   // 清除现有标记
@@ -3471,16 +4383,12 @@ const updateMapMarkers = (shouldCenter = false) => {
     // 只在初始加载或明确要求时才设置地图中心
     if (shouldCenter && amapInstance) {
       amapInstance.setCenter([longitude, latitude])
-      // 确保地图样式保持为卫星图
-      if (amapApiRef) {
-        amapInstance.setLayers([
-          new amapApiRef.TileLayer.Satellite(),
-          new amapApiRef.TileLayer.RoadNet()
-        ])
-      }
     }
+    // 同时更新地面机器人标记
+    updateRobotMapMarker(shouldCenter)
   } else {
-    // 无设备坐标数据，无法添加标记
+    // 无设备坐标数据，也尝试更新地面机器人标记（地面机器人和机场相对独立）
+    updateRobotMapMarker(shouldCenter)
   }
 }
 
@@ -5734,6 +6642,27 @@ watch(selectedMap, async (newMapName) => {
     try {
       await ensureSelectedMapPointCloudFresh()
       await syncSelectedMapTrajectoryFiles(newMapName)
+      
+      const gnssOrigin = await loadGnssOrigin(newMapName)
+      updateOriginMapMarker(gnssOrigin)
+      
+      // 切换地图时，如果有正在运行的循迹任务，重新绘制地图上的轨迹
+      if (robotStore.isTracking) {
+        const runningTrackName = normalizeTrackName(
+          robotStore.cmdStatus?.track_info?.track_name
+          || activeOverlayTrackName.value
+          || selectedTrack.value
+          || ''
+        )
+        if (runningTrackName) {
+          lastTrackOverlayKey.value = ''
+          lastTrackOverlayTaskPointCount.value = 0
+          trackOverlayInFlightKey.value = ''
+          overlayTrackTrajectory(runningTrackName)
+        }
+      } else {
+        clearRobotTrajectoryOnMap()
+      }
     } catch (err) {
       await refreshPointCloud({ force: !canReuseCurrentPointCloud })
     }
@@ -7919,6 +8848,145 @@ watch(() => infraredStreamUrl.value, (newUrl) => {
   })
 })
 
+// 是否正在初始化 AMap
+let isAMapLoading = false
+
+const initAMap = () => {
+  if (amapInstance || isAMapLoading || !mapContainer.value) return
+  isAMapLoading = true
+
+  // 读取凭据：优先使用通过 vite.define 注入的常量，其次使用 VITE_ 环境变量
+  // @ts-ignore
+  const definedAmapKey = (typeof __AMAP_KEY__ !== 'undefined' ? __AMAP_KEY__ : '') as string
+  // @ts-ignore
+  const definedAmapSec = (typeof __AMAP_SECURITY__ !== 'undefined' ? __AMAP_SECURITY__ : '') as string
+  const envAmapKey = (import.meta as any).env?.VITE_AMAP_KEY || ''
+  const envAmapSec = (import.meta as any).env?.VITE_AMAP_SECURITY || ''
+  const amapKey = definedAmapKey || envAmapKey || '6f9eaf51960441fa4f813ea2d7e7cfff'
+  const amapSec = definedAmapSec || envAmapSec || ''
+  
+  if (amapSec) {
+    ;(window as any)._AMapSecurityConfig = { securityJsCode: amapSec }
+  }
+  
+  AMapLoader.load({
+    key: amapKey,
+    version: '2.0',
+    plugins: ['AMap.ToolBar', 'AMap.Geolocation', 'AMap.PlaceSearch']
+  }).then((AMap) => {
+    amapApiRef = AMap // 缓存 AMap
+
+    // 根据当前图层类型初始化地图的基础图层
+    // 必须在构造函数中传入 layers，否则首次加载卫星图时 RoadNet 标注不生效
+    const initLayers = currentMapType.value === 'satellite'
+      ? [new AMap.TileLayer.Satellite({ detectRetina: true }), new AMap.TileLayer.RoadNet({ detectRetina: true })]
+      : [AMap.createDefaultLayer()]
+    const initStyle = currentMapType.value === 'satellite'
+      ? 'amap://styles/normal'
+      : 'amap://styles/normal'
+
+    amapInstance = new AMap.Map(mapContainer.value, {
+      zoom: 18,
+      center: [116.397428, 39.90923],
+      logoEnable: false,
+      copyrightEnable: false,
+      viewMode: '3D',
+      layers: initLayers,
+      mapStyle: initStyle
+    })
+    
+    // 地图加载完成后更新标记并居中定位到机器人
+    amapInstance.on('complete', () => {
+      try {
+        const layers = amapInstance.getLayers()
+        layers.forEach((layer: any) => {
+          const cls = layer.CLASS_NAME || ''
+          if (cls.includes('LabelsLayer')) {
+            layer.setzIndex(115)
+          }
+        })
+      } catch (err) {
+        console.warn('Set LabelsLayer zIndex failed:', err)
+      }
+      updateMapMarkers(false)
+      updateRobotMapMarker(true)
+      if (selectedMap.value) {
+        loadGnssOrigin(selectedMap.value).then(gnssOrigin => {
+          updateOriginMapMarker(gnssOrigin)
+        })
+      }
+      isInitialLoad.value = false
+    })
+    isAMapLoading = false
+  }).catch((error) => {
+    console.error('AMap load failed:', error)
+    isAMapLoading = false
+  })
+}
+
+// 监听卫星地图的显示切换，并在首次切到卫星图时延迟初始化 AMap
+watch(showSatelliteMap, (newVal) => {
+  if (newVal) {
+    nextTick(() => {
+      if (!amapInstance) {
+        initAMap()
+      } else {
+        updateMapMarkers(false)
+        updateRobotMapMarker(true)
+        
+        // 重新在 AMap 上加载原点和轨迹，避免切换视图后标记丢失
+        if (selectedMap.value) {
+          loadGnssOrigin(selectedMap.value).then(gnssOrigin => {
+            updateOriginMapMarker(gnssOrigin)
+          })
+        }
+        const runningTrackName = normalizeTrackName(
+          robotStore.cmdStatus?.track_info?.track_name
+          || activeOverlayTrackName.value
+          || selectedTrack.value
+          || ''
+        )
+        if (runningTrackName) {
+          lastTrackOverlayKey.value = ''
+          lastTrackOverlayTaskPointCount.value = 0
+          trackOverlayInFlightKey.value = ''
+          overlayTrackTrajectory(runningTrackName)
+        }
+      }
+    })
+  }
+})
+
+// 监听机器人 GPS 及朝向变化，实时更新地图上的 Marker
+watch(
+  [() => robotStore.gpsMessage, () => robotStore.pose, () => robotStore.pose?.theta],
+  () => {
+    if (showSatelliteMap.value) {
+      updateRobotMapMarker(false)
+    }
+    if (currentViewType.value === 'grid') {
+      drawGridMapCanvas()
+    }
+  },
+  { deep: true }
+)
+
+let gridMapResizeObserver: ResizeObserver | null = null
+
+watch(currentViewType, async (newType) => {
+  if (newType === 'grid') {
+    await loadAndDrawGridMap()
+    await nextTick()
+    drawGridMapCanvas()
+  }
+})
+
+watch(selectedMap, async (newMap) => {
+  if (newMap && currentViewType.value === 'grid') {
+    await loadAndDrawGridMap()
+  }
+})
+
 onMounted(async () => {
   window.addEventListener('robot-camera-ready', handleRobotCameraReady)
   window.addEventListener('robot-map-list-ready', handleRobotMapListReady)
@@ -7976,55 +9044,17 @@ onMounted(async () => {
   })
 
   // 初始化地图
-  if (mapContainer.value) {
-    // 读取凭据：优先使用通过 vite.define 注入的常量，其次使用 VITE_ 环境变量
-    // @ts-ignore
-    const definedAmapKey = (typeof __AMAP_KEY__ !== 'undefined' ? __AMAP_KEY__ : '') as string
-    // @ts-ignore
-    const definedAmapSec = (typeof __AMAP_SECURITY__ !== 'undefined' ? __AMAP_SECURITY__ : '') as string
-    const envAmapKey = (import.meta as any).env?.VITE_AMAP_KEY || ''
-    const envAmapSec = (import.meta as any).env?.VITE_AMAP_SECURITY || ''
-    const amapKey = definedAmapKey || envAmapKey || '6f9eaf51960441fa4f813ea2d7e7cfff'
-    const amapSec = definedAmapSec || envAmapSec || ''
-    
-    if (amapSec) {
-      ;(window as any)._AMapSecurityConfig = { securityJsCode: amapSec }
-    }
-    
-    AMapLoader.load({
-      key: amapKey,
-      version: '2.0',
-      plugins: ['AMap.ToolBar', 'AMap.Geolocation', 'AMap.PlaceSearch']
-    }).then((AMap) => {
-      amapApiRef = AMap // 缓存 AMap
-      amapInstance = new AMap.Map(mapContainer.value, {
-        zoom: 18,
-        center: [116.397428, 39.90923],
-        logoEnable: false,
-        copyrightEnable: false,
-        mapStyle: 'amap://styles/satellite', // 强制设置卫星图样式
-        layers: [
-          new AMap.TileLayer.Satellite(),
-          new AMap.TileLayer.RoadNet()
-        ]
-      })
-      
-      
-      // 地图加载完成后更新机场标记
-      amapInstance.on('complete', () => {
-        updateMapMarkers(isInitialLoad.value)
-        isInitialLoad.value = false
-        
-        setTimeout(() => {
-          if (isInitialLoad.value) {
-            updateMapMarkers(true)
-            isInitialLoad.value = false
-          }
-        }, 2000)
-      })
-    }).catch((error) => {
-      // 地图加载失败
+  if (showSatelliteMap.value && mapContainer.value) {
+    initAMap()
+  }
+  
+  if (gridMapContainerRef.value) {
+    gridMapResizeObserver = new ResizeObserver(() => {
+      if (currentViewType.value === 'grid') {
+        drawGridMapCanvas()
+      }
     })
+    gridMapResizeObserver.observe(gridMapContainerRef.value)
   }
   
 
@@ -8186,6 +9216,16 @@ const handleRobotContextRefreshed = async (event: Event) => {
 
 // 组件卸载时清理
 onUnmounted(() => {
+  if (gridMapResizeObserver) {
+    gridMapResizeObserver.disconnect()
+    gridMapResizeObserver = null
+  }
+  if (originMapMarker) {
+    if (amapInstance) {
+      amapInstance.remove(originMapMarker)
+    }
+    originMapMarker = null
+  }
   // 移除全局事件监听
   document.removeEventListener('click', handleGlobalClick)
   window.removeEventListener('robot-camera-ready', handleRobotCameraReady)
@@ -8230,6 +9270,8 @@ onUnmounted(() => {
   // 清理地图标记
   clearDockMarkers()
   clearDroneMarkers()
+  clearRobotMarker()
+  clearRobotTrajectoryOnMap()
   
   // 清理航点和轨迹
   clearWaylineDisplay()
@@ -8240,6 +9282,8 @@ onUnmounted(() => {
     amapInstance = null
     amapApiRef = null
   }
+  robotMarker = null
+  trafficLayer = null
   
   // 停止视频播放
   stopVideoPlayback()
@@ -8251,10 +9295,7 @@ onUnmounted(() => {
     pc = null
   }
   
-  if (amapInstance) {
-    amapInstance.destroy()
-    amapInstance = null
-  }
+
   if (alarmTrendChart) {
     alarmTrendChart.dispose()
   }
@@ -8391,6 +9432,29 @@ const waylineMarkers = ref<any[]>([])
 const waylinePolyline = ref<any>(null)
 const currentWaypointMarker = ref<any>(null)
 
+// 机器人地图轨迹和任务点相关变量
+const robotTrajectoryPolyline = ref<any>(null)
+const robotTaskpointMarkers = ref<any[]>([])
+
+// 清除机器人地图上的轨迹和任务点显示
+const clearRobotTrajectoryOnMap = () => {
+  currentTrajectoryPoints.value = []
+  currentTaskPoints.value = []
+  if (amapInstance) {
+    if (robotTrajectoryPolyline.value) {
+      amapInstance.remove(robotTrajectoryPolyline.value)
+      robotTrajectoryPolyline.value = null
+    }
+    robotTaskpointMarkers.value.forEach(marker => {
+      amapInstance.remove(marker)
+    })
+    robotTaskpointMarkers.value = []
+  }
+  if (currentViewType.value === 'grid') {
+    drawGridMapCanvas()
+  }
+}
+
 // 更新无人机追踪位置
 const updateDroneTracking = () => {
   if (isDroneTracking.value) {
@@ -8519,7 +9583,8 @@ const clearWaylineDisplay = () => {
         strokeColor: '#67d5fd',
         strokeWeight: 3,
         strokeOpacity: 0.8,
-        strokeStyle: 'solid'
+        strokeStyle: 'solid',
+        zIndex: 105 // 确保折线层级低于底图的文字标注图层 (115)
       })
       amapInstance.add(waylinePolyline.value)
       } else {
@@ -9353,6 +10418,159 @@ const handlePageShow = () => {
 </script>
 
 <style scoped>
+/* 视图切换与栅格图样式 */
+.map-view-switcher-group {
+  position: absolute;
+  bottom: -18px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+}
+.view-switch-btn {
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: rgba(89, 192, 252, 0.9);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.view-switch-btn:hover {
+  color: #fff;
+  background: rgba(89, 192, 252, 0.15);
+}
+.view-switch-btn.active {
+  color: #fff;
+  background: rgba(89, 192, 252, 0.45);
+}
+.view-switch-btn svg {
+  width: 12px;
+  height: 12px;
+}
+.pointcloud-fullscreen .map-view-switcher-group {
+  bottom: 16px;
+  left: 16px;
+  z-index: 10000;
+}
+.grid-map-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #ffffff;
+}
+.grid-map-canvas {
+  display: block;
+}
+.grid-map-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  color: #1a1a1a;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+.grid-map-overlay.error {
+  background: rgba(255, 77, 79, 0.15);
+  color: #ff4d4f;
+}
+
+/* 确保高德地图底图文字显示在折线之上，自定义标记显示在文字之上 */
+:deep(.amap-vectors) {
+  z-index: 110 !important;
+}
+:deep(.amap-labels) {
+  z-index: 115 !important;
+}
+:deep(.amap-markers) {
+  z-index: 120 !important;
+}
+
+/* 机器人地图定位标记样式 */
+:deep(.robot-location-indicator) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+:deep(.robot-location-label) {
+  position: absolute;
+  top: 38px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #00a0e9;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
+}
+
+/* 机器人地图原点样式 */
+:deep(.map-origin-marker) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  pointer-events: none;
+}
+:deep(.map-origin-label) {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #ff3b30;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
+}
+
+/* 机器人地图任务点样式 */
+:deep(.robot-map-taskpoint) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+:deep(.robot-map-taskpoint) .taskpoint-dot {
+  width: 18px;
+  height: 18px;
+  background: #39b54a;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+:deep(.robot-map-taskpoint) .taskpoint-label {
+  position: absolute;
+  top: 20px;
+  color: #39b54a;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
+  pointer-events: none;
+}
+
 /* 航线选择器样式 */
 .wayline-select-wrapper {
   position: relative;
@@ -11303,6 +12521,123 @@ const handlePageShow = () => {
 .pcd-tool-btn svg {
   width: 100%;
   height: 100%;
+}
+
+/* 地图图层切换器 */
+.map-layer-switcher {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.layer-switch-trigger {
+  background: rgba(0, 12, 23, 0.75);
+  border: 1px solid rgba(89, 192, 252, 0.45);
+  backdrop-filter: blur(10px);
+  border-radius: 4px;
+  color: #59c0fc;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s ease;
+}
+.layer-switch-trigger:hover {
+  background: rgba(89, 192, 252, 0.15);
+  color: #fff;
+  border-color: rgba(89, 192, 252, 0.8);
+}
+.layer-switch-trigger svg {
+  width: 14px;
+  height: 14px;
+}
+.layer-menu-dropdown {
+  margin-top: 6px;
+  background: rgba(0, 12, 23, 0.85);
+  border: 1px solid rgba(89, 192, 252, 0.35);
+  backdrop-filter: blur(12px);
+  border-radius: 4px;
+  padding: 6px 0;
+  width: 110px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+.layer-option {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+.layer-option:hover {
+  background: rgba(89, 192, 252, 0.12);
+  color: #fff;
+}
+.layer-option.active {
+  color: #59c0fc;
+  font-weight: bold;
+  background: rgba(89, 192, 252, 0.08);
+}
+.layer-divider {
+  height: 1px;
+  background: rgba(89, 192, 252, 0.2);
+  margin: 4px 0;
+}
+.option-checkbox {
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(89, 192, 252, 0.5);
+  border-radius: 2px;
+  display: inline-block;
+  position: relative;
+  transition: all 0.15s;
+}
+.option-checkbox.checked {
+  background: #59c0fc;
+  border-color: #59c0fc;
+}
+.option-checkbox.checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 4px;
+  height: 6px;
+  border: solid #000;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.layer-option .option-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  display: inline-block;
+}
+.layer-option.active .option-icon {
+  background: #59c0fc;
+  box-shadow: 0 0 6px #59c0fc;
+}
+
+/* 动效 */
+.layer-menu-fade-enter-active,
+.layer-menu-fade-leave-active {
+  transition: all 0.2s ease;
+}
+.layer-menu-fade-enter-from,
+.layer-menu-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 /* 点云全屏模式 */
