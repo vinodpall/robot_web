@@ -256,8 +256,9 @@
                 <div class="nav-map-container">
                   <div class="nav-map-canvas">
                     <div class="pointcloud-wrapper">
-                      <div class="pointcloud-view">
-                      <ThreePointCloudPreview
+                      <!-- 1. 点云图视图 -->
+                      <div class="pointcloud-view" v-show="navViewType === 'pointcloud'">
+                        <ThreePointCloudPreview
                           ref="navPointCloudPreviewRef"
                           :points="navPointCloudData"
                           :loading="navPointCloudLoading"
@@ -270,6 +271,115 @@
                           :robot-mesh="arrowMesh"
                           :robot-type="selectedVehicleType"
                         />
+                      </div>
+
+                      <!-- 2. 2D 栅格图视图 -->
+                      <div class="pointcloud-view grid-view" v-show="navViewType === 'grid'">
+                        <div class="grid-map-container" ref="navGridMapContainerRef">
+                          <canvas 
+                            ref="navGridMapCanvasRef" 
+                            class="grid-map-canvas"
+                            @wheel="handleNavGridMapWheel"
+                            @mousedown="handleNavGridMapMouseDown"
+                            @mousemove="handleNavGridMapMouseMove"
+                            @mouseup="handleNavGridMapMouseUp"
+                            @mouseleave="handleNavGridMapMouseUp"
+                            style="cursor: grab;"
+                          ></canvas>
+                          <div v-if="navGridMapLoading" class="grid-map-overlay">栅格地图加载中...</div>
+                          <div v-else-if="navGridMapError" class="grid-map-overlay error">{{ navGridMapError }}</div>
+                        </div>
+                      </div>
+
+                      <!-- 3. 高德标准/卫星地图视图 -->
+                      <div class="pointcloud-view map-view" v-show="navViewType === 'map'">
+                        <div ref="navMapContainer" style="width: 100%; height: 100%;"></div>
+                        
+                        <!-- 地图图层切换器 -->
+                        <div class="map-layer-switcher">
+                          <button class="layer-switch-trigger" @click.stop="toggleNavLayerMenu">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                              <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>图层</span>
+                          </button>
+                          <transition name="layer-menu-fade">
+                            <div v-show="navShowLayerMenu" class="layer-menu-dropdown">
+                              <div class="layer-option" :class="{ active: navMapType === 'standard' }" @click.stop="setNavMapType('standard')">
+                                <span class="option-icon standard-icon"></span>
+                                <span>标准地图</span>
+                              </div>
+                              <div class="layer-option" :class="{ active: navMapType === 'satellite' }" @click.stop="setNavMapType('satellite')">
+                                <span class="option-icon satellite-icon"></span>
+                                <span>卫星地图</span>
+                              </div>
+
+                              <div class="layer-divider"></div>
+                              <div class="layer-option" :class="{ active: navShowTraffic }" @click.stop="toggleNavTraffic">
+                                <span class="option-checkbox" :class="{ checked: navShowTraffic }"></span>
+                                <span>实时路况</span>
+                              </div>
+                            </div>
+                          </transition>
+                        </div>
+                      </div>
+
+                      <!-- 视图模式切换组 (靠左侧) -->
+                      <div class="map-view-switcher-group">
+                        <button 
+                          class="view-switch-btn" 
+                          :class="{ active: navViewType === 'pointcloud' }" 
+                          @click.stop="navViewType = 'pointcloud'"
+                          title="点云图"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z" stroke-dasharray="2 2"/>
+                            <path d="M12 3v18" stroke-dasharray="2 2"/>
+                            <path d="M12 12L4 7.5" stroke-dasharray="2 2"/>
+                            <path d="M12 12l8-4.5" stroke-dasharray="2 2"/>
+                            <circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/>
+                            <circle cx="4" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                            <circle cx="20" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                            <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                            <circle cx="4" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                            <circle cx="20" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                            <circle cx="12" cy="21" r="1.5" fill="currentColor" stroke="none"/>
+                          </svg>
+                        </button>
+                        <button 
+                          class="view-switch-btn" 
+                          :class="{ active: navViewType === 'grid' }" 
+                          @click.stop="navViewType = 'grid'"
+                          title="栅格图"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="1.5"/>
+                            <path d="M9 3v18"/>
+                            <path d="M15 3v18"/>
+                            <path d="M3 9h18"/>
+                            <path d="M3 15h18"/>
+                            <rect x="3.5" y="3.5" width="5" height="5" fill="currentColor" stroke="none"/>
+                            <rect x="15.5" y="9.5" width="5" height="5" fill="currentColor" stroke="none"/>
+                            <rect x="9.5" y="15.5" width="5" height="5" fill="currentColor" stroke="none"/>
+                          </svg>
+                        </button>
+                        <button 
+                          class="view-switch-btn" 
+                          :class="{ active: navViewType === 'map' }" 
+                          @click.stop="navViewType = 'map'"
+                          title="卫星图"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"/>
+                            <rect x="2" y="10" width="4" height="4" rx="0.5"/>
+                            <rect x="18" y="10" width="4" height="4" rx="0.5"/>
+                            <line x1="6" y1="12" x2="9" y2="12"/>
+                            <line x1="15" y1="12" x2="18" y2="12"/>
+                            <path d="M12 15v3"/>
+                            <path d="M9 18h6"/>
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1392,7 +1502,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onActivated, onUnmounted, nextTick, watch, computed, shallowRef } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, onUnmounted, nextTick, watch, computed, shallowRef } from 'vue'
+import AMapLoader from '@amap/amap-jsapi-loader'
 import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
 import ThreePointCloudPreview from '../components/ThreePointCloudPreview.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -1423,6 +1534,119 @@ import { useDeviceStore } from '../stores/device'
 import { useTaskExecutionStore } from '../stores/taskExecution'
 import { usePermissionStore } from '@/stores/permission'
 import { getRobotMapCacheKeys, getRobotContextCacheKeys, refreshMapCache, refreshRobotRelatedCache } from '@/utils/robotBootstrap'
+
+// WGS84坐标转GCJ-02坐标的转换函数
+const transformWGS84ToGCJ02 = (wgsLng: number, wgsLat: number) => {
+  const PI = Math.PI
+  const ee = 0.00669342162296594323
+  const a = 6378245.0
+
+  if (isOutOfChina(wgsLng, wgsLat)) {
+    return { longitude: wgsLng, latitude: wgsLat }
+  }
+
+  let dlat = transformLat(wgsLng - 105.0, wgsLat - 35.0)
+  let dlng = transformLng(wgsLng - 105.0, wgsLat - 35.0)
+  const radlat = wgsLat / 180.0 * PI
+  let magic = Math.sin(radlat)
+  magic = 1 - ee * magic * magic
+  const sqrtmagic = Math.sqrt(magic)
+  dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * PI)
+  dlng = (dlng * 180.0) / (a / sqrtmagic * Math.cos(radlat) * PI)
+  const mglat = wgsLat + dlat
+  const mglng = wgsLng + dlng
+
+  return { longitude: mglng, latitude: mglat }
+}
+
+const isOutOfChina = (lng: number, lat: number) => {
+  return (lng < 72.004 || lng > 137.8347) || (lat < 0.8293 || lat > 55.8271)
+}
+
+const transformLat = (lng: number, lat: number) => {
+  const PI = Math.PI
+  let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng))
+  ret += (20.0 * Math.sin(6.0 * lng * PI) + 20.0 * Math.sin(2.0 * lng * PI)) * 2.0 / 3.0
+  ret += (20.0 * Math.sin(lat * PI) + 40.0 * Math.sin(lat / 3.0 * PI)) * 2.0 / 3.0
+  ret += (160.0 * Math.sin(lat / 12.0 * PI) + 320 * Math.sin(lat * PI / 30.0)) * 2.0 / 3.0
+  return ret
+}
+
+const transformLng = (lng: number, lat: number) => {
+  const PI = Math.PI
+  let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng))
+  ret += (20.0 * Math.sin(6.0 * lng * PI) + 20.0 * Math.sin(2.0 * lng * PI)) * 2.0 / 3.0
+  ret += (20.0 * Math.sin(lng * PI) + 40.0 * Math.sin(lng / 3.0 * PI)) * 2.0 / 3.0
+  ret += (150.0 * Math.sin(lng / 12.0 * PI) + 300.0 * Math.sin(lng / 30.0 * PI)) * 2.0 / 3.0
+  return ret
+}
+
+const normalizeGpsCoordinate = (val: string | number | undefined | null): number => {
+  if (val === undefined || val === null || val === '') return 0
+  let n = Number(val)
+  if (isNaN(n)) return 0
+  if (Math.abs(n) > 10000) {
+    if (Math.abs(n) > 10000000) {
+      n = n / 10000000.0
+    } else {
+      n = n / 1000000.0
+    }
+  }
+  return n
+}
+
+const convertLocalToGps = (x: number, y: number, gnssOrigin: { latitude: number; longitude: number } | null) => {
+  let lat0 = 0
+  let lng0 = 0
+  
+  if (gnssOrigin) {
+    lat0 = gnssOrigin.latitude
+    lng0 = gnssOrigin.longitude
+  } else {
+    const gps = robotStore.gpsMessage
+    const pose = robotStore.pose
+    if (gps && gps.longitude && gps.latitude && pose) {
+      const rlng = normalizeGpsCoordinate(gps.longitude)
+      const rlat = normalizeGpsCoordinate(gps.latitude)
+      const rx = pose.x
+      const ry = pose.y
+      if (rlng !== 0 && rlat !== 0 && !isNaN(rx) && !isNaN(ry)) {
+        lat0 = rlat - ry / 111319.0
+        lng0 = rlng - rx / (111319.0 * Math.cos(rlat * Math.PI / 180))
+      }
+    }
+  }
+
+  if (lat0 === 0 || lng0 === 0) {
+    return null
+  }
+
+  const lat = lat0 + y / 111319.0
+  const lng = lng0 + x / (111319.0 * Math.cos(lat0 * Math.PI / 180))
+  return { longitude: lng, latitude: lat }
+}
+
+const loadGnssOrigin = async (mapName: string): Promise<{ latitude: number; longitude: number } | null> => {
+  if (!mapName) return null
+  try {
+    const blob = await getMapFile(mapName, 'gnss_origin.txt')
+    if (!blob) return null
+    const text = await blob.text()
+    const parts = text.trim().split(/[\s,]+/)
+    if (parts.length >= 2) {
+      const p0 = parseFloat(parts[0])
+      const p1 = parseFloat(parts[1])
+      if (!isNaN(p0) && !isNaN(p1) && p0 !== 0 && p1 !== 0) {
+        const lat = Math.min(Math.abs(p0), Math.abs(p1)) * (p0 < p1 ? Math.sign(p0) : Math.sign(p1))
+        const lng = Math.max(Math.abs(p0), Math.abs(p1)) * (p0 > p1 ? Math.sign(p0) : Math.sign(p1))
+        return { latitude: lat, longitude: lng }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load gnss_origin:', err)
+  }
+  return null
+}
 
 const deviceStore = useDeviceStore()
 const robotStore = useRobotStore()
@@ -1589,6 +1813,24 @@ const handleTabClick = async (tab: { key: string; permission?: string }) => {
       initNavPointCloud()
       fetchGpsStatus() // 获取GPS状态
       fetchCurrentTaskSpeed() // 获取当前任务速度
+
+      // v-else-if 会重建 DOM，AMap 旧实例绑定的容器节点已失效，需要销毁重建
+      if (navAmapInstance) {
+        try { navAmapInstance.destroy() } catch (_) {}
+        navAmapInstance = null
+        navAmapApiRef = null
+        navRobotMarker = null
+        navOriginMapMarker = null
+        navTrafficLayer = null
+        navRobotTrajectoryPolyline.value = null
+        navRobotTaskpointMarkers.value = []
+        isNavAmapLoading = false
+      }
+      if (navViewType.value === 'map') {
+        nextTick(() => { initNavAMap() })
+      } else if (navViewType.value === 'grid') {
+        nextTick(() => { drawNavGridMapCanvas() })
+      }
     })
   } else if (key === 'track_record') {
     nextTick(async () => {
@@ -4009,6 +4251,44 @@ const arrowMesh = ref<MeshData | null>(null)
 const navPointCloudPreviewRef = ref<InstanceType<typeof ThreePointCloudPreview> | null>(null)
 const lastLoadedNavPointCloudMap = ref('')
 let navPointCloudLoadToken = 0
+
+// 导航地图多视图切换 (点云图、栅格图、卫星图)
+const navViewType = ref<'pointcloud' | 'grid' | 'map'>('pointcloud')
+const showNavSatelliteMap = computed(() => navViewType.value === 'map')
+
+// AMap 实例与图层状态
+const navMapContainer = ref<HTMLElement | null>(null)
+let navAmapInstance: any = null
+let navAmapApiRef: any = null
+let navRobotMarker: any = null
+let navOriginMapMarker: any = null
+let navTrafficLayer: any = null
+const navMapType = ref('standard') // 'standard' | 'satellite'
+const navShowTraffic = ref(false)
+const navShowLayerMenu = ref(false)
+const navAmapLoading = ref(false)
+
+// AMap 循迹轨迹 and 任务点 Marker
+const navRobotTrajectoryPolyline = ref<any>(null)
+const navRobotTaskpointMarkers = ref<any[]>([])
+
+
+// 栅格图 PGM / YAML 解析与渲染
+const navGridMapCanvasRef = ref<HTMLCanvasElement | null>(null)
+const navGridMapContainerRef = ref<HTMLDivElement | null>(null)
+const navGridMapLoading = ref(false)
+const navGridMapError = ref('')
+const navGridMapMeta = ref<GridMapMeta | null>(null)
+const navGridMapWidth = ref(0)
+const navGridMapHeight = ref(0)
+const navGridMapOffscreenCanvas = shallowRef<HTMLCanvasElement | null>(null)
+
+// 2D 栅格图平移与缩放
+const navGridMapZoom = ref(1.0)
+const navGridMapPanX = ref(0)
+const navGridMapPanY = ref(0)
+const currentNavTrajectoryPoints = ref<any[]>([])
+const currentNavTaskPoints = ref<any[]>([])
 let navPointCloudErrorTimer: number | null = null
 
 const clearNavPointCloudErrorTimer = () => {
@@ -4630,6 +4910,77 @@ const overlayNavTrackTrajectory = async (trackName: string) => {
       })
     }
 
+    // 将轨迹与任务点坐标保存到全局 ref 中，方便 2D 栅格图及其他组件使用
+    currentNavTrajectoryPoints.value = trajectoryPoints
+    currentNavTaskPoints.value = taskPointsData
+
+    if (navViewType.value === 'grid') {
+      drawNavGridMapCanvas()
+    }
+
+    // 如果地图已初始化，也在地图上渲染轨迹和任务点
+    if (navAmapInstance && navAmapApiRef) {
+      if (navRobotTrajectoryPolyline.value) {
+        navAmapInstance.remove(navRobotTrajectoryPolyline.value)
+        navRobotTrajectoryPolyline.value = null
+      }
+      navRobotTaskpointMarkers.value.forEach(marker => {
+        navAmapInstance.remove(marker)
+      })
+      navRobotTaskpointMarkers.value = []
+      
+      const AMap = navAmapApiRef
+      const gnssOrigin = await loadGnssOrigin(selectedNavMap.value)
+      
+      // 转换轨迹点
+      const mapPath: [number, number][] = []
+      trajectoryPoints.forEach(p => {
+        const gps = convertLocalToGps(p.x, p.y, gnssOrigin)
+        if (gps) {
+          const gcjCoords = transformWGS84ToGCJ02(gps.longitude, gps.latitude)
+          mapPath.push([gcjCoords.longitude, gcjCoords.latitude])
+        }
+      })
+      
+      // 画轨迹线
+      if (mapPath.length > 1) {
+        navRobotTrajectoryPolyline.value = new AMap.Polyline({
+          path: mapPath,
+          strokeColor: '#39b54a', // 亮绿色
+          strokeWeight: 4,
+          strokeOpacity: 0.85,
+          strokeStyle: 'solid',
+          lineJoin: 'round',
+          showDir: true,
+          zIndex: 105 // 确保折线层级低于底图的文字标注图层 (115)
+        })
+        navAmapInstance.add(navRobotTrajectoryPolyline.value)
+      }
+      
+      // 画任务点 Marker
+      const markers: any[] = []
+      taskPointsData.forEach((p, index) => {
+        const gps = convertLocalToGps(p.x, p.y, gnssOrigin)
+        if (gps) {
+          const gcjCoords = transformWGS84ToGCJ02(gps.longitude, gps.latitude)
+          const marker = new AMap.Marker({
+            position: [gcjCoords.longitude, gcjCoords.latitude],
+            offset: new AMap.Pixel(0, 0),
+            anchor: 'center',
+            content: `
+              <div class="robot-map-taskpoint" title="${p.name}">
+                <div class="taskpoint-dot">${index + 1}</div>
+                <div class="taskpoint-label">${p.name}</div>
+              </div>
+            `
+          })
+          navAmapInstance.add(marker)
+          markers.push(marker)
+        }
+      })
+      navRobotTaskpointMarkers.value = markers
+    }
+
     const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
     const normalizedTrajectory = trajectoryPoints.map(p => ({
       x: (p.x - centerX) / maxRange,
@@ -5010,6 +5361,722 @@ watch(() => taskExecutionStore.selectedMapName, (newMap) => {
   }
 }, { immediate: true })
 
+// 导航 AMap/栅格图/卫星图切换与绘制逻辑
+let isNavAmapLoading = false
+
+const initNavAMap = () => {
+  if (navAmapInstance || isNavAmapLoading || !navMapContainer.value) return
+  isNavAmapLoading = true
+
+  // @ts-ignore
+  const definedAmapKey = (typeof __AMAP_KEY__ !== 'undefined' ? __AMAP_KEY__ : '') as string
+  // @ts-ignore
+  const definedAmapSec = (typeof __AMAP_SECURITY__ !== 'undefined' ? __AMAP_SECURITY__ : '') as string
+  const envAmapKey = (import.meta as any).env?.VITE_AMAP_KEY || ''
+  const envAmapSec = (import.meta as any).env?.VITE_AMAP_SECURITY || ''
+  const amapKey = definedAmapKey || envAmapKey || '6f9eaf51960441fa4f813ea2d7e7cfff'
+  const amapSec = definedAmapSec || envAmapSec || ''
+  
+  if (amapSec) {
+    ;(window as any)._AMapSecurityConfig = { securityJsCode: amapSec }
+  }
+  
+  AMapLoader.load({
+    key: amapKey,
+    version: '2.0',
+    plugins: ['AMap.ToolBar', 'AMap.Geolocation', 'AMap.PlaceSearch', 'AMap.Scale']
+  }).then((AMap) => {
+    navAmapApiRef = AMap
+
+    const initLayers = navMapType.value === 'satellite'
+      ? [new AMap.TileLayer.Satellite({ detectRetina: true }), new AMap.TileLayer.RoadNet({ detectRetina: true })]
+      : [AMap.createDefaultLayer()]
+
+    navAmapInstance = new AMap.Map(navMapContainer.value, {
+      zoom: 18,
+      zooms: [2, 22],
+      center: [116.397428, 39.90923],
+      logoEnable: false,
+      copyrightEnable: false,
+      viewMode: '3D',
+      layers: initLayers,
+      mapStyle: 'amap://styles/normal'
+    })
+
+    const scale = new AMap.Scale({
+      position: 'RB',
+      offset: new AMap.Pixel(20, 20)
+    })
+    navAmapInstance.addControl(scale)
+    
+    navAmapInstance.on('complete', () => {
+      try {
+        const layers = navAmapInstance.getLayers()
+        layers.forEach((layer: any) => {
+          const cls = layer.CLASS_NAME || ''
+          if (cls.includes('LabelsLayer')) {
+            layer.setzIndex(115)
+          }
+        })
+      } catch (err) {
+        console.warn('Set LabelsLayer zIndex failed:', err)
+      }
+      updateNavRobotMapMarker(true)
+      if (selectedNavMap.value) {
+        loadGnssOrigin(selectedNavMap.value).then(gnssOrigin => {
+          updateNavOriginMapMarker(gnssOrigin)
+        })
+      }
+
+      if (robotStore.isTracking) {
+        const runningTrackName = normalizeTrackName(
+          robotStore.cmdStatus?.track_info?.track_name
+          || activeNavOverlayTrackName.value
+          || ''
+        )
+        if (runningTrackName) {
+          lastNavTrackOverlayKey.value = ''
+          overlayNavTrackTrajectory(runningTrackName)
+        }
+      }
+    })
+    isNavAmapLoading = false
+  }).catch((error) => {
+    console.error('AMap load failed:', error)
+    isNavAmapLoading = false
+  })
+}
+
+const updateNavRobotMapMarker = (shouldCenter = false) => {
+  if (!navAmapInstance || !navAmapApiRef || !showNavSatelliteMap.value) return
+
+  const gps = robotStore.gpsMessage
+  if (!gps || !gps.longitude || !gps.latitude) return
+
+  const wgsLng = normalizeGpsCoordinate(gps.longitude)
+  const wgsLat = normalizeGpsCoordinate(gps.latitude)
+  if (wgsLng === 0 || wgsLat === 0) return
+
+  const gcj = transformWGS84ToGCJ02(wgsLng, wgsLat)
+  const AMap = navAmapApiRef
+
+  const theta = robotStore.pose?.theta
+  const angle = typeof theta === 'number' && Number.isFinite(theta) ? theta * (180 / Math.PI) : 0
+  const labelText = selectedVehicleType.value === 'four_wheel' ? '无人车' : '机器狗'
+
+  if (!navRobotMarker) {
+    navRobotMarker = new AMap.Marker({
+      position: [gcj.longitude, gcj.latitude],
+      title: labelText,
+      content: `
+        <div class="robot-location-indicator">
+          <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${angle}deg); transform-origin: center; display: block;">
+            <path d="M18 5L12 14H24Z" fill="#00a0e9"/>
+            <circle cx="18" cy="18" r="9.5" fill="#ffffff" stroke="rgba(0,0,0,0.1)" stroke-width="0.5"/>
+            <circle cx="18" cy="18" r="7.5" fill="#00a0e9"/>
+          </svg>
+          <div class="robot-location-label">${labelText}</div>
+        </div>
+      `,
+      autoRotation: false,
+      anchor: 'center',
+      offset: new AMap.Pixel(0, 0)
+    })
+    navAmapInstance.add(navRobotMarker)
+  } else {
+    navRobotMarker.setPosition([gcj.longitude, gcj.latitude])
+    navRobotMarker.setAngle(0)
+    navRobotMarker.setContent(`
+      <div class="robot-location-indicator">
+        <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${angle}deg); transform-origin: center; display: block;">
+          <path d="M18 5L12 14H24Z" fill="#00a0e9"/>
+          <circle cx="18" cy="18" r="9.5" fill="#ffffff" stroke="rgba(0,0,0,0.1)" stroke-width="0.5"/>
+          <circle cx="18" cy="18" r="7.5" fill="#00a0e9"/>
+        </svg>
+        <div class="robot-location-label">${labelText}</div>
+      </div>
+    `)
+  }
+
+  if (shouldCenter) {
+    navAmapInstance.setCenter([gcj.longitude, gcj.latitude])
+  }
+}
+
+const updateNavOriginMapMarker = (gnssOrigin: { latitude: number; longitude: number } | null) => {
+  if (!navAmapInstance || !navAmapApiRef) return
+  
+  if (navOriginMapMarker) {
+    navAmapInstance.remove(navOriginMapMarker)
+    navOriginMapMarker = null
+  }
+  
+  if (!gnssOrigin) return
+  
+  const AMap = navAmapApiRef
+  const gcjCoords = transformWGS84ToGCJ02(gnssOrigin.longitude, gnssOrigin.latitude)
+  
+  navOriginMapMarker = new AMap.Marker({
+    position: [gcjCoords.longitude, gcjCoords.latitude],
+    anchor: 'center',
+    zIndex: 108,
+    content: `
+      <div class="map-origin-marker">
+        <svg width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="6" cy="6" r="5" fill="#ff3b30" stroke="#ffffff" stroke-width="1"/>
+        </svg>
+        <div class="map-origin-label">原点</div>
+      </div>
+    `
+  })
+  
+  navAmapInstance.add(navOriginMapMarker)
+}
+
+const clearNavRobotTrajectoryOnMap = () => {
+  currentNavTrajectoryPoints.value = []
+  currentNavTaskPoints.value = []
+  if (navAmapInstance) {
+    if (navRobotTrajectoryPolyline.value) {
+      navAmapInstance.remove(navRobotTrajectoryPolyline.value)
+      navRobotTrajectoryPolyline.value = null
+    }
+    navRobotTaskpointMarkers.value.forEach(marker => {
+      navAmapInstance.remove(marker)
+    })
+    navRobotTaskpointMarkers.value = []
+  }
+  if (navViewType.value === 'grid') {
+    drawNavGridMapCanvas()
+  }
+}
+
+const applyNavMapType = () => {
+  if (!navAmapInstance || !navAmapApiRef) return
+  const AMap = navAmapApiRef
+
+  if (navTrafficLayer) {
+    navAmapInstance.remove(navTrafficLayer)
+  }
+
+  if (navMapType.value === 'standard') {
+    navAmapInstance.setLayers([AMap.createDefaultLayer()])
+    navAmapInstance.setMapStyle('amap://styles/normal')
+    navAmapInstance.setPitch(0)
+    navAmapInstance.setFeatures(['bg', 'road', 'building', 'point'])
+  } else if (navMapType.value === 'satellite') {
+    navAmapInstance.setLayers([
+      new AMap.TileLayer.Satellite({ detectRetina: true }),
+      new AMap.TileLayer.RoadNet({ detectRetina: true })
+    ])
+    navAmapInstance.setMapStyle('amap://styles/normal')
+    navAmapInstance.setPitch(0)
+    navAmapInstance.setFeatures(['bg', 'road', 'point'])
+  }
+
+  try {
+    const layers = navAmapInstance.getLayers()
+    layers.forEach((layer: any) => {
+      const cls = layer.CLASS_NAME || ''
+      if (cls.includes('LabelsLayer')) {
+        layer.setzIndex(115)
+      }
+    })
+  } catch (err) {
+    console.warn('Set LabelsLayer zIndex failed:', err)
+  }
+
+  if (navShowTraffic.value) {
+    if (!navTrafficLayer) {
+      navTrafficLayer = new AMap.TileLayer.Traffic({
+        zIndex: 10
+      })
+    }
+    navAmapInstance.add(navTrafficLayer)
+  }
+}
+
+const setNavMapType = (type: 'standard' | 'satellite') => {
+  navMapType.value = type
+  applyNavMapType()
+  
+  updateNavRobotMapMarker(false)
+  if (selectedNavMap.value) {
+    loadGnssOrigin(selectedNavMap.value).then(gnssOrigin => {
+      updateNavOriginMapMarker(gnssOrigin)
+    })
+  }
+  const runningTrackName = normalizeTrackName(
+    robotStore.cmdStatus?.track_info?.track_name
+    || activeNavOverlayTrackName.value
+    || ''
+  )
+  if (runningTrackName) {
+    lastNavTrackOverlayKey.value = ''
+    overlayNavTrackTrajectory(runningTrackName)
+  }
+  
+  navShowLayerMenu.value = false
+}
+
+const toggleNavTraffic = () => {
+  navShowTraffic.value = !navShowTraffic.value
+  applyNavMapType()
+}
+
+const toggleNavLayerMenu = () => {
+  navShowLayerMenu.value = !navShowLayerMenu.value
+}
+
+// 栅格图加载与绘制逻辑
+const loadAndDrawNavGridMap = async () => {
+  const mapName = selectedNavMap.value
+  if (!mapName) {
+    navGridMapMeta.value = null
+    navGridMapError.value = '未选择地图'
+    return
+  }
+  
+  try {
+    navGridMapLoading.value = true
+    navGridMapError.value = ''
+    
+    let yamlBlob = await getMapFile(mapName, 'gridMap.yaml')
+    if (!yamlBlob) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        yamlBlob = await mapFileApi.downloadMapFile(robotId, mapName, 'gridMap.yaml', true)
+        if (yamlBlob) {
+          await saveMapFile(mapName, 'gridMap.yaml', yamlBlob)
+        }
+      }
+    }
+    if (yamlBlob) {
+      navGridMapMeta.value = parseGridMapYaml(await yamlBlob.text())
+    } else {
+      navGridMapMeta.value = null
+    }
+    
+    let pgmBlob = await getMapFile(mapName, 'gridMap.pgm')
+    if (!pgmBlob) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        pgmBlob = await mapFileApi.downloadMapFile(robotId, mapName, 'gridMap.pgm', true)
+        if (pgmBlob) {
+          await saveMapFile(mapName, 'gridMap.pgm', pgmBlob)
+        }
+      }
+    }
+    
+    if (!pgmBlob) {
+      navGridMapError.value = '未找到栅格地图文件'
+      navGridMapLoading.value = false
+      return
+    }
+    
+    const buffer = await pgmBlob.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    
+    // 解析PGM头部
+    let ptr = 0
+    let tokenCount = 0
+    let inComment = false
+    let headerTokens: string[] = []
+    
+    while (ptr < bytes.length && tokenCount < 4) {
+        const char = String.fromCharCode(bytes[ptr])
+        if (inComment) {
+            if (char === '\n') inComment = false
+            ptr++
+            continue
+        }
+        if (char === '#') {
+            inComment = true
+            ptr++
+            continue
+        }
+        if (/\s/.test(char)) {
+            ptr++
+            continue
+        }
+        let tokenStart = ptr
+        while (ptr < bytes.length && !/\s/.test(String.fromCharCode(bytes[ptr]))) {
+            ptr++
+        }
+        let token = String.fromCharCode(...bytes.subarray(tokenStart, ptr))
+        headerTokens.push(token)
+        tokenCount++
+    }
+    
+    if (ptr < bytes.length && /\s/.test(String.fromCharCode(bytes[ptr]))) {
+        ptr++
+    }
+    let dataStart = ptr
+    
+    const magic = headerTokens[0]
+    const width = parseInt(headerTokens[1])
+    const height = parseInt(headerTokens[2])
+    const maxVal = parseInt(headerTokens[3]) || 255
+    
+    navGridMapWidth.value = width
+    navGridMapHeight.value = height
+    
+    const offscreen = document.createElement('canvas')
+    offscreen.width = width
+    offscreen.height = height
+    const offscreenCtx = offscreen.getContext('2d')
+    if (!offscreenCtx) return
+    
+    const imageData = offscreenCtx.createImageData(width, height)
+    
+    if (magic === 'P5') {
+      let p = dataStart
+      for (let idx = 0; idx < width * height; idx++) {
+        if (p >= bytes.length) break
+        const v = bytes[p++]
+        const c = v
+        const off = idx * 4
+        imageData.data[off] = c
+        imageData.data[off + 1] = c
+        imageData.data[off + 2] = c
+        imageData.data[off + 3] = 255
+      }
+    } else if (magic === 'P2') {
+      const textDecoder = new TextDecoder()
+      const asciiData = textDecoder.decode(bytes.subarray(dataStart))
+      const tokens = asciiData.trim().split(/\s+/)
+      
+      for (let idx = 0; idx < width * height; idx++) {
+        if (idx >= tokens.length) break
+        const v = parseInt(tokens[idx], 10)
+        const c = Math.floor((v / maxVal) * 255)
+        const off = idx * 4
+        imageData.data[off] = c
+        imageData.data[off + 1] = c
+        imageData.data[off + 2] = c
+        imageData.data[off + 3] = 255
+      }
+    } else {
+      throw new Error('不支持的PGM格式: ' + magic)
+    }
+    
+    // 黑白映射优化显示
+    for (let k = 0; k < imageData.data.length; k += 4) {
+      const g = imageData.data[k]
+      if (g === 205) {
+        imageData.data[k] = 205
+        imageData.data[k + 1] = 205
+        imageData.data[k + 2] = 205
+      } else if (g < 128) {
+        imageData.data[k] = 0
+        imageData.data[k + 1] = 0
+        imageData.data[k + 2] = 0
+      } else {
+        imageData.data[k] = 255
+        imageData.data[k + 1] = 255
+        imageData.data[k + 2] = 255
+      }
+    }
+    
+    offscreenCtx.putImageData(imageData, 0, 0)
+    navGridMapOffscreenCanvas.value = offscreen
+    navGridMapLoading.value = false
+    drawNavGridMapCanvas()
+  } catch (err) {
+    console.error('Failed to load and draw nav grid map:', err)
+    navGridMapError.value = '加载地图失败'
+    navGridMapLoading.value = false
+  }
+}
+
+const drawNavGridMapCanvas = () => {
+  const canvas = navGridMapCanvasRef.value
+  const container = navGridMapContainerRef.value
+  const offscreen = navGridMapOffscreenCanvas.value
+  if (!canvas || !container || !offscreen) return
+  
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  
+  const containerWidth = container.clientWidth || 800
+  const containerHeight = container.clientHeight || 500
+  
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = containerWidth * dpr
+  canvas.height = containerHeight * dpr
+  canvas.style.width = containerWidth + 'px'
+  canvas.style.height = containerHeight + 'px'
+  
+  ctx.scale(dpr, dpr)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, containerWidth, containerHeight)
+  
+  const mapW = navGridMapWidth.value
+  const mapH = navGridMapHeight.value
+  if (mapW <= 0 || mapH <= 0) return
+  
+  const scaleX = containerWidth / mapW
+  const scaleY = containerHeight / mapH
+  const baseScale = Math.min(scaleX, scaleY)
+  
+  const baseOffsetX = (containerWidth - mapW * baseScale) / 2
+  const baseOffsetY = (containerHeight - mapH * baseScale) / 2
+  
+  const zoom = navGridMapZoom.value
+  const panX = navGridMapPanX.value
+  const panY = navGridMapPanY.value
+  
+  ctx.save()
+  ctx.translate(panX, panY)
+  
+  const centerX = containerWidth / 2
+  const centerY = containerHeight / 2
+  ctx.translate(centerX, centerY)
+  ctx.scale(zoom, zoom)
+  ctx.translate(-centerX, -centerY)
+  
+  ctx.save()
+  ctx.translate(baseOffsetX, baseOffsetY)
+  ctx.scale(baseScale, baseScale)
+  ctx.imageSmoothingEnabled = (baseScale * zoom) < 1.0
+  ctx.drawImage(offscreen, 0, 0)
+  ctx.restore()
+  
+  const meta = navGridMapMeta.value
+  if (!meta) {
+    ctx.restore()
+    return
+  }
+  
+  if (currentNavTrajectoryPoints.value.length > 1) {
+    ctx.save()
+    ctx.beginPath()
+    currentNavTrajectoryPoints.value.forEach((p, index) => {
+      const px = (p.x - meta.originX) / meta.resolution
+      const py = mapH - (p.y - meta.originY) / meta.resolution
+      const cx = baseOffsetX + px * baseScale
+      const cy = baseOffsetY + py * baseScale
+      if (index === 0) {
+        ctx.moveTo(cx, cy)
+      } else {
+        ctx.lineTo(cx, cy)
+      }
+    })
+    ctx.strokeStyle = '#39b54a'
+    ctx.lineWidth = Math.max(1.0, 2.5 / zoom)
+    ctx.stroke()
+    ctx.restore()
+  }
+  
+  ctx.save()
+  const ox = -meta.originX / meta.resolution
+  const oy = mapH + meta.originY / meta.resolution
+  const rxOrigin = baseOffsetX + ox * baseScale
+  const ryOrigin = baseOffsetY + oy * baseScale
+  
+  ctx.translate(rxOrigin, ryOrigin)
+  ctx.scale(1 / zoom, 1 / zoom)
+  
+  ctx.beginPath()
+  ctx.arc(0, 0, 5, 0, Math.PI * 2)
+  ctx.fillStyle = '#ff3b30'
+  ctx.fill()
+  
+  ctx.font = 'bold 13px Arial'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  const originText = '原点'
+  
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 3
+  ctx.strokeText(originText, 0, 8)
+  
+  ctx.fillStyle = '#ff3b30'
+  ctx.fillText(originText, 0, 8)
+  
+  ctx.restore()
+  
+  const pose = robotStore.pose
+  if (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y)) {
+    const px = (pose.x - meta.originX) / meta.resolution
+    const py = mapH - (pose.y - meta.originY) / meta.resolution
+    const rx = baseOffsetX + px * baseScale
+    const ry = baseOffsetY + py * baseScale
+    
+    ctx.save()
+    ctx.translate(rx, ry)
+    ctx.scale(1 / zoom, 1 / zoom)
+    
+    ctx.save()
+    const angle = typeof pose.theta === 'number' && Number.isFinite(pose.theta) ? pose.theta : 0
+    ctx.rotate(-angle)
+    
+    ctx.beginPath()
+    ctx.moveTo(15, 0)
+    ctx.lineTo(6, -6)
+    ctx.lineTo(6, 6)
+    ctx.closePath()
+    ctx.fillStyle = '#00a0e9'
+    ctx.fill()
+    
+    ctx.beginPath()
+    ctx.arc(0, 0, 9.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
+    ctx.shadowBlur = 4
+    ctx.shadowOffsetY = 1
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    
+    ctx.beginPath()
+    ctx.arc(0, 0, 7.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#00a0e9'
+    ctx.fill()
+    ctx.restore()
+    
+    ctx.font = 'bold 13px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    const labelText = selectedVehicleType.value === 'four_wheel' ? '无人车' : '机器狗'
+    
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 3
+    ctx.strokeText(labelText, 0, 16)
+    
+    ctx.fillStyle = '#00a0e9'
+    ctx.fillText(labelText, 0, 16)
+    
+    ctx.restore()
+  }
+
+  if (currentNavTaskPoints.value.length > 0) {
+    currentNavTaskPoints.value.forEach((p, index) => {
+      const px = (p.x - meta.originX) / meta.resolution
+      const py = mapH - (p.y - meta.originY) / meta.resolution
+      const tx = baseOffsetX + px * baseScale
+      const ty = baseOffsetY + py * baseScale
+      
+      ctx.save()
+      ctx.translate(tx, ty)
+      ctx.scale(1 / zoom, 1 / zoom)
+      
+      ctx.beginPath()
+      ctx.arc(0, 0, 9, 0, Math.PI * 2)
+      ctx.fillStyle = '#ff9500'
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 1.5
+      ctx.fill()
+      ctx.stroke()
+      
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'bold 10px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(index + 1), 0, 0)
+      
+      ctx.font = 'bold 12px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 3
+      ctx.strokeText(p.name, 0, 11)
+      
+      ctx.fillStyle = '#ff9500'
+      ctx.fillText(p.name, 0, 11)
+      ctx.restore()
+    })
+  }
+
+  ctx.restore()
+}
+
+// 栅格图滚轮和拖拽交互
+let isDraggingNavGridMap = false
+let startDragNavX = 0
+let startDragNavY = 0
+
+const handleNavGridMapWheel = (e: WheelEvent) => {
+  e.preventDefault()
+  const zoomFactor = 1.1
+  let newZoom = navGridMapZoom.value
+  if (e.deltaY < 0) {
+    newZoom *= zoomFactor
+  } else {
+    newZoom /= zoomFactor
+  }
+  navGridMapZoom.value = Math.min(15.0, Math.max(0.4, newZoom))
+  drawNavGridMapCanvas()
+}
+
+const handleNavGridMapMouseDown = (e: MouseEvent) => {
+  isDraggingNavGridMap = true
+  startDragNavX = e.clientX - navGridMapPanX.value
+  startDragNavY = e.clientY - navGridMapPanY.value
+  if (navGridMapCanvasRef.value) {
+    navGridMapCanvasRef.value.style.cursor = 'grabbing'
+  }
+}
+
+const handleNavGridMapMouseMove = (e: MouseEvent) => {
+  if (!isDraggingNavGridMap) return
+  navGridMapPanX.value = e.clientX - startDragNavX
+  navGridMapPanY.value = e.clientY - startDragNavY
+  drawNavGridMapCanvas()
+}
+
+const handleNavGridMapMouseUp = () => {
+  if (!isDraggingNavGridMap) return
+  isDraggingNavGridMap = false
+  if (navGridMapCanvasRef.value) {
+    navGridMapCanvasRef.value.style.cursor = 'grab'
+  }
+}
+
+const closeNavLayerMenuOnOutside = (e: MouseEvent) => {
+  const el = (e.target as HTMLElement).closest('.map-layer-switcher')
+  if (!el) navShowLayerMenu.value = false
+}
+
+// 监听视图切换与地图变化以重新初始化和加载
+watch(navViewType, async (newType) => {
+  if (newType === 'grid') {
+    await loadAndDrawNavGridMap()
+    await nextTick()
+    drawNavGridMapCanvas()
+  } else if (newType === 'map') {
+    nextTick(() => {
+      initNavAMap()
+    })
+  }
+})
+
+watch(selectedNavMap, async (newMap) => {
+  if (newMap) {
+    if (navViewType.value === 'grid') {
+      await loadAndDrawNavGridMap()
+    } else if (navViewType.value === 'map') {
+      if (!navAmapInstance) {
+        initNavAMap()
+      } else {
+        updateNavRobotMapMarker(false)
+        loadGnssOrigin(newMap).then(gnssOrigin => {
+          updateNavOriginMapMarker(gnssOrigin)
+        })
+        const runningTrackName = normalizeTrackName(
+          robotStore.cmdStatus?.track_info?.track_name
+          || activeNavOverlayTrackName.value
+          || ''
+        )
+        if (runningTrackName) {
+          lastNavTrackOverlayKey.value = ''
+          overlayNavTrackTrajectory(runningTrackName)
+        }
+      }
+    }
+  }
+})
+
 // 初始化导航点云图
 const initNavPointCloud = async () => {
   navPointCloudInitialized = true
@@ -5033,6 +6100,18 @@ watch(() => robotStore.pose, () => {
   if (navPointCloudData.value.length > 0) {
     scheduleNavPointCloudRender()
   }
+  if (navViewType.value === 'grid' && navGridMapCanvasRef.value) {
+    drawNavGridMapCanvas()
+  }
+  if (navViewType.value === 'map') {
+    updateNavRobotMapMarker(false)
+  }
+}, { deep: true })
+
+watch(() => robotStore.gpsMessage, () => {
+  if (navViewType.value === 'map') {
+    updateNavRobotMapMarker(false)
+  }
 }, { deep: true })
 
 watch(() => robotStore.cmdStatus?.track, (val) => {
@@ -5048,6 +6127,7 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
   } else if (val === 0) {
     lastNavTrackOverlayKey.value = ''
     activeNavOverlayTrackName.value = ''
+    clearNavRobotTrajectoryOnMap()
     if (baseNavPointCloudData.value.length > 0) {
       navPointCloudData.value = [...baseNavPointCloudData.value]
       scheduleNavPointCloudRender()
@@ -5129,6 +6209,7 @@ onMounted(async () => {
   // 监听机器人切换事件，刷新各 tab 的列表
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.addEventListener('click', handleGlobalClick)
+  document.addEventListener('click', closeNavLayerMenuOnOutside)
   await fetchNavPointTaskList()
 })
 
@@ -5147,6 +6228,13 @@ onActivated(async () => {
     lastLoadedNavPointCloudMap.value = ''
     void initNavPointCloud()
     requestNavPointCloudRelayout()
+
+    // 重新激活时重建 AMap 实例（keep-alive 切页导致 DOM 分离，AMap canvas 失效）
+    if (navViewType.value === 'map') {
+      nextTick(() => { initNavAMap() })
+    } else if (navViewType.value === 'grid') {
+      nextTick(() => { drawNavGridMapCanvas() })
+    }
   } else if (currentTab.value === 'map_edit') {
     fetchEditMapList()
   } else if (currentTab.value === 'track_record') {
@@ -5178,9 +6266,25 @@ const handleRobotContextRefreshed = () => {
   void fetchNavPointTaskList(true)
 }
 
+onDeactivated(() => {
+  // 离开页面时销毁 AMap 实例，下次 onActivated 时重建（keep-alive 切页导致 DOM 分离）
+  if (navAmapInstance) {
+    try { navAmapInstance.destroy() } catch (_) {}
+    navAmapInstance = null
+    navAmapApiRef = null
+    navRobotMarker = null
+    navOriginMapMarker = null
+    navTrafficLayer = null
+    navRobotTrajectoryPolyline.value = null
+    navRobotTaskpointMarkers.value = []
+    isNavAmapLoading = false
+  }
+})
+
 onUnmounted(() => {
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.removeEventListener('click', handleGlobalClick)
+  document.removeEventListener('click', closeNavLayerMenuOnOutside)
   clearNavPointCloudErrorTimer()
 })
 
@@ -11078,6 +12182,282 @@ select.recording-input option {
   left: 0;
   width: 100%;
   height: 100%;
+}
+
+/* 视图切换与栅格图样式 */
+.map-view-switcher-group {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  gap: 6px;
+  z-index: 100;
+}
+.view-switch-btn {
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  background: rgba(0, 12, 23, 0.75);
+  border: 1px solid rgba(89, 192, 252, 0.35);
+  backdrop-filter: blur(8px);
+  border-radius: 4px;
+  color: rgba(89, 192, 252, 0.9);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.view-switch-btn:hover {
+  color: #fff;
+  background: rgba(89, 192, 252, 0.15);
+  border-color: rgba(89, 192, 252, 0.75);
+}
+.view-switch-btn.active {
+  color: #fff;
+  background: rgba(89, 192, 252, 0.55);
+  border-color: #59c0fc;
+}
+.view-switch-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.grid-map-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #ffffff;
+}
+.grid-map-canvas {
+  display: block;
+}
+.grid-map-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  color: #1a1a1a;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+.grid-map-overlay.error {
+  background: rgba(255, 77, 79, 0.15);
+  color: #ff4d4f;
+}
+
+/* 确保高德地图底图文字显示在折线之上，自定义标记显示在文字之上 */
+:deep(.amap-vectors) {
+  z-index: 110 !important;
+}
+:deep(.amap-labels) {
+  z-index: 115 !important;
+}
+:deep(.amap-markers) {
+  z-index: 120 !important;
+}
+
+/* 修正比例尺控件文字颜色（防止继承容器白字导致浅色背景下看不清数值） */
+:deep(.amap-scale-text) {
+  color: #111111 !important;
+  font-weight: bold !important;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff, 0 0 3px #ffffff !important;
+}
+:deep(.amap-scale-line) {
+  border-color: #111111 !important;
+}
+
+/* 机器人地图定位标记样式 */
+:deep(.robot-location-indicator) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+:deep(.robot-location-label) {
+  position: absolute;
+  top: 38px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #00a0e9;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
+}
+
+/* 机器人地图原点样式 */
+:deep(.map-origin-marker) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  pointer-events: none;
+}
+:deep(.map-origin-label) {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #ff3b30;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
+}
+
+/* 机器人地图任务点样式 */
+:deep(.robot-map-taskpoint) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+:deep(.robot-map-taskpoint) .taskpoint-dot {
+  width: 18px;
+  height: 18px;
+  background: #ff9500;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+:deep(.robot-map-taskpoint) .taskpoint-label {
+  position: absolute;
+  top: 20px;
+  color: #ff9500;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
+  pointer-events: none;
+}
+
+/* 地图图层切换器 */
+.map-layer-switcher {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.layer-switch-trigger {
+  background: rgba(0, 12, 23, 0.75);
+  border: 1px solid rgba(89, 192, 252, 0.45);
+  backdrop-filter: blur(10px);
+  border-radius: 4px;
+  color: #59c0fc;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s ease;
+}
+.layer-switch-trigger:hover {
+  background: rgba(89, 192, 252, 0.15);
+  color: #fff;
+  border-color: rgba(89, 192, 252, 0.8);
+}
+.layer-switch-trigger svg {
+  width: 14px;
+  height: 14px;
+}
+.layer-menu-dropdown {
+  margin-top: 6px;
+  background: rgba(0, 12, 23, 0.85);
+  border: 1px solid rgba(89, 192, 252, 0.35);
+  backdrop-filter: blur(12px);
+  border-radius: 4px;
+  padding: 6px 0;
+  width: 110px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+.layer-option {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+.layer-option:hover {
+  background: rgba(89, 192, 252, 0.12);
+  color: #fff;
+}
+.layer-option.active {
+  color: #59c0fc;
+  font-weight: bold;
+  background: rgba(89, 192, 252, 0.08);
+}
+.layer-divider {
+  height: 1px;
+  background: rgba(89, 192, 252, 0.2);
+  margin: 4px 0;
+}
+.option-checkbox {
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(89, 192, 252, 0.5);
+  border-radius: 2px;
+  display: inline-block;
+  position: relative;
+  transition: all 0.15s;
+}
+.option-checkbox.checked {
+  background: #59c0fc;
+  border-color: #59c0fc;
+}
+.option-checkbox.checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 4px;
+  height: 6px;
+  border: solid #000;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.layer-option .option-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  display: inline-block;
+}
+.layer-option.active .option-icon {
+  background: #59c0fc;
+  box-shadow: 0 0 6px #59c0fc;
+}
+.layer-menu-fade-enter-active,
+.layer-menu-fade-leave-active {
+  transition: all 0.2s ease;
+}
+.layer-menu-fade-enter-from,
+.layer-menu-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 </style>
