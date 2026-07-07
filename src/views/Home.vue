@@ -2127,8 +2127,23 @@ const overlayTrackTrajectory = async (trackName: string) => {
 
   trackOverlayInFlightKey.value = overlayKey
   try {
-    // 1. 读取轨迹路线数据
-    const blob = await getTrajectoryFile(normalizedTrackName)
+    // 1. 读取轨迹路线数据 (如果本地无轨迹文件，尝试从服务器下载)
+    let blob = await getTrajectoryFile(normalizedTrackName)
+    if (!blob) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        try {
+          blob = await downloadTrajectoryFile(robotId, normalizedTrackName)
+          if (blob) {
+            await saveTrajectoryFile(normalizedTrackName, blob)
+            updateTrajectoryConfig(normalizedTrackName, '')
+          }
+        } catch (downloadErr) {
+          console.warn('[点云] 动态下载轨迹文件失败:', downloadErr)
+        }
+      }
+    }
+
     const trajectoryPoints: Array<{x: number, y: number, z: number}> = []
 
     if (blob) {
@@ -2217,8 +2232,9 @@ const overlayTrackTrajectory = async (trackName: string) => {
       console.warn('[任务点] 未找到有效的任务点坐标数据')
     }
 
-    // 3. 归一化并合并数据 (仅当点云基础数据加载完成时才进行点云图的渲染叠加)
-    if (basePointCloudData.value.length > 0 && pointCloudNormalizationParams.value) {
+    // 3. 归一化并合并数据 (仅当点云基础数据加载完成且归一化参数有效时才进行点云图的渲染叠加)
+    let isOverlayApplied = false
+    if (basePointCloudData.value.length > 0 && pointCloudNormalizationParams.value && pointCloudNormalizationParams.value.maxRange > 0) {
       const { centerX, centerY, centerZ, maxRange } = pointCloudNormalizationParams.value
       
       const normalizedTrajectory = trajectoryPoints.map(p => ({
@@ -2241,6 +2257,7 @@ const overlayTrackTrajectory = async (trackName: string) => {
         ...normalizedTrajectory,
         ...normalizedTaskPoints
       ]
+      isOverlayApplied = true
     }
 
     // 如果地图已初始化，也在地图上渲染轨迹和任务点
@@ -2307,8 +2324,11 @@ const overlayTrackTrajectory = async (trackName: string) => {
       drawGridMapCanvas()
     }
 
-    lastTrackOverlayKey.value = overlayKey
-    lastTrackOverlayTaskPointCount.value = taskPointsData.length
+    // 只有在成功叠加到点云，且存在轨迹点或任务点时，才标记此 Key 为已完成
+    if (isOverlayApplied && (trajectoryPoints.length > 0 || taskPointsData.length > 0)) {
+      lastTrackOverlayKey.value = overlayKey
+      lastTrackOverlayTaskPointCount.value = taskPointsData.length
+    }
   } catch (e) {
     console.warn('叠加轨迹失败:', e)
   } finally {
@@ -3615,7 +3635,7 @@ const drawGridMapCanvas = () => {
       
       ctx.beginPath()
       ctx.arc(0, 0, 9, 0, Math.PI * 2)
-      ctx.fillStyle = '#39b54a'
+      ctx.fillStyle = '#ff9500'
       ctx.strokeStyle = '#ffffff'
       ctx.lineWidth = 1.5
       ctx.fill()
@@ -3635,7 +3655,7 @@ const drawGridMapCanvas = () => {
       ctx.lineWidth = 3
       ctx.strokeText(p.name, 0, 11)
       
-      ctx.fillStyle = '#39b54a'
+      ctx.fillStyle = '#ff9500'
       ctx.fillText(p.name, 0, 11)
       ctx.restore()
     })
@@ -8872,7 +8892,7 @@ const initAMap = () => {
   AMapLoader.load({
     key: amapKey,
     version: '2.0',
-    plugins: ['AMap.ToolBar', 'AMap.Geolocation', 'AMap.PlaceSearch']
+    plugins: ['AMap.ToolBar', 'AMap.Geolocation', 'AMap.PlaceSearch', 'AMap.Scale']
   }).then((AMap) => {
     amapApiRef = AMap // 缓存 AMap
 
@@ -8887,6 +8907,7 @@ const initAMap = () => {
 
     amapInstance = new AMap.Map(mapContainer.value, {
       zoom: 18,
+      zooms: [2, 22],
       center: [116.397428, 39.90923],
       logoEnable: false,
       copyrightEnable: false,
@@ -8894,6 +8915,13 @@ const initAMap = () => {
       layers: initLayers,
       mapStyle: initStyle
     })
+
+    // 添加比例尺插件到右下角
+    const scale = new AMap.Scale({
+      position: 'RB',
+      offset: new AMap.Pixel(20, 20)
+    })
+    amapInstance.addControl(scale)
     
     // 地图加载完成后更新标记并居中定位到机器人
     amapInstance.on('complete', () => {
@@ -8915,6 +8943,23 @@ const initAMap = () => {
           updateOriginMapMarker(gnssOrigin)
         })
       }
+
+      // 如果当前正在循迹，在地图完成初始化后立即绘制轨迹和任务点
+      if (robotStore.isTracking) {
+        const runningTrackName = normalizeTrackName(
+          robotStore.cmdStatus?.track_info?.track_name
+          || activeOverlayTrackName.value
+          || selectedTrack.value
+          || ''
+        )
+        if (runningTrackName) {
+          lastTrackOverlayKey.value = ''
+          lastTrackOverlayTaskPointCount.value = 0
+          trackOverlayInFlightKey.value = ''
+          overlayTrackTrajectory(runningTrackName)
+        }
+      }
+
       isInitialLoad.value = false
     })
     isAMapLoading = false
@@ -10497,6 +10542,16 @@ const handlePageShow = () => {
   z-index: 120 !important;
 }
 
+/* 修正比例尺控件文字颜色（防止继承容器白字导致浅色背景下看不清数值） */
+:deep(.amap-scale-text) {
+  color: #111111 !important;
+  font-weight: bold !important;
+  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff, 0 0 3px #ffffff !important;
+}
+:deep(.amap-scale-line) {
+  border-color: #111111 !important;
+}
+
 /* 机器人地图定位标记样式 */
 :deep(.robot-location-indicator) {
   display: flex;
@@ -10549,7 +10604,7 @@ const handlePageShow = () => {
 :deep(.robot-map-taskpoint) .taskpoint-dot {
   width: 18px;
   height: 18px;
-  background: #39b54a;
+  background: #ff9500;
   border: 2px solid #ffffff;
   border-radius: 50%;
   color: #ffffff;
@@ -10563,7 +10618,7 @@ const handlePageShow = () => {
 :deep(.robot-map-taskpoint) .taskpoint-label {
   position: absolute;
   top: 20px;
-  color: #39b54a;
+  color: #ff9500;
   font-size: 13px;
   font-weight: bold;
   white-space: nowrap;
