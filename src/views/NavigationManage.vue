@@ -1025,13 +1025,9 @@
                         绘制
                       </button>
                     </div>
-                  </div>
 
-                  <div class="track-edit-panel-section">
-                    <div class="track-edit-panel-heading">
-                      <div class="track-edit-panel-title">绘制类型</div>
-                    </div>
-                    <div class="track-edit-action-grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <!-- 绘制类型 (直线/曲线) -->
+                    <div class="track-edit-action-grid" style="grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
                       <button 
                         class="track-edit-action" 
                         :class="{ active: routeEditDrawType === 'line' }" 
@@ -1048,6 +1044,22 @@
                       >
                         曲线
                       </button>
+                    </div>
+
+                    <!-- 轨迹配置 (步长) -->
+                    <div class="track-edit-range-row" style="margin-top: 8px;">
+                      <label>步长</label>
+                      <div class="track-edit-step-counter">
+                        <button class="step-btn" @click="decreaseRouteEditStep" :disabled="routeEditMode !== 'draw' || routeEditStep <= 0.01">-</button>
+                        <input
+                          :value="routeEditStep.toFixed(2)"
+                          type="text"
+                          readonly
+                          class="step-input"
+                          :disabled="routeEditMode !== 'draw'"
+                        />
+                        <button class="step-btn" @click="increaseRouteEditStep" :disabled="routeEditMode !== 'draw' || routeEditStep >= 1.00">+</button>
+                      </div>
                     </div>
                   </div>
 
@@ -1068,25 +1080,6 @@
                     </div>
                     <div class="track-edit-action-grid">
                       <button class="track-edit-action primary" :disabled="!routeEditHasRoute" v-permission-click-dialog="'nav-trackrecord-edit'" @click="confirmApplyRouteEditManualZToAll">全局应用</button>
-                    </div>
-                  </div>
-
-                  <div class="track-edit-panel-section">
-                    <div class="track-edit-panel-heading">
-                      <div class="track-edit-panel-title">轨迹配置</div>
-                    </div>
-                    <div class="track-edit-range-row">
-                      <label>步长</label>
-                      <div class="track-edit-step-counter">
-                        <button class="step-btn" @click="decreaseRouteEditStep" :disabled="routeEditStep <= 0.01">-</button>
-                        <input
-                          :value="routeEditStep.toFixed(2)"
-                          type="text"
-                          readonly
-                          class="step-input"
-                        />
-                        <button class="step-btn" @click="increaseRouteEditStep" :disabled="routeEditStep >= 1.00">+</button>
-                      </div>
                     </div>
                   </div>
 
@@ -2279,10 +2272,7 @@ const handleTabClick = async (tab: { key: string; permission?: string }) => {
       fetchTrackMapList()
       await fetchAllTrackList()
       loadRouteEditLocalLineList()
-      if (trackEditMap.value && !trackEditLine.value && trackEditLineList.value.length > 0) {
-        trackEditLine.value = trackEditLineList.value[0]
-      }
-      if (trackEditLine.value) {
+      if (trackEditMap.value && trackEditLine.value) {
         await loadTrackEditRoute()
       }
       // 根据当前视图加载 2D 视图
@@ -2963,10 +2953,10 @@ const setRouteEditView = async (newType: 'grid' | 'map') => {
   if (currentTab.value !== 'track_edit') return
   if (navViewType.value === newType) return
   if (routeEditDirty.value) {
-    const ok = window.confirm(ROUTE_EDIT_DIRTY_CONFIRM_MESSAGE)
+    const ok = window.confirm('切换地图将清空当前未保存的操作，是否继续？')
     if (!ok) return
-    resetRouteEditWorkspace()
   }
+  resetRouteEditWorkspace()
   navViewType.value = newType
   // 确保地图列表已加载（selectedNavMap 可能为空）
   if (!selectedNavMap.value) {
@@ -4239,8 +4229,9 @@ watch(trackEditLineList, (newLines) => {
     resetRouteEditWorkspace()
     return
   }
-  if (!trackEditLine.value || !newLines.includes(trackEditLine.value)) {
-    trackEditLine.value = newLines[0]
+  if (trackEditLine.value && !newLines.includes(trackEditLine.value)) {
+    trackEditLine.value = ''
+    resetRouteEditWorkspace()
   }
 })
 
@@ -4248,15 +4239,12 @@ watch(trackEditMap, async (newMap) => {
   if (currentTab.value !== 'track_edit') return
   resetRouteEditWorkspace()
   loadRouteEditLocalLineList(newMap)
+  trackEditLine.value = ''
   if (!newMap) {
-    trackEditLine.value = ''
     return
   }
   await refreshNavPointCloud(newMap, { silent: true })
   await fetchAllTrackList()
-  if (trackEditLineList.value.length > 0) {
-    trackEditLine.value = trackEditLineList.value[0]
-  }
 })
 
 watch(trackEditLine, () => {
@@ -7103,6 +7091,9 @@ const closeNavLayerMenuOnOutside = (e: MouseEvent) => {
 
 // 监听视图切换与地图变化以重新初始化和加载
 watch(navViewType, async (newType) => {
+  if (currentTab.value === 'track_edit') {
+    resetRouteEditWorkspace()
+  }
   if (newType === 'grid') {
     await loadAndDrawNavGridMap()
     await nextTick()
