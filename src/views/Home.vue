@@ -237,11 +237,27 @@
                 @mousedown="handleGridMapMouseDown"
                 @mousemove="handleGridMapMouseMove"
                 @mouseup="handleGridMapMouseUp"
-                @mouseleave="handleGridMapMouseUp"
+                @mouseleave="handleGridMapMouseLeave"
+                @contextmenu.prevent
                 style="cursor: grab;"
               ></canvas>
               <div v-if="gridMapLoading" class="grid-map-overlay">栅格地图加载中...</div>
               <div v-else-if="gridMapError" class="grid-map-overlay error">{{ gridMapError }}</div>
+              
+              <!-- 任务点悬停提示 -->
+              <div 
+                v-if="gridMapTooltip.show" 
+                class="grid-map-tooltip"
+                :style="{ left: gridMapTooltip.x + 'px', top: gridMapTooltip.y + 'px' }"
+              >
+                <div 
+                  v-for="(item, idx) in gridMapTooltip.content" 
+                  :key="idx" 
+                  class="grid-map-tooltip-item"
+                >
+                  {{ item.index }}: {{ item.name }}
+                </div>
+              </div>
             </div>
           </div>
           <div class="pointcloud-view map-view" v-show="currentViewType === 'map'">
@@ -3281,6 +3297,81 @@ const gridMapZoom = ref(1.0)
 const gridMapPanX = ref(0)
 const gridMapPanY = ref(0)
 
+const gridMapTooltip = ref({
+  show: false,
+  x: 0,
+  y: 0,
+  content: [] as Array<{ index: number; name: string }>
+})
+
+interface GroupedTaskItem {
+  index: number
+  name: string
+}
+
+interface GroupedTask {
+  x: number
+  y: number
+  items: GroupedTaskItem[]
+  displayIndex: number
+}
+
+const getGroupedTaskPoints = (points: Array<{ x: number; y: number; z: number; name: string }>) => {
+  const groups: GroupedTask[] = []
+  points.forEach((p, index) => {
+    const group = groups.find(g => Math.abs(g.x - p.x) < 0.01 && Math.abs(g.y - p.y) < 0.01)
+    if (group) {
+      group.items.push({
+        index: index + 1,
+        name: p.name
+      })
+    } else {
+      groups.push({
+        x: p.x,
+        y: p.y,
+        items: [{
+          index: index + 1,
+          name: p.name
+        }],
+        displayIndex: index + 1
+      })
+    }
+  })
+  return groups
+}
+
+const getProjectedCoords = (
+  x: number,
+  y: number,
+  meta: any,
+  mapH: number,
+  baseScale: number,
+  baseOffsetX: number,
+  baseOffsetY: number,
+  containerWidth: number,
+  containerHeight: number,
+  zoom: number,
+  panX: number,
+  panY: number
+) => {
+  const px = (x - meta.originX) / meta.resolution
+  const py = mapH - (y - meta.originY) / meta.resolution
+  
+  let cx = baseOffsetX + px * baseScale
+  let cy = baseOffsetY + py * baseScale
+  
+  const centerX = containerWidth / 2
+  const centerY = containerHeight / 2
+  
+  cx = (cx - centerX) * zoom + centerX
+  cy = (cy - centerY) * zoom + centerY
+  
+  cx += panX
+  cy += panY
+  
+  return { x: cx, y: cy }
+}
+
 // 地图图层类型和状态
 const currentMapType = ref('standard') // 'standard' | '3d' | 'satellite'
 const showTraffic = ref(false)
@@ -3562,7 +3653,49 @@ const drawGridMapCanvas = () => {
   
   ctx.restore()
   
-  // 3. 绘制机器人位置 (在屏幕上的尺寸保持固定，不受 zoom 影响)
+  // 3. 绘制任务点 (在屏幕上的尺寸保持固定，不受 zoom 影响)
+  if (currentTaskPoints.value.length > 0) {
+    const groups = getGroupedTaskPoints(currentTaskPoints.value)
+    groups.forEach((p) => {
+      const px = (p.x - meta.originX) / meta.resolution
+      const py = mapH - (p.y - meta.originY) / meta.resolution
+      const tx = baseOffsetX + px * baseScale
+      const ty = baseOffsetY + py * baseScale
+      
+      ctx.save()
+      ctx.translate(tx, ty)
+      ctx.scale(1 / zoom, 1 / zoom) // 缩放补偿，保证图标和文字标签大小恒定
+      
+      ctx.beginPath()
+      ctx.arc(0, 0, 9, 0, Math.PI * 2)
+      ctx.fillStyle = '#ff9500'
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 1.5
+      ctx.fill()
+      ctx.stroke()
+      
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'bold 10px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(p.displayIndex), 0, 0)
+      
+      ctx.font = 'bold 12px Arial'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 3
+      const displayName = p.items.length > 1 ? `${p.items[0].name}等(${p.items.length})` : p.items[0].name
+      ctx.strokeText(displayName, 0, 11)
+      
+      ctx.fillStyle = '#ff9500'
+      ctx.fillText(displayName, 0, 11)
+      ctx.restore()
+    })
+  }
+
+  // 4. 绘制机器人位置 (在屏幕上的尺寸保持固定，不受 zoom 影响)
   const pose = robotStore.pose
   if (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y)) {
     const px = (pose.x - meta.originX) / meta.resolution
@@ -3620,46 +3753,6 @@ const drawGridMapCanvas = () => {
     
     ctx.restore()
   }
-
-  // 4. 绘制任务点 (在屏幕上的尺寸保持固定，不受 zoom 影响)
-  if (currentTaskPoints.value.length > 0) {
-    currentTaskPoints.value.forEach((p, index) => {
-      const px = (p.x - meta.originX) / meta.resolution
-      const py = mapH - (p.y - meta.originY) / meta.resolution
-      const tx = baseOffsetX + px * baseScale
-      const ty = baseOffsetY + py * baseScale
-      
-      ctx.save()
-      ctx.translate(tx, ty)
-      ctx.scale(1 / zoom, 1 / zoom) // 缩放补偿，保证图标和文字标签大小恒定
-      
-      ctx.beginPath()
-      ctx.arc(0, 0, 9, 0, Math.PI * 2)
-      ctx.fillStyle = '#ff9500'
-      ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = 1.5
-      ctx.fill()
-      ctx.stroke()
-      
-      ctx.fillStyle = '#ffffff'
-      ctx.font = 'bold 10px Arial'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(index + 1), 0, 0)
-      
-      ctx.font = 'bold 12px Arial'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'top'
-      
-      ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = 3
-      ctx.strokeText(p.name, 0, 11)
-      
-      ctx.fillStyle = '#ff9500'
-      ctx.fillText(p.name, 0, 11)
-      ctx.restore()
-    })
-  }
   
   ctx.restore()
 }
@@ -3693,10 +3786,74 @@ const handleGridMapMouseDown = (e: MouseEvent) => {
 }
 
 const handleGridMapMouseMove = (e: MouseEvent) => {
-  if (!isDraggingGridMap) return
-  gridMapPanX.value = e.clientX - startDragX
-  gridMapPanY.value = e.clientY - startDragY
-  drawGridMapCanvas()
+  if (isDraggingGridMap) {
+    gridMapPanX.value = e.clientX - startDragX
+    gridMapPanY.value = e.clientY - startDragY
+    drawGridMapCanvas()
+    gridMapTooltip.value.show = false
+    return
+  }
+
+  // 悬停检测任务点
+  const canvas = gridMapCanvasRef.value
+  const container = gridMapContainerRef.value
+  const meta = gridMapMeta.value
+  if (!canvas || !container || !meta || currentTaskPoints.value.length === 0) {
+    gridMapTooltip.value.show = false
+    return
+  }
+
+  const rect = canvas.getBoundingClientRect()
+  const mouseX = e.clientX - rect.left
+  const mouseY = e.clientY - rect.top
+
+  const mapW = gridMapWidth.value
+  const mapH = gridMapHeight.value
+  const scaleX = container.clientWidth / mapW
+  const scaleY = container.clientHeight / mapH
+  const baseScale = Math.min(scaleX, scaleY)
+  const baseOffsetX = (container.clientWidth - mapW * baseScale) / 2
+  const baseOffsetY = (container.clientHeight - mapH * baseScale) / 2
+
+  const groups = getGroupedTaskPoints(currentTaskPoints.value)
+  let foundGroup: any = null
+  let foundCx = 0
+  let foundCy = 0
+
+  for (const p of groups) {
+    const projected = getProjectedCoords(
+      p.x,
+      p.y,
+      meta,
+      mapH,
+      baseScale,
+      baseOffsetX,
+      baseOffsetY,
+      container.clientWidth,
+      container.clientHeight,
+      gridMapZoom.value,
+      gridMapPanX.value,
+      gridMapPanY.value
+    )
+    const dist = Math.hypot(mouseX - projected.x, mouseY - projected.y)
+    if (dist < 12) { // 12像素碰撞半径
+      foundGroup = p
+      foundCx = projected.x
+      foundCy = projected.y
+      break
+    }
+  }
+
+  if (foundGroup) {
+    gridMapTooltip.value = {
+      show: true,
+      x: foundCx,
+      y: foundCy - 15,
+      content: foundGroup.items
+    }
+  } else {
+    gridMapTooltip.value.show = false
+  }
 }
 
 const handleGridMapMouseUp = () => {
@@ -3705,6 +3862,11 @@ const handleGridMapMouseUp = () => {
   if (gridMapCanvasRef.value) {
     gridMapCanvasRef.value.style.cursor = 'grab'
   }
+}
+
+const handleGridMapMouseLeave = () => {
+  handleGridMapMouseUp()
+  gridMapTooltip.value.show = false
 }
 
 const applyMapType = () => {
@@ -15123,6 +15285,31 @@ const handlePageShow = () => {
   min-width: 56px;
   text-align: center;
   letter-spacing: 0.5px;
+}
+
+.grid-map-tooltip {
+  position: absolute;
+  background: rgba(0, 12, 23, 0.9);
+  border: 1px solid #ff9500;
+  border-radius: 4px;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+}
+.grid-map-tooltip-item {
+  line-height: 1.5;
+}
+.grid-map-tooltip-title {
+  font-weight: bold;
+  color: #ff9500;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 149, 0, 0.3);
+  padding-bottom: 2px;
 }
 
 </style>

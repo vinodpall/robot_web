@@ -1648,9 +1648,10 @@ export const mapFileApi = {
     }
   },
 
-  uploadTrajectoryFile: async (robotId: string, mapName: string, trajectoryName: string, file: Blob): Promise<boolean> => {
-    const remotePath = `/root/dxr_data/trajectory/${mapName}`
-    const fileName = trajectoryName.toLowerCase().endsWith('.txt') ? trajectoryName : `${trajectoryName}.txt`
+  uploadTrajectoryFile: async (robotId: string, trajectoryName: string, file: Blob): Promise<boolean> => {
+    const trackName = trajectoryName.replace(/\.txt$/i, '')
+    const remotePath = `/root/dxr_data/trajectory/${trackName}`
+    const fileName = `${trackName}.txt`
     const url = buildRobotHttpUrl(robotId, 5000, 'upload_single_file')
 
     const formData = new FormData()
@@ -1689,46 +1690,6 @@ export const mapFileApi = {
     }
   },
 
-  downloadTrajectoryFileFromMap: async (
-    robotId: string,
-    mapName: string,
-    trajectoryName: string,
-    forceNoCache = false
-  ): Promise<Blob | null> => {
-    const fileName = trajectoryName.toLowerCase().endsWith('.txt') ? trajectoryName : `${trajectoryName}.txt`
-    const url = buildRobotHttpUrl(robotId, 5000, 'download_file', {
-      remote_path: `/root/dxr_data/trajectory/${mapName}/${fileName}`,
-      ...(forceNoCache ? { _t: Date.now() } : {})
-    })
-    try {
-      const response = await fetchWithTimeout(url, {
-        method: 'GET',
-        cache: 'no-store',
-        headers: {
-          ...buildAuthHeaders(),
-          ...(forceNoCache
-            ? {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                Pragma: 'no-cache',
-                Expires: '0'
-              }
-            : {})
-        }
-      })
-      if (!response.ok) {
-        console.error(`[轨迹下载] 轨迹文件下载失败: ${mapName}/${fileName}, HTTP ${response.status}`)
-        return null
-      }
-      return await response.blob()
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        console.error(`[轨迹下载] 轨迹文件下载超时(${ROBOT_HTTP_FETCH_TIMEOUT_MS}ms): ${mapName}/${fileName}`)
-        return null
-      }
-      console.error(`[轨迹下载] 轨迹文件下载异常: ${mapName}/${fileName}`, error)
-      return null
-    }
-  },
 
   downloadTrajectoryFile: async (
     robotId: string,
