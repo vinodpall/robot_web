@@ -1029,6 +1029,30 @@
 
                   <div class="track-edit-panel-section">
                     <div class="track-edit-panel-heading">
+                      <div class="track-edit-panel-title">绘制类型</div>
+                    </div>
+                    <div class="track-edit-action-grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+                      <button 
+                        class="track-edit-action" 
+                        :class="{ active: routeEditDrawType === 'line' }" 
+                        :disabled="routeEditMode !== 'draw'"
+                        @click="setRouteEditDrawType('line')"
+                      >
+                        直线
+                      </button>
+                      <button 
+                        class="track-edit-action" 
+                        :class="{ active: routeEditDrawType === 'curve' }" 
+                        :disabled="routeEditMode !== 'draw'"
+                        @click="setRouteEditDrawType('curve')"
+                      >
+                        曲线
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="track-edit-panel-section">
+                    <div class="track-edit-panel-heading">
                       <div class="track-edit-panel-title">高度</div>
                     </div>
                     <div class="track-edit-range-row track-edit-z-row">
@@ -1758,12 +1782,29 @@ const loadGnssOrigin = async (mapName: string): Promise<{ latitude: number; long
 }
 
 // 路线编辑在 AMap 上的轨迹 overlay
-let routeEditMainPolyline: any = null
+let routeEditMainPolylines: any[] = []
 let routeEditDraftPolyline: any = null
 let routeEditSelectionPolyline: any = null
 let routeEditMainMarkers: any[] = []
 let routeEditDraftMarkers: any[] = []
 let routeEditSelectionMarkers: any[] = []
+
+const splitRouteEditPointsByBreaks = (points: RouteEditPoint[], breaks: number[]): RouteEditPoint[][] => {
+  if (points.length === 0) return []
+  const segments: RouteEditPoint[][] = []
+  let currentSegment: RouteEditPoint[] = [points[0]]
+  
+  for (let i = 1; i < points.length; i++) {
+    if (breaks.includes(i - 1)) {
+      segments.push(currentSegment)
+      currentSegment = [points[i]]
+    } else {
+      currentSegment.push(points[i])
+    }
+  }
+  segments.push(currentSegment)
+  return segments
+}
 
 const clearRouteEditAMapOverlays = () => {
   if (!navAmapInstance) return
@@ -1772,7 +1813,8 @@ const clearRouteEditAMapOverlays = () => {
       try { navAmapInstance.remove(obj) } catch {}
     }
   }
-  if (routeEditMainPolyline) { removeSafe(routeEditMainPolyline); routeEditMainPolyline = null }
+  routeEditMainPolylines.forEach(p => removeSafe(p))
+  routeEditMainPolylines = []
   if (routeEditDraftPolyline) { removeSafe(routeEditDraftPolyline); routeEditDraftPolyline = null }
   if (routeEditSelectionPolyline) { removeSafe(routeEditSelectionPolyline); routeEditSelectionPolyline = null }
   routeEditMainMarkers.forEach(m => removeSafe(m))
@@ -1792,6 +1834,10 @@ const renderRouteEditOnAMap = async () => {
   cachedLngLatOrigin = gnssOrigin
   cachedLngLatMapName = selectedNavMap.value
 
+  if (navOriginMapMarker && typeof navAmapInstance.remove === 'function') {
+    try { navAmapInstance.remove(navOriginMapMarker) } catch {}
+  }
+
   clearRouteEditAMapOverlays()
 
   const localToLngLat = (p: { x: number; y: number }): [number, number] | null => {
@@ -1804,45 +1850,47 @@ const renderRouteEditOnAMap = async () => {
   const points = routeEditPoints.value
   const draft = routeEditDraftPoints.value
 
-  // 主轨迹
-  const mainPath: [number, number][] = []
-  points.forEach(p => {
-    const c = localToLngLat(p)
-    if (c) mainPath.push(c)
-  })
-  if (mainPath.length > 1) {
-    routeEditMainPolyline = new AMap.Polyline({
-      path: mainPath,
-      strokeColor: '#39b54a',
-      strokeWeight: 4,
-      strokeOpacity: 0.85,
-      strokeStyle: 'solid',
-      lineJoin: 'round',
-      showDir: true,
-      zIndex: 105,
-    })
-    navAmapInstance.add(routeEditMainPolyline)
-  }
-
-  // 主轨迹关键点
-  if (AMap && (AMap as any).CircleMarker) {
-    points.forEach((p, idx) => {
+  // 主轨迹 (使用 breaks 拆分多段绘制以支持删除选段时的断开效果)
+  const pointSegments = splitRouteEditPointsByBreaks(points, routeEditBreaks.value)
+  pointSegments.forEach(seg => {
+    const segPath: [number, number][] = []
+    seg.forEach(p => {
       const c = localToLngLat(p)
-      if (!c) return
-      const isEnd = idx === points.length - 1
-      const color = idx === 0 || isEnd ? '#ff9500' : '#39b54a'
+      if (c) segPath.push(c)
+    })
+    if (segPath.length > 1) {
+      const poly = new AMap.Polyline({
+        path: segPath,
+        strokeColor: '#39b54a',
+        strokeWeight: 2,
+        strokeOpacity: 0.85,
+        strokeStyle: 'solid',
+        lineJoin: 'round',
+        showDir: true,
+        zIndex: 105,
+      })
+      navAmapInstance.add(poly)
+      routeEditMainPolylines.push(poly)
+    }
+  })
+
+  // 主轨迹关键点 (仅在绘制或新增模式下画终点，且去掉起点的橙色标记点)
+  if (AMap && (AMap as any).CircleMarker && points.length > 0 && (routeEditMode.value === 'draw' || routeEditCreateMode.value)) {
+    const p = points[points.length - 1]
+    const c = localToLngLat(p)
+    if (c) {
       const marker = new (AMap as any).CircleMarker({
         center: c,
-        radius: idx === 0 || isEnd ? 7 : 5,
+        radius: 7,
         strokeColor: '#ffffff',
         strokeWeight: 2,
-        fillColor: color,
+        fillColor: '#ff9500',
         fillOpacity: 1,
         zIndex: 110,
       })
       navAmapInstance.add(marker)
       routeEditMainMarkers.push(marker)
-    })
+    }
   }
 
   // draft 轨迹
@@ -1855,7 +1903,7 @@ const renderRouteEditOnAMap = async () => {
     routeEditDraftPolyline = new AMap.Polyline({
       path: draftPath,
       strokeColor: '#ff9500',
-      strokeWeight: 4,
+      strokeWeight: 2,
       strokeStyle: 'dashed',
       strokeOpacity: 0.9,
       lineJoin: 'round',
@@ -1864,7 +1912,9 @@ const renderRouteEditOnAMap = async () => {
     navAmapInstance.add(routeEditDraftPolyline)
   }
   if (draftPath.length > 0 && AMap && (AMap as any).CircleMarker) {
-    draft.forEach(p => {
+    const indices = draft.length === 1 ? [0] : [0, draft.length - 1]
+    indices.forEach((idx) => {
+      const p = draft[idx]
       const c = localToLngLat(p)
       if (!c) return
       const marker = new (AMap as any).CircleMarker({
@@ -1893,7 +1943,7 @@ const renderRouteEditOnAMap = async () => {
       routeEditSelectionPolyline = new AMap.Polyline({
         path: segPath,
         strokeColor: '#ff3b30',
-        strokeWeight: 6,
+        strokeWeight: 3,
         strokeOpacity: 0.9,
         strokeStyle: 'solid',
         lineJoin: 'round',
@@ -1901,8 +1951,12 @@ const renderRouteEditOnAMap = async () => {
       })
       navAmapInstance.add(routeEditSelectionPolyline)
     }
-    if (AMap && (AMap as any).CircleMarker) {
-      ;[range.start, range.end].forEach(i => {
+  }
+
+  // 选段模式下的点击位置标记 (AMap)
+  if (routeEditMode.value === 'pick' && AMap && (AMap as any).CircleMarker) {
+    [routeEditSelectionStart.value, routeEditSelectionEnd.value].forEach((i) => {
+      if (isValidRouteEditIndex(i) && i < points.length) {
         const c = localToLngLat(points[i])
         if (!c) return
         const marker = new (AMap as any).CircleMarker({
@@ -1910,14 +1964,14 @@ const renderRouteEditOnAMap = async () => {
           radius: 8,
           strokeColor: '#ffffff',
           strokeWeight: 2,
-          fillColor: '#ff3b30',
+          fillColor: '#ff9500',
           fillOpacity: 1,
           zIndex: 112,
         })
         navAmapInstance.add(marker)
         routeEditSelectionMarkers.push(marker)
-      })
-    }
+      }
+    })
   }
 }
 
@@ -2966,6 +3020,14 @@ const increaseRouteEditStep = () => {
   }
 }
 const routeEditUploading = ref(false)
+const routeEditDrawType = ref<'line' | 'curve'>('line')
+const routeEditCurveState = ref<'idle' | 'middle'>('idle')
+const routeEditClickHistory = ref<{ pointsLen: number; curveState: 'idle' | 'middle' }[]>([])
+const routeEditDraftClickHistory = ref<{ pointsLen: number; curveState: 'idle' | 'middle' }[]>([])
+const setRouteEditDrawType = (type: 'line' | 'curve') => {
+  routeEditDrawType.value = type
+  routeEditCurveState.value = 'idle'
+}
 const routeEditCreateDialog = ref({
   visible: false,
   trackName: '',
@@ -3222,6 +3284,10 @@ const resetRouteEditWorkspace = () => {
   setRouteEditManualZ(0)
   routeEditCreateDialog.value.visible = false
   routeEditCreateDialog.value.error = ''
+  routeEditDrawType.value = 'line'
+  routeEditCurveState.value = 'idle'
+  routeEditClickHistory.value = []
+  routeEditDraftClickHistory.value = []
   if (baseNavPointCloudData.value.length > 0) {
     navPointCloudData.value = [...baseNavPointCloudData.value]
   }
@@ -3289,6 +3355,80 @@ const parseEditableTrajectoryText = (text: string): { points: RouteEditPoint[]; 
 const formatRouteEditNumber = (value: number) => {
   if (!Number.isFinite(value)) return '0'
   return Number(value.toFixed(6)).toString()
+}
+
+const generateCircularArcPoints = (
+  p1: RouteEditPoint,
+  p2: RouteEditPoint,
+  p3: RouteEditPoint,
+  step: number
+): RouteEditPoint[] => {
+  const x1 = p1.x, y1 = p1.y
+  const x2 = p2.x, y2 = p2.y
+  const x3 = p3.x, y3 = p3.y
+
+  const a1 = 2 * (x2 - x1)
+  const b1 = 2 * (y2 - y1)
+  const c1 = (x2 * x2 + y2 * y2) - (x1 * x1 + y1 * y1)
+
+  const a2 = 2 * (x3 - x2)
+  const b2 = 2 * (y3 - y2)
+  const c2 = (x3 * x3 + y3 * y3) - (x2 * x2 + y2 * y2)
+
+  const det = a1 * b2 - a2 * b1
+
+  if (Math.abs(det) < 1e-6) {
+    return [p2]
+  }
+
+  const x0 = (c1 * b2 - c2 * b1) / det
+  const y0 = (a1 * c2 - a2 * c1) / det
+  const R = Math.hypot(x1 - x0, y1 - y0)
+
+  const theta1 = Math.atan2(y1 - y0, x1 - x0)
+  const theta2 = Math.atan2(y2 - y0, x2 - x0)
+  const theta3 = Math.atan2(y3 - y0, x3 - x0)
+
+  let diff2 = (theta2 - theta1) % (2 * Math.PI)
+  if (diff2 < 0) diff2 += 2 * Math.PI
+
+  let diff3 = (theta3 - theta1) % (2 * Math.PI)
+  if (diff3 < 0) diff3 += 2 * Math.PI
+
+  const isCCW = diff2 < diff3
+  const deltaTheta = isCCW ? diff3 : (2 * Math.PI - diff3)
+
+  const arcLength = R * deltaTheta
+
+  if (arcLength <= 1e-6 || step <= 0) {
+    return [p2]
+  }
+
+  const numSteps = Math.max(2, Math.ceil(arcLength / step))
+  const result: RouteEditPoint[] = []
+
+  for (let k = 1; k < numSteps; k++) {
+    const ratio = k / numSteps
+    const angle = isCCW
+      ? theta1 + ratio * deltaTheta
+      : theta1 - ratio * deltaTheta
+
+    const px = x0 + R * Math.cos(angle)
+    const py = y0 + R * Math.sin(angle)
+    const pz = p1.z + ratio * (p3.z - p1.z)
+
+    result.push({
+      x: Number(px.toFixed(6)),
+      y: Number(py.toFixed(6)),
+      z: Number(pz.toFixed(6)),
+    })
+  }
+
+  if (result.length === 0) {
+    return [p2]
+  }
+
+  return result
 }
 
 const interpolateRouteEditPointsList = (points: RouteEditPoint[], step: number): RouteEditPoint[] => {
@@ -3450,15 +3590,39 @@ const handleRouteEditPlaneClick = (payload: { x: number; y: number; z: number; s
       return
     }
 
-    routeEditPoints.value = [
-      ...routeEditPoints.value,
-      {
-        x: Number(payload.x.toFixed(6)),
-        y: Number(payload.y.toFixed(6)),
-        z: Number(payload.z.toFixed(6)),
-        snappedIndex: payload.snappedIndex,
+    routeEditClickHistory.value.push({
+      pointsLen: routeEditPoints.value.length,
+      curveState: routeEditCurveState.value
+    })
+
+    const newPt = {
+      x: Number(payload.x.toFixed(6)),
+      y: Number(payload.y.toFixed(6)),
+      z: Number(payload.z.toFixed(6)),
+      snappedIndex: payload.snappedIndex,
+    }
+
+    if (routeEditDrawType.value === 'curve' && routeEditPoints.value.length >= 2) {
+      if (routeEditCurveState.value === 'idle') {
+        routeEditPoints.value = [...routeEditPoints.value, newPt]
+        routeEditCurveState.value = 'middle'
+      } else {
+        const p1 = routeEditPoints.value[routeEditPoints.value.length - 2]
+        const p2 = routeEditPoints.value[routeEditPoints.value.length - 1]
+        const p3 = newPt
+        const arc = generateCircularArcPoints(p1, p2, p3, routeEditStep.value)
+        routeEditPoints.value = [
+          ...routeEditPoints.value.slice(0, -1),
+          ...arc,
+          p3
+        ]
+        routeEditCurveState.value = 'idle'
       }
-    ]
+    } else {
+      routeEditPoints.value = [...routeEditPoints.value, newPt]
+      routeEditCurveState.value = 'idle'
+    }
+
     routeEditDirty.value = routeEditPoints.value.length > 0
     return
   }
@@ -3473,15 +3637,39 @@ const handleRouteEditPlaneClick = (payload: { x: number; y: number; z: number; s
     return
   }
 
-  routeEditDraftPoints.value = [
-    ...routeEditDraftPoints.value,
-    {
-      x: Number(payload.x.toFixed(6)),
-      y: Number(payload.y.toFixed(6)),
-      z: Number(payload.z.toFixed(6)),
-      snappedIndex: payload.snappedIndex,
+  routeEditDraftClickHistory.value.push({
+    pointsLen: routeEditDraftPoints.value.length,
+    curveState: routeEditCurveState.value
+  })
+
+  const newPt = {
+    x: Number(payload.x.toFixed(6)),
+    y: Number(payload.y.toFixed(6)),
+    z: Number(payload.z.toFixed(6)),
+    snappedIndex: payload.snappedIndex,
+  }
+
+  if (routeEditDrawType.value === 'curve' && routeEditDraftPoints.value.length >= 2) {
+    if (routeEditCurveState.value === 'idle') {
+      routeEditDraftPoints.value = [...routeEditDraftPoints.value, newPt]
+      routeEditCurveState.value = 'middle'
+    } else {
+      const p1 = routeEditDraftPoints.value[routeEditDraftPoints.value.length - 2]
+      const p2 = routeEditDraftPoints.value[routeEditDraftPoints.value.length - 1]
+      const p3 = newPt
+      const arc = generateCircularArcPoints(p1, p2, p3, routeEditStep.value)
+      routeEditDraftPoints.value = [
+        ...routeEditDraftPoints.value.slice(0, -1),
+        ...arc,
+        p3
+      ]
+      routeEditCurveState.value = 'idle'
     }
-  ]
+  } else {
+    routeEditDraftPoints.value = [...routeEditDraftPoints.value, newPt]
+    routeEditCurveState.value = 'idle'
+  }
+
   if (getRouteEditDraftSnappedEndpoints()) {
     void applyRouteEditDraft()
   }
@@ -3640,13 +3828,22 @@ const startRouteEditCreate = () => {
 
 const undoRouteEditCreatePoint = () => {
   if (!routeEditCreateMode.value) return
-  routeEditPoints.value = routeEditPoints.value.slice(0, -1)
+  if (routeEditClickHistory.value.length > 0) {
+    const hist = routeEditClickHistory.value.pop()!
+    routeEditPoints.value = routeEditPoints.value.slice(0, hist.pointsLen)
+    routeEditCurveState.value = hist.curveState
+  } else {
+    routeEditPoints.value = routeEditPoints.value.slice(0, -1)
+    routeEditCurveState.value = 'idle'
+  }
   routeEditDirty.value = routeEditPoints.value.length > 0
 }
 
 const clearRouteEditCreatePoints = () => {
   if (!routeEditCreateMode.value) return
   routeEditPoints.value = []
+  routeEditClickHistory.value = []
+  routeEditCurveState.value = 'idle'
   routeEditDirty.value = false
 }
 
@@ -3856,6 +4053,8 @@ const applyRouteEditDraft = async () => {
   }
 
   routeEditDraftPoints.value = []
+  routeEditDraftClickHistory.value = []
+  routeEditCurveState.value = 'idle'
   clearRouteEditSelection()
   routeEditDirty.value = true
   routeEditMode.value = 'pick'
@@ -3889,7 +4088,14 @@ const generateBezierCurvePoints = (
 
 const undoRouteEditOperation = async () => {
   if (routeEditDraftPoints.value.length > 0) {
-    routeEditDraftPoints.value = routeEditDraftPoints.value.slice(0, -1)
+    if (routeEditDraftClickHistory.value.length > 0) {
+      const hist = routeEditDraftClickHistory.value.pop()!
+      routeEditDraftPoints.value = routeEditDraftPoints.value.slice(0, hist.pointsLen)
+      routeEditCurveState.value = hist.curveState
+    } else {
+      routeEditDraftPoints.value = routeEditDraftPoints.value.slice(0, -1)
+      routeEditCurveState.value = 'idle'
+    }
     await applyRouteEditPreview()
     return
   }
@@ -6346,6 +6552,7 @@ const loadAndDrawNavGridMap = async (mapName?: string) => {
         if (idx >= tokens.length) break
         const v = parseInt(tokens[idx], 10)
         const c = Math.floor((v / maxVal) * 255)
+        
         const off = idx * 4
         imageData.data[off] = c
         imageData.data[off + 1] = c
@@ -6513,7 +6720,7 @@ const drawNavGridMapCanvas = () => {
     return
   }
   
-  if (currentNavTrajectoryPoints.value.length > 1) {
+  if (currentNavTrajectoryPoints.value.length > 1 && currentTab.value !== 'track_edit') {
     ctx.save()
     ctx.beginPath()
     currentNavTrajectoryPoints.value.forEach((p, index) => {
@@ -6528,38 +6735,40 @@ const drawNavGridMapCanvas = () => {
       }
     })
     ctx.strokeStyle = '#39b54a'
-    ctx.lineWidth = Math.max(1.0, 2.5 / zoom)
+    ctx.lineWidth = 2 / zoom
     ctx.stroke()
     ctx.restore()
   }
   
-  ctx.save()
-  const ox = -meta.originX / meta.resolution
-  const oy = mapH + meta.originY / meta.resolution
-  const rxOrigin = baseOffsetX + ox * baseScale
-  const ryOrigin = baseOffsetY + oy * baseScale
-  
-  ctx.translate(rxOrigin, ryOrigin)
-  ctx.scale(1 / zoom, 1 / zoom)
-  
-  ctx.beginPath()
-  ctx.arc(0, 0, 5, 0, Math.PI * 2)
-  ctx.fillStyle = '#ff3b30'
-  ctx.fill()
-  
-  ctx.font = 'bold 13px Arial'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'top'
-  const originText = '原点'
-  
-  ctx.strokeStyle = '#ffffff'
-  ctx.lineWidth = 3
-  ctx.strokeText(originText, 0, 8)
-  
-  ctx.fillStyle = '#ff3b30'
-  ctx.fillText(originText, 0, 8)
-  
-  ctx.restore()
+  if (currentTab.value !== 'track_edit') {
+    ctx.save()
+    const ox = -meta.originX / meta.resolution
+    const oy = mapH + meta.originY / meta.resolution
+    const rxOrigin = baseOffsetX + ox * baseScale
+    const ryOrigin = baseOffsetY + oy * baseScale
+    
+    ctx.translate(rxOrigin, ryOrigin)
+    ctx.scale(1 / zoom, 1 / zoom)
+    
+    ctx.beginPath()
+    ctx.arc(0, 0, 5, 0, Math.PI * 2)
+    ctx.fillStyle = '#ff3b30'
+    ctx.fill()
+    
+    ctx.font = 'bold 13px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    const originText = '原点'
+    
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 3
+    ctx.strokeText(originText, 0, 8)
+    
+    ctx.fillStyle = '#ff3b30'
+    ctx.fillText(originText, 0, 8)
+    
+    ctx.restore()
+  }
   
   const pose = robotStore.pose
   if (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y)) {
@@ -6661,6 +6870,8 @@ const drawNavGridMapCanvas = () => {
   ctx.restore()
 }
 
+
+
 // route_edit 轨迹叠加到栅格图：主线（绿）、draft（橙虚线）、选中段（橙）、关键点
 const drawRouteEditOnGrid = (
   ctx: CanvasRenderingContext2D,
@@ -6682,19 +6893,22 @@ const drawRouteEditOnGrid = (
   }
 
   ctx.save()
-  // 主轨迹：实线绿色
-  if (points.length > 1) {
-    ctx.beginPath()
-    points.forEach((p, i) => {
-      const sp = toCanvas(p)
-      if (i === 0) ctx.moveTo(sp.x, sp.y)
-      else ctx.lineTo(sp.x, sp.y)
-    })
-    ctx.strokeStyle = '#39b54a'
-    ctx.lineWidth = Math.max(1.5, 2.5 / zoom)
-    ctx.lineJoin = 'round'
-    ctx.stroke()
-  }
+  // 主轨迹：使用 breaks 拆分段绘制以支持删除选段后的断开效果
+  const pointSegments = splitRouteEditPointsByBreaks(points, routeEditBreaks.value)
+  pointSegments.forEach(seg => {
+    if (seg.length > 1) {
+      ctx.beginPath()
+      seg.forEach((p, i) => {
+        const sp = toCanvas(p)
+        if (i === 0) ctx.moveTo(sp.x, sp.y)
+        else ctx.lineTo(sp.x, sp.y)
+      })
+      ctx.strokeStyle = '#39b54a'
+      ctx.lineWidth = 2 / zoom
+      ctx.lineJoin = 'round'
+      ctx.stroke()
+    }
+  })
 
   // draft 轨迹：橙色虚线
   if (draftPoints.length > 1) {
@@ -6705,7 +6919,7 @@ const drawRouteEditOnGrid = (
       else ctx.lineTo(sp.x, sp.y)
     })
     ctx.strokeStyle = '#ff9500'
-    ctx.lineWidth = Math.max(1.5, 2.5 / zoom)
+    ctx.lineWidth = 2 / zoom
     ctx.setLineDash([6 / zoom, 4 / zoom])
     ctx.stroke()
     ctx.setLineDash([])
@@ -6720,33 +6934,45 @@ const drawRouteEditOnGrid = (
       else ctx.lineTo(sp.x, sp.y)
     }
     ctx.strokeStyle = '#ff9500'
-    ctx.lineWidth = Math.max(2.0, 5 / zoom)
+    ctx.lineWidth = 3 / zoom
     ctx.lineCap = 'round'
     ctx.stroke()
   }
 
-  // 主轨迹关键点（绿色圆点，区分起点/终点）
-  if (points.length > 0) {
-    points.forEach((p, i) => {
-      const sp = toCanvas(p)
-      ctx.beginPath()
-      ctx.arc(sp.x, sp.y, Math.max(2.5, 4 / zoom), 0, Math.PI * 2)
-      ctx.fillStyle = (i === 0 || i === points.length - 1) ? '#ff9500' : '#39b54a'
-      ctx.fill()
-    })
+  // 主轨迹关键点 (仅在绘制或新增模式下画终点，且去掉起点的橙色标记点)
+  if (points.length > 0 && (routeEditMode.value === 'draw' || routeEditCreateMode.value)) {
+    const sp = toCanvas(points[points.length - 1])
+    ctx.beginPath()
+    ctx.arc(sp.x, sp.y, Math.max(2.5, 4 / zoom), 0, Math.PI * 2)
+    ctx.fillStyle = '#ff9500'
+    ctx.fill()
   }
 
-  // draft 关键点（橙色描边）
+  // draft 关键点 (仅画终点)
   if (draftPoints.length > 0) {
-    draftPoints.forEach((p) => {
-      const sp = toCanvas(p)
-      ctx.beginPath()
-      ctx.arc(sp.x, sp.y, Math.max(2.0, 3 / zoom), 0, Math.PI * 2)
-      ctx.fillStyle = '#ffffff'
-      ctx.strokeStyle = '#ff9500'
-      ctx.lineWidth = Math.max(1.0, 1.5 / zoom)
-      ctx.fill()
-      ctx.stroke()
+    const sp = toCanvas(draftPoints[draftPoints.length - 1])
+    ctx.beginPath()
+    ctx.arc(sp.x, sp.y, Math.max(2.0, 3 / zoom), 0, Math.PI * 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.strokeStyle = '#ff9500'
+    ctx.lineWidth = 1 / zoom
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  // 选段模式下的点击位置标记 (Canvas)
+  if (routeEditMode.value === 'pick') {
+    [routeEditSelectionStart.value, routeEditSelectionEnd.value].forEach((idx) => {
+      if (isValidRouteEditIndex(idx) && idx < points.length) {
+        const sp = toCanvas(points[idx])
+        ctx.beginPath()
+        ctx.arc(sp.x, sp.y, Math.max(4.0, 7 / zoom), 0, Math.PI * 2)
+        ctx.fillStyle = '#ff9500'
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 1.5 / zoom
+        ctx.fill()
+        ctx.stroke()
+      }
     })
   }
 
@@ -11171,7 +11397,7 @@ const handleDelete = (item: any) => {
 
 .track-edit-mode-hint {
   position: absolute;
-  left: 16px;
+  right: 16px;
   bottom: 16px;
   z-index: 2;
   color: #ffcf7a;
