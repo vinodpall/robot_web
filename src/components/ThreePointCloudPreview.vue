@@ -4,6 +4,16 @@
     <div v-if="loading" class="three-pointcloud-overlay">{{ loadingText || '点云加载中...' }}</div>
     <div v-else-if="error" class="three-pointcloud-overlay error">{{ error }}</div>
     <div v-else-if="!hasDisplayData" class="three-pointcloud-overlay">暂无点云数据</div>
+    
+    <!-- Hover Tooltip -->
+    <div 
+      v-show="tooltip.visible" 
+      class="pcd-hover-tooltip"
+      :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+    >
+      <div class="tooltip-title">{{ tooltip.name }}</div>
+      <div class="tooltip-type" :class="'type-' + tooltip.type">{{ tooltip.typeLabel }}</div>
+    </div>
   </div>
 </template>
 
@@ -39,6 +49,13 @@ const props = defineProps<{
   snapPixelRadius?: number
   snapPriorityIndex?: number | null
   robotType?: string
+  featureAreas?: Array<{
+    name: string
+    type: string
+    geometry: string
+    coordinates: Array<[number, number]>
+  }>
+  showFeatureAreas?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -61,6 +78,15 @@ const controlsRef = shallowRef<OrbitControls | null>(null)
 const dynamicGroupRef = shallowRef<THREE.Group | null>(null)
 const robotGroupRef = shallowRef<THREE.Group | null>(null)
 let resizeObserver: ResizeObserver | null = null
+
+const tooltip = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  name: '',
+  type: '',
+  typeLabel: '',
+})
 let animationFrameId = 0
 let renderLoopStarted = false
 let pendingStartTimer = 0
@@ -672,6 +698,9 @@ const disposeGroupResources = (group: THREE.Group) => {
 
     const spriteMaterial = sprite.material as THREE.SpriteMaterial | undefined
     spriteMaterial?.map?.dispose()
+
+    const meshMaterial = mesh.material as THREE.MeshBasicMaterial | undefined
+    meshMaterial?.map?.dispose()
   })
 }
 
@@ -736,6 +765,243 @@ const updateLabelScale = () => {
     const clampedHeight = Math.min(0.085, Math.max(minWorldHeight, worldHeight))
     sprite.scale.set(clampedHeight * aspect, clampedHeight, 1)
   }
+}
+
+const createPatternTexture = (type: string, maxRange: number) => {
+  const canvas = document.createElement('canvas')
+  const size = 64
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  ctx.clearRect(0, 0, size, size)
+
+  let strokeColor = '#ffffff'
+  let fillColor = 'rgba(255, 255, 255, 0.22)'
+  let drawPattern = (c: CanvasRenderingContext2D) => {}
+
+  if (type === 'forbidden') {
+    strokeColor = '#ef4444'
+    fillColor = 'rgba(239, 68, 68, 0.22)'
+    drawPattern = (c) => {
+      c.beginPath()
+      c.moveTo(0, size); c.lineTo(size, 0)
+      c.stroke()
+    }
+  } else if (type === 'stairs') {
+    strokeColor = '#f59e0b'
+    fillColor = 'rgba(245, 158, 11, 0.22)'
+    drawPattern = (c) => {
+      c.beginPath()
+      c.moveTo(0, size / 2); c.lineTo(size, size / 2)
+      c.stroke()
+    }
+  } else if (type === 'slope') {
+    strokeColor = '#8b5cf6'
+    fillColor = 'rgba(139, 92, 246, 0.22)'
+    drawPattern = (c) => {
+      c.beginPath()
+      c.moveTo(size / 2, 0); c.lineTo(size / 2, size)
+      c.stroke()
+    }
+  } else if (type === 'narrow') {
+    strokeColor = '#06b6d4'
+    fillColor = 'rgba(6, 182, 212, 0.22)'
+    drawPattern = (c) => {
+      c.beginPath()
+      c.moveTo(0, size / 2); c.lineTo(size, size / 2)
+      c.moveTo(size / 2, 0); c.lineTo(size / 2, size)
+      c.stroke()
+    }
+  } else if (type === 'grass') {
+    strokeColor = '#22c55e'
+    fillColor = 'rgba(34, 197, 94, 0.22)'
+    drawPattern = (c) => {
+      c.beginPath()
+      c.moveTo(0, 0); c.lineTo(size, size)
+      c.moveTo(0, size); c.lineTo(size, 0)
+      c.stroke()
+    }
+  } else {
+    return null
+  }
+
+  ctx.fillStyle = fillColor
+  ctx.fillRect(0, 0, size, size)
+
+  ctx.strokeStyle = strokeColor
+  ctx.lineWidth = 4
+  drawPattern(ctx)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.anisotropy = 4
+  const density = 0.55
+  texture.repeat.set(maxRange * density, maxRange * density)
+  texture.needsUpdate = true
+  
+  return texture
+}
+
+const createFeatureAreasGroup = () => {
+  if (!props.featureAreas || !props.featureAreas.length) return null
+
+  const group = new THREE.Group()
+  const { centerX, centerY, centerZ, maxRange } = props.normalizationParams
+  if (maxRange <= 1e-6) return null
+
+  const oz = props.navigationOrigin ? (props.navigationOrigin.z || 0) : 0
+  const normZ = (oz - centerZ) / maxRange + 0.002 / maxRange
+
+  const colorMap: Record<string, string> = {
+    forbidden: '#ef4444',
+    stairs: '#f59e0b',
+    slope: '#8b5cf6',
+    narrow: '#06b6d4',
+    grass: '#22c55e',
+  }
+
+  const textColorMap: Record<string, string> = {
+    forbidden: '#ff6767',
+    stairs: '#ffb834',
+    slope: '#b18cff',
+    narrow: '#3be5ff',
+    grass: '#5ef093',
+  }
+
+  const borderColorMap: Record<string, string> = {
+    forbidden: 'rgba(255, 84, 84, 0.7)',
+    stairs: 'rgba(255, 184, 52, 0.7)',
+    slope: 'rgba(177, 140, 255, 0.7)',
+    narrow: 'rgba(59, 229, 255, 0.7)',
+    grass: 'rgba(94, 240, 147, 0.7)',
+  }
+
+  props.featureAreas.forEach((area) => {
+    if (!area.coordinates || area.coordinates.length < 2) return
+
+    const color = colorMap[area.type] || '#ffffff'
+    const textColor = textColorMap[area.type] || '#ffffff'
+    const borderColor = borderColorMap[area.type] || 'rgba(255,255,255,0.7)'
+
+    const points3D: THREE.Vector3[] = area.coordinates.map(([x, y]) => {
+      const normX = (x - centerX) / maxRange
+      const normY = (y - centerY) / maxRange
+      return toWorldPosition(normX, normY, normZ)
+    })
+
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points3D)
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.85,
+    })
+
+    const typeLabelMap: Record<string, string> = {
+      forbidden: '禁行区',
+      stairs: '楼梯',
+      slope: '斜坡',
+      narrow: '窄通道',
+      grass: '草地',
+    }
+
+    let line: THREE.Line | THREE.LineLoop
+    if (area.geometry === 'area' && area.coordinates.length >= 3) {
+      line = new THREE.LineLoop(lineGeometry, lineMaterial)
+    } else {
+      line = new THREE.Line(lineGeometry, lineMaterial)
+    }
+    line.renderOrder = 40
+    line.userData = {
+      isFeatureArea: true,
+      name: area.name,
+      type: area.type,
+      typeLabel: typeLabelMap[area.type] || area.type,
+    }
+    group.add(line)
+
+    if (area.geometry === 'area' && area.coordinates.length >= 3) {
+      const shape = new THREE.Shape()
+      area.coordinates.forEach(([x, y], idx) => {
+        const normX = (x - centerX) / maxRange
+        const normY = (y - centerY) / maxRange
+        if (idx === 0) {
+          shape.moveTo(normX, normY)
+        } else {
+          shape.lineTo(normX, normY)
+        }
+      })
+      shape.closePath()
+
+      const shapeGeometry = new THREE.ShapeGeometry(shape)
+      const texture = createPatternTexture(area.type, maxRange)
+      let shapeMaterial: THREE.Material
+      if (texture) {
+        shapeMaterial = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        })
+      } else {
+        shapeMaterial = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.18,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        })
+      }
+      const mesh = new THREE.Mesh(shapeGeometry, shapeMaterial)
+      mesh.position.set(0, normZ + 0.0005, 0)
+      mesh.rotation.x = -Math.PI / 2
+      mesh.renderOrder = 39
+      mesh.userData = {
+        isFeatureArea: true,
+        name: area.name,
+        type: area.type,
+        typeLabel: typeLabelMap[area.type] || area.type,
+      }
+      group.add(mesh)
+    }
+
+    if (area.name) {
+      let sumX = 0
+      let sumY = 0
+      area.coordinates.forEach(([x, y]) => {
+        sumX += x
+        sumY += y
+      })
+      const centX = sumX / area.coordinates.length
+      const centY = sumY / area.coordinates.length
+
+      const normCentX = (centX - centerX) / maxRange
+      const normCentY = (centY - centerY) / maxRange
+      const labelPos = toWorldPosition(normCentX, normCentY, normZ)
+      labelPos.y += 0.015
+
+      const label = createLabelSprite(area.name, {
+        textColor,
+        borderColor,
+        backgroundColor: 'rgba(5, 15, 35, 0.65)',
+        heightPx: UNIFIED_LABEL_HEIGHT_PX,
+        fontPx: UNIFIED_LABEL_FONT_PX,
+        paddingX: UNIFIED_LABEL_PADDING_X,
+        paddingY: UNIFIED_LABEL_PADDING_Y,
+        strokeColor: 'rgba(5, 15, 35, 0.8)',
+        strokeWidth: 1.2,
+      })
+
+      if (label) {
+        label.position.copy(labelPos)
+        group.add(label)
+      }
+    }
+  })
+
+  return group
 }
 
 const rebuildSceneContent = () => {
@@ -804,6 +1070,11 @@ const rebuildSceneContent = () => {
 
   const origin = createOriginMarker()
   if (origin) group.add(origin)
+
+  if (props.showFeatureAreas && props.featureAreas?.length) {
+    const featureAreasGroup = createFeatureAreasGroup()
+    if (featureAreasGroup) group.add(featureAreasGroup)
+  }
 
   scene.add(group)
   dynamicGroupRef.value = group
@@ -963,6 +1234,84 @@ const projectPlaneClick = (clientX: number, clientY: number) => {
   }
 }
 
+const handlePointerMove = (event: PointerEvent) => {
+  if (!props.showFeatureAreas || !props.featureAreas?.length) {
+    tooltip.value.visible = false
+    return
+  }
+
+  const camera = cameraRef.value
+  const renderer = rendererRef.value
+  const scene = sceneRef.value
+  if (!camera || !renderer || !scene) {
+    tooltip.value.visible = false
+    return
+  }
+
+  const rect = renderer.domElement.getBoundingClientRect()
+  if (!rect.width || !rect.height) {
+    tooltip.value.visible = false
+    return
+  }
+
+  const ndc = new THREE.Vector2(
+    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    -(((event.clientY - rect.top) / rect.height) * 2 - 1)
+  )
+
+  const raycaster = new THREE.Raycaster()
+  raycaster.params.Line = { threshold: 0.02 }
+  raycaster.setFromCamera(ndc, camera)
+
+  const dynamicGroup = dynamicGroupRef.value
+  if (!dynamicGroup) {
+    tooltip.value.visible = false
+    return
+  }
+
+  const candidates: THREE.Object3D[] = []
+  dynamicGroup.traverse((object) => {
+    if (
+      (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.LineLoop) &&
+      object.userData?.isFeatureArea
+    ) {
+      candidates.push(object)
+    }
+  })
+
+  if (candidates.length === 0) {
+    tooltip.value.visible = false
+    return
+  }
+
+  const intersects = raycaster.intersectObjects(candidates, true)
+  if (intersects.length > 0) {
+    const hitObj = intersects[0].object
+    const data = hitObj.userData
+    
+    let x = event.clientX - rect.left + 15
+    let y = event.clientY - rect.top + 15
+    
+    const tooltipWidth = 140
+    const tooltipHeight = 55
+    if (x + tooltipWidth > rect.width) {
+      x = event.clientX - rect.left - tooltipWidth - 10
+    }
+    if (y + tooltipHeight > rect.height) {
+      y = event.clientY - rect.top - tooltipHeight - 10
+    }
+    
+    tooltip.value.x = x
+    tooltip.value.y = y
+    tooltip.value.name = data.name
+    tooltip.value.type = data.type
+    tooltip.value.typeLabel = data.typeLabel
+    tooltip.value.visible = true
+  } else {
+    tooltip.value.visible = false
+  }
+}
+
 let interactionPointerDown: { x: number; y: number } | null = null
 
 const handleInteractionPointerDown = (event: PointerEvent) => {
@@ -1088,7 +1437,7 @@ const ensureRendererReady = (retryCount = 16) => {
 }
 
 watch(
-  () => [props.points, props.trajectoryPoints, props.normalizationParams, props.selectedTrajectoryRange, props.draftPoints, props.drawPointMarkers, props.trajectoryBreaks] as const,
+  () => [props.points, props.trajectoryPoints, props.normalizationParams, props.selectedTrajectoryRange, props.draftPoints, props.drawPointMarkers, props.trajectoryBreaks, props.featureAreas, props.showFeatureAreas] as const,
   () => {
     rebuildSceneContent()
     rebuildRobotObject()
@@ -1160,6 +1509,7 @@ onMounted(() => {
   container.appendChild(renderer.domElement)
   renderer.domElement.addEventListener('pointerdown', handleInteractionPointerDown, false)
   renderer.domElement.addEventListener('pointerup', handleInteractionPointerUp, false)
+  renderer.domElement.addEventListener('pointermove', handlePointerMove, false)
 
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
@@ -1243,6 +1593,7 @@ onBeforeUnmount(() => {
   if (renderer) {
     renderer.domElement.removeEventListener('pointerdown', handleInteractionPointerDown, false)
     renderer.domElement.removeEventListener('pointerup', handleInteractionPointerUp, false)
+    renderer.domElement.removeEventListener('pointermove', handlePointerMove, false)
   }
   if (renderer && contextLostHandler) {
     renderer.domElement.removeEventListener('webglcontextlost', contextLostHandler, false)
@@ -1303,4 +1654,31 @@ defineExpose({
   background: rgba(94, 17, 17, 0.45);
 }
 
+.pcd-hover-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(5, 15, 35, 0.88);
+  border: 1px solid rgba(89, 192, 252, 0.45);
+  border-radius: 4px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 12px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tooltip-title {
+  font-weight: 600;
+  color: #d7efff;
+}
+.tooltip-type {
+  font-size: 11px;
+}
+.tooltip-type.type-forbidden { color: #ef4444; }
+.tooltip-type.type-stairs { color: #f59e0b; }
+.tooltip-type.type-slope { color: #8b5cf6; }
+.tooltip-type.type-narrow { color: #06b6d4; }
+.tooltip-type.type-grass { color: #22c55e; }
 </style>

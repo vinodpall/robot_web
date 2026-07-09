@@ -439,6 +439,8 @@ const formatTime = (time: string | null | undefined) => {
   if (!time) return '--'
   const date = new Date(time)
   if (Number.isNaN(date.getTime())) return '--'
+  // Add 8 hours (8 * 60 * 60 * 1000 ms)
+  date.setTime(date.getTime() + 8 * 60 * 60 * 1000)
   const pad = (n: number) => n.toString().padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }

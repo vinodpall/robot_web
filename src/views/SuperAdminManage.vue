@@ -641,6 +641,27 @@ onMounted(() => {
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.3) rgba(10, 42, 58, 0.5);
+}
+
+.module-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+.module-list::-webkit-scrollbar-track {
+  background: rgba(10, 42, 58, 0.5);
+}
+
+.module-list::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 3px;
+}
+
+.module-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
 }
 
 .module-item {
@@ -678,6 +699,27 @@ onMounted(() => {
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.3) rgba(10, 42, 58, 0.5);
+}
+
+.permission-cards::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+.permission-cards::-webkit-scrollbar-track {
+  background: rgba(10, 42, 58, 0.5);
+}
+
+.permission-cards::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 3px;
+}
+
+.permission-cards::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
 }
 
 .page-card {

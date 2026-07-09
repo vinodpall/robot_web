@@ -89,6 +89,9 @@ export const useRobotStore = defineStore('robot', () => {
   // ===== multitask_status 多任务组运行状态 =====
   const multitaskStatus = ref<MultiTaskStatusData | null>(null)
 
+  // ===== 实时2D激光雷达扫描数据 =====
+  const currentScan = ref<{ timestamp: number; data: [number, number][] } | null>(null)
+
   // ===== 停障避障报警（遇到障碍物连续3次） =====
   const globalObstacleAlertActive = ref(false)
   let consecutiveObstacleCount = 0
@@ -239,6 +242,10 @@ export const useRobotStore = defineStore('robot', () => {
     multitaskStatus.value = data
   }
 
+  const setCurrentScan = (data: { timestamp: number; data: [number, number][] }) => {
+    currentScan.value = data
+  }
+
   const setRealtimeSensorData = (payload: any) => {
     if (!payload || typeof payload !== 'object') return
     Object.keys(payload).forEach(key => {
@@ -274,6 +281,7 @@ export const useRobotStore = defineStore('robot', () => {
     taskStatus.value = null
     taskProgress.value = null
     multitaskStatus.value = null
+    currentScan.value = null
     realtimeSensorValues.value = {}
     realtimeSensorUnits.value = {}
     gpsMessage.value = null
@@ -487,6 +495,7 @@ export const useRobotStore = defineStore('robot', () => {
     taskProgress,
     multitaskStatus,
     globalObstacleAlertActive,
+    currentScan,
     // mutations
     setOnlineStatus,
     setPose,
@@ -516,6 +525,7 @@ export const useRobotStore = defineStore('robot', () => {
     setTaskProgress,
     setMultitaskStatus,
     setRealtimeSensorData,
+    setCurrentScan,
     resetRuntimeState,
     // computed
     batteryLevel,

@@ -1,5 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { usePermissionStore } from '../stores/permission'
+import { apiClient } from '../api/config'
+import { authApi } from '../api/services'
 
 function extractPermissionsFromUser(user: any): string[] {
   const codes: string[] = []
@@ -185,7 +187,41 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
+  // 1. 如果 URL 中携带了 token 参数，先执行免登逻辑
+  const urlToken = to.query.token as string
+  if (urlToken) {
+    try {
+      apiClient.setAuthToken(urlToken)
+      localStorage.setItem('token', urlToken)
+
+      // 请求后端获取当前用户信息并保存
+      const userResponse = await authApi.getCurrentUser()
+      const userData = userResponse.data || userResponse
+
+      if (userData) {
+        localStorage.setItem('user', JSON.stringify(userData))
+        
+        const permissionStore = usePermissionStore()
+        permissionStore.setSuperuser(isSuperAdminUser(userData))
+        permissionStore.setUserPermissions(extractPermissionsFromUser(userData))
+      }
+
+      // 清除 URL 中的 token 参数，保持地址栏美观与安全
+      const query = { ...to.query }
+      delete query.token
+      next({ path: to.path, query, replace: true })
+      return
+    } catch (err) {
+      console.error('URL Token 自动登录失败:', err)
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      apiClient.clearAuthToken()
+      next('/login')
+      return
+    }
+  }
+
   const requiresAuth = to.matched.some(record => record.meta?.requiresAuth)
   const token = localStorage.getItem('token')
 

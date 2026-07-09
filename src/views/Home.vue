@@ -1,6 +1,6 @@
 
 <template>
-  <div class="home-container">
+  <div class="home-container" :class="{ 'has-fullscreen-child': isPointCloudFullscreen }">
     <!-- 左侧状态栏 -->
     <div class="left-box">
       <!-- 可见光视频 -->
@@ -226,6 +226,8 @@
               :robot-pose="robotStore.pose"
               :robot-mesh="arrowMesh"
               :robot-type="selectedVehicleType"
+              :feature-areas="featureAreas3D"
+              :show-feature-areas="showFeatureAreas"
             />
           </div>
           <div class="pointcloud-view grid-view" v-show="currentViewType === 'grid'">
@@ -243,6 +245,51 @@
               ></canvas>
               <div v-if="gridMapLoading" class="grid-map-overlay">栅格地图加载中...</div>
               <div v-else-if="gridMapError" class="grid-map-overlay error">{{ gridMapError }}</div>
+              
+              <!-- 区域图例 Legend Overlay -->
+              <div v-if="showFeatureAreas && featureAreas3D.length > 0" class="home-grid-legend">
+                <div class="legend-list">
+                  <div v-for="type in featureAreaTypes" :key="type.value" class="legend-item">
+                    <svg class="legend-item-icon" width="20" height="10" viewBox="0 0 20 10">
+                      <defs>
+                        <pattern :id="`home-pattern-legend-${type.value}`" width="5" height="5" patternUnits="userSpaceOnUse">
+                          <path v-if="type.value === 'forbidden'" d="M0,5 L5,0" stroke="#ef4444" stroke-width="1" fill="none" />
+                          <path v-else-if="type.value === 'stairs'" d="M0,2.5 H5" stroke="#f59e0b" stroke-width="1" fill="none" />
+                          <path v-else-if="type.value === 'slope'" d="M2.5,0 V5" stroke="#8b5cf6" stroke-width="1" fill="none" />
+                          <path v-else-if="type.value === 'narrow'" d="M0,2.5 H5 M2.5,0 V5" stroke="#06b6d4" stroke-width="0.9" fill="none" />
+                          <path v-else-if="type.value === 'grass'" d="M0,0 L5,5 M0,5 L5,0" stroke="#22c55e" stroke-width="0.9" fill="none" />
+                        </pattern>
+                      </defs>
+                      <rect width="20" height="10" rx="2" ry="2" :class="[`feature-area-${type.value}`]" fill-opacity="0.15" stroke="none" />
+                      <rect width="20" height="10" rx="2" ry="2" :class="['feature-area-shape', `feature-area-${type.value}`]" :style="{ fill: `url(#home-pattern-legend-${type.value})` }" stroke-width="1.5" />
+                    </svg>
+                    <span class="legend-item-label">{{ type.label }}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 实时点云开关按钮 -->
+              <button 
+                v-if="!gridMapLoading && !gridMapError" 
+                class="grid-map-realtime-btn"
+                :class="{ active: showRealtimeScan }"
+                @click.stop="showRealtimeScan = !showRealtimeScan"
+                title="实时点云开关"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z" stroke-dasharray="2 2"/>
+                  <path d="M12 3v18" stroke-dasharray="2 2"/>
+                  <path d="M12 12L4 7.5" stroke-dasharray="2 2"/>
+                  <path d="M12 12l8-4.5" stroke-dasharray="2 2"/>
+                  <circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="4" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="20" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="4" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="20" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="12" cy="21" r="1.5" fill="currentColor" stroke="none"/>
+                </svg>
+              </button>
               
               <!-- 任务点悬停提示 -->
               <div 
@@ -354,6 +401,18 @@
 
           <!-- 工具按鈕组 -->
           <div class="pcd-btn-group">
+            <button 
+              class="pcd-tool-btn" 
+              :class="{ active: showFeatureAreas }" 
+              @click.stop="showFeatureAreas = !showFeatureAreas" 
+              title="功能区开关"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+            </button>
             <button class="pcd-tool-btn" @click.stop="centerToRobot" title="定位机器人">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
@@ -2120,6 +2179,194 @@ const togglePointCloudFullscreen = () => {
   isPointCloudFullscreen.value = !isPointCloudFullscreen.value
 }
 
+const FEATURE_AREA_FILE_NAME = 'task.json'
+const featureAreaTypeCodeMap: Record<string, number> = {
+  forbidden: 0,
+  stairs: 1,
+  slope: 2,
+  narrow: 3,
+  grass: 4,
+}
+const featureAreaTypeByCode = new Map<number, string>(
+  Object.entries(featureAreaTypeCodeMap).map(([type, code]) => [code, type])
+)
+
+const featureAreas3D = ref<Array<{
+  name: string
+  type: string
+  geometry: string
+  coordinates: Array<[number, number]>
+}>>([])
+
+const showFeatureAreas = ref(localStorage.getItem('show_feature_areas') !== 'false')
+
+watch(showFeatureAreas, (val) => {
+  localStorage.setItem('show_feature_areas', String(val))
+})
+
+const parseTaskJsonCoordinates = (rawCoordinates: unknown): Array<[number, number]> => {
+  if (!Array.isArray(rawCoordinates)) return []
+  return rawCoordinates
+    .map((point: any) => {
+      if (!Array.isArray(point) || point.length < 2) return null
+      const x = Number(point[0])
+      const y = Number(point[1])
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+      return [x, y] as [number, number]
+    })
+    .filter((point): point is [number, number] => !!point)
+}
+
+const normalizeTaskShape = (shape: unknown): 'area' | 'line' => {
+  return String(shape || '').toLowerCase() === 'polyline' ? 'line' : 'area'
+}
+
+const loadFeatureAreasForMap = async (mapName: string) => {
+  if (!mapName) {
+    featureAreas3D.value = []
+    return
+  }
+
+  try {
+    let blob = await getMapFile(mapName, FEATURE_AREA_FILE_NAME)
+    if (!blob || blob.size === 0) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        const downloadedBlob = await mapFileApi.downloadMapFile(robotId, mapName, FEATURE_AREA_FILE_NAME, true)
+        if (downloadedBlob) {
+          await saveMapFile(mapName, FEATURE_AREA_FILE_NAME, downloadedBlob)
+          blob = downloadedBlob
+        }
+      }
+    }
+
+    if (!blob || blob.size === 0) {
+      featureAreas3D.value = []
+      return
+    }
+
+    const text = await blob.text()
+    if (!text || text.trim() === '') {
+      featureAreas3D.value = []
+      return
+    }
+    const parsed = JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      featureAreas3D.value = []
+      return
+    }
+
+    const areas: Array<{
+      name: string
+      type: string
+      geometry: string
+      coordinates: Array<[number, number]>
+    }> = []
+
+    const typeLabelMap: Record<string, string> = {
+      forbidden: '禁行区',
+      stairs: '楼梯',
+      slope: '斜坡',
+      narrow: '窄通道',
+      grass: '草地',
+    }
+
+    Object.entries(parsed).forEach(([name, entry]: [string, any], index) => {
+      const code = Number(entry?.type)
+      const type = featureAreaTypeByCode.get(code) || 'forbidden'
+      const geometry = normalizeTaskShape(entry?.area?.shape)
+      const coordinates = parseTaskJsonCoordinates(entry?.area?.coordinates)
+      if (coordinates.length < 2) return
+
+      const defaultName = `${geometry === 'line' ? '线段' : '区域'}-${typeLabelMap[type] || type} ${index + 1}`
+      areas.push({
+        name: String(name || defaultName),
+        type,
+        geometry,
+        coordinates,
+      })
+    })
+
+    featureAreas3D.value = areas
+  } catch (error) {
+    console.error('加载首页点云图功能区失败:', error)
+    featureAreas3D.value = []
+  }
+}
+
+const featureAreaTypes = [
+  { value: 'forbidden', label: '禁行区' },
+  { value: 'stairs', label: '楼梯' },
+  { value: 'slope', label: '斜坡' },
+  { value: 'narrow', label: '窄通道' },
+  { value: 'grass', label: '草地' },
+]
+
+const gridPatternCache: Record<string, CanvasPattern | null> = {}
+
+const getGridPattern = (ctx: CanvasRenderingContext2D, type: string): CanvasPattern | null => {
+  if (gridPatternCache[type]) return gridPatternCache[type]
+  
+  const canvas = document.createElement('canvas')
+  canvas.width = 8
+  canvas.height = 8
+  const pCtx = canvas.getContext('2d')
+  if (!pCtx) return null
+  
+  if (type === 'forbidden') {
+    pCtx.strokeStyle = '#ef4444'
+    pCtx.lineWidth = 1.2
+    pCtx.beginPath()
+    pCtx.moveTo(0, 8); pCtx.lineTo(8, 0)
+    pCtx.stroke()
+  } else if (type === 'stairs') {
+    pCtx.strokeStyle = '#f59e0b'
+    pCtx.lineWidth = 1.2
+    pCtx.beginPath()
+    pCtx.moveTo(0, 4); pCtx.lineTo(8, 4)
+    pCtx.stroke()
+  } else if (type === 'slope') {
+    pCtx.strokeStyle = '#8b5cf6'
+    pCtx.lineWidth = 1.2
+    pCtx.beginPath()
+    pCtx.moveTo(4, 0); pCtx.lineTo(4, 8)
+    pCtx.stroke()
+  } else if (type === 'narrow') {
+    pCtx.strokeStyle = '#06b6d4'
+    pCtx.lineWidth = 1.0
+    pCtx.beginPath()
+    pCtx.moveTo(0, 4); pCtx.lineTo(8, 4)
+    pCtx.moveTo(4, 0); pCtx.lineTo(4, 8)
+    pCtx.stroke()
+  } else if (type === 'grass') {
+    pCtx.strokeStyle = '#22c55e'
+    pCtx.lineWidth = 1.0
+    pCtx.beginPath()
+    pCtx.moveTo(0, 0); pCtx.lineTo(8, 8)
+    pCtx.moveTo(0, 8); pCtx.lineTo(8, 0)
+    pCtx.stroke()
+  }
+  
+  const pattern = ctx.createPattern(canvas, 'repeat')
+  gridPatternCache[type] = pattern
+  return pattern
+}
+
+const mapCoordinateToCanvasPoint = (mx: number, my: number): { x: number; y: number } => {
+  const meta = gridMapMeta.value
+  const mapH = gridMapHeight.value
+  if (!meta || mapH <= 0) return { x: mx, y: my }
+  
+  return {
+    x: (mx - meta.originX) / meta.resolution,
+    y: mapH - (my - meta.originY) / meta.resolution,
+  }
+}
+
+watch([showFeatureAreas, featureAreas3D], () => {
+  drawGridMapCanvas()
+})
+
 // 将视图居中到机器人当前位置
 const centerToRobot = () => {
   if (currentViewType.value === 'map') {
@@ -3286,6 +3533,7 @@ const gridMapContainerRef = ref<HTMLDivElement | null>(null)
 const gridMapLoading = ref(false)
 const gridMapError = ref('')
 const gridMapMeta = ref<{ resolution: number; originX: number; originY: number } | null>(null)
+const showRealtimeScan = ref(false)
 const gridMapWidth = ref(0)
 const gridMapHeight = ref(0)
 const gridMapOffscreenCanvas = shallowRef<HTMLCanvasElement | null>(null)
@@ -3751,6 +3999,148 @@ const drawGridMapCanvas = () => {
     ctx.fillStyle = '#00a0e9'
     ctx.fillText(labelText, 0, 16)
     
+    ctx.restore()
+  }
+
+  // 5. 绘制实时激光雷达扫描数据 (2D点云)
+  if (showRealtimeScan.value && robotStore.currentScan && robotStore.currentScan.data) {
+    const scanPoints = robotStore.currentScan.data
+    const pose = robotStore.pose
+    
+    // 检查点云是否在地图坐标系中，若否则进行局部到全局转换
+    let isWorldCoords = false
+    if (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y) && scanPoints.length > 0) {
+      const pt = scanPoints[0]
+      const distToRobot = Math.sqrt((pt[0] - pose.x) ** 2 + (pt[1] - pose.y) ** 2)
+      const distToOrigin = Math.sqrt(pt[0] ** 2 + pt[1] ** 2)
+      
+      // Heuristic: If points are far from origin but close to robot, they are world coordinates
+      if (distToOrigin > 15 && distToRobot < 15) {
+        isWorldCoords = true
+      }
+    }
+
+    ctx.save()
+    ctx.fillStyle = '#ff0055' // Vibrant neon pink/red
+    
+    const angle = pose && typeof pose.theta === 'number' && Number.isFinite(pose.theta) ? pose.theta : 0
+    const cosA = Math.cos(angle)
+    const sinA = Math.sin(angle)
+    
+    scanPoints.forEach(pt => {
+      let wx = pt[0]
+      let wy = pt[1]
+      
+      if (!isWorldCoords && pose && Number.isFinite(pose.x) && Number.isFinite(pose.y)) {
+        // Local to world transform
+        wx = pose.x + pt[0] * cosA - pt[1] * sinA
+        wy = pose.y + pt[0] * sinA + pt[1] * cosA
+      }
+      
+      const px = (wx - meta.originX) / meta.resolution
+      const py = mapH - (wy - meta.originY) / meta.resolution
+      const cx = baseOffsetX + px * baseScale
+      const cy = baseOffsetY + py * baseScale
+      
+      ctx.beginPath()
+      ctx.arc(cx, cy, Math.max(0.6, 1.0 / zoom), 0, Math.PI * 2)
+      ctx.fill()
+    })
+    
+    ctx.restore()
+  }
+
+  // 3. 绘制功能区
+  if (featureAreas3D.value.length > 0 && showFeatureAreas.value) {
+    ctx.save()
+    ctx.translate(baseOffsetX, baseOffsetY)
+    ctx.scale(baseScale, baseScale)
+
+    const colorMap: Record<string, string> = {
+      forbidden: '#ef4444',
+      stairs: '#f59e0b',
+      slope: '#8b5cf6',
+      narrow: '#06b6d4',
+      grass: '#22c55e',
+    }
+
+    const bgMap: Record<string, string> = {
+      forbidden: 'rgba(239, 68, 68, 0.15)',
+      stairs: 'rgba(245, 158, 11, 0.15)',
+      slope: 'rgba(139, 92, 246, 0.15)',
+      narrow: 'rgba(6, 182, 212, 0.15)',
+      grass: 'rgba(34, 197, 94, 0.15)',
+    }
+
+    featureAreas3D.value.forEach((area) => {
+      if (!area.coordinates || area.coordinates.length < 2) return
+
+      const pts = area.coordinates.map(([mx, my]) => mapCoordinateToCanvasPoint(mx, my))
+
+      // a) Draw Area Fill
+      if (area.geometry === 'area' && pts.length >= 3) {
+        ctx.save()
+        ctx.beginPath()
+        pts.forEach((pt, idx) => {
+          if (idx === 0) ctx.moveTo(pt.x, pt.y)
+          else ctx.lineTo(pt.x, pt.y)
+        })
+        ctx.closePath()
+
+        ctx.fillStyle = bgMap[area.type] || 'rgba(0,0,0,0)'
+        ctx.fill()
+
+        const pattern = getGridPattern(ctx, area.type)
+        if (pattern) {
+          ctx.fillStyle = pattern
+          ctx.fill()
+        }
+        ctx.restore()
+      }
+
+      // b) Draw Outline/Line
+      ctx.save()
+      ctx.beginPath()
+      pts.forEach((pt, idx) => {
+        if (idx === 0) ctx.moveTo(pt.x, pt.y)
+        else ctx.lineTo(pt.x, pt.y)
+      })
+      if (area.geometry === 'area') {
+        ctx.closePath()
+      }
+      ctx.strokeStyle = colorMap[area.type] || '#ffffff'
+      ctx.lineWidth = 1.5 / (baseScale * zoom)
+      ctx.stroke()
+      ctx.restore()
+
+      // c) Draw Text Label at centroid
+      if (area.name) {
+        let sumX = 0
+        let sumY = 0
+        pts.forEach((pt) => {
+          sumX += pt.x
+          sumY += pt.y
+        })
+        const centX = sumX / pts.length
+        const centY = sumY / pts.length
+
+        ctx.save()
+        ctx.font = `bold ${Math.max(10, 11 / (baseScale * zoom))}px Arial`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        
+        const textColor = colorMap[area.type] || '#ffffff'
+        
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 3 / (baseScale * zoom)
+        ctx.strokeText(area.name, centX, centY)
+        
+        ctx.fillStyle = textColor
+        ctx.fillText(area.name, centX, centY)
+        ctx.restore()
+      }
+    })
+
     ctx.restore()
   }
   
@@ -6491,6 +6881,8 @@ const ensureSelectedMapPointCloudFresh = async (options?: { silent?: boolean }) 
   const mapName = String(selectedMap.value || '').trim()
   if (!mapName) return
 
+  await loadFeatureAreasForMap(mapName)
+
   const updateTime = mapUpdateTimeMap.value[mapName] || ''
   const wasDownloaded = await downloadMapFiles(mapName, updateTime)
   const canReuseCurrentPointCloud = isCurrentPointCloudReusable(mapName, updateTime)
@@ -6850,6 +7242,7 @@ watch(selectedMap, async (newMapName) => {
     }
   } else {
     clearPointCloud()
+    featureAreas3D.value = []
     pointCloudLoading.value = false
     pointCloudLoadingText.value = '点云加载中...'
   }
@@ -9178,6 +9571,22 @@ watch(
   { deep: true }
 )
 
+// 监听实时 2D 点云数据变化，重新绘制栅格图
+watch(
+  () => robotStore.currentScan,
+  () => {
+    if (currentViewType.value === 'grid' && showRealtimeScan.value) {
+      drawGridMapCanvas()
+    }
+  }
+)
+
+watch(showRealtimeScan, () => {
+  if (currentViewType.value === 'grid') {
+    drawGridMapCanvas()
+  }
+})
+
 let gridMapResizeObserver: ResizeObserver | null = null
 
 watch(currentViewType, async (newType) => {
@@ -10693,6 +11102,43 @@ const handlePageShow = () => {
   color: #ff4d4f;
 }
 
+/* 2D 实时点云切换按钮 - 极简图标样式 */
+.grid-map-realtime-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 200;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 4px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+.grid-map-realtime-btn:hover {
+  background: rgba(248, 250, 252, 0.8);
+  color: #334155;
+  border-color: #cbd5e1;
+}
+.grid-map-realtime-btn.active {
+  background: rgba(59, 130, 246, 0.85);
+  color: #ffffff;
+  border-color: rgba(59, 130, 246, 0.85);
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
+}
+.grid-map-realtime-btn svg {
+  width: 100%;
+  height: 100%;
+}
+
 /* 确保高德地图底图文字显示在折线之上，自定义标记显示在文字之上 */
 :deep(.amap-vectors) {
   z-index: 110 !important;
@@ -11575,6 +12021,9 @@ const handlePageShow = () => {
   right: 0;
   bottom: 0;
   width: 100%;
+}
+.home-container.has-fullscreen-child {
+  z-index: 10000;
 }
 
 /* 左侧列样式 */
@@ -12734,6 +13183,11 @@ const handlePageShow = () => {
 }
 .pcd-tool-btn:hover {
   color: #fff;
+  background: rgba(89, 192, 252, 0.15);
+}
+.pcd-tool-btn.active {
+  color: #fff;
+  background: rgba(89, 192, 252, 0.45);
 }
 .pcd-tool-btn svg {
   width: 100%;
@@ -15312,4 +15766,46 @@ const handlePageShow = () => {
   padding-bottom: 2px;
 }
 
+.home-grid-legend {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  padding: 6px 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 90px;
+  pointer-events: none;
+  user-select: none;
+}
+.home-grid-legend .legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.home-grid-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.home-grid-legend .legend-item-icon {
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+.home-grid-legend .legend-item-label {
+  font-size: 10px;
+  color: #334155 !important;
+}
+
+/* Feature area stroke colors for legend SVGs */
+.home-grid-legend .feature-area-forbidden { stroke: #ef4444; fill: #ef4444; }
+.home-grid-legend .feature-area-stairs { stroke: #f59e0b; fill: #f59e0b; }
+.home-grid-legend .feature-area-slope { stroke: #8b5cf6; fill: #8b5cf6; }
+.home-grid-legend .feature-area-narrow { stroke: #06b6d4; fill: #06b6d4; }
+.home-grid-legend .feature-area-grass { stroke: #22c55e; fill: #22c55e; }
 </style>

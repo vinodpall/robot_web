@@ -620,6 +620,15 @@ export function useRobotWebSocket() {
       case 'task_update':
         break
 
+      // ---- 实时2D雷达点云 ----
+      case 'current_scan':
+        if (typeof (robotStore as any).setCurrentScan === 'function') {
+          ;(robotStore as any).setCurrentScan(data)
+        } else {
+          ;(robotStore as any).currentScan = data
+        }
+        break
+
       default:
         break
     }

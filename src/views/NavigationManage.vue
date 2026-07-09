@@ -288,6 +288,29 @@
                           ></canvas>
                           <div v-if="navGridMapLoading" class="grid-map-overlay">栅格地图加载中...</div>
                           <div v-else-if="navGridMapError" class="grid-map-overlay error">{{ navGridMapError }}</div>
+                          
+                          <!-- 实时点云开关按钮 -->
+                          <button 
+                            v-if="!navGridMapLoading && !navGridMapError" 
+                            class="grid-map-realtime-btn"
+                            :class="{ active: showRealtimeScan }"
+                            @click.stop="showRealtimeScan = !showRealtimeScan"
+                            title="实时点云开关"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z" stroke-dasharray="2 2"/>
+                              <path d="M12 3v18" stroke-dasharray="2 2"/>
+                              <path d="M12 12L4 7.5" stroke-dasharray="2 2"/>
+                              <path d="M12 12l8-4.5" stroke-dasharray="2 2"/>
+                              <circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="4" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="20" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="4" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="20" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="12" cy="21" r="1.5" fill="currentColor" stroke="none"/>
+                            </svg>
+                          </button>
                         </div>
                       </div>
 
@@ -933,6 +956,29 @@
                           ></canvas>
                           <div v-if="navGridMapLoading" class="grid-map-overlay">栅格地图加载中...</div>
                           <div v-else-if="navGridMapError" class="grid-map-overlay error">{{ navGridMapError }}</div>
+                          
+                          <!-- 实时点云开关按钮 -->
+                          <button 
+                            v-if="!navGridMapLoading && !navGridMapError" 
+                            class="grid-map-realtime-btn"
+                            :class="{ active: showRealtimeScan }"
+                            @click.stop="showRealtimeScan = !showRealtimeScan"
+                            title="实时点云开关"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z" stroke-dasharray="2 2"/>
+                              <path d="M12 3v18" stroke-dasharray="2 2"/>
+                              <path d="M12 12L4 7.5" stroke-dasharray="2 2"/>
+                              <path d="M12 12l8-4.5" stroke-dasharray="2 2"/>
+                              <circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="4" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="20" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="4" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="20" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
+                              <circle cx="12" cy="21" r="1.5" fill="currentColor" stroke="none"/>
+                            </svg>
+                          </button>
                         </div>
                       </div>
 
@@ -5061,6 +5107,7 @@ const navGridMapContainerRef = ref<HTMLDivElement | null>(null)
 const navGridMapLoading = ref(false)
 const navGridMapError = ref('')
 const navGridMapMeta = ref<GridMapMeta | null>(null)
+const showRealtimeScan = ref(false)
 const navGridMapWidth = ref(0)
 const navGridMapHeight = ref(0)
 const navGridMapOffscreenCanvas = shallowRef<HTMLCanvasElement | null>(null)
@@ -6850,6 +6897,54 @@ const drawNavGridMapCanvas = () => {
     })
   }
 
+  // 绘制实时激光雷达扫描数据 (2D点云)
+  if (showRealtimeScan.value && robotStore.currentScan && robotStore.currentScan.data) {
+    const scanPoints = robotStore.currentScan.data
+    const pose = robotStore.pose
+    
+    // 检查点云是否在地图坐标系中，若否则进行局部到全局转换
+    let isWorldCoords = false
+    if (pose && Number.isFinite(pose.x) && Number.isFinite(pose.y) && scanPoints.length > 0) {
+      const pt = scanPoints[0]
+      const distToRobot = Math.sqrt((pt[0] - pose.x) ** 2 + (pt[1] - pose.y) ** 2)
+      const distToOrigin = Math.sqrt(pt[0] ** 2 + pt[1] ** 2)
+      
+      // Heuristic: If points are far from origin but close to robot, they are world coordinates
+      if (distToOrigin > 15 && distToRobot < 15) {
+        isWorldCoords = true
+      }
+    }
+
+    ctx.save()
+    ctx.fillStyle = '#ff0055' // Vibrant neon pink/red
+    
+    const angle = pose && typeof pose.theta === 'number' && Number.isFinite(pose.theta) ? pose.theta : 0
+    const cosA = Math.cos(angle)
+    const sinA = Math.sin(angle)
+    
+    scanPoints.forEach(pt => {
+      let wx = pt[0]
+      let wy = pt[1]
+      
+      if (!isWorldCoords && pose && Number.isFinite(pose.x) && Number.isFinite(pose.y)) {
+        // Local to world transform
+        wx = pose.x + pt[0] * cosA - pt[1] * sinA
+        wy = pose.y + pt[0] * sinA + pt[1] * cosA
+      }
+      
+      const px = (wx - meta.originX) / meta.resolution
+      const py = mapH - (wy - meta.originY) / meta.resolution
+      const cx = baseOffsetX + px * baseScale
+      const cy = baseOffsetY + py * baseScale
+      
+      ctx.beginPath()
+      ctx.arc(cx, cy, Math.max(0.6, 1.0 / zoom), 0, Math.PI * 2)
+      ctx.fill()
+    })
+    
+    ctx.restore()
+  }
+
   // route_edit 叠加（仅 track_edit tab 下渲染，避免在 map_record 多余开销）
   if (currentTab.value === 'track_edit') {
     drawRouteEditOnGrid(ctx, meta, mapH, baseOffsetX, baseOffsetY, baseScale, zoom)
@@ -7167,6 +7262,22 @@ watch(() => robotStore.gpsMessage, () => {
     updateNavRobotMapMarker(false)
   }
 }, { deep: true })
+
+// 监听实时 2D 点云数据变化，重新绘制导航页的栅格图
+watch(
+  () => robotStore.currentScan,
+  () => {
+    if (navViewType.value === 'grid' && showRealtimeScan.value) {
+      drawNavGridMapCanvas()
+    }
+  }
+)
+
+watch(showRealtimeScan, () => {
+  if (navViewType.value === 'grid') {
+    drawNavGridMapCanvas()
+  }
+})
 
 watch(() => robotStore.cmdStatus?.track, (val) => {
   // 预览模式下不响应任务状态变化，保持用户预览的轨迹
@@ -13564,6 +13675,43 @@ select.recording-input option {
 .layer-menu-fade-leave-to {
   opacity: 0;
   transform: translateY(6px);
+}
+
+/* 2D 实时点云切换按钮 - 极简图标样式 */
+.grid-map-realtime-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 100;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 4px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+.grid-map-realtime-btn:hover {
+  background: rgba(248, 250, 252, 0.8);
+  color: #334155;
+  border-color: #cbd5e1;
+}
+.grid-map-realtime-btn.active {
+  background: rgba(59, 130, 246, 0.85);
+  color: #ffffff;
+  border-color: rgba(59, 130, 246, 0.85);
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
+}
+.grid-map-realtime-btn svg {
+  width: 100%;
+  height: 100%;
 }
 
 </style>
