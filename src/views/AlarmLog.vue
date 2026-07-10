@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <aside class="sidebar-menu">
       <div class="sidebar-tabs">
@@ -160,6 +160,7 @@
                 <button class="mission-btn mission-btn-secondary" v-permission-click-dialog="'log-tracklog-query'" @click="handleReset">重置</button>
                 <button class="mission-btn mission-btn-stop" v-permission-click-dialog="'log-tracklog-query'" @click="handleDelete">删除</button>
                 <button class="mission-btn mission-btn-export" v-permission-click-dialog="'log-tracklog-export'" @click="handleExport">导出</button>
+                <button class="mission-btn mission-btn-round" @click="handleOpenRoundDialog">轮次信息</button>
               </div>
             </div>
             <div class="mission-toolbar track-toolbar-row track-toolbar-row-bottom">
@@ -353,6 +354,135 @@
         <div class="export-generating-card">
           <span class="export-generating-spinner" />
           <span class="export-generating-text">{{ exportGenerating.text }}</span>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="roundDialog.show" class="round-dialog-mask" @click="roundDialog.show = false">
+        <div class="round-dialog-card" @click.stop>
+          <div class="round-dialog-header">
+            <span class="round-dialog-title">轮次信息列表</span>
+            <button class="round-dialog-close-btn" @click="roundDialog.show = false">×</button>
+          </div>
+          <div class="round-dialog-body">
+            <div v-if="roundDialog.loading" class="round-dialog-loading">
+              <span class="round-dialog-spinner" />
+              <span>数据加载中...</span>
+            </div>
+            <div v-else-if="roundDialog.errorMsg" class="round-dialog-loading">
+              <span style="color: #ff7675; text-shadow: 0 0 6px rgba(255, 118, 117, 0.2);">{{ roundDialog.errorMsg }}</span>
+            </div>
+            <div v-else class="round-dialog-table-container">
+              <table class="round-dialog-table">
+                <thead>
+                  <tr>
+                    <th>任务名称</th>
+                    <th>任务时间</th>
+                    <th>巡检点位总数</th>
+                    <th>异常点位数</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in roundDialog.list" :key="item.id">
+                    <td class="round-td-name" :title="item.name">{{ item.name }}</td>
+                    <td class="round-td-time">{{ item.time }}</td>
+                    <td class="round-td-count">{{ item.totalPoints }}</td>
+                    <td class="round-td-abnormal" :class="{ 'has-error': item.abnormalPoints > 0 }">
+                      {{ item.abnormalPoints }}
+                    </td>
+                    <td class="round-td-actions">
+                      <button class="round-td-btn" @click="handleViewRoundDetail(item)">查看详情</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="detailDialog.show" class="detail-dialog-mask" @click="detailDialog.show = false">
+        <div class="detail-dialog-card" @click.stop>
+          <div class="detail-dialog-header">
+            <span class="detail-dialog-title">轮次日志详情</span>
+            <button class="detail-dialog-close-btn" @click="detailDialog.show = false">×</button>
+          </div>
+          <div class="detail-dialog-body">
+            <div v-if="detailDialog.loading" class="detail-dialog-loading">
+              <span class="round-dialog-spinner" />
+              <span>正在加载日志详情...</span>
+            </div>
+            <div v-else-if="detailDialog.errorMsg" class="detail-dialog-error">
+              <span>{{ detailDialog.errorMsg }}</span>
+            </div>
+            <div v-else class="detail-dialog-table-container trc-table file-table file-table-adaptive">
+              <div class="file-table-header">
+                <div class="file-table-cell trc-id">id</div>
+                <div class="file-table-cell trc-time">时间</div>
+                <div class="file-table-cell trc-map">地图</div>
+                <div class="file-table-cell trc-task">任务名称</div>
+                <div class="file-table-cell trc-point">任务组</div>
+                <div class="file-table-cell trc-coord">实时坐标</div>
+                <div class="file-table-cell trc-item">识别项目</div>
+                <div class="file-table-cell trc-result">识别结果</div>
+                <div class="file-table-cell trc-desc">描述</div>
+                <div class="file-table-cell trc-pic">图片</div>
+              </div>
+              <div class="file-table-body detail-table-scroll-body">
+                <div class="file-table-row" v-for="row in detailDialog.list" :key="row.id">
+                  <div class="file-table-cell trc-id" :title="String(row.id)">{{ row.id }}</div>
+                  <div class="file-table-cell trc-time" :title="formatTime(row.create_time)">
+                    <span class="trc-date-part">{{ formatDatePart(row.create_time) }}</span>
+                    <span class="trc-clock-part">{{ formatClockPart(row.create_time) }}</span>
+                  </div>
+                  <div class="file-table-cell trc-map" :title="row.map_name || '-'">
+                    <span class="trc-map-text">{{ row.map_name || '-' }}</span>
+                  </div>
+                  <div class="file-table-cell trc-task" :title="row.tracking_route || '-'">
+                    <div class="trc-task-inner">
+                      <span v-if="row.tracking_route" class="trc-route-tag">{{ row.tracking_route }}</span>
+                      <span v-else>-</span>
+                    </div>
+                  </div>
+                  <div class="file-table-cell trc-point" :title="row.task_group || '-'">
+                    <div class="trc-task-inner">
+                      <span v-if="row.task_group" class="trc-group-tag">{{ row.task_group }}</span>
+                      <span v-else>-</span>
+                    </div>
+                  </div>
+                  <div class="file-table-cell trc-coord" :title="formatCoord(row.x, row.y, row.z)">
+                    <span class="trc-coord-val">{{ formatCoord(row.x, row.y, row.z) }}</span>
+                  </div>
+                  <div class="file-table-cell trc-item" :title="row.content || '-'">
+                    <span v-if="row.content" class="trc-item-tag">{{ row.content }}</span>
+                    <span v-else>-</span>
+                  </div>
+                  <div class="file-table-cell trc-result" :title="getOutMessage(row).message || row.results || '-'">
+                    <span v-if="getOutMessage(row).message" class="trc-result-badge">{{ getOutMessage(row).message }}</span>
+                    <span v-else-if="row.results" class="trc-result-badge">{{ row.results }}</span>
+                    <span v-else class="trc-empty">-</span>
+                  </div>
+                  <div class="file-table-cell trc-desc" :title="row.remark || '-'">{{ row.remark || '-' }}</div>
+                  <div class="file-table-cell trc-pic">
+                    <span v-if="!getDisplayImage(row)" class="no-image">-</span>
+                    <img
+                      v-else
+                      :src="getDisplayImage(row)!"
+                      alt="识别图片"
+                      class="trc-thumb-img"
+                      @click="openImagePreview(getImage(row)!, row.id)"
+                      @error="handleRecordImageError(row, $event)"
+                      style="cursor:pointer;"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -835,8 +965,9 @@ const resolveExportUrls = (payload: any): string[] => {
 
 const normalizeExportUrl = (rawUrl: string): string => {
   if (!rawUrl) return ''
-  const value = rawUrl.trim()
+  let value = rawUrl.trim()
   if (!value) return ''
+  value = value.replace('/v1/proxy/', '/v1/robots/').replace('/proxy/', '/robots/')
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
   if (!robotId) return value
   return buildRobotHttpAssetUrl(robotId, 81, value)
@@ -941,6 +1072,113 @@ const handleExport = async () => {
     showExportError(`导出失败：${msg}`)
   } finally {
     exportGenerating.value.show = false
+  }
+}
+
+const roundDialog = ref({
+  show: false,
+  loading: false,
+  list: [] as Array<{
+    id: number
+    name: string
+    time: string
+    totalPoints: number
+    abnormalPoints: number
+  }>,
+  errorMsg: ''
+})
+
+const formatTimeRange = (startVal: any, endVal: any): string => {
+  const startSec = Number(startVal) || 0
+  const endSec = Number(endVal) || 0
+  if (!startSec) return '-'
+
+  const dStart = new Date(startSec * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const dateStr = `${dStart.getFullYear()}-${pad(dStart.getMonth() + 1)}-${pad(dStart.getDate())}`
+  const timeStart = `${pad(dStart.getHours())}:${pad(dStart.getMinutes())}:${pad(dStart.getSeconds())}`
+
+  if (!endSec) {
+    return `${dateStr} ${timeStart} ~ -`
+  }
+
+  const dEnd = new Date(endSec * 1000)
+  const timeEnd = `${pad(dEnd.getHours())}:${pad(dEnd.getMinutes())}:${pad(dEnd.getSeconds())}`
+
+  if (dStart.toDateString() === dEnd.toDateString()) {
+    return `${dateStr} ${timeStart} ~ ${timeEnd}`
+  } else {
+    const dateEndStr = `${dEnd.getFullYear()}-${pad(dEnd.getMonth() + 1)}-${pad(dEnd.getDate())}`
+    return `${dateStr} ${timeStart} ~ ${dateEndStr} ${timeEnd}`
+  }
+}
+
+const handleOpenRoundDialog = async () => {
+  console.log('[轮次信息] 点击打开弹窗，准备加载数据...')
+  roundDialog.value.show = true
+  roundDialog.value.loading = true
+  roundDialog.value.errorMsg = ''
+  roundDialog.value.list = []
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    console.log('[轮次信息] 当前机器人ID:', robotId)
+    if (!robotId) throw new Error('未选择机器人')
+
+    console.log('[轮次信息] 开始请求 API...')
+    const res = await navigationApi.getTrackReportList(robotId, { limit: 200 })
+    console.log('[轮次信息] API 请求成功，响应数据:', res)
+    const listData = res?.data || []
+    roundDialog.value.list = listData.map((item: any) => ({
+      id: item.id,
+      name: item.report_name || item.track_pointname || '未命名报告',
+      time: formatTimeRange(item.track_startTime, item.track_endTime),
+      totalPoints: parseInt(item.total_inspection_point) || 0,
+      abnormalPoints: parseInt(item.unnormal_inspection_point) || 0
+    }))
+    console.log('[轮次信息] 列表数据解析完成，数量:', roundDialog.value.list.length)
+  } catch (error: any) {
+    console.error('[轮次信息] 获取轮次数据列表失败:', error)
+    const msg = error?.message || error?.detail || (typeof error === 'object' ? JSON.stringify(error) : String(error))
+    roundDialog.value.errorMsg = `加载失败：${msg}`
+  } finally {
+    roundDialog.value.loading = false
+  }
+}
+
+const detailDialog = ref({
+  show: false,
+  loading: false,
+  list: [] as any[],
+  errorMsg: '',
+  taskReportId: null as number | null
+})
+
+const handleViewRoundDetail = async (item: any) => {
+  detailDialog.value.taskReportId = item.id
+  detailDialog.value.show = true
+  detailDialog.value.loading = true
+  detailDialog.value.errorMsg = ''
+  detailDialog.value.list = []
+  
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) throw new Error('未选择机器人')
+    
+    const params = {
+      type: 'track' as const,
+      task_report_id: String(item.id),
+      page: 1,
+      page_size: 1000
+    }
+    
+    const res = await navigationApi.getTrackLogList(robotId, params)
+    const data = res?.data || {}
+    detailDialog.value.list = data.data || []
+  } catch (err: any) {
+    console.error('获取轮次详情数据失败:', err)
+    detailDialog.value.errorMsg = `加载失败：${err?.message || '未知错误'}`
+  } finally {
+    detailDialog.value.loading = false
   }
 }
 
@@ -1679,10 +1917,10 @@ onUnmounted(() => {
 .trc-map       { flex: 1 1 0;     min-width: 80px;  text-align: center; }
 .trc-task      { flex: 1.8 1 0;   min-width: 120px; text-align: center; display: flex !important; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
 .trc-point     { flex: 1 1 0;     min-width: 80px;  text-align: center; }
-.trc-coord     { flex: 1 1 0;     min-width: 90px;  text-align: center; }
+.trc-coord     { flex: 1.5 1 0;   min-width: 110px; text-align: center; }
 .trc-item      { flex: 1 1 0;     min-width: 80px;  text-align: center; }
 .trc-result    { flex: 0.8 1 0;   min-width: 70px;  text-align: center; }
-.trc-desc      { flex: 2 1 0;     min-width: 100px; text-align: center; }
+.trc-desc      { flex: 1.5 1 0;   min-width: 90px;  text-align: center; }
 .trc-pic       { flex: 0 0 80px;  min-width: 80px;  padding: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; overflow: visible; }
 .file-table-row .trc-pic {
   justify-content: center !important;
@@ -1947,7 +2185,7 @@ select.track-filter-input:hover {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.72);
-  z-index: 9999;
+  z-index: 20000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2050,6 +2288,384 @@ select.track-filter-input:hover {
 @keyframes export-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* 轮次信息按钮样式 */
+.mission-btn-round {
+  background: #2a7bd1;
+  border: 1px solid #2a7bd1;
+  color: #ffffff;
+}
+
+.mission-btn-round:hover {
+  filter: brightness(1.05);
+}
+
+/* 轮次信息弹窗遮罩 */
+.round-dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+/* 弹窗卡片容器 */
+.round-dialog-card {
+  width: 95%;
+  max-width: 1100px;
+  height: 500px;
+  max-height: 85vh;
+  background: linear-gradient(135deg, rgba(16, 32, 54, 0.95) 0%, rgba(10, 22, 38, 0.98) 100%);
+  border: 1px solid rgba(103, 213, 253, 0.28);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: round-zoom-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 弹窗头部 */
+.round-dialog-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(103, 213, 253, 0.03);
+}
+
+.round-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #67d5fd;
+  text-shadow: 0 0 8px rgba(103, 213, 253, 0.25);
+  letter-spacing: 0.5px;
+}
+
+.round-dialog-close-btn {
+  background: transparent;
+  border: none;
+  color: #a0aec0;
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.2s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+
+.round-dialog-close-btn:hover {
+  color: #67d5fd;
+  background: rgba(103, 213, 253, 0.1);
+  transform: rotate(90deg);
+}
+
+/* 弹窗主体 */
+.round-dialog-body {
+  padding: 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 加载态 */
+.round-dialog-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #a0aec0;
+  font-size: 14px;
+}
+
+.round-dialog-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid rgba(103, 213, 253, 0.15);
+  border-top-color: #67d5fd;
+  animation: round-spin 0.8s linear infinite;
+}
+
+/* 表格容器及样式 */
+.round-dialog-table-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid rgba(103, 213, 253, 0.15);
+  border-radius: 6px;
+  background: rgba(8, 16, 28, 0.4);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.3) rgba(10, 42, 58, 0.5);
+}
+
+.round-dialog-table-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+.round-dialog-table-container::-webkit-scrollbar-track {
+  background: rgba(10, 42, 58, 0.5);
+}
+
+.round-dialog-table-container::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 3px;
+}
+
+.round-dialog-table-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
+}
+
+.round-dialog-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  text-align: left;
+  font-size: 13px;
+  color: #dff5ff;
+}
+
+.round-dialog-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #152c42;
+  color: #67d5fd;
+  font-weight: 600;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.2);
+  white-space: nowrap;
+}
+
+.round-dialog-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.1);
+  white-space: nowrap;
+}
+
+.round-dialog-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.round-dialog-table tbody tr:hover {
+  background: rgba(103, 213, 253, 0.05);
+}
+
+/* 特定列宽度及排版控制 */
+.round-dialog-table th:nth-child(1),
+.round-td-name {
+  width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  text-align: left;
+}
+
+.round-dialog-table th:nth-child(2),
+.round-td-time {
+  width: 26%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #a0aec0;
+  text-align: left;
+}
+
+.round-dialog-table th:nth-child(3),
+.round-td-count {
+  width: 8%;
+  text-align: center;
+}
+
+.round-dialog-table th:nth-child(4),
+.round-td-abnormal {
+  width: 8%;
+  text-align: center;
+  font-weight: bold;
+}
+
+.round-td-abnormal.has-error {
+  color: #ff7675;
+  text-shadow: 0 0 6px rgba(255, 118, 117, 0.2);
+}
+
+.round-dialog-table th:nth-child(5),
+.round-td-actions {
+  width: 12%;
+  text-align: center;
+}
+
+.round-td-btn {
+  background: rgba(103, 213, 253, 0.1);
+  border: 1px solid rgba(103, 213, 253, 0.35);
+  color: #67d5fd;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.round-td-btn:hover {
+  background: #67d5fd;
+  color: #0d1e2d;
+  box-shadow: 0 0 8px rgba(103, 213, 253, 0.3);
+}
+
+@keyframes round-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes round-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 轮次详情弹窗遮罩 */
+.detail-dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+/* 详情弹窗卡片容器 */
+.detail-dialog-card {
+  width: 95%;
+  max-width: 1300px;
+  height: 650px;
+  max-height: 90vh;
+  background: linear-gradient(135deg, rgba(16, 32, 54, 0.96) 0%, rgba(10, 22, 38, 0.98) 100%);
+  border: 1px solid rgba(103, 213, 253, 0.32);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: round-zoom-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.detail-dialog-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(103, 213, 253, 0.04);
+}
+
+.detail-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #67d5fd;
+  text-shadow: 0 0 8px rgba(103, 213, 253, 0.25);
+  letter-spacing: 0.5px;
+}
+
+.detail-dialog-close-btn {
+  background: transparent;
+  border: none;
+  color: #a0aec0;
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.2s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+
+.detail-dialog-close-btn:hover {
+  color: #67d5fd;
+  background: rgba(103, 213, 253, 0.1);
+  transform: rotate(90deg);
+}
+
+.detail-dialog-body {
+  padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detail-dialog-loading, .detail-dialog-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #a0aec0;
+  font-size: 14px;
+}
+
+/* 详情表格特有滚动容器 */
+.detail-dialog-table-container {
+  overflow-x: auto;
+  min-width: 0;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-table-scroll-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.3) rgba(10, 42, 58, 0.5);
+}
+
+.detail-table-scroll-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+.detail-table-scroll-body::-webkit-scrollbar-track {
+  background: rgba(10, 42, 58, 0.5);
+}
+
+.detail-table-scroll-body::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 3px;
+}
+
+.detail-table-scroll-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
 }
 </style>
 

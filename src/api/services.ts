@@ -1332,6 +1332,24 @@ export const navigationApi = {
   }) => {
     return apiClient.post(`/tracks/${robotId}/export_track_log`, data)
   },
+  getTrackReportList: (robotId: string, params: { limit?: number }) => {
+    return apiClient.get<{ data: Array<{
+      id: number;
+      detection_unit: any;
+      track_pointname: string;
+      track_startTime: number;
+      track_endTime: number;
+      task_status: string;
+      total_inspection_point: string;
+      finish_inspection_point: string;
+      unfinish_inspection_point: string;
+      normal_inspection_point: string;
+      unnormal_inspection_point: string;
+      environmental_information: string;
+      report_name: string;
+      create_date: string;
+    }> }>(`/tracks/${robotId}/report_list`, params)
+  },
   oneKeyRecharge: (robotId: string, data: { chargeIndex: number }) => {
     return apiClient.post(`/charging/${robotId}/one_key_recharge`, data)
   },
