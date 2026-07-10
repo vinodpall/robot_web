@@ -27,6 +27,7 @@ import type {
   StopStateData,
   CarTemperatureData,
   CarMotorInfoData,
+  SlamGridMapData,
 } from '../composables/useRobotWebSocket'
 
 export const useRobotStore = defineStore('robot', () => {
@@ -91,6 +92,9 @@ export const useRobotStore = defineStore('robot', () => {
 
   // ===== 实时2D激光雷达扫描数据 =====
   const currentScan = ref<{ timestamp: number; data: [number, number][] } | null>(null)
+
+  // ===== 实时建图2D栅格图数据 =====
+  const slamGridMapData = ref<SlamGridMapData | null>(null)
 
   // ===== 停障避障报警（遇到障碍物连续3次） =====
   const globalObstacleAlertActive = ref(false)
@@ -246,6 +250,10 @@ export const useRobotStore = defineStore('robot', () => {
     currentScan.value = data
   }
 
+  const setSlamGridMap = (data: SlamGridMapData) => {
+    slamGridMapData.value = data
+  }
+
   const setRealtimeSensorData = (payload: any) => {
     if (!payload || typeof payload !== 'object') return
     Object.keys(payload).forEach(key => {
@@ -282,6 +290,7 @@ export const useRobotStore = defineStore('robot', () => {
     taskProgress.value = null
     multitaskStatus.value = null
     currentScan.value = null
+    slamGridMapData.value = null
     realtimeSensorValues.value = {}
     realtimeSensorUnits.value = {}
     gpsMessage.value = null
@@ -496,6 +505,7 @@ export const useRobotStore = defineStore('robot', () => {
     multitaskStatus,
     globalObstacleAlertActive,
     currentScan,
+    slamGridMapData,
     // mutations
     setOnlineStatus,
     setPose,
@@ -526,6 +536,7 @@ export const useRobotStore = defineStore('robot', () => {
     setMultitaskStatus,
     setRealtimeSensorData,
     setCurrentScan,
+    setSlamGridMap,
     resetRuntimeState,
     // computed
     batteryLevel,

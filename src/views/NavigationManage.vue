@@ -49,6 +49,23 @@
                   >
                     完成录制
                   </button>
+                  <button 
+                    class="map-btn"
+                    :class="[isSlamOnline ? 'map-btn-danger' : 'map-btn-primary', { loading: slamOnlineBtnLoading }]"
+                    :disabled="slamOnlineBtnLoading"
+                    v-permission-click-dialog="'nav-lbjt-slamonline'"
+                    @click="handleSlamOnlineToggle"
+                  >
+                    {{ slamOnlineBtnLoading ? (isSlamOnline ? '关闭中...' : '开启中...') : (isSlamOnline ? '关闭建图' : '实时建图') }}
+                  </button>
+                  <button
+                    v-if="isSlamOnline"
+                    class="map-btn map-btn-secondary"
+                    @click="slamOnlineMapDialogVisible = true"
+                    style="margin-left: 8px;"
+                  >
+                    查看实时地图
+                  </button>
                 </div>
               </div>
 
@@ -1332,6 +1349,87 @@
         </section>
       </div>
     </main>
+
+    <!-- 实时建图地图渲染弹窗 -->
+    <div v-if="slamOnlineMapDialogVisible" class="recording-dialog-overlay slam-online-map-overlay">
+      <div class="recording-dialog-card card slam-online-map-dialog">
+        <div class="recording-dialog-header">
+          实时建图 - 栅格地图
+          <button class="dialog-close-btn" @click="slamOnlineMapDialogVisible = false">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="recording-dialog-body" style="padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #07141e;">
+          <!-- 实时绘制 Canvas -->
+          <div class="realtime-map-canvas-container" style="position: relative; width: 100%; height: 640px; background: #e6e6e6; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+            <canvas 
+              ref="slamOnlineCanvasRef" 
+              style="max-width: 100%; max-height: 100%; object-fit: contain; cursor: grab;"
+              @wheel.prevent="handleSlamOnlineWheel"
+              @mousedown="handleSlamOnlineMouseDown"
+              @mousemove="handleSlamOnlineMouseMove"
+              @mouseup="handleSlamOnlineMouseUp"
+              @mouseleave="handleSlamOnlineMouseUp"
+            ></canvas>
+            <div v-if="!hasSlamOnlineData" style="position: absolute; color: rgba(0, 0, 0, 0.5); font-size: 14px;">
+              等待实时栅格图数据 (slam_grid_map)...
+            </div>
+          </div>
+          <!-- 底部状态与操作 -->
+          <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: #9adfff; font-size: 13px;">
+            <div>
+              <span style="opacity: 0.7;">分辨率: </span>
+              <span style="font-weight: 600; color: #fff;">{{ slamGridMapMetaInfo.resolution }} m/cell</span>
+              <span style="opacity: 0.7; margin-left: 15px;">地图尺寸: </span>
+              <span style="font-weight: 600; color: #fff;">{{ slamGridMapMetaInfo.width }} x {{ slamGridMapMetaInfo.height }}</span>
+            </div>
+            <div>
+              <button class="map-btn map-btn-danger" @click="handleSlamOnlineToggle">
+                关闭建图
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 实时建图地图名称输入对话框 -->
+    <div v-if="slamOnlineDialogVisible" class="recording-dialog-overlay">
+      <div class="recording-dialog-card card">
+        <div class="recording-dialog-header">
+          开启实时建图
+          <button class="dialog-close-btn" @click="cancelStartSlamOnline">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="recording-dialog-body">
+          <input
+            v-model="slamOnlineMapName"
+            placeholder="请输入地图名称"
+            class="recording-input"
+            @input="handleSlamOnlineMapNameInput"
+          />
+          <div v-if="isSlamOnlineMapNameDuplicate" class="error-tip" style="color: #ff4d4f; font-size: 12px; margin-top: 4px; text-align: left;">
+            地图名称已存在
+          </div>
+        </div>
+        <div class="recording-dialog-actions">
+          <button 
+            class="map-btn map-btn-primary" 
+            v-permission-click-dialog="'nav-lbjt-slamonline'"
+            @click="confirmStartSlamOnline" 
+            :disabled="slamOnlineLoading || isSlamOnlineMapNameDuplicate || !slamOnlineMapName.trim()"
+          >
+            {{ slamOnlineLoading ? '提交中...' : '确定' }}
+          </button>
+          <button class="map-btn" @click="cancelStartSlamOnline">取消</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 录包名称输入对话框 -->
     <div v-if="recordingDialogVisible" class="recording-dialog-overlay">
@@ -7492,6 +7590,46 @@ watch(() => robotStore.mappingProgress?.progress, (progress) => {
     }
   }
 })
+// 实时建图相关状态
+const localSlamOnlineActive = ref(false)
+const slamOnlineBtnLoading = ref(false)
+const slamOnlineDialogVisible = ref(false)
+const slamOnlineMapName = ref('')
+const slamOnlineActiveName = ref('')  // 记录当前开启的地图名称，关闭时传回
+const slamOnlineLoading = ref(false)
+
+// slam=1 且没有建图进度时表示实时建图开启状态
+const isSlamOnline = computed(() => {
+  const cmdStatus = robotStore.cmdStatus
+  if (cmdStatus) {
+    return cmdStatus.slam === 1 && !robotStore.mappingProgress
+  }
+  return localSlamOnlineActive.value
+})
+
+const isSlamOnlineMapNameDuplicate = computed(() => {
+  const name = slamOnlineMapName.value.trim()
+  if (!name) return false
+  return isMapInList(name, navMapList.value)
+})
+
+const slamOnlineMapDialogVisible = ref(false)
+const slamOnlineCanvasRef = ref<HTMLCanvasElement | null>(null)
+const slamOnlineZoom = ref(1.0)
+const slamOnlinePanX = ref(0)
+const slamOnlinePanY = ref(0)
+
+const hasSlamOnlineData = computed(() => !!robotStore.slamGridMapData)
+const slamGridMapMetaInfo = computed(() => {
+  const map = robotStore.slamGridMapData
+  if (!map) return { resolution: 0, width: 0, height: 0 }
+  return {
+    resolution: map.resolution,
+    width: map.width,
+    height: map.height
+  }
+})
+
 const recordingDialogVisible = ref(false)
 const recordingName = ref('')
 const recordingLoading = ref(false)
@@ -7540,6 +7678,419 @@ const ensureNotRecordingForMapActions = () => {
     onCancel: () => {}
   })
   return false
+}
+
+const handleSlamOnlineMapNameInput = (event: Event) => {
+  const target = event.target as HTMLInputElement | null
+  if (!target) return
+  const sanitized = (target.value || '').replace(/\s+/g, '')
+  if (sanitized !== target.value) {
+    target.value = sanitized
+  }
+  slamOnlineMapName.value = sanitized
+}
+
+const handleSlamOnlineToggle = () => {
+  if (isSlamOnline.value) {
+    showConfirmDialog({
+      title: '关闭建图',
+      message: '确定要关闭实时建图吗？',
+      confirmText: '确定',
+      cancelText: '取消',
+      type: 'warning',
+      onConfirm: () => {
+        closeConfirmDialog()
+        void stopSlamOnlineRequest()
+      },
+      onCancel: () => {
+        closeConfirmDialog()
+      }
+    })
+  } else {
+    if (!ensureNavigationClosedForMapping()) return
+    slamOnlineMapName.value = ''
+    slamOnlineDialogVisible.value = true
+  }
+}
+
+const drawSlamOnlineGridMap = (map: any) => {
+  const canvas = slamOnlineCanvasRef.value
+  if (!canvas) return
+  const container = canvas.parentElement
+  if (!container) return
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const containerWidth = container.clientWidth || 800
+  const containerHeight = container.clientHeight || 500
+
+  // Set high-resolution canvas size based on device pixel ratio
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = containerWidth * dpr
+  canvas.height = containerHeight * dpr
+  canvas.style.width = containerWidth + 'px'
+  canvas.style.height = containerHeight + 'px'
+
+  ctx.scale(dpr, dpr)
+
+  // 1. Fill entire canvas background with light-gray (unknown space)
+  ctx.fillStyle = '#e6e6e6'
+  ctx.fillRect(0, 0, containerWidth, containerHeight)
+
+  const mapW = map.width
+  const mapH = map.height
+  if (mapW <= 0 || mapH <= 0) return
+
+  // 2. Calculate robot cell position from map.pose [x, y, theta]
+  const poseArr = map.pose
+  let rx = 0, ry = 0, theta = 0
+  let hasRobot = false
+
+  if (poseArr && Array.isArray(poseArr) && poseArr.length >= 2) {
+    rx = Number(poseArr[0])
+    ry = Number(poseArr[1])
+    theta = poseArr.length >= 3 ? Number(poseArr[2]) : 0
+    hasRobot = Number.isFinite(rx) && Number.isFinite(ry)
+  }
+
+  let cellX = mapW / 2
+  let cellY = mapH / 2
+
+  if (map.origin && hasRobot) {
+    cellX = (rx - map.origin.x) / map.resolution
+    cellY = (ry - map.origin.y) / map.resolution
+  }
+
+  // 3. Compute the bounding box of the explored area (robot position + occupied cells)
+  let minX = cellX
+  let maxX = cellX
+  let minY = cellY
+  let maxY = cellY
+
+  if (Array.isArray(map.occupied_cells) && map.occupied_cells.length > 0) {
+    map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
+      if (cx < minX) minX = cx
+      if (cx > maxX) maxX = cx
+      if (cy < minY) minY = cy
+      if (cy > maxY) maxY = cy
+    })
+  }
+
+  // Add margin around explored area
+  minX -= 5
+  maxX += 5
+  minY -= 5
+  maxY += 5
+
+  const exploredW = Math.max(1, maxX - minX)
+  const exploredH = Math.max(1, maxY - minY)
+
+  // Compute scaling to fit the explored area in the container (with a minimum scale of 12 pixels per cell to keep it large)
+  const scaleX = containerWidth / exploredW
+  const scaleY = containerHeight / exploredH
+  const baseScale = Math.max(12.0, Math.min(scaleX, scaleY))
+
+  const exploredCenterX = (minX + maxX) / 2
+  const exploredCenterY = (minY + maxY) / 2
+
+  ctx.save()
+
+  // Apply user-defined manual zoom and drag pan on top of the auto-fit scale
+  ctx.translate(containerWidth / 2 + slamOnlinePanX.value, containerHeight / 2 + slamOnlinePanY.value)
+  ctx.scale(slamOnlineZoom.value, slamOnlineZoom.value)
+  ctx.translate(-containerWidth / 2, -containerHeight / 2)
+
+  // 4. Draw explored map boundaries (free space) as white
+  ctx.fillStyle = '#ffffff'
+  const mapLeft = containerWidth / 2 - exploredCenterX * baseScale
+  const mapTop = containerHeight / 2 - (mapH - exploredCenterY) * baseScale
+  ctx.fillRect(mapLeft, mapTop, mapW * baseScale, mapH * baseScale)
+
+  // 5. Draw explored free space rays from robot to occupied cells to simulate LIDAR clear paths
+  if (hasRobot && Array.isArray(map.occupied_cells)) {
+    const robotCanvasX = containerWidth / 2 + (cellX - exploredCenterX) * baseScale
+    const robotCanvasY = containerHeight / 2 - (cellY - exploredCenterY) * baseScale
+
+    // Fill a small circle around the robot to represent local cleared space
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.arc(robotCanvasX, robotCanvasY, Math.max(10, baseScale * 1.5), 0, Math.PI * 2)
+    ctx.fill()
+
+    // Draw white rays to all occupied cells
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = Math.max(1.5, baseScale * 0.6) // dynamic ray thickness
+    ctx.beginPath()
+    map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
+      const canvasX = containerWidth / 2 + (cx - exploredCenterX) * baseScale
+      const canvasY = containerHeight / 2 - (cy - exploredCenterY) * baseScale
+      ctx.moveTo(robotCanvasX, robotCanvasY)
+      ctx.lineTo(canvasX, canvasY)
+    })
+    ctx.stroke()
+  }
+
+  // 6. Draw occupied cells (obstacles) in solid black
+  ctx.fillStyle = '#000000'
+  if (Array.isArray(map.occupied_cells)) {
+    map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
+      const canvasX = containerWidth / 2 + (cx - exploredCenterX) * baseScale
+      const canvasY = containerHeight / 2 - (cy - exploredCenterY) * baseScale
+      ctx.fillRect(canvasX - 0.2, canvasY - 0.2, baseScale + 0.4, baseScale + 0.4)
+    })
+  }
+
+  // 7. Draw map origin marker (world 0,0) — same style as navigation grid map
+  if (map.origin) {
+    const oxCell = (0 - map.origin.x) / map.resolution
+    const oyCell = (0 - map.origin.y) / map.resolution
+    const oxCanvas = containerWidth / 2 + (oxCell - exploredCenterX) * baseScale
+    const oyCanvas = containerHeight / 2 - (oyCell - exploredCenterY) * baseScale
+
+    ctx.save()
+    ctx.translate(oxCanvas, oyCanvas)
+    // 反向缩放，使图标和文字在 zoom 时保持固定视觉大小
+    ctx.scale(1 / slamOnlineZoom.value, 1 / slamOnlineZoom.value)
+
+    ctx.beginPath()
+    ctx.arc(0, 0, 5, 0, Math.PI * 2)
+    ctx.fillStyle = '#ff3b30'
+    ctx.fill()
+
+    ctx.font = 'bold 13px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 3
+    ctx.strokeText('原点', 0, 8)
+
+    ctx.fillStyle = '#ff3b30'
+    ctx.fillText('原点', 0, 8)
+
+    ctx.restore()
+  }
+
+  // 8. Draw robot position — same style as navigation grid map
+  if (hasRobot) {
+    const robotCanvasX = containerWidth / 2 + (cellX - exploredCenterX) * baseScale
+    const robotCanvasY = containerHeight / 2 - (cellY - exploredCenterY) * baseScale
+
+    ctx.save()
+    ctx.translate(robotCanvasX, robotCanvasY)
+    // 反向缩放，使图标和文字在 zoom 时保持固定视觉大小
+    ctx.scale(1 / slamOnlineZoom.value, 1 / slamOnlineZoom.value)
+
+    // Arrow layer (rotated with heading)
+    ctx.save()
+    ctx.rotate(-theta)
+
+    ctx.beginPath()
+    ctx.moveTo(15, 0)
+    ctx.lineTo(6, -6)
+    ctx.lineTo(6, 6)
+    ctx.closePath()
+    ctx.fillStyle = '#00a0e9'
+    ctx.fill()
+
+    // White outer circle
+    ctx.beginPath()
+    ctx.arc(0, 0, 9.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
+    ctx.shadowBlur = 4
+    ctx.shadowOffsetY = 1
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+
+    // Blue inner circle
+    ctx.beginPath()
+    ctx.arc(0, 0, 7.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#00a0e9'
+    ctx.fill()
+
+    ctx.restore() // restore arrow rotation
+
+    // Label (not rotated)
+    ctx.font = 'bold 13px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 3
+    ctx.strokeText('无人车', 0, 16)
+
+    ctx.fillStyle = '#00a0e9'
+    ctx.fillText('无人车', 0, 16)
+
+    ctx.restore()
+  }
+
+  ctx.restore() // Restore manual zoom/pan transformations
+}
+
+// Mouse events handling for zoom and drag pan
+let isDraggingSlamOnline = false
+let startDragX = 0
+let startDragY = 0
+
+const handleSlamOnlineMouseDown = (e: MouseEvent) => {
+  isDraggingSlamOnline = true
+  startDragX = e.clientX - slamOnlinePanX.value
+  startDragY = e.clientY - slamOnlinePanY.value
+  if (slamOnlineCanvasRef.value) {
+    slamOnlineCanvasRef.value.style.cursor = 'grabbing'
+  }
+}
+
+const handleSlamOnlineMouseMove = (e: MouseEvent) => {
+  if (!isDraggingSlamOnline) return
+  slamOnlinePanX.value = e.clientX - startDragX
+  slamOnlinePanY.value = e.clientY - startDragY
+  if (robotStore.slamGridMapData) {
+    drawSlamOnlineGridMap(robotStore.slamGridMapData)
+  }
+}
+
+const handleSlamOnlineMouseUp = () => {
+  isDraggingSlamOnline = false
+  if (slamOnlineCanvasRef.value) {
+    slamOnlineCanvasRef.value.style.cursor = 'grab'
+  }
+}
+
+const handleSlamOnlineWheel = (e: WheelEvent) => {
+  const zoomFactor = 1.1
+  if (e.deltaY < 0) {
+    slamOnlineZoom.value = Math.min(15, slamOnlineZoom.value * zoomFactor)
+  } else {
+    slamOnlineZoom.value = Math.max(0.15, slamOnlineZoom.value / zoomFactor)
+  }
+  if (robotStore.slamGridMapData) {
+    drawSlamOnlineGridMap(robotStore.slamGridMapData)
+  }
+}
+
+// Watchers for drawing grid map
+watch(() => robotStore.slamGridMapData, (newMap) => {
+  if (slamOnlineMapDialogVisible.value && newMap) {
+    drawSlamOnlineGridMap(newMap)
+  }
+}, { deep: true })
+
+watch(slamOnlineMapDialogVisible, (visible) => {
+  if (visible) {
+    // Reset zoom and pan on opening
+    slamOnlineZoom.value = 1.0
+    slamOnlinePanX.value = 0
+    slamOnlinePanY.value = 0
+    if (robotStore.slamGridMapData) {
+      nextTick(() => {
+        drawSlamOnlineGridMap(robotStore.slamGridMapData)
+      })
+    }
+  }
+})
+
+// Auto open/close grid map popup when slam online state changes
+watch(isSlamOnline, (isActive) => {
+  if (isActive) {
+    slamOnlineMapDialogVisible.value = true
+  } else {
+    // cmd_status 反馈确认已关闭，释放 loading 并清理状态
+    if (slamOnlineBtnLoading.value) {
+      slamOnlineBtnLoading.value = false
+      localSlamOnlineActive.value = false
+      slamOnlineActiveName.value = ''
+      void refreshMapListCache()
+    }
+    slamOnlineMapDialogVisible.value = false
+  }
+})
+
+const confirmStartSlamOnline = async () => {
+  const name = slamOnlineMapName.value.trim()
+  if (!name) {
+    showErrorMessage('请输入地图名称')
+    return
+  }
+  if (isSlamOnlineMapNameDuplicate.value) {
+    showErrorMessage('地图名称已存在')
+    return
+  }
+
+  if (slamOnlineLoading.value) return
+  slamOnlineLoading.value = true
+  slamOnlineBtnLoading.value = true
+
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+
+    await navigationApi.slamOnline(robotId, {
+      action: 1,
+      map_name: name
+    })
+
+    localSlamOnlineActive.value = true
+    slamOnlineActiveName.value = name  // 保存地图名称，关闭时传回
+    slamOnlineDialogVisible.value = false
+    showSuccessMessage('开始实时建图指令已发送')
+    void refreshMapListCache()
+    // Open the map rendering popup
+    slamOnlineMapDialogVisible.value = true
+  } catch (err: any) {
+    console.error('开始实时建图失败:', err)
+    const errorMsg = err?.detail || err?.message || '开始实时建图失败'
+    showErrorMessage(errorMsg)
+  } finally {
+    slamOnlineLoading.value = false
+    slamOnlineBtnLoading.value = false
+  }
+}
+
+const cancelStartSlamOnline = () => {
+  slamOnlineDialogVisible.value = false
+}
+
+const stopSlamOnlineRequest = async () => {
+  if (slamOnlineBtnLoading.value) return
+  slamOnlineBtnLoading.value = true
+
+  try {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      slamOnlineBtnLoading.value = false
+      return
+    }
+
+    await navigationApi.slamOnline(robotId, {
+      action: 0,
+      map_name: slamOnlineActiveName.value  // 关闭时传回当前地图名称
+    })
+
+    showSuccessMessage('关闭实时建图指令已发送')
+    // 不立即释放 loading，等待 isSlamOnline 变为 false（cmd_status 反馈）时再释放
+    // 超时保险：5 秒后强制释放
+    setTimeout(() => {
+      if (slamOnlineBtnLoading.value) {
+        slamOnlineBtnLoading.value = false
+        localSlamOnlineActive.value = false
+        slamOnlineActiveName.value = ''
+        slamOnlineMapDialogVisible.value = false
+      }
+    }, 5000)
+  } catch (err: any) {
+    console.error('关闭实时建图失败:', err)
+    const errorMsg = err?.detail || err?.message || '关闭实时建图失败'
+    showErrorMessage(errorMsg)
+    slamOnlineBtnLoading.value = false
+  }
 }
 
 const handleStartRecording = () => {
@@ -12658,6 +13209,28 @@ const handleDelete = (item: any) => {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   min-width: 400px;
   max-width: 500px;
+}
+
+/* 实时建图栅格图弹窗 - 更大尺寸，并提升层级避免被顶部菜单遮挡 */
+.recording-dialog-overlay.slam-online-map-overlay {
+  z-index: 1000000;
+  align-items: flex-start;
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+
+.recording-dialog-card.slam-online-map-dialog {
+  min-width: 1000px;
+  max-width: 1400px;
+  width: 92vw;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+}
+
+.recording-dialog-card.slam-online-map-dialog .recording-dialog-body {
+  max-height: calc(100vh - 200px);
+  overflow: hidden;
 }
 
 .recording-dialog-header {

@@ -38,6 +38,7 @@ export interface CmdStatusData {
   data_record: number
   slam: number
   msf: number
+  slam_online?: number
   app_nav_pause?: CmdStatusActionResult
   app_stop_navtrack?: CmdStatusActionResult
   app_nav_stop?: CmdStatusActionResult
@@ -74,6 +75,21 @@ export interface AlertData {
 export interface MappingProgressData {
   progress: number
   timestamp: string
+}
+
+export interface SlamGridMapData {
+  timestamp: number
+  frame_id: string
+  resolution: number
+  width: number
+  height: number
+  origin: {
+    x: number
+    y: number
+    z: number
+  }
+  occupied_cells: [number, number][]
+  pose?: [number, number, number]  // [x, y, theta] 无人车实时位置
 }
 
 export interface MsfStatusData {
@@ -416,6 +432,15 @@ export function useRobotWebSocket() {
       // ---- 定位状态 ----
       case 'loc_status':
         robotStore.setLocStatus(data as LocStatusData)
+        break
+
+      // ---- 实时建图 2D 栅格数据 ----
+      case 'slam_grid_map':
+        if (typeof (robotStore as any).setSlamGridMap === 'function') {
+          ;(robotStore as any).setSlamGridMap(data as SlamGridMapData)
+        } else {
+          ;(robotStore as any).slamGridMapData = data as SlamGridMapData
+        }
         break
 
       // ---- 传感器状态（激光雷达/IMU/GPS） ----

@@ -1060,6 +1060,12 @@ export const navigationApi = {
   }) => {
     return apiClient.post(`/navigation/${robotId}/data_record`, data)
   },
+  slamOnline: (robotId: string, data: {
+    action: number;
+    map_name: string;
+  }) => {
+    return apiClient.post(`/navigation/${robotId}/slam_online`, data)
+  },
   slam: (robotId: string, data: {
     action: number;
     data_name: string;
