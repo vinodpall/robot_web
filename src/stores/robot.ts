@@ -254,6 +254,10 @@ export const useRobotStore = defineStore('robot', () => {
     slamGridMapData.value = data
   }
 
+  const clearSlamGridMap = () => {
+    slamGridMapData.value = null
+  }
+
   const setRealtimeSensorData = (payload: any) => {
     if (!payload || typeof payload !== 'object') return
     Object.keys(payload).forEach(key => {
@@ -537,6 +541,7 @@ export const useRobotStore = defineStore('robot', () => {
     setRealtimeSensorData,
     setCurrentScan,
     setSlamGridMap,
+    clearSlamGridMap,
     resetRuntimeState,
     // computed
     batteryLevel,

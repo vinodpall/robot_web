@@ -92,7 +92,7 @@ const handleMaskClick = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10030;
+  z-index: 2000000;
   backdrop-filter: blur(4px);
 }
 

@@ -1363,7 +1363,7 @@
         </div>
         <div class="recording-dialog-body" style="padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #07141e;">
           <!-- 实时绘制 Canvas -->
-          <div class="realtime-map-canvas-container" style="position: relative; width: 100%; height: 640px; background: #e6e6e6; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+          <div class="realtime-map-canvas-container" style="position: relative; width: 100%; height: 640px; background: #ffffff; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
             <canvas 
               ref="slamOnlineCanvasRef" 
               style="max-width: 100%; max-height: 100%; object-fit: contain; cursor: grab;"
@@ -7725,17 +7725,21 @@ const drawSlamOnlineGridMap = (map: any) => {
   const containerWidth = container.clientWidth || 800
   const containerHeight = container.clientHeight || 500
 
-  // Set high-resolution canvas size based on device pixel ratio
+  // Only resize canvas when dimensions actually change to avoid flicker/jitter
   const dpr = window.devicePixelRatio || 1
-  canvas.width = containerWidth * dpr
-  canvas.height = containerHeight * dpr
-  canvas.style.width = containerWidth + 'px'
-  canvas.style.height = containerHeight + 'px'
+  const targetW = containerWidth * dpr
+  const targetH = containerHeight * dpr
+  if (canvas.width !== targetW || canvas.height !== targetH) {
+    canvas.width = targetW
+    canvas.height = targetH
+    canvas.style.width = containerWidth + 'px'
+    canvas.style.height = containerHeight + 'px'
+  }
 
-  ctx.scale(dpr, dpr)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-  // 1. Fill entire canvas background with light-gray (unknown space)
-  ctx.fillStyle = '#e6e6e6'
+  // 1. Fill entire canvas background with white (consistent with map free space)
+  ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, containerWidth, containerHeight)
 
   const mapW = map.width
@@ -7762,37 +7766,32 @@ const drawSlamOnlineGridMap = (map: any) => {
     cellY = (ry - map.origin.y) / map.resolution
   }
 
-  // 3. Compute the bounding box of the explored area (robot position + occupied cells)
-  let minX = cellX
-  let maxX = cellX
-  let minY = cellY
-  let maxY = cellY
-
+  // 3. Compute the max radius from the robot to any occupied cell
+  //    Use the robot position as the fixed view center — this prevents the whole
+  //    map from shifting every frame when new cells are discovered at the edges.
+  let maxRadius = 20 // minimum radius in cells (keeps initial view from being too zoomed in)
   if (Array.isArray(map.occupied_cells) && map.occupied_cells.length > 0) {
     map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
-      if (cx < minX) minX = cx
-      if (cx > maxX) maxX = cx
-      if (cy < minY) minY = cy
-      if (cy > maxY) maxY = cy
+      const dx = Math.abs(cx - cellX)
+      const dy = Math.abs(cy - cellY)
+      const r = Math.max(dx, dy)
+      if (r > maxRadius) maxRadius = r
     })
   }
 
-  // Add margin around explored area
-  minX -= 5
-  maxX += 5
-  minY -= 5
-  maxY += 5
+  // Add margin
+  maxRadius += 8
 
-  const exploredW = Math.max(1, maxX - minX)
-  const exploredH = Math.max(1, maxY - minY)
+  // Stable scale: fit the full explored radius in the shorter canvas dimension.
+  // The radius only ever grows (new cells discovered), so the scale only shrinks
+  // gradually — no sudden jumps in either direction.
+  const halfView = Math.min(containerWidth, containerHeight) / 2
+  const baseScale = Math.max(4.0, halfView / maxRadius)
 
-  // Compute scaling to fit the explored area in the container (with a minimum scale of 12 pixels per cell to keep it large)
-  const scaleX = containerWidth / exploredW
-  const scaleY = containerHeight / exploredH
-  const baseScale = Math.max(12.0, Math.min(scaleX, scaleY))
-
-  const exploredCenterX = (minX + maxX) / 2
-  const exploredCenterY = (minY + maxY) / 2
+  // The view center is always the robot position (cellX, cellY in map coords).
+  // All canvas coords are computed relative to this center.
+  const viewCX = cellX
+  const viewCY = cellY
 
   ctx.save()
 
@@ -7803,14 +7802,14 @@ const drawSlamOnlineGridMap = (map: any) => {
 
   // 4. Draw explored map boundaries (free space) as white
   ctx.fillStyle = '#ffffff'
-  const mapLeft = containerWidth / 2 - exploredCenterX * baseScale
-  const mapTop = containerHeight / 2 - (mapH - exploredCenterY) * baseScale
+  const mapLeft = containerWidth / 2 - viewCX * baseScale
+  const mapTop  = containerHeight / 2 - (mapH - viewCY) * baseScale
   ctx.fillRect(mapLeft, mapTop, mapW * baseScale, mapH * baseScale)
 
   // 5. Draw explored free space rays from robot to occupied cells to simulate LIDAR clear paths
   if (hasRobot && Array.isArray(map.occupied_cells)) {
-    const robotCanvasX = containerWidth / 2 + (cellX - exploredCenterX) * baseScale
-    const robotCanvasY = containerHeight / 2 - (cellY - exploredCenterY) * baseScale
+    const robotCanvasX = containerWidth / 2  // robot is always at canvas center
+    const robotCanvasY = containerHeight / 2
 
     // Fill a small circle around the robot to represent local cleared space
     ctx.fillStyle = '#ffffff'
@@ -7823,8 +7822,8 @@ const drawSlamOnlineGridMap = (map: any) => {
     ctx.lineWidth = Math.max(1.5, baseScale * 0.6) // dynamic ray thickness
     ctx.beginPath()
     map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
-      const canvasX = containerWidth / 2 + (cx - exploredCenterX) * baseScale
-      const canvasY = containerHeight / 2 - (cy - exploredCenterY) * baseScale
+      const canvasX = containerWidth / 2 + (cx - viewCX) * baseScale
+      const canvasY = containerHeight / 2 - (cy - viewCY) * baseScale
       ctx.moveTo(robotCanvasX, robotCanvasY)
       ctx.lineTo(canvasX, canvasY)
     })
@@ -7835,8 +7834,8 @@ const drawSlamOnlineGridMap = (map: any) => {
   ctx.fillStyle = '#000000'
   if (Array.isArray(map.occupied_cells)) {
     map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
-      const canvasX = containerWidth / 2 + (cx - exploredCenterX) * baseScale
-      const canvasY = containerHeight / 2 - (cy - exploredCenterY) * baseScale
+      const canvasX = containerWidth / 2 + (cx - viewCX) * baseScale
+      const canvasY = containerHeight / 2 - (cy - viewCY) * baseScale
       ctx.fillRect(canvasX - 0.2, canvasY - 0.2, baseScale + 0.4, baseScale + 0.4)
     })
   }
@@ -7845,8 +7844,8 @@ const drawSlamOnlineGridMap = (map: any) => {
   if (map.origin) {
     const oxCell = (0 - map.origin.x) / map.resolution
     const oyCell = (0 - map.origin.y) / map.resolution
-    const oxCanvas = containerWidth / 2 + (oxCell - exploredCenterX) * baseScale
-    const oyCanvas = containerHeight / 2 - (oyCell - exploredCenterY) * baseScale
+    const oxCanvas = containerWidth / 2 + (oxCell - viewCX) * baseScale
+    const oyCanvas = containerHeight / 2 - (oyCell - viewCY) * baseScale
 
     ctx.save()
     ctx.translate(oxCanvas, oyCanvas)
@@ -7874,8 +7873,9 @@ const drawSlamOnlineGridMap = (map: any) => {
 
   // 8. Draw robot position — same style as navigation grid map
   if (hasRobot) {
-    const robotCanvasX = containerWidth / 2 + (cellX - exploredCenterX) * baseScale
-    const robotCanvasY = containerHeight / 2 - (cellY - exploredCenterY) * baseScale
+    // Robot is always at the canvas center (it's the view origin)
+    const robotCanvasX = containerWidth / 2
+    const robotCanvasY = containerHeight / 2
 
     ctx.save()
     ctx.translate(robotCanvasX, robotCanvasY)
@@ -7972,11 +7972,22 @@ const handleSlamOnlineWheel = (e: WheelEvent) => {
   }
 }
 
+// RAF handle for throttling slam grid map renders to screen refresh rate (~60fps)
+let slamRafId: number | null = null
+
 // Watchers for drawing grid map
 watch(() => robotStore.slamGridMapData, (newMap) => {
-  if (slamOnlineMapDialogVisible.value && newMap) {
-    drawSlamOnlineGridMap(newMap)
-  }
+  if (!slamOnlineMapDialogVisible.value || !newMap) return
+  // Throttle renders to one per animation frame (≤ 60fps)
+  // even if WebSocket pushes data faster than the screen can refresh
+  if (slamRafId !== null) return
+  slamRafId = requestAnimationFrame(() => {
+    slamRafId = null
+    const map = robotStore.slamGridMapData
+    if (slamOnlineMapDialogVisible.value && map) {
+      drawSlamOnlineGridMap(map)
+    }
+  })
 }, { deep: true })
 
 watch(slamOnlineMapDialogVisible, (visible) => {
@@ -7985,10 +7996,12 @@ watch(slamOnlineMapDialogVisible, (visible) => {
     slamOnlineZoom.value = 1.0
     slamOnlinePanX.value = 0
     slamOnlinePanY.value = 0
-    if (robotStore.slamGridMapData) {
-      nextTick(() => {
-        drawSlamOnlineGridMap(robotStore.slamGridMapData)
-      })
+    // 不在此处渲染旧数据，等待新的 WebSocket 推送
+  } else {
+    // 弹窗关闭时取消尚未执行的渲染帧，防止泄漏
+    if (slamRafId !== null) {
+      cancelAnimationFrame(slamRafId)
+      slamRafId = null
     }
   }
 })
@@ -7996,6 +8009,8 @@ watch(slamOnlineMapDialogVisible, (visible) => {
 // Auto open/close grid map popup when slam online state changes
 watch(isSlamOnline, (isActive) => {
   if (isActive) {
+    // 清除上次残留的栅格图数据，避免弹窗打开时显示旧数据
+    robotStore.clearSlamGridMap()
     slamOnlineMapDialogVisible.value = true
   } else {
     // cmd_status 反馈确认已关闭，释放 loading 并清理状态
@@ -8041,6 +8056,8 @@ const confirmStartSlamOnline = async () => {
     slamOnlineDialogVisible.value = false
     showSuccessMessage('开始实时建图指令已发送')
     void refreshMapListCache()
+    // 清除上次残留的栅格图数据，避免弹窗打开时显示旧数据
+    robotStore.clearSlamGridMap()
     // Open the map rendering popup
     slamOnlineMapDialogVisible.value = true
   } catch (err: any) {
@@ -13215,7 +13232,7 @@ const handleDelete = (item: any) => {
 .recording-dialog-overlay.slam-online-map-overlay {
   z-index: 1000000;
   align-items: flex-start;
-  padding-top: 40px;
+  padding-top: 120px;
   padding-bottom: 40px;
 }
 
@@ -13223,7 +13240,7 @@ const handleDelete = (item: any) => {
   min-width: 1000px;
   max-width: 1400px;
   width: 92vw;
-  max-height: calc(100vh - 80px);
+  max-height: calc(100vh - 160px);
   display: flex;
   flex-direction: column;
 }
