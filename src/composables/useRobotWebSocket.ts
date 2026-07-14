@@ -88,8 +88,9 @@ export interface SlamGridMapData {
     y: number
     z: number
   }
-  occupied_cells: [number, number][]
-  pose?: [number, number, number]  // [x, y, theta] 无人车实时位置
+  occupied_cells: [number, number][]   // 占用格（有障碍）
+  free_cells?: [number, number][]      // 空闲格（已探测、无障碍）
+  pose?: [number, number, number]      // [x, y, theta] 无人车实时位置
 }
 
 export interface MsfStatusData {
@@ -369,11 +370,22 @@ export function useRobotWebSocket() {
 
     const { type, robot_id, data } = msg
     const selectedRobotId = deviceStore.selectedRobotId
+
+    // 打印日志以确认收到的消息类型和 ID
+    if (type === 'slam_pose_update' || type === 'slam_grid_map') {
+      console.log(`[WS Debug] Received ${type}, robot_id: ${robot_id}, selectedRobotId: ${selectedRobotId}`)
+    }
+
     if (selectedRobotId && robot_id && robot_id !== selectedRobotId) {
-      return
+      // 容错：防止因 ID 格式不一致（如前端为数据库ID "1"，数据包为 "robot_001"）导致建图关键数据被过滤
+      if (type !== 'slam_pose_update' && type !== 'slam_grid_map') {
+        return
+      }
     }
     if (subscribedRobotId && robot_id && robot_id !== subscribedRobotId) {
-      return
+      if (type !== 'slam_pose_update' && type !== 'slam_grid_map') {
+        return
+      }
     }
 
     switch (type) {
@@ -440,6 +452,15 @@ export function useRobotWebSocket() {
           ;(robotStore as any).setSlamGridMap(data as SlamGridMapData)
         } else {
           ;(robotStore as any).slamGridMapData = data as SlamGridMapData
+        }
+        break
+
+      // ---- 实时建图机器人位姿 ----
+      case 'slam_pose_update':
+      case 'slam_pose_message':
+        console.log('[WS] Received slam_pose_update:', data)
+        if (typeof (robotStore as any).setSlamPoseData === 'function') {
+          ;(robotStore as any).setSlamPoseData(data as { x: number; y: number; z?: number; theta: number; frame_id?: string; timestamp?: number })
         }
         break
 

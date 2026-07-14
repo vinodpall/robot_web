@@ -1363,7 +1363,7 @@
         </div>
         <div class="recording-dialog-body" style="padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #07141e;">
           <!-- 实时绘制 Canvas -->
-          <div class="realtime-map-canvas-container" style="position: relative; width: 100%; height: 640px; background: #ffffff; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+          <div class="realtime-map-canvas-container" style="position: relative; width: 100%; height: 640px; background: #3d5252; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
             <canvas 
               ref="slamOnlineCanvasRef" 
               style="max-width: 100%; max-height: 100%; object-fit: contain; cursor: grab;"
@@ -1373,7 +1373,7 @@
               @mouseup="handleSlamOnlineMouseUp"
               @mouseleave="handleSlamOnlineMouseUp"
             ></canvas>
-            <div v-if="!hasSlamOnlineData" style="position: absolute; color: rgba(0, 0, 0, 0.5); font-size: 14px;">
+            <div v-if="!hasSlamOnlineData" style="position: absolute; color: #ffffff; font-size: 14px;">
               等待实时栅格图数据 (slam_grid_map)...
             </div>
           </div>
@@ -1384,10 +1384,14 @@
               <span style="font-weight: 600; color: #fff;">{{ slamGridMapMetaInfo.resolution }} m/cell</span>
               <span style="opacity: 0.7; margin-left: 15px;">地图尺寸: </span>
               <span style="font-weight: 600; color: #fff;">{{ slamGridMapMetaInfo.width }} x {{ slamGridMapMetaInfo.height }}</span>
+              <span style="opacity: 0.7; margin-left: 15px;">车辆位姿: </span>
+              <span style="font-weight: 600; color: #fff;">
+                {{ robotStore.slamPoseData ? `x: ${robotStore.slamPoseData.x.toFixed(3)}, y: ${robotStore.slamPoseData.y.toFixed(3)}, θ: ${robotStore.slamPoseData.theta.toFixed(3)}` : '等待数据...' }}
+              </span>
             </div>
             <div>
-              <button class="map-btn map-btn-danger" @click="handleSlamOnlineToggle">
-                关闭建图
+              <button class="map-btn map-btn-danger" :disabled="slamOnlineBtnLoading" @click="handleSlamOnlineToggle">
+                {{ slamOnlineBtnLoading ? '关闭中...' : '关闭建图' }}
               </button>
             </div>
           </div>
@@ -7738,24 +7742,30 @@ const drawSlamOnlineGridMap = (map: any) => {
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-  // 1. Fill entire canvas background with white (consistent with map free space)
-  ctx.fillStyle = '#ffffff'
+  // ── 颜色配置 ──────────────────────────────────────────
+  const COLOR_UNKNOWN  = '#3d5252'   // 未知区域（背景）
+  const COLOR_FREE     = '#9aacac'   // 空闲格（已探测、无障碍）
+  const COLOR_OCCUPIED = '#1a2424'   // 占用格（有障碍）
+
+  // 1. 整个 canvas 填充"未知"色
+  ctx.fillStyle = COLOR_UNKNOWN
   ctx.fillRect(0, 0, containerWidth, containerHeight)
 
   const mapW = map.width
   const mapH = map.height
   if (mapW <= 0 || mapH <= 0) return
 
-  // 2. Calculate robot cell position from map.pose [x, y, theta]
-  const poseArr = map.pose
+  // 2. 解析机器人位置 —— 来自独立推送的 slam_pose_update，不再读 map.pose
+  const slamPose = robotStore.slamPoseData
+  console.log('[DrawSlam] slamPose:', slamPose)
   let rx = 0, ry = 0, theta = 0
   let hasRobot = false
 
-  if (poseArr && Array.isArray(poseArr) && poseArr.length >= 2) {
-    rx = Number(poseArr[0])
-    ry = Number(poseArr[1])
-    theta = poseArr.length >= 3 ? Number(poseArr[2]) : 0
-    hasRobot = Number.isFinite(rx) && Number.isFinite(ry)
+  if (slamPose && Number.isFinite(slamPose.x) && Number.isFinite(slamPose.y)) {
+    rx = slamPose.x
+    ry = slamPose.y
+    theta = Number.isFinite(slamPose.theta) ? slamPose.theta : 0
+    hasRobot = true
   }
 
   let cellX = mapW / 2
@@ -7766,90 +7776,63 @@ const drawSlamOnlineGridMap = (map: any) => {
     cellY = (ry - map.origin.y) / map.resolution
   }
 
-  // 3. Compute the max radius from the robot to any occupied cell
-  //    Use the robot position as the fixed view center — this prevents the whole
-  //    map from shifting every frame when new cells are discovered at the edges.
-  let maxRadius = 20 // minimum radius in cells (keeps initial view from being too zoomed in)
-  if (Array.isArray(map.occupied_cells) && map.occupied_cells.length > 0) {
-    map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
-      const dx = Math.abs(cx - cellX)
-      const dy = Math.abs(cy - cellY)
-      const r = Math.max(dx, dy)
-      if (r > maxRadius) maxRadius = r
-    })
-  }
-
-  // Add margin
+  // 3. 以机器人为视图中心，计算最大半径来确定比例尺
+  let maxRadius = 20
+  const allCells = [
+    ...(Array.isArray(map.occupied_cells) ? map.occupied_cells : []),
+    ...(Array.isArray(map.free_cells) ? map.free_cells : [])
+  ]
+  allCells.forEach(([cx, cy]: [number, number]) => {
+    const r = Math.max(Math.abs(cx - cellX), Math.abs(cy - cellY))
+    if (r > maxRadius) maxRadius = r
+  })
   maxRadius += 8
 
-  // Stable scale: fit the full explored radius in the shorter canvas dimension.
-  // The radius only ever grows (new cells discovered), so the scale only shrinks
-  // gradually — no sudden jumps in either direction.
   const halfView = Math.min(containerWidth, containerHeight) / 2
   const baseScale = Math.max(4.0, halfView / maxRadius)
 
-  // The view center is always the robot position (cellX, cellY in map coords).
-  // All canvas coords are computed relative to this center.
+  // 视图中心 = 机器人位置，画布中点对应机器人
   const viewCX = cellX
   const viewCY = cellY
 
   ctx.save()
-
-  // Apply user-defined manual zoom and drag pan on top of the auto-fit scale
+  // 用户手动缩放 / 平移叠加在自动适配之上
   ctx.translate(containerWidth / 2 + slamOnlinePanX.value, containerHeight / 2 + slamOnlinePanY.value)
   ctx.scale(slamOnlineZoom.value, slamOnlineZoom.value)
   ctx.translate(-containerWidth / 2, -containerHeight / 2)
 
-  // 4. Draw explored map boundaries (free space) as white
-  ctx.fillStyle = '#ffffff'
-  const mapLeft = containerWidth / 2 - viewCX * baseScale
-  const mapTop  = containerHeight / 2 - (mapH - viewCY) * baseScale
-  ctx.fillRect(mapLeft, mapTop, mapW * baseScale, mapH * baseScale)
+  // 将格子坐标转换为画布像素的内联函数
+  const toCanvas = (cx: number, cy: number) => ({
+    x: containerWidth  / 2 + (cx - viewCX) * baseScale,
+    y: containerHeight / 2 - (cy - viewCY) * baseScale
+  })
 
-  // 5. Draw explored free space rays from robot to occupied cells to simulate LIDAR clear paths
-  if (hasRobot && Array.isArray(map.occupied_cells)) {
-    const robotCanvasX = containerWidth / 2  // robot is always at canvas center
-    const robotCanvasY = containerHeight / 2
-
-    // Fill a small circle around the robot to represent local cleared space
-    ctx.fillStyle = '#ffffff'
-    ctx.beginPath()
-    ctx.arc(robotCanvasX, robotCanvasY, Math.max(10, baseScale * 1.5), 0, Math.PI * 2)
-    ctx.fill()
-
-    // Draw white rays to all occupied cells
-    ctx.strokeStyle = '#ffffff'
-    ctx.lineWidth = Math.max(1.5, baseScale * 0.6) // dynamic ray thickness
-    ctx.beginPath()
-    map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
-      const canvasX = containerWidth / 2 + (cx - viewCX) * baseScale
-      const canvasY = containerHeight / 2 - (cy - viewCY) * baseScale
-      ctx.moveTo(robotCanvasX, robotCanvasY)
-      ctx.lineTo(canvasX, canvasY)
-    })
-    ctx.stroke()
-  }
-
-  // 6. Draw occupied cells (obstacles) in solid black
-  ctx.fillStyle = '#000000'
-  if (Array.isArray(map.occupied_cells)) {
-    map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
-      const canvasX = containerWidth / 2 + (cx - viewCX) * baseScale
-      const canvasY = containerHeight / 2 - (cy - viewCY) * baseScale
-      ctx.fillRect(canvasX - 0.2, canvasY - 0.2, baseScale + 0.4, baseScale + 0.4)
+  // 4. 绘制空闲格（已探测、无障碍）—— 亮灰色
+  if (Array.isArray(map.free_cells) && map.free_cells.length > 0) {
+    ctx.fillStyle = COLOR_FREE
+    map.free_cells.forEach(([cx, cy]: [number, number]) => {
+      const { x, y } = toCanvas(cx, cy)
+      ctx.fillRect(x - 0.2, y - 0.2, baseScale + 0.4, baseScale + 0.4)
     })
   }
 
-  // 7. Draw map origin marker (world 0,0) — same style as navigation grid map
+  // 5. 绘制占用格（有障碍）—— 深色
+  if (Array.isArray(map.occupied_cells) && map.occupied_cells.length > 0) {
+    ctx.fillStyle = COLOR_OCCUPIED
+    map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
+      const { x, y } = toCanvas(cx, cy)
+      ctx.fillRect(x - 0.2, y - 0.2, baseScale + 0.4, baseScale + 0.4)
+    })
+  }
+
+  // 6. 绘制原点标记（世界坐标 0,0）
   if (map.origin) {
     const oxCell = (0 - map.origin.x) / map.resolution
     const oyCell = (0 - map.origin.y) / map.resolution
-    const oxCanvas = containerWidth / 2 + (oxCell - viewCX) * baseScale
-    const oyCanvas = containerHeight / 2 - (oyCell - viewCY) * baseScale
+    const { x: oxCanvas, y: oyCanvas } = toCanvas(oxCell, oyCell)
 
     ctx.save()
     ctx.translate(oxCanvas, oyCanvas)
-    // 反向缩放，使图标和文字在 zoom 时保持固定视觉大小
     ctx.scale(1 / slamOnlineZoom.value, 1 / slamOnlineZoom.value)
 
     ctx.beginPath()
@@ -7860,74 +7843,69 @@ const drawSlamOnlineGridMap = (map: any) => {
     ctx.font = 'bold 13px Arial'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-
-    ctx.strokeStyle = '#ffffff'
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'
     ctx.lineWidth = 3
     ctx.strokeText('原点', 0, 8)
-
-    ctx.fillStyle = '#ff3b30'
+    ctx.fillStyle = '#ff6b6b'
     ctx.fillText('原点', 0, 8)
 
     ctx.restore()
   }
 
-  // 8. Draw robot position — same style as navigation grid map
+  // 7. 绘制机器人位置（始终在画布中心）
   if (hasRobot) {
-    // Robot is always at the canvas center (it's the view origin)
     const robotCanvasX = containerWidth / 2
     const robotCanvasY = containerHeight / 2
 
     ctx.save()
     ctx.translate(robotCanvasX, robotCanvasY)
-    // 反向缩放，使图标和文字在 zoom 时保持固定视觉大小
     ctx.scale(1 / slamOnlineZoom.value, 1 / slamOnlineZoom.value)
 
-    // Arrow layer (rotated with heading)
+    // 1. 方向箭头（最底层，其底盘和描边会被上层的白色外圈完美遮挡/裁剪，只露出外部的尖尖和白边）
     ctx.save()
     ctx.rotate(-theta)
-
     ctx.beginPath()
-    ctx.moveTo(15, 0)
-    ctx.lineTo(6, -6)
-    ctx.lineTo(6, 6)
+    ctx.moveTo(15, 0) // 顶点缩短至 15
+    ctx.lineTo(4, -6.5) // 基底加宽至 6.5
+    ctx.lineTo(4, 6.5)
     ctx.closePath()
-    ctx.fillStyle = '#00a0e9'
+    ctx.fillStyle = '#00a0e9' // 与内圈完全一致的蓝色
+    ctx.strokeStyle = '#ffffff' // 白色描边
+    ctx.lineWidth = 2.2 // 边框粗细保持 2.2px，匹配圆形白圈的厚度
+    ctx.stroke()
     ctx.fill()
+    ctx.restore()
 
-    // White outer circle
+    // 2. 外圈（白色底色，中层，覆盖在箭头底盘之上，确保圆形边框完美闭合并完整显示）
     ctx.beginPath()
     ctx.arc(0, 0, 9.5, 0, Math.PI * 2)
-    ctx.fillStyle = '#ffffff'
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
-    ctx.shadowBlur = 4
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'
+    ctx.shadowColor = 'rgba(0,0,0,0.4)'
+    ctx.shadowBlur = 6
     ctx.shadowOffsetY = 1
     ctx.fill()
-    ctx.shadowColor = 'transparent'
+    ctx.shadowColor = 'transparent' // 清除阴影
 
-    // Blue inner circle
+    // 3. 内圈（科技蓝色，最上层，完成圆形的内圈填充）
     ctx.beginPath()
     ctx.arc(0, 0, 7.5, 0, Math.PI * 2)
     ctx.fillStyle = '#00a0e9'
     ctx.fill()
 
-    ctx.restore() // restore arrow rotation
-
-    // Label (not rotated)
+    // 4. 标签（无人车字样）
     ctx.font = 'bold 13px Arial'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-
-    ctx.strokeStyle = '#ffffff'
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)'
     ctx.lineWidth = 3
     ctx.strokeText('无人车', 0, 16)
-
-    ctx.fillStyle = '#00a0e9'
+    ctx.fillStyle = '#67d5fd'
     ctx.fillText('无人车', 0, 16)
 
     ctx.restore()
   }
 
-  ctx.restore() // Restore manual zoom/pan transformations
+  ctx.restore() // 恢复用户缩放/平移变换
 }
 
 // Mouse events handling for zoom and drag pan
@@ -7980,6 +7958,18 @@ watch(() => robotStore.slamGridMapData, (newMap) => {
   if (!slamOnlineMapDialogVisible.value || !newMap) return
   // Throttle renders to one per animation frame (≤ 60fps)
   // even if WebSocket pushes data faster than the screen can refresh
+  if (slamRafId !== null) return
+  slamRafId = requestAnimationFrame(() => {
+    slamRafId = null
+    const map = robotStore.slamGridMapData
+    if (slamOnlineMapDialogVisible.value && map) {
+      drawSlamOnlineGridMap(map)
+    }
+  })
+}, { deep: true })
+
+watch(() => robotStore.slamPoseData, (newPose) => {
+  if (!slamOnlineMapDialogVisible.value || !newPose) return
   if (slamRafId !== null) return
   slamRafId = requestAnimationFrame(() => {
     slamRafId = null

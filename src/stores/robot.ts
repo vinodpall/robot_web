@@ -96,6 +96,9 @@ export const useRobotStore = defineStore('robot', () => {
   // ===== 实时建图2D栅格图数据 =====
   const slamGridMapData = ref<SlamGridMapData | null>(null)
 
+  // ===== 实时建图机器人位姿（slam_pose_update） =====
+  const slamPoseData = ref<{ x: number; y: number; z?: number; theta: number; frame_id?: string; timestamp?: number } | null>(null)
+
   // ===== 停障避障报警（遇到障碍物连续3次） =====
   const globalObstacleAlertActive = ref(false)
   let consecutiveObstacleCount = 0
@@ -256,6 +259,11 @@ export const useRobotStore = defineStore('robot', () => {
 
   const clearSlamGridMap = () => {
     slamGridMapData.value = null
+    slamPoseData.value = null
+  }
+
+  const setSlamPoseData = (data: { x: number; y: number; z?: number; theta: number; frame_id?: string; timestamp?: number }) => {
+    slamPoseData.value = data
   }
 
   const setRealtimeSensorData = (payload: any) => {
@@ -295,6 +303,7 @@ export const useRobotStore = defineStore('robot', () => {
     multitaskStatus.value = null
     currentScan.value = null
     slamGridMapData.value = null
+    slamPoseData.value = null
     realtimeSensorValues.value = {}
     realtimeSensorUnits.value = {}
     gpsMessage.value = null
@@ -510,6 +519,7 @@ export const useRobotStore = defineStore('robot', () => {
     globalObstacleAlertActive,
     currentScan,
     slamGridMapData,
+    slamPoseData,
     // mutations
     setOnlineStatus,
     setPose,
@@ -541,6 +551,7 @@ export const useRobotStore = defineStore('robot', () => {
     setRealtimeSensorData,
     setCurrentScan,
     setSlamGridMap,
+    setSlamPoseData,
     clearSlamGridMap,
     resetRuntimeState,
     // computed
