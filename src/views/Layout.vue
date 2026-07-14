@@ -32,7 +32,7 @@
         >
           任务管理
         </router-link>
-        <router-link :to="logNavTarget" class="nav-item" :class="{ active: $route.path === '/dashboard/device-manage' || $route.path === '/dashboard/alarm-log' }">
+        <router-link :to="logNavTarget" class="nav-item" :class="{ active: $route.path === '/dashboard/device-manage' || $route.path === '/dashboard/alarm-log' || $route.path === '/dashboard/operation-log' }">
           日志管理
         </router-link>
         <router-link :to="systemNavTarget" class="nav-item" :class="{ active: $route.path.includes('body-params') || $route.path.includes('users') || $route.path.includes('roles') || $route.path.includes('super-admin') || $route.path.includes('robot-info') }">
@@ -250,7 +250,7 @@ const NAV_MODULE_DEFAULT_PATH = '/dashboard/navigation'
 const NAV_MODULE_PATH_SET = new Set(['/dashboard/navigation'])
 const LOG_MODULE_LAST_PATH_KEY = 'log_module_last_path'
 const LOG_MODULE_DEFAULT_PATH = '/dashboard/alarm-log'
-const LOG_MODULE_PATH_SET = new Set(['/dashboard/alarm-log', '/dashboard/device-manage'])
+const LOG_MODULE_PATH_SET = new Set(['/dashboard/alarm-log', '/dashboard/device-manage', '/dashboard/operation-log'])
 const SYSTEM_MODULE_LAST_PATH_KEY = 'system_module_last_path'
 const SYSTEM_MODULE_DEFAULT_PATH = '/dashboard/body-params'
 const SYSTEM_MODULE_PATH_SET = new Set([

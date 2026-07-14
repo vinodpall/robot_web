@@ -1,4 +1,4 @@
-import { authApi, userApi, dockApi, droneApi, missionApi, missionRecordApi, alertApi, roleApi, deviceApi, drcApi } from './services'
+import { authApi, userApi, dockApi, droneApi, missionApi, missionRecordApi, alertApi, roleApi, deviceApi, drcApi, operationLogApi } from './services'
 
 // 导出所有API服务
 export {
@@ -11,5 +11,6 @@ export {
   alertApi,
   roleApi,
   deviceApi,
-  drcApi
+  drcApi,
+  operationLogApi
 }

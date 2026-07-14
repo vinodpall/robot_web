@@ -129,6 +129,15 @@ const router = createRouter({
           }
         },
         {
+          path: 'operation-log',
+          name: 'OperationLog',
+          component: () => import('../views/OperationLog.vue'),
+          meta: {
+            requiresAuth: true,
+            permission: 'log-show'
+          }
+        },
+        {
           path: 'users',
           name: 'UserManage',
           component: () => import('../views/UserManage.vue'),

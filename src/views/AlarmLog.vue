@@ -499,6 +499,7 @@ import { buildRobotHttpAssetUrl } from '@/utils/robotHttpProxy'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import trackRecordIcon from '@/assets/source_data/svg_data/robot_source/track_record.svg'
+import operationIcon from '@/assets/source_data/svg_data/robot_source/operation.svg'
 
 const router = useRouter()
 const route = useRoute()
@@ -506,7 +507,8 @@ const deviceStore = useDeviceStore()
 const permissionStore = usePermissionStore()
 
 const sidebarTabs = [
-  { key: 'track-record', label: '循迹记录', icon: trackRecordIcon, path: '/dashboard/alarm-log', permission: 'log-tracklog-show' }
+  { key: 'track-record', label: '循迹记录', icon: trackRecordIcon, path: '/dashboard/alarm-log', permission: 'log-tracklog-show' },
+  { key: 'operation-log', label: '操作日志', icon: operationIcon, path: '/dashboard/operation-log', permission: 'log-show' }
 ]
 const emitPermissionDenied = (permission: string) => {
   if (typeof document !== 'undefined') {

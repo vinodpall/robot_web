@@ -1753,5 +1753,32 @@ export const mapFileApi = {
       return null
     }
   }
+}
 
+export const operationLogApi = {
+  getOperationLogs: (params: {
+    page: number
+    page_size: number
+    user_id?: number | string
+    robot_id?: string
+    operation_type?: string
+    start_time?: string
+    end_time?: string
+  }) => {
+    return apiClient.get<{
+      total: number
+      items: Array<{
+        id: number
+        user_id: number
+        username: string
+        robot_id: string
+        operation_type: string
+        operation_desc: string
+        request_data: string | null
+        response_data: string | null
+        ip_address: string | null
+        created_at: string
+      }>
+    }>('/operation_logs', params)
+  }
 }

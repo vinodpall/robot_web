@@ -177,6 +177,7 @@ import m4tdImg from '@/assets/source_data/plane_2.png'
 import rubbishIcon from '@/assets/source_data/svg_data/rubbish.svg'
 import videoIcon from '@/assets/source_data/svg_data/video.svg'
 import AlarmLog from './AlarmLog.vue'
+import operationIcon from '@/assets/source_data/svg_data/robot_source/operation.svg'
 
 const router = useRouter()
 const route = useRoute()
@@ -195,7 +196,8 @@ const loadDevices = async () => {
 
 const sidebarTabs = [
   { key: 'manage', label: '设备管理', icon: equipmengStoreIcon },
-  { key: 'warning', label: '设备告警', icon: equipmentWarningsIcon }
+  { key: 'warning', label: '设备告警', icon: equipmentWarningsIcon },
+  { key: 'operation', label: '操作日志', icon: operationIcon }
 ]
 const currentTab = ref('manage')
 
@@ -203,6 +205,8 @@ const currentTab = ref('manage')
 const syncTabWithRoute = () => {
   if (route.path.includes('/dashboard/alarm-log')) {
     currentTab.value = 'warning'
+  } else if (route.path.includes('/dashboard/operation-log')) {
+    currentTab.value = 'operation'
   } else {
     currentTab.value = 'manage'
   }
@@ -227,6 +231,8 @@ const handleTabClick = (key: string) => {
     router.push('/dashboard/device-manage')
   } else if (key === 'warning') {
     router.push('/dashboard/alarm-log')
+  } else if (key === 'operation') {
+    router.push('/dashboard/operation-log')
   }
 }
 
