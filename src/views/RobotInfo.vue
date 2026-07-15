@@ -58,7 +58,7 @@
                 <span class="status-text" style="font-size: 13px; font-weight: bold; color: #EAF7FF;">{{ getStatusLabel(robotData.status) }}</span>
               </div>
               <img 
-                :src="robotData.robot_type === 'robot_dog' ? dogImg : carImg" 
+                :src="['dog', 'robot_dog'].includes(robotData.robot_type) ? dogImg : carImg" 
                 alt="Robot Model" 
                 class="model-img" 
               />
@@ -253,7 +253,13 @@
         <div class="cyber-form-group">
           <label class="cyber-label">英文名称</label>
           <div class="cyber-input-wrapper">
-            <input v-model="newSensor.en" class="cyber-input" placeholder="例: O2, LEL, CO2, NO2" />
+            <input 
+              v-model="newSensor.en" 
+              class="cyber-input" 
+              placeholder="例: O2, LEL, CO2, NO2" 
+              @input="handleEnInput"
+              @compositionend="handleEnInput"
+            />
             <div class="cyber-input-focus-line"></div>
           </div>
         </div>
@@ -261,7 +267,13 @@
         <div class="cyber-form-group">
           <label class="cyber-label">中文名称</label>
           <div class="cyber-input-wrapper">
-            <input v-model="newSensor.cn" class="cyber-input" placeholder="例: 氧气, 可燃气体" />
+            <input 
+              v-model="newSensor.cn" 
+              class="cyber-input" 
+              placeholder="例: 氧气, 可燃气体" 
+              @input="handleCnInput"
+              @compositionend="handleCnInput"
+            />
             <div class="cyber-input-focus-line"></div>
           </div>
         </div>
@@ -388,6 +400,22 @@ const extraDataObj = ref({
 const showSensorModal = ref(false)
 const newSensor = ref<CustomSensor>({ en: '', cn: '', unit: '', max_val: '', min_val: '' })
 
+const handleCnInput = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  if ((event as any).isComposing) return
+  const sanitized = target.value.replace(/[^\u4e00-\u9fa5]/g, '')
+  newSensor.value.cn = sanitized
+  target.value = sanitized
+}
+
+const handleEnInput = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  if ((event as any).isComposing) return
+  const sanitized = target.value.replace(/[^\x20-\x7e]/g, '')
+  newSensor.value.en = sanitized
+  target.value = sanitized
+}
+
 const openAddSensorModal = () => {
   newSensor.value = { en: '', cn: '', unit: '', max_val: '', min_val: '' }
   showSensorModal.value = true
@@ -405,6 +433,13 @@ const confirmAddSensor = () => {
   const parsedMin = newSensor.value.min_val !== '' && newSensor.value.min_val !== undefined && newSensor.value.min_val !== null 
     ? Number(newSensor.value.min_val) 
     : null
+
+  if (parsedMax !== null && parsedMin !== null && !Number.isNaN(parsedMax) && !Number.isNaN(parsedMin)) {
+    if (parsedMin > parsedMax) {
+      showError('下限值不能大于上限值')
+      return
+    }
+  }
 
   extraDataObj.value.sensors.push({ 
     ...newSensor.value,
@@ -459,7 +494,8 @@ const getRobotTypeLabel = (type: string | null | undefined) => {
   if (!type) return '通用底盘'
   switch (type.toLowerCase()) {
     case 'four_wheel': return '四轮底盘'
-    case 'robot_dog': return '四足机器狗'
+    case 'robot_dog':
+    case 'dog': return '四足机器狗'
     case 'tracked': return '履带式机器人'
     default: return type
   }

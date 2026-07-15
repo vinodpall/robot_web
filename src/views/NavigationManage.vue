@@ -405,6 +405,7 @@
                           </svg>
                         </button>
                         <button 
+                          v-if="hasRobotRtk"
                           class="view-switch-btn" 
                           :class="{ active: navViewType === 'map' }" 
                           @click.stop="navViewType = 'map'"
@@ -1051,6 +1052,7 @@
                           </svg>
                         </button>
                         <button
+                          v-if="hasRobotRtk"
                           class="view-switch-btn"
                           :class="{ active: navViewType === 'map' }"
                           @click.stop="setRouteEditView('map')"
@@ -4350,12 +4352,9 @@ const confirmUploadRouteEditRoute = () => {
     return
   }
 
-  const mapName = normalizeMapName(trackEditMap.value)
-  const trackName = getRouteEditUploadTrackName()
-  const fileName = getRouteEditUploadFileName()
   showConfirmDialog({
     title: '上传路线',
-    message: `确定上传当前路线到服务器吗？\n\n地图：${mapName}\n路线：${trackName}\n上传目录：${getRouteEditUploadDisplayPath(mapName)}\n文件：${fileName}\n\n上传后将覆盖服务器上的同名 txt 文件。`,
+    message: '是否确认上传当前路线？',
     confirmText: '确认上传',
     cancelText: '取消',
     type: 'warning',
@@ -7299,6 +7298,16 @@ watch(navViewType, async (newType) => {
     nextTick(() => {
       initNavAMap()
     })
+  }
+})
+
+watch(hasRobotRtk, (hasRtk) => {
+  if (!hasRtk && navViewType.value === 'map') {
+    if (currentTab.value === 'track_edit') {
+      navViewType.value = 'grid'
+    } else {
+      navViewType.value = 'pointcloud'
+    }
   }
 })
 
@@ -13889,18 +13898,18 @@ select.recording-input option {
 
 /* 细滚动条，契合网站风格 */
 .custom-select-dropdown::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
   background: transparent;
 }
 
 .custom-select-dropdown::-webkit-scrollbar-track {
-  background: rgba(10, 42, 58, 0.5);
+  background: transparent;
 }
 
 .custom-select-dropdown::-webkit-scrollbar-thumb {
   background: rgba(103, 213, 253, 0.3);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .custom-select-dropdown::-webkit-scrollbar-thumb:hover {
@@ -13909,7 +13918,7 @@ select.recording-input option {
 
 .custom-select-dropdown {
   scrollbar-width: thin;
-  scrollbar-color: rgba(103, 213, 253, 0.3) rgba(10, 42, 58, 0.5);
+  scrollbar-color: rgba(103, 213, 253, 0.3) transparent;
 }
 
 /* ==================== 重定位弹窗样式 ==================== */

@@ -381,6 +381,7 @@
               </svg>
             </button>
             <button 
+              v-if="hasRobotRtk"
               class="view-switch-btn" 
               :class="{ active: currentViewType === 'map' }" 
               @click.stop="setViewType('map')"
@@ -3672,6 +3673,9 @@ const loadAndDrawGridMap = async () => {
       gridMapMeta.value = null
     }
     
+    // 1.5 加载导航原点数据，以供 2D 栅格图原点绘制使用
+    pointCloudNavigationOrigin.value = await loadMapNavigationOrigin(mapName)
+    
     // 2. 获取 pgm 图像
     let pgmBlob = await getMapFile(mapName, 'gridMap.pgm')
     if (!pgmBlob) {
@@ -3870,10 +3874,12 @@ const drawGridMapCanvas = () => {
     ctx.restore()
   }
   
-  // 2.5 绘制地图原点 (0, 0)
+  // 2.5 绘制地图原点 (使用从 odom_key_frames.txt 读取的导航原点)
   ctx.save()
-  const ox = -meta.originX / meta.resolution
-  const oy = mapH + meta.originY / meta.resolution
+  const navOriginX = pointCloudNavigationOrigin.value?.x ?? 0
+  const navOriginY = pointCloudNavigationOrigin.value?.y ?? 0
+  const ox = (navOriginX - meta.originX) / meta.resolution
+  const oy = mapH - (navOriginY - meta.originY) / meta.resolution
   const rxOrigin = baseOffsetX + ox * baseScale
   const ryOrigin = baseOffsetY + oy * baseScale
   
@@ -9600,6 +9606,12 @@ watch(currentViewType, async (newType) => {
 watch(selectedMap, async (newMap) => {
   if (newMap && currentViewType.value === 'grid') {
     await loadAndDrawGridMap()
+  }
+})
+
+watch(hasRobotRtk, (hasRtk) => {
+  if (!hasRtk && currentViewType.value === 'map') {
+    currentViewType.value = 'pointcloud'
   }
 })
 

@@ -620,10 +620,10 @@
                <div class="simple-form-item stop-switch-item">
                  <label class="simple-label">是否到点不停</label>
                  <div class="simple-flex-row stop-switch-row">
-                   <div class="simple-switch" @click="addTaskDialog.form.no_switch = !addTaskDialog.form.no_switch" :class="{active: addTaskDialog.form.no_switch}">
+                   <div class="simple-switch" @click="addTaskDialog.form.no_stop = !addTaskDialog.form.no_stop" :class="{active: addTaskDialog.form.no_stop}">
                       <div class="simple-switch-dot"></div>
                    </div>
-                   <img :src="addTaskDialog.form.no_switch ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
+                   <img :src="addTaskDialog.form.no_stop ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
                  </div>
               </div>
                <div class="simple-form-item">
@@ -634,6 +634,19 @@
                     <option value="绕障模式">绕障模式</option>
                   </select>
               </div>
+            </div>
+
+             <div class="simple-form-grid">
+               <div class="simple-form-item stop-switch-item">
+                 <label class="simple-label">是否常检</label>
+                 <div class="simple-flex-row stop-switch-row">
+                   <div class="simple-switch" @click="addTaskDialog.form.no_switch = !addTaskDialog.form.no_switch" :class="{active: addTaskDialog.form.no_switch}">
+                      <div class="simple-switch-dot"></div>
+                   </div>
+                   <img :src="addTaskDialog.form.no_switch ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
+                 </div>
+              </div>
+              <div class="simple-form-item"></div>
             </div>
 
           </div>
@@ -760,7 +773,7 @@
                                  <span>{{ presetDialog.form.selectedName || '请选择预置点' }}</span>
                                  <span style="font-size:12px; transform: scaleY(0.6);">▼</span>
                              </div>
-                             <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="max-height: 340px; background: #102a43; border: 1px solid #244f78;">
+                             <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="bottom: 100%; top: auto; margin-top: 0; margin-bottom: 4px; max-height: 260px; background: #102a43; border: 1px solid #244f78;">
                                   <div
                                     v-for="p in presetList"
                                     :key="p.id"
@@ -3296,6 +3309,7 @@ const addTaskDialog = ref({
     obsMode: '停障模式',
     gait: '1',
     ground: '1',
+    no_stop: false,
     no_switch: false
   }
 })
@@ -3617,6 +3631,7 @@ const handleAddTask = () => {
   addTaskDialog.value.form.obsMode = '停障模式'
   addTaskDialog.value.form.gait = '1'
   addTaskDialog.value.form.ground = '1'
+  addTaskDialog.value.form.no_stop = false
   addTaskDialog.value.form.no_switch = false
   addTaskDialog.value.form.isMulti = '0'
 
@@ -3651,11 +3666,11 @@ const parseBooleanLike = (value: unknown): boolean | null => {
 }
 
 const resolveNoSwitchFromTask = (task: any): boolean => {
+  const noStop = parseBooleanLike(task?.no_stop ?? task?.noStop ?? task?.nostop)
+  if (noStop !== null) return noStop
+
   const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
   if (noSwitch !== null) return noSwitch
-
-  const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
-  if (noStop !== null) return noStop
 
   const stopAtPoint = parseBooleanLike(task?.stopAtPoint ?? task?.stop_at_point)
   if (stopAtPoint !== null) return !stopAtPoint
@@ -3768,7 +3783,8 @@ const handleEditTask = async (waypoint: any) => {
     addTaskDialog.value.form.obsMode = normalizeTrackTaskObsModeText(waypoint.rawData?.obs_mode)
     addTaskDialog.value.form.gait = waypoint.gait || waypoint.rawData?.gait || '1'
     addTaskDialog.value.form.ground = waypoint.ground || waypoint.rawData?.ground || '1'
-    addTaskDialog.value.form.no_switch = resolveNoSwitchFromTask(waypoint.rawData || waypoint)
+    addTaskDialog.value.form.no_stop = resolveNoSwitchFromTask(waypoint.rawData || waypoint)
+    addTaskDialog.value.form.no_switch = parseBooleanLike(waypoint.rawData?.no_switch ?? waypoint.no_switch ?? waypoint.rawData?.noSwitch ?? waypoint.noSwitch) ?? false
 
     addTaskDialog.value.visible = true
     await nextTick()
@@ -3833,8 +3849,8 @@ const confirmAddTask = async () => {
     track_point_name: selectedTaskGroupName.value,
     extra: form.extraConfig || '',
     obs_mode: form.obsMode || '停障模式',
+    no_stop: form.no_stop,
     no_switch: form.no_switch,
-    nostop: false,
     gait: selectedVehicleType.value === 'four_wheel' ? '' : form.gait,
     ground: selectedVehicleType.value === 'four_wheel' ? '' : form.ground,
     createtime: isEditMode.value ? (editingTaskItem.value?.rawData?.createtime || timestamp) : timestamp
@@ -4024,12 +4040,7 @@ const presetDialog = ref({
 })
 
 // Mock preset list for UI layout - replace with API call later if needed
-const presetList = ref<{id: string, name: string}[]>(
-  Array.from({ length: 300 }, (_, i) => ({
-    id: String(i + 1),
-    name: `${i + 1}.预置点${i + 1}`
-  }))
-)
+const presetList = ref<{id: string, name: string}[]>([])
 const isPresetDropdownOpen = ref(false)
 const presetDropdownRef = ref<HTMLElement | null>(null)
 
@@ -4325,9 +4336,31 @@ const openPresetDialog = async () => {
   presetDialog.value.visible = true
   
   // 获取当前表单中的预置点值
-  const currentPreset = addTaskDialog.value.form.preset
+  const currentPreset = String(addTaskDialog.value.form.preset || '').trim()
 
   presetVideoType.value = hasPresetVisibleStream.value ? 'drone_visible' : (hasPresetInfraredStream.value ? 'drone_infrared' : 'drone_visible')
+
+  // 初始化列表与选中项（优先加载当前已选的预置点，避免列表闪烁）
+  if (currentPreset) {
+    const match = currentPreset.match(/^(\d+)\.(.+)$/)
+    if (match) {
+      const [, number, name] = match
+      presetList.value = [{ id: number, name: currentPreset }]
+      presetDialog.value.form.id = number
+      presetDialog.value.form.selectedName = currentPreset
+      presetDialog.value.form.inputName = currentPreset
+    } else {
+      presetList.value = [{ id: '', name: currentPreset }]
+      presetDialog.value.form.id = ''
+      presetDialog.value.form.selectedName = currentPreset
+      presetDialog.value.form.inputName = currentPreset
+    }
+  } else {
+    presetList.value = []
+    presetDialog.value.form.id = ''
+    presetDialog.value.form.selectedName = ''
+    presetDialog.value.form.inputName = ''
+  }
 
   // 先启动视频，不等待 presets 接口
   nextTick(() => {
@@ -4350,7 +4383,7 @@ const openPresetDialog = async () => {
     ? (localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list'))
     : localStorage.getItem('camera_list')
   
-  // presets 后台拉取，避免阻塞视频首帧
+  // presets 后台拉取，从接口获取最新数据并渲染
   if (robotId && cameraListStr) {
     void (async () => {
       try {
@@ -4360,26 +4393,20 @@ const openPresetDialog = async () => {
           if (ptzName) {
             console.log('Fetching presets for:', ptzName)
             const res = await navigationApi.getPresets(robotId, ptzName)
-            if (res && res.code === 200 && Array.isArray(res.list)) {
-              res.list.forEach((item: any) => {
-                const idStr = String(item.id)
-                const existingIndex = presetList.value.findIndex(p => p.id === idStr)
-                if (existingIndex !== -1) {
-                  presetList.value[existingIndex].name = `${idStr}.${item.presetName}`
-                } else {
-                  presetList.value.push({
-                    id: idStr,
-                    name: `${idStr}.${item.presetName}`
-                  })
-                }
-              })
-              presetList.value.sort((a, b) => Number(a.id) - Number(b.id))
+            if (res && Array.isArray(res.list)) {
+              // 重新组装列表，只保留接口返回的实际预置点
+              presetList.value = res.list.map((item: any) => ({
+                id: String(item.id),
+                name: `${item.id}.${item.presetName || item.preset_name || item.name || `预置点${item.id}`}`
+              })).sort((a, b) => Number(a.id) - Number(b.id))
 
+              // 重新根据最新加载 of 列表绑定当前选中项
               const selectedId = String(presetDialog.value.form.id || '').trim()
               if (selectedId) {
                 const selectedPreset = presetList.value.find(p => String(p.id) === selectedId)
                 if (selectedPreset) {
                   presetDialog.value.form.selectedName = selectedPreset.name
+                  presetDialog.value.form.inputName = selectedPreset.name
                 }
               } else if (presetList.value.length > 0) {
                 presetDialog.value.form.id = presetList.value[0].id
@@ -4397,36 +4424,6 @@ const openPresetDialog = async () => {
         console.error('Error parsing camera_list or fetching presets:', e)
       }
     })()
-  }
-
-  // 根据当前选中的预置点设置选中项
-  if (currentPreset) {
-    // 从当前值中提取预置点名称（格式可能是 "4.测试点123"）
-    const match = currentPreset.match(/^(\d+)\.(.+)$/)
-    let targetPreset = null
-    
-    if (match) {
-      const [, number, name] = match
-      // 在 presetList 中查找匹配的项
-      targetPreset = presetList.value.find(p => {
-        const pMatch = p.name.match(/^(\d+)\.(.+)$/)
-        return pMatch && pMatch[1] === number
-      })
-    }
-    
-    if (targetPreset) {
-      presetDialog.value.form.id = targetPreset.id
-      presetDialog.value.form.selectedName = targetPreset.name
-      presetDialog.value.form.inputName = currentPreset
-    } else if (presetList.value.length > 0) {
-      presetDialog.value.form.id = presetList.value[0].id
-      presetDialog.value.form.selectedName = presetList.value[0].name
-      presetDialog.value.form.inputName = currentPreset
-    }
-  } else if (presetList.value.length > 0) {
-    presetDialog.value.form.id = presetList.value[0].id
-    presetDialog.value.form.selectedName = presetList.value[0].name
-    presetDialog.value.form.inputName = presetList.value[0].name
   }
 }
 

@@ -27,10 +27,41 @@
             <div class="mission-toolbar track-toolbar-row">
               <div class="track-toolbar-group">
                 <span class="mission-toolbar-label">地图名称：</span>
-                <select v-model="filterMapName" class="mission-toolbar-select track-filter-input">
-                  <option value="">全部</option>
-                  <option v-for="m in mapList" :key="m" :value="m">{{ m }}</option>
-                </select>
+                <div class="custom-select-container track-filter-input" ref="mapDropdownRef" style="padding: 0; border: none; background: transparent; position: relative;">
+                  <div
+                    class="custom-select-trigger"
+                    :class="{ 'is-active': isMapDropdownOpen }"
+                    style="height: 32px; width: 160px; min-width: 100px; border-radius: 4px; border: 1px solid #164159; background-color: #0c2a3e; color: #fff; padding: 0 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;"
+                    @click.stop="isMapDropdownOpen = !isMapDropdownOpen"
+                  >
+                    <span class="custom-select-value" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ filterMapName || '全部' }}</span>
+                    <span class="custom-select-arrow" :style="{ transform: isMapDropdownOpen ? 'rotate(180deg)' : 'none' }" style="display: flex; align-items: center; transition: transform 0.2s ease;">
+                      <svg width="10" height="6" viewBox="0 0 10 6">
+                        <polygon points="0,0 10,0 5,6" fill="#67d5fd"/>
+                      </svg>
+                    </span>
+                  </div>
+                  <div v-show="isMapDropdownOpen" class="custom-select-dropdown" style="position: absolute; top: 100%; left: 0; right: 0; background: #0c2a3e; border: 1px solid #164159; border-radius: 4px; max-height: 200px; overflow-y: auto; z-index: 1000; margin-top: 4px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); box-sizing: border-box;">
+                    <div
+                      class="custom-select-option"
+                      :class="{ selected: filterMapName === '' }"
+                      style="padding: 8px 12px; font-size: 13px; color: #67d5fd; cursor: pointer; transition: background 0.2s, color 0.2s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;"
+                      @click="selectMap('')"
+                    >
+                      全部
+                    </div>
+                    <div
+                      v-for="m in mapList"
+                      :key="m"
+                      class="custom-select-option"
+                      :class="{ selected: filterMapName === m }"
+                      style="padding: 8px 12px; font-size: 13px; color: #67d5fd; cursor: pointer; transition: background 0.2s, color 0.2s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;"
+                      @click="selectMap(m)"
+                    >
+                      {{ m }}
+                    </div>
+                  </div>
+                </div>
               </div>
               <div class="track-toolbar-group">
                 <span class="mission-toolbar-label">识别项目：</span>
@@ -562,6 +593,12 @@ const loadFilterOptions = async () => {
 }
 
 const filterMapName = ref('')
+const isMapDropdownOpen = ref(false)
+const mapDropdownRef = ref<HTMLElement | null>(null)
+const selectMap = (m: string) => {
+  filterMapName.value = m
+  isMapDropdownOpen.value = false
+}
 const filterContent = ref('')
 const filterTrackRoute = ref('')
 const filterTaskGroup = ref('')
@@ -768,6 +805,9 @@ const handleGlobalMouseDown = (event: MouseEvent) => {
   if (!target) return
   if (!target.closest('.track-time-picker-wrap')) {
     activeTimePicker.value = null
+  }
+  if (!target.closest('.custom-select-container')) {
+    isMapDropdownOpen.value = false
   }
 }
 
@@ -2668,6 +2708,36 @@ select.track-filter-input:hover {
 
 .detail-table-scroll-body::-webkit-scrollbar-thumb:hover {
   background: rgba(103, 213, 253, 0.5);
+}
+
+/* 自定义下拉滚动条优化 */
+.custom-select-dropdown::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+.custom-select-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-select-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.3);
+  border-radius: 2px;
+}
+.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: rgba(103, 213, 253, 0.5);
+}
+.custom-select-dropdown {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 213, 253, 0.3) transparent;
+}
+.custom-select-option:hover {
+  background: rgba(103, 213, 253, 0.15) !important;
+  color: #fff !important;
+}
+.custom-select-option.selected {
+  background: rgba(103, 213, 253, 0.3) !important;
+  color: #fff !important;
+  font-weight: bold;
 }
 </style>
 
