@@ -8011,14 +8011,29 @@ watch(isSlamOnline, (isActive) => {
     // 清除上次残留的栅格图数据，避免弹窗打开时显示旧数据
     robotStore.clearSlamGridMap()
     slamOnlineMapDialogVisible.value = true
+    
+    // 如果内存里的地图名称为空，尝试恢复
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (robotId && !slamOnlineActiveName.value) {
+      const cachedName = localStorage.getItem(`slam_online_active_name_${robotId}`)
+      if (cachedName) {
+        slamOnlineActiveName.value = cachedName
+      } else if (robotStore.cmdStatus?.map_name) {
+        slamOnlineActiveName.value = robotStore.cmdStatus.map_name
+      }
+    }
   } else {
     // cmd_status 反馈确认已关闭，释放 loading 并清理状态
     if (slamOnlineBtnLoading.value) {
       slamOnlineBtnLoading.value = false
-      localSlamOnlineActive.value = false
-      slamOnlineActiveName.value = ''
-      void refreshMapListCache()
     }
+    localSlamOnlineActive.value = false
+    slamOnlineActiveName.value = ''
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (robotId) {
+      localStorage.removeItem(`slam_online_active_name_${robotId}`)
+    }
+    void refreshMapListCache()
     slamOnlineMapDialogVisible.value = false
   }
 })
@@ -8052,6 +8067,9 @@ const confirmStartSlamOnline = async () => {
 
     localSlamOnlineActive.value = true
     slamOnlineActiveName.value = name  // 保存地图名称，关闭时传回
+    if (robotId) {
+      localStorage.setItem(`slam_online_active_name_${robotId}`, name)
+    }
     slamOnlineDialogVisible.value = false
     showSuccessMessage('开始实时建图指令已发送')
     void refreshMapListCache()
@@ -8085,9 +8103,14 @@ const stopSlamOnlineRequest = async () => {
       return
     }
 
+    const activeMapName = slamOnlineActiveName.value || 
+                          localStorage.getItem(`slam_online_active_name_${robotId}`) || 
+                          robotStore.cmdStatus?.map_name || 
+                          ''
+
     await navigationApi.slamOnline(robotId, {
       action: 0,
-      map_name: slamOnlineActiveName.value  // 关闭时传回当前地图名称
+      map_name: activeMapName  // 关闭时传回当前地图名称
     })
 
     showSuccessMessage('关闭实时建图指令已发送')
@@ -8098,6 +8121,9 @@ const stopSlamOnlineRequest = async () => {
         slamOnlineBtnLoading.value = false
         localSlamOnlineActive.value = false
         slamOnlineActiveName.value = ''
+        if (robotId) {
+          localStorage.removeItem(`slam_online_active_name_${robotId}`)
+        }
         slamOnlineMapDialogVisible.value = false
       }
     }, 5000)

@@ -423,10 +423,16 @@
                <div class="simple-form-item stop-switch-item">
                  <label class="simple-label">是否到点不停</label>
                  <div class="simple-flex-row stop-switch-row">
-                   <div class="simple-switch" @click="addTaskDialog.form.no_stop = !addTaskDialog.form.no_stop" :class="{active: addTaskDialog.form.no_stop}">
+                   <div
+                     class="simple-switch"
+                     @click="editingTaskIndex < 0 && (addTaskDialog.form.nostop = !addTaskDialog.form.nostop)"
+                     :class="{active: addTaskDialog.form.nostop}"
+                     :style="editingTaskIndex >= 0 ? { opacity: '0.45', cursor: 'not-allowed', pointerEvents: 'none' } : {}"
+                     :title="editingTaskIndex >= 0 ? '编辑模式下不可修改' : ''"
+                   >
                       <div class="simple-switch-dot"></div>
                    </div>
-                   <img :src="addTaskDialog.form.no_stop ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
+                   <img :src="addTaskDialog.form.nostop ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" :style="editingTaskIndex >= 0 ? { opacity: '0.45' } : {}" />
                  </div>
               </div>
                <div class="simple-form-item stop-switch-item">
@@ -1806,7 +1812,7 @@ const addTaskDialog = ref({
     obsMode: '停障模式',
     gait: '1', // 行走步态
     ground: '1', // 实心地面
-    no_stop: false,
+    nostop: false,
     no_switch: false,
     remark: '' // 备注
   }
@@ -2117,7 +2123,7 @@ const handleAddTask = () => {
     obsMode: '停障模式',
     gait: '1',
     ground: '1',
-    no_stop: false,
+    nostop: false,
     no_switch: false,
     remark: ''
   }
@@ -2191,7 +2197,7 @@ const confirmAddTask = async () => {
     obs_mode: 2,
     gait: selectedVehicleType.value === 'four_wheel' ? '' : (addTaskDialog.value.form.gait || '1'),
     ground: selectedVehicleType.value === 'four_wheel' ? '' : (addTaskDialog.value.form.ground || '1'),
-    no_stop: addTaskDialog.value.form.no_stop,
+    nostop: addTaskDialog.value.form.nostop,
     no_switch: addTaskDialog.value.form.no_switch
   }
   
@@ -2291,7 +2297,7 @@ const handleEditTask = async (waypoint: any) => {
       obsMode: normalizeTrackTaskObsModeText(taskData.obs_mode),
       gait: taskData.gait || '1',
       ground: taskData.ground || '1',
-      no_stop: resolveNoSwitchFromTask(taskData),
+      nostop: resolveNoSwitchFromTask(taskData),
       no_switch: parseBooleanLike(taskData?.no_switch ?? taskData?.noSwitch) ?? false
     }
     addTaskDialog.value.visible = true

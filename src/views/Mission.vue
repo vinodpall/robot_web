@@ -620,10 +620,16 @@
                <div class="simple-form-item stop-switch-item">
                  <label class="simple-label">是否到点不停</label>
                  <div class="simple-flex-row stop-switch-row">
-                   <div class="simple-switch" @click="addTaskDialog.form.no_stop = !addTaskDialog.form.no_stop" :class="{active: addTaskDialog.form.no_stop}">
+                   <div
+                     class="simple-switch"
+                     @click="!isEditMode && (addTaskDialog.form.nostop = !addTaskDialog.form.nostop)"
+                     :class="{active: addTaskDialog.form.nostop}"
+                     :style="isEditMode ? { opacity: '0.45', cursor: 'not-allowed', pointerEvents: 'none' } : {}"
+                     :title="isEditMode ? '编辑模式下不可修改' : ''"
+                   >
                       <div class="simple-switch-dot"></div>
                    </div>
-                   <img :src="addTaskDialog.form.no_stop ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" />
+                   <img :src="addTaskDialog.form.nostop ? unlockIcon : lockIcon" style="width: 20px; height: 20px; margin-left: 10px;" :style="isEditMode ? { opacity: '0.45' } : {}" />
                  </div>
               </div>
                <div class="simple-form-item">
@@ -3309,7 +3315,7 @@ const addTaskDialog = ref({
     obsMode: '停障模式',
     gait: '1',
     ground: '1',
-    no_stop: false,
+    nostop: false,
     no_switch: false
   }
 })
@@ -3631,7 +3637,7 @@ const handleAddTask = () => {
   addTaskDialog.value.form.obsMode = '停障模式'
   addTaskDialog.value.form.gait = '1'
   addTaskDialog.value.form.ground = '1'
-  addTaskDialog.value.form.no_stop = false
+  addTaskDialog.value.form.nostop = false
   addTaskDialog.value.form.no_switch = false
   addTaskDialog.value.form.isMulti = '0'
 
@@ -3666,8 +3672,8 @@ const parseBooleanLike = (value: unknown): boolean | null => {
 }
 
 const resolveNoSwitchFromTask = (task: any): boolean => {
-  const noStop = parseBooleanLike(task?.no_stop ?? task?.noStop ?? task?.nostop)
-  if (noStop !== null) return noStop
+  const nostopVal = parseBooleanLike(task?.nostop ?? task?.no_stop ?? task?.noStop)
+  if (nostopVal !== null) return nostopVal
 
   const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
   if (noSwitch !== null) return noSwitch
@@ -3783,7 +3789,7 @@ const handleEditTask = async (waypoint: any) => {
     addTaskDialog.value.form.obsMode = normalizeTrackTaskObsModeText(waypoint.rawData?.obs_mode)
     addTaskDialog.value.form.gait = waypoint.gait || waypoint.rawData?.gait || '1'
     addTaskDialog.value.form.ground = waypoint.ground || waypoint.rawData?.ground || '1'
-    addTaskDialog.value.form.no_stop = resolveNoSwitchFromTask(waypoint.rawData || waypoint)
+    addTaskDialog.value.form.nostop = resolveNoSwitchFromTask(waypoint.rawData || waypoint)
     addTaskDialog.value.form.no_switch = parseBooleanLike(waypoint.rawData?.no_switch ?? waypoint.no_switch ?? waypoint.rawData?.noSwitch ?? waypoint.noSwitch) ?? false
 
     addTaskDialog.value.visible = true
@@ -3849,7 +3855,7 @@ const confirmAddTask = async () => {
     track_point_name: selectedTaskGroupName.value,
     extra: form.extraConfig || '',
     obs_mode: form.obsMode || '停障模式',
-    no_stop: form.no_stop,
+    nostop: form.nostop,
     no_switch: form.no_switch,
     gait: selectedVehicleType.value === 'four_wheel' ? '' : form.gait,
     ground: selectedVehicleType.value === 'four_wheel' ? '' : form.ground,
