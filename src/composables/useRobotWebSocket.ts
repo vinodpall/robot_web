@@ -299,6 +299,17 @@ export interface CarMotorInfoData {
   timestamp: string
 }
 
+export interface TireInfoData {
+  tire_pressure: number[]
+  tire_temperature: number[]
+  no_data_warning: number[]
+  gas_leak_warning?: number[]
+  "gas_leak_warning "?: number[]
+  high_temperature_warning: number[]
+  pressure_state: number[]
+  timestamp?: string
+}
+
 
 /** 0x3100EE01 地形模式 */
 export interface TerrainModeData {
@@ -661,6 +672,15 @@ export function useRobotWebSocket() {
         }
         break
       }
+
+      // ---- 无人车轮胎数据 ----
+      case 'tire_info':
+        if (typeof (robotStore as any).setTireInfo === 'function') {
+          ;(robotStore as any).setTireInfo(data as TireInfoData)
+        } else {
+          ;(robotStore as any).tireInfo = data as TireInfoData
+        }
+        break
 
       // ---- task_update（暂保留兼容） ----
       case 'task_update':

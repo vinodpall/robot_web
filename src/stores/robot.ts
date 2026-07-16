@@ -28,6 +28,7 @@ import type {
   CarTemperatureData,
   CarMotorInfoData,
   SlamGridMapData,
+  TireInfoData,
 } from '../composables/useRobotWebSocket'
 
 export const useRobotStore = defineStore('robot', () => {
@@ -82,6 +83,7 @@ export const useRobotStore = defineStore('robot', () => {
   const stopState = ref<StopStateData | null>(null)
   const carTemperature = ref<CarTemperatureData | null>(null)
   const carMotorInfo = ref<CarMotorInfoData | null>(null)
+  const tireInfo = ref<TireInfoData | null>(null)
 
   // ===== task_status 发布点任务运行状态 =====
   const taskStatus = ref<TaskStatusData | null>(null)
@@ -237,6 +239,11 @@ export const useRobotStore = defineStore('robot', () => {
     carMotorInfo.value = data
   }
 
+  const setTireInfo = (data: TireInfoData) => {
+    if (!data) return
+    tireInfo.value = data
+  }
+
   const setTaskStatus = (data: TaskStatusData) => {
     taskStatus.value = data
   }
@@ -310,6 +317,7 @@ export const useRobotStore = defineStore('robot', () => {
     stopState.value = null
     carTemperature.value = null
     carMotorInfo.value = null
+    tireInfo.value = null
     globalObstacleAlertActive.value = false
     consecutiveObstacleCount = 0
   }
@@ -513,6 +521,7 @@ export const useRobotStore = defineStore('robot', () => {
     stopState,
     carTemperature,
     carMotorInfo,
+    tireInfo,
     taskStatus,
     taskProgress,
     multitaskStatus,
@@ -545,6 +554,7 @@ export const useRobotStore = defineStore('robot', () => {
     setStopState,
     setCarTemperature,
     setCarMotorInfo,
+    setTireInfo,
     setTaskStatus,
     setTaskProgress,
     setMultitaskStatus,
