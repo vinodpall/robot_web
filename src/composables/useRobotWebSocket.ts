@@ -376,16 +376,26 @@ export function useRobotWebSocket() {
       console.log(`[WS Debug] Received ${type}, robot_id: ${robot_id}, selectedRobotId: ${selectedRobotId}`)
     }
 
-    if (selectedRobotId && robot_id && robot_id !== selectedRobotId) {
-      // 容错：防止因 ID 格式不一致（如前端为数据库ID "1"，数据包为 "robot_001"）导致建图关键数据被过滤
-      if (type !== 'slam_pose_update' && type !== 'slam_grid_map') {
-        return
-      }
+    // 辅助函数：灵活匹配 robot_id（兼容 "1", 1, "robot_001", "robot_1" 等不同格式）
+    const isSameRobotId = (id1: any, id2: any) => {
+      if (!id1 || !id2) return true
+      const s1 = String(id1).trim()
+      const s2 = String(id2).trim()
+      if (s1 === s2) return true
+      const c1 = s1.replace(/^robot_/, '').replace(/^0+/, '')
+      const c2 = s2.replace(/^0+/, '').replace(/^robot_/, '').replace(/^0+/, '')
+      if (c1 === c2) return true
+      // 单机器人项目允许放行
+      if (deviceStore.robots && deviceStore.robots.length <= 1) return true
+      return false
     }
-    if (subscribedRobotId && robot_id && robot_id !== subscribedRobotId) {
-      if (type !== 'slam_pose_update' && type !== 'slam_grid_map') {
-        return
-      }
+
+    if (selectedRobotId && robot_id && !isSameRobotId(robot_id, selectedRobotId)) {
+      console.warn(`[WS Warning] Received ${type} with robot_id ${robot_id}, but selectedRobotId is ${selectedRobotId}`)
+      return
+    }
+    if (subscribedRobotId && robot_id && !isSameRobotId(robot_id, subscribedRobotId)) {
+      return
     }
 
     switch (type) {
@@ -689,11 +699,13 @@ export function useRobotWebSocket() {
     connectionError.value = ''
     subscribedRobotId = robotId || ''
 
-    // WebSocket 地址与其他接口用同一套 IP 逻辑
-    const wsHost = config.websocket.host
-    const wsPort = config.websocket.port
+    // WebSocket 地址与其他接口用同一套 IP 逻辑：生产环境下通过当前 Web 端口 (window.location.host) 同源代理
+    const wsProtocol = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? 'wss:' : 'ws:'
+    const wsHostPort = (import.meta.env.PROD && typeof window !== 'undefined' && window.location.host)
+      ? window.location.host
+      : `${config.websocket.host}:${config.websocket.port || 8000}`
     const robotParam = robotId ? `?robot_id=${encodeURIComponent(robotId)}` : ''
-    const url = `ws://${wsHost}:${wsPort}/v1/ws${robotParam}`
+    const url = `${wsProtocol}//${wsHostPort}/v1/ws${robotParam}`
 
     const socket = new WebSocket(url)
     ws.value = socket

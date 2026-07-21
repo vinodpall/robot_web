@@ -4,6 +4,12 @@
  *   1. 静态文件服务（dist 目录）
  *   2. 动态机器人代理：拦截带 robot_ip 参数的请求，转发到对应机器人
  *   3. SRS WebRTC 信令代理
+/**
+ * 生产环境服务器
+ * 功能：
+ *   1. 静态文件服务（dist 目录）
+ *   2. 动态机器人代理：拦截带 robot_ip 参数的请求，转发到对应机器人
+ *   3. SRS WebRTC 信令代理
  *
  * 使用方法：
  *   node server.js [port]       默认端口 4173
@@ -11,6 +17,7 @@
  */
 
 import http from 'node:http'
+import https from 'node:https'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -131,6 +138,78 @@ function rtcProxy(req, res, next) {
   }
 }
 
+// ---- 后端 API 代理中间件 ----
+const BACKEND_URL = process.env.BACKEND_URL || ''
+
+function backendApiProxy(req, res, next) {
+  if (!BACKEND_URL) return next()
+  if (!req.url) return next()
+
+  // 仅代理 /v1 开头的 API 请求
+  if (!req.url.startsWith('/v1/') && req.url !== '/v1') return next()
+
+  try {
+    const targetUrl = new URL(req.url, BACKEND_URL)
+    const targetHost = targetUrl.hostname
+    const isHttps = targetUrl.protocol === 'https:'
+    const requester = isHttps ? https : http
+    const targetPort = targetUrl.port || (isHttps ? '443' : '80')
+    const targetPath = targetUrl.pathname + targetUrl.search
+
+    console.log(`[后端代理] 转发请求: ${req.method} ${req.url} -> ${BACKEND_URL}${targetPath}`)
+
+    const headers = { ...req.headers }
+    headers.host = targetUrl.host // 覆盖 host 为目标 host
+
+    const options = {
+      hostname: targetHost,
+      port: parseInt(targetPort, 10),
+      path: targetPath,
+      method: req.method,
+      headers
+    }
+
+    const proxyReq = requester.request(options, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers)
+      proxyRes.pipe(res)
+    })
+
+    proxyReq.on('error', (err) => {
+      console.error('[后端代理] 转发失败:', err.message, `-> ${BACKEND_URL}${targetPath}`)
+      if (!res.headersSent) {
+        res.writeHead(502)
+        res.end('Bad Gateway')
+      }
+    })
+
+    proxyReq.setTimeout(60000, () => {
+      console.error('[后端代理] 请求超时:', `${BACKEND_URL}${targetPath}`)
+      proxyReq.destroy()
+      if (!res.headersSent) {
+        res.writeHead(504)
+        res.end('Gateway Timeout')
+      }
+    })
+
+    if (req.method === 'GET' || req.method === 'HEAD' || !req.method) {
+      proxyReq.end()
+    } else {
+      req.pipe(proxyReq)
+      req.on('error', (err) => {
+        console.error('[后端代理] 请求流读取错误:', err.message)
+        proxyReq.destroy()
+        if (!res.headersSent) {
+          res.writeHead(500)
+          res.end('Internal Server Error')
+        }
+      })
+    }
+  } catch (err) {
+    console.error('[后端代理] 解析 URL 失败:', err.message)
+    next()
+  }
+}
+
 // ---- 静态文件服务 ----
 function staticServe(req, res) {
   // 仅取 pathname，忽略 query string
@@ -201,14 +280,92 @@ function runMiddleware(middlewares, req, res) {
 // ---- 启动服务器 ----
 const server = http.createServer((req, res) => {
   runMiddleware([
+    backendApiProxy,
     dynamicRobotProxy,
     rtcProxy,
     staticServe,
   ], req, res)
 })
 
+// ---- WebSocket 升级代理 ----
+server.on('upgrade', (req, socket, head) => {
+  if (!BACKEND_URL || !req.url) {
+    socket.destroy()
+    return
+  }
+
+  // 仅代理 /v1 开头的 WebSocket 请求
+  if (req.url.startsWith('/v1/') || req.url === '/v1') {
+    try {
+      const targetUrl = new URL(req.url, BACKEND_URL)
+      const targetHost = targetUrl.hostname
+      const isHttps = targetUrl.protocol === 'https:'
+      const requester = isHttps ? https : http
+      const targetPort = targetUrl.port || (isHttps ? 443 : 80)
+      const targetPath = targetUrl.pathname + targetUrl.search
+
+      console.log(`[WS代理] 转发 WebSocket 升级请求: ${req.url} -> ${targetHost}:${targetPort}${targetPath}`)
+
+      const proxyReq = requester.request({
+        hostname: targetHost,
+        port: parseInt(targetPort, 10),
+        path: targetPath,
+        method: 'GET',
+        headers: {
+          ...req.headers,
+          host: targetUrl.host
+        }
+      })
+
+      proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+        let responseHeaders = `HTTP/1.1 101 Switching Protocols\r\n`
+        for (const [key, value] of Object.entries(proxyRes.headers)) {
+          if (Array.isArray(value)) {
+            for (const v of value) {
+              responseHeaders += `${key}: ${v}\r\n`
+            }
+          } else if (value !== undefined) {
+            responseHeaders += `${key}: ${value}\r\n`
+          }
+        }
+        responseHeaders += `\r\n`
+
+        socket.write(responseHeaders)
+        if (proxyHead && proxyHead.length > 0) {
+          socket.write(proxyHead)
+        }
+
+        proxySocket.pipe(socket)
+        socket.pipe(proxySocket)
+
+        proxySocket.on('error', (err) => {
+          console.error('[WS代理] 后端 socket 错误:', err.message)
+          socket.destroy()
+        })
+        socket.on('error', (err) => {
+          console.error('[WS代理] 客户端 socket 错误:', err.message)
+          proxySocket.destroy()
+        })
+      })
+
+      proxyReq.on('error', (err) => {
+        console.error('[WS代理] 连接后端 WebSocket 失败:', err.message)
+        socket.destroy()
+      })
+
+      proxyReq.end()
+    } catch (err) {
+      console.error('[WS代理] 解析 WebSocket URL 失败:', err.message)
+      socket.destroy()
+    }
+  } else {
+    socket.destroy()
+  }
+})
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ 生产服务器已启动: http://0.0.0.0:${PORT}`)
   console.log(`   静态文件目录: ${DIST_DIR}`)
   console.log(`   动态机器人代理: 已启用 (robot_ip 参数路由)`)
+  console.log(`   WebSocket 代理: 已启用 (/v1 -> ${BACKEND_URL})`)
 })
