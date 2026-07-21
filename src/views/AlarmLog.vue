@@ -689,12 +689,12 @@ const loadFilterOptions = async () => {
     if (!robotId) return
     const res = await navigationApi.getTrackLogFilterOptions(robotId, 'content,task_group,tracking_route')
     const payload = res?.data || {}
-    const clean = (arr: string[]) => (arr || []).filter((v: string) => v !== '鍏ㄩ儴' && v !== '全部' && v !== '')
+    const clean = (arr: string[]) => (arr || []).filter((v: string) => v !== '全部' && v !== '')
     contentList.value = clean(payload.content || [])
     routeList.value = clean(payload.tracking_route || [])
     taskGroupList.value = clean(payload.task_group || [])
   } catch (err) {
-    console.error('鑾峰彇绛涢€夐」澶辫触:', err)
+    console.error('获取选项失败:', err)
   }
 }
 
@@ -1208,7 +1208,7 @@ const handleExport = async () => {
       start_time: toExportDateTime(startTime.value),
       stoptime: toExportDateTime(endTime.value),
       relinfo: '',
-      page_size: 100,
+      page_size: 10000,
       page: 1
     }
 
@@ -1934,13 +1934,19 @@ onUnmounted(() => {
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
+  width: 10px !important;
+  height: 6px !important;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   z-index: 2;
+  transition: transform 0.2s ease;
+}
+.custom-select-arrow svg {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
 }
 .mission-select {
   background: transparent !important;

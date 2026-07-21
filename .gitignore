@@ -34,3 +34,9 @@ Thumbs.db
 *.cache
 /temp_test.py
 /Home_original.vue
+
+# Deployments and exported offline packages
+deploy/
+*.tar
+*.zip
+

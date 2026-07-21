@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  robot-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_ENV=${BUILD_ENV:-internet}
+    image: robot-web:latest
+    container_name: robot-web
+    restart: always
+    network_mode: "host"
+    environment:
+      - PORT=${HOST_PORT:-5173}
+      - BACKEND_URL=${BACKEND_URL:-http://127.0.0.1:8000}
+      - NODE_ENV=production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

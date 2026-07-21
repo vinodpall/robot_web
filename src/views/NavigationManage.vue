@@ -6878,8 +6878,10 @@ const drawNavGridMapCanvas = () => {
   
   if (currentTab.value !== 'track_edit') {
     ctx.save()
-    const ox = -meta.originX / meta.resolution
-    const oy = mapH + meta.originY / meta.resolution
+    const navOriginX = navPointCloudNavigationOrigin.value?.x ?? 0
+    const navOriginY = navPointCloudNavigationOrigin.value?.y ?? 0
+    const ox = (navOriginX - meta.originX) / meta.resolution
+    const oy = mapH - (navOriginY - meta.originY) / meta.resolution
     const rxOrigin = baseOffsetX + ox * baseScale
     const ryOrigin = baseOffsetY + oy * baseScale
     
@@ -7995,7 +7997,10 @@ watch(slamOnlineMapDialogVisible, (visible) => {
     slamOnlineZoom.value = 1.0
     slamOnlinePanX.value = 0
     slamOnlinePanY.value = 0
-    // 不在此处渲染旧数据，等待新的 WebSocket 推送
+    // 如果内存中已存在栅格地图数据，打开弹窗时立即渲染首帧，无需等待下一次推送
+    if (robotStore.slamGridMapData) {
+      drawSlamOnlineGridMap(robotStore.slamGridMapData)
+    }
   } else {
     // 弹窗关闭时取消尚未执行的渲染帧，防止泄漏
     if (slamRafId !== null) {
@@ -8010,15 +8015,30 @@ watch(isSlamOnline, (isActive) => {
   if (isActive) {
     // 清除上次残留的栅格图数据，避免弹窗打开时显示旧数据
     robotStore.clearSlamGridMap()
-    slamOnlineMapDialogVisible.value = true
+    // 只有本端主动开启并提交名称时才自动弹出，此处不再对所有终端强制弹出，防止干扰其他端用户
+    
+    // 如果内存里的地图名称为空，尝试恢复
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (robotId && !slamOnlineActiveName.value) {
+      const cachedName = localStorage.getItem(`slam_online_active_name_${robotId}`)
+      if (cachedName) {
+        slamOnlineActiveName.value = cachedName
+      } else if (robotStore.cmdStatus?.map_name) {
+        slamOnlineActiveName.value = robotStore.cmdStatus.map_name
+      }
+    }
   } else {
     // cmd_status 反馈确认已关闭，释放 loading 并清理状态
     if (slamOnlineBtnLoading.value) {
       slamOnlineBtnLoading.value = false
-      localSlamOnlineActive.value = false
-      slamOnlineActiveName.value = ''
-      void refreshMapListCache()
     }
+    localSlamOnlineActive.value = false
+    slamOnlineActiveName.value = ''
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (robotId) {
+      localStorage.removeItem(`slam_online_active_name_${robotId}`)
+    }
+    void refreshMapListCache()
     slamOnlineMapDialogVisible.value = false
   }
 })
@@ -8052,6 +8072,9 @@ const confirmStartSlamOnline = async () => {
 
     localSlamOnlineActive.value = true
     slamOnlineActiveName.value = name  // 保存地图名称，关闭时传回
+    if (robotId) {
+      localStorage.setItem(`slam_online_active_name_${robotId}`, name)
+    }
     slamOnlineDialogVisible.value = false
     showSuccessMessage('开始实时建图指令已发送')
     void refreshMapListCache()
@@ -8085,9 +8108,14 @@ const stopSlamOnlineRequest = async () => {
       return
     }
 
+    const activeMapName = slamOnlineActiveName.value || 
+                          localStorage.getItem(`slam_online_active_name_${robotId}`) || 
+                          robotStore.cmdStatus?.map_name || 
+                          ''
+
     await navigationApi.slamOnline(robotId, {
       action: 0,
-      map_name: slamOnlineActiveName.value  // 关闭时传回当前地图名称
+      map_name: activeMapName  // 关闭时传回当前地图名称
     })
 
     showSuccessMessage('关闭实时建图指令已发送')
@@ -8098,6 +8126,9 @@ const stopSlamOnlineRequest = async () => {
         slamOnlineBtnLoading.value = false
         localSlamOnlineActive.value = false
         slamOnlineActiveName.value = ''
+        if (robotId) {
+          localStorage.removeItem(`slam_online_active_name_${robotId}`)
+        }
         slamOnlineMapDialogVisible.value = false
       }
     }, 5000)
@@ -9210,22 +9241,51 @@ let reloIsDrawingArrow = false
 let reloOffscreenCanvas: HTMLCanvasElement | null = null
 
 // 居中显示车辆
+const checkAndResizeReloCanvas = () => {
+  const canvas = reloCanvas.value
+  const parent = reloContainer.value
+  if (!canvas || !parent) return false
+
+  const sw = parent.clientWidth
+  const sh = parent.clientHeight
+
+  if (sw > 0 && sh > 0 && (canvas.width !== sw || canvas.height !== sh)) {
+    canvas.width = sw
+    canvas.height = sh
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.transform = ''
+    return true
+  }
+  return false
+}
+
+// 居中显示车辆
 const reloCenterOnRobot = () => {
-  const pose = robotStore.pose
   const meta = reloMapMeta.value
   const canvas = reloCanvas.value
   const parent = reloContainer.value
-  if (!pose || !meta || !canvas || !parent || !reloOffscreenCanvas) return
+  if (!meta || !canvas || !parent || !reloOffscreenCanvas) return
 
   const mapWidth = reloOffscreenCanvas.width
   const mapHeight = reloOffscreenCanvas.height
 
-  // PGM 坐标
-  const px = (pose.x - meta.originX) / meta.resolution
-  const py = mapHeight - (pose.y - meta.originY) / meta.resolution
-
   const sw = parent.clientWidth
   const sh = parent.clientHeight
+  if (sw <= 0 || sh <= 0) {
+    setTimeout(reloCenterOnRobot, 50)
+    return
+  }
+
+  const pose = robotStore.pose
+  let px = mapWidth / 2
+  let py = mapHeight / 2
+
+  if (pose) {
+    px = (pose.x - meta.originX) / meta.resolution
+    py = mapHeight - (pose.y - meta.originY) / meta.resolution
+  }
+
   const baseScale = Math.min(sw / mapWidth, sh / mapHeight)
   const finalScale = baseScale * reloScale
 
@@ -9236,23 +9296,7 @@ const reloCenterOnRobot = () => {
 
 // 应用 transform
 const applyReloTransform = () => {
-  const canvas = reloCanvas.value
-  if (!canvas) return
-  const parent = reloContainer.value
-  if (!parent) return
-
-  const sw = parent.clientWidth
-  const sh = parent.clientHeight
-
-  // 重置 Canvas 物理尺寸，实现 1:1 像素清晰绘制
-  if (canvas.width !== sw || canvas.height !== sh) {
-    canvas.width = sw
-    canvas.height = sh
-    canvas.style.width = '100%'
-    canvas.style.height = '100%'
-    canvas.style.transform = ''
-  }
-
+  checkAndResizeReloCanvas()
   drawReloCanvas()
 }
 
@@ -9261,12 +9305,19 @@ const getReloCanvasCoords = (e: MouseEvent) => {
   const canvas = reloCanvas.value
   if (!canvas || !reloOffscreenCanvas) return { x: 0, y: 0 }
 
-  const rect = canvas.getBoundingClientRect()
-  const mx = e.clientX - rect.left
-  const my = e.clientY - rect.top
+  checkAndResizeReloCanvas()
 
-  const sw = rect.width
-  const sh = rect.height
+  const rect = canvas.getBoundingClientRect()
+  // 计算鼠标相对 Canvas 的 client 坐标
+  const rx = e.clientX - rect.left
+  const ry = e.clientY - rect.top
+
+  // 缩放到 Canvas 绘图缓冲区的坐标空间，消除任何 CSS 缩放/DPI 影响
+  const mx = rx * (canvas.width / rect.width)
+  const my = ry * (canvas.height / rect.height)
+
+  const sw = canvas.width
+  const sh = canvas.height
   const mapWidth = reloOffscreenCanvas.width
   const mapHeight = reloOffscreenCanvas.height
 
@@ -9339,6 +9390,8 @@ const drawReloCanvas = () => {
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx || !reloOffscreenCanvas) return
 
+  checkAndResizeReloCanvas()
+
   const sw = canvas.width
   const sh = canvas.height
   const mapWidth = reloOffscreenCanvas.width
@@ -9361,9 +9414,44 @@ const drawReloCanvas = () => {
   ctx.drawImage(reloOffscreenCanvas, 0, 0)
   ctx.restore()
 
-  // 3. 绘制车辆当前位置 (1:1 物理像素绘制，杜绝拉伸模糊)
-  const pose = robotStore.pose
   const meta = reloMapMeta.value
+
+  // 3. 绘制地图坐标原点 (0, 0) (1:1 物理像素绘制，保证清晰度)
+  if (meta) {
+    const navOriginX = navPointCloudNavigationOrigin.value?.x ?? 0
+    const navOriginY = navPointCloudNavigationOrigin.value?.y ?? 0
+    const px_origin = (navOriginX - meta.originX) / meta.resolution
+    const py_origin = mapHeight - (navOriginY - meta.originY) / meta.resolution
+    const sx_origin = centerX + px_origin * finalScale
+    const sy_origin = centerY + py_origin * finalScale
+
+    ctx.save()
+    ctx.translate(sx_origin, sy_origin)
+
+    // 绘制红色圆点
+    ctx.beginPath()
+    ctx.arc(0, 0, 5, 0, Math.PI * 2)
+    ctx.fillStyle = '#ff3b30'
+    ctx.fill()
+
+    // 绘制文字说明 (具有白色描边的红色文字 "原点")
+    ctx.font = 'bold 13px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    const originText = '原点'
+
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 3
+    ctx.strokeText(originText, 0, 8)
+
+    ctx.fillStyle = '#ff3b30'
+    ctx.fillText(originText, 0, 8)
+
+    ctx.restore()
+  }
+
+  // 4. 绘制车辆当前位置 (1:1 物理像素绘制，杜绝拉伸模糊)
+  const pose = robotStore.pose
   if (pose && meta) {
     const px = (pose.x - meta.originX) / meta.resolution
     const py = mapHeight - (pose.y - meta.originY) / meta.resolution
@@ -9372,7 +9460,7 @@ const drawReloCanvas = () => {
     drawRobot(ctx, sx, sy, pose.theta)
   }
 
-  // 4. 绘制重定位拖拽方向箭头 (1:1 物理像素绘制，杜绝拉伸模糊)
+  // 5. 绘制重定位拖拽方向箭头 (1:1 物理像素绘制，杜绝拉伸模糊)
   if (reloArrow.value) {
     const arrow = reloArrow.value
     const sx0 = centerX + arrow.startX * finalScale
@@ -9606,8 +9694,10 @@ const onReloMouseUp = async (e: MouseEvent) => {
     const mapHeight = reloOffscreenCanvas.height
 
     // 1. 计算重定位地图坐标
-    const startX = meta.originX + arrow.startX * meta.resolution
-    const startY = meta.originY + (mapHeight - arrow.startY) * meta.resolution
+    const navOriginX = navPointCloudNavigationOrigin.value?.x ?? 0
+    const navOriginY = navPointCloudNavigationOrigin.value?.y ?? 0
+    const startX = (meta.originX + arrow.startX * meta.resolution) - navOriginX
+    const startY = (meta.originY + (mapHeight - arrow.startY) * meta.resolution) - navOriginY
 
     // 计算朝向 theta
     // Canvas y 轴朝下，Map y 轴朝上，计算角度时 dy 取反
@@ -9628,20 +9718,16 @@ const onReloMouseUp = async (e: MouseEvent) => {
       return
     }
 
-    try {
-      showSuccessMessage('正在提交重定位指令...')
-      await navigationApi.setReloPose(robotId, {
-        x: Number(startX.toFixed(6)),
-        y: Number(startY.toFixed(6)),
-        theta: Number(theta.toFixed(6))
-      })
-      showSuccessMessage('重定位设置成功')
-      closeReloModal()
-    } catch (err: any) {
-      console.error('重定位失败:', err)
-      showErrorMessage(err?.detail || err?.msg || err?.message || '网络请求错误，请重试')
-      drawReloCanvas()
-    }
+    showSuccessMessage('重定位数据发送成功')
+    drawReloCanvas()
+
+    navigationApi.setReloPose(robotId, {
+      x: Number(startX.toFixed(6)),
+      y: Number(startY.toFixed(6)),
+      theta: Number(theta.toFixed(6))
+    }).catch((err: any) => {
+      console.error('后台重定位请求失败:', err)
+    })
   }
 }
 
