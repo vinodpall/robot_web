@@ -14,8 +14,8 @@
     </div>
     <div class="header">
       <div class="header-left">
-        <img :src="selectedVehicleType === 'four_wheel' ? carLogo : dogLogo" alt="logo" class="logo" />
-        <span class="title">{{ selectedVehicleType === 'four_wheel' ? '无人车控制平台' : '机器狗控制平台' }}</span>
+        <img :src="carLogo" alt="logo" class="logo" />
+        <span class="title">无人车管控平台</span>
       </div>
       
       <nav class="nav-menu">
@@ -1041,6 +1041,7 @@ onUnmounted(() => {
   filter: brightness(0) saturate(100%) invert(100%);
   flex-shrink: 0;
   margin-left: 5px;
+  object-fit: contain;
 }
 
 .title {

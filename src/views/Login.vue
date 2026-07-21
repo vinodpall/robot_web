@@ -7,8 +7,8 @@
     <div class="login-content">
       <div class="login-left">
         <div class="logo-section">
-          <img src="/src/assets/source_data/dog_logo.svg" alt="logo" class="logo" />
-          <h1 class="title">机器狗管控平台</h1>
+          <img src="/src/assets/source_data/car_logo.svg" alt="logo" class="logo" />
+          <h1 class="title">无人车管控平台</h1>
         </div>
         <div class="drone-illustration">
           <img src="/src/assets/source_data/bg_data/main_pg_front.png" alt="drone" />
@@ -294,6 +294,8 @@ const closeErrorDialog = () => {
   width: 70px;
   height: 70px;
   margin-right: 1rem;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(100%);
 }
 
 .title {
