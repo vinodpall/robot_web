@@ -808,20 +808,130 @@ const handleAddTaskGroup = () => {
     originPublish: true
   }
 
-  // Load data from cache
+  // Load data from cache & API
   loadMapListFromCache()
   loadTrackListFromCache()
   loadPointTaskListFromCache()
+  loadPointTaskList()
+  loadAllTrackTaskList()
+
+  const currentTrack = addTaskGroupDialog.value.form.trackName
+  if (currentTrack && addTaskGroupDialog.value.form.taskMode === 'track') {
+    loadTaskGroupList(currentTrack)
+  }
 
   addTaskGroupDialog.value.visible = true
 
   // 等 watch 执行完后，若任务组仍为空则主动加载
   nextTick(() => {
     const trackName = addTaskGroupDialog.value.form.trackName
-    if (trackName && addTaskGroupDialog.value.form.taskMode === 'track' && taskGroupOptions.value.length === 0) {
+    if (trackName && addTaskGroupDialog.value.form.taskMode === 'track') {
       loadTaskGroupList(trackName)
     }
   })
+}
+
+const resolveTaskIdForSelection = async (taskMode: string, mapName: string, trackName: string, taskGroup: string): Promise<string> => {
+  if (addTaskGroupDialog.value.isEdit && addTaskGroupDialog.value.editTaskId) {
+    return addTaskGroupDialog.value.editTaskId
+  }
+
+  const robotId = getCurrentRobotId()
+  const contextKeys = robotId ? getRobotContextCacheKeys(robotId) : null
+
+  const cleanName = (val: any) => {
+    const s = String(val || '').trim()
+    const atIdx = s.indexOf('@')
+    return atIdx > -1 ? s.slice(0, atIdx) : s
+  }
+
+  // 1. 发布点任务模式：task_id 为选中的发布点任务在 /taskpoints/${robotId}/task_list 中的 task_id
+  if (taskMode === 'publish') {
+    let list = pointTaskListFull.value
+    if (!list || list.length === 0) {
+      if (robotId) {
+        try {
+          const res = await navigationApi.getPointTaskList(robotId)
+          if (res && res.data) {
+            list = res.data
+            pointTaskListFull.value = res.data
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    if (!list || list.length === 0) {
+      try {
+        const cached = (contextKeys ? localStorage.getItem(contextKeys.pointTaskListKey) : null) || localStorage.getItem('cached_point_task_list')
+        if (cached) list = JSON.parse(cached)
+      } catch { /* ignore */ }
+    }
+
+    const targetGroupClean = cleanName(taskGroup)
+    const matched = (list || []).find((item: any) => {
+      const name = String(item.task_name || item.name || '').trim()
+      return name === taskGroup || cleanName(name) === targetGroupClean
+    })
+
+    if (matched && matched.task_id) {
+      return String(matched.task_id)
+    }
+  }
+
+  // 2. 循迹任务模式：task_id 为选中的轨迹任务在 /tracks/${robotId}/alltask_list 中对应 track_name + track_point_name 的 task_id
+  if (taskMode === 'track') {
+    let allTrackTasks: any[] = []
+    if (robotId) {
+      try {
+        const res: any = await navigationApi.getAllTrackTaskList(robotId)
+        allTrackTasks = Array.isArray(res) ? res : (res?.data || res?.msg?.result || [])
+      } catch { /* ignore */ }
+    }
+    if (!allTrackTasks || allTrackTasks.length === 0) {
+      try {
+        const cached = (contextKeys ? localStorage.getItem(contextKeys.allTrackTaskListKey) : null) || localStorage.getItem('all_track_task_list')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          allTrackTasks = Array.isArray(parsed) ? parsed : (parsed?.data || parsed?.msg?.result || [])
+        }
+      } catch { /* ignore */ }
+    }
+
+    const targetTrackClean = cleanName(trackName)
+    const targetGroupClean = cleanName(taskGroup)
+
+    const matched = (allTrackTasks || []).find((item: any) => {
+      const itemTrack = String(item.track_name || item.trackName || '').trim()
+      const itemGroup = String(item.track_point_name || item.task_pointname || item.track_pointname || '').trim()
+
+      const trackMatch = itemTrack === trackName || cleanName(itemTrack) === targetTrackClean
+      const groupMatch = itemGroup === taskGroup || cleanName(itemGroup) === targetGroupClean
+      return trackMatch && groupMatch
+    })
+
+    if (matched && matched.task_id) {
+      return String(matched.task_id)
+    }
+  }
+
+  return taskGroup || ''
+}
+
+const loadAllTrackTaskList = async () => {
+  const robotId = getCurrentRobotId()
+  if (!robotId) return
+  try {
+    const response: any = await navigationApi.getAllTrackTaskList(robotId)
+    if (response) {
+      const list = Array.isArray(response) ? response : (response.data || response.msg?.result || [])
+      const contextKeys = getRobotContextCacheKeys(robotId)
+      if (contextKeys) {
+        localStorage.setItem(contextKeys.allTrackTaskListKey, JSON.stringify(list))
+      }
+      localStorage.setItem('all_track_task_list', JSON.stringify(list))
+    }
+  } catch (err) {
+    console.error('获取全量循迹任务列表失败:', err)
+  }
 }
 
 const closeAddTaskGroupDialog = () => {
@@ -876,6 +986,8 @@ const confirmAddTaskGroup = async () => {
     showErrorMessage('无效的多任务组')
     return
   }
+
+  const resolvedTaskId = await resolveTaskIdForSelection(form.taskMode, form.mapName, form.trackName, form.taskGroup)
   
   try {
     // 组装task_data
@@ -885,7 +997,7 @@ const confirmAddTaskGroup = async () => {
       task_pointname: form.taskGroup,
       task_type: form.taskMode === 'track' ? 'track' : 'task',
       circle: parseInt(form.circle.toString()),
-      task_id: addTaskGroupDialog.value.editTaskId || '',
+      task_id: resolvedTaskId,
       obs_mode: form.obsMode,
       is_origin_publish: form.originPublish ? 1 : 0,
       start_mode: startModeToNumber(form.startMode),
@@ -1095,11 +1207,11 @@ const loadPointTaskList = async () => {
     if (response && response.data) {
       pointTaskListFull.value = response.data
       
-      // 根据地图名称筛选发布点任务
-      const mapName = addTaskGroupDialog.value.form.mapName
-      if (mapName) {
+      // 仅在发布点模式下更新任务组下拉选项
+      if (addTaskGroupDialog.value.form.taskMode === 'publish') {
+        const mapName = addTaskGroupDialog.value.form.mapName
         const filtered = response.data
-          .filter((task: any) => task.task_name && task.task_name.startsWith(mapName + '_'))
+          .filter((task: any) => !mapName || (task.task_name && task.task_name.startsWith(mapName + '_')))
           .map((task: any) => task.task_name)
         
         taskGroupOptions.value = filtered
@@ -1122,28 +1234,28 @@ const loadPointTaskListFromCache = () => {
       const data = JSON.parse(cached)
       pointTaskListFull.value = data
       
-      // 根据地图名称筛选发布点任务
-      const mapName = addTaskGroupDialog.value.form.mapName
-      if (mapName) {
-        const filtered = data
-          .filter((task: any) => task.task_name && task.task_name.startsWith(mapName + '_'))
-          .map((task: any) => task.task_name)
-        
-        taskGroupOptions.value = filtered
-        
-        // 默认选择第一个
-        if (taskGroupOptions.value.length > 0) {
-          addTaskGroupDialog.value.form.taskGroup = taskGroupOptions.value[0]
-        }
-      } else {
-        // 如果没有选择地图，显示所有发布点任务
-        taskGroupOptions.value = data
-          .filter((task: any) => task.task_name)
-          .map((task: any) => task.task_name)
-        
-        // 默认选择第一个
-        if (taskGroupOptions.value.length > 0) {
-          addTaskGroupDialog.value.form.taskGroup = taskGroupOptions.value[0]
+      // 仅在发布点模式下更新任务组下拉选项
+      if (addTaskGroupDialog.value.form.taskMode === 'publish') {
+        const mapName = addTaskGroupDialog.value.form.mapName
+        if (mapName) {
+          const filtered = data
+            .filter((task: any) => task.task_name && task.task_name.startsWith(mapName + '_'))
+            .map((task: any) => task.task_name)
+          
+          taskGroupOptions.value = filtered
+          
+          // 默认选择第一个
+          if (taskGroupOptions.value.length > 0 && !addTaskGroupDialog.value.form.taskGroup) {
+            addTaskGroupDialog.value.form.taskGroup = taskGroupOptions.value[0]
+          }
+        } else {
+          taskGroupOptions.value = data
+            .filter((task: any) => task.task_name)
+            .map((task: any) => task.task_name)
+          
+          if (taskGroupOptions.value.length > 0 && !addTaskGroupDialog.value.form.taskGroup) {
+            addTaskGroupDialog.value.form.taskGroup = taskGroupOptions.value[0]
+          }
         }
       }
     }
@@ -1356,8 +1468,14 @@ const handleDeleteTask = (task: any) => {
     return
   }
   
+  // 判断任务类型：如果是发布点任务用任务组名称(task_pointname)，如果是循迹任务用轨迹名称(task_name)
+  const isPublishTask = task.task_type === 'task' || task.task_type === 'publish'
+  const displayName = isPublishTask
+    ? (task.task_pointname || task.task_name || '')
+    : (task.task_name || task.task_pointname || '')
+
   // 显示自定义确认弹窗
-  deleteConfirmDialog.value.message = `确定要删除任务 "${task.task_pointname}" 吗？`
+  deleteConfirmDialog.value.message = `确定要删除任务 "${displayName}" 吗？`
   deleteConfirmDialog.value.taskToDelete = task
   deleteConfirmDialog.value.visible = true
 }
@@ -1482,7 +1600,11 @@ const handleRobotContextRefreshed = async () => {
 const refreshMultiTaskPageListOnEnter = async () => {
   loading.value = true
   try {
-    await fetchMultiTaskList()
+    await Promise.all([
+      fetchMultiTaskList(),
+      loadPointTaskList(),
+      loadAllTrackTaskList()
+    ])
   } finally {
     loading.value = false
   }

@@ -4,7 +4,6 @@
 # robot_web 一键 Docker 部署脚本
 # ==========================================
 
-# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -18,11 +17,16 @@ if ! [ -x "$(command -v docker)" ]; then
   exit 1
 fi
 
-# 检查 Docker Compose 是否安装
-if ! [ -x "$(command -v docker-compose)" ] && ! docker compose version &>/dev/null; then
-  echo -e "${RED}错误: 未检测到 docker-compose，请先安装 docker-compose。${NC}" >&2
-  exit 1
+# 检查 Docker Compose 工具
+COMPOSE_CMD=""
+if [ -x "$(command -v docker-compose)" ]; then
+  COMPOSE_CMD="docker-compose"
+elif docker compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="docker compose"
+else
+  echo -e "${YELLOW}提示: 未检测到 docker-compose，将自动使用标准 Docker 引擎完成构建部署。${NC}"
 fi
+
 # 定义默认值
 DEFAULT_HOST_PORT="5173"
 DEFAULT_BACKEND_URL="http://127.0.0.1:8000"
@@ -30,7 +34,7 @@ DEFAULT_BACKEND_URL="http://127.0.0.1:8000"
 # 检查 dist 文件夹是否存在
 if [ ! -d "dist" ]; then
   echo -e "${RED}错误: 未在当前目录下检测到编译好的 dist/ 文件夹！${NC}"
-  echo "请确保您已在本地运行 npm run build:internet 或 npm run build:intranet 进行了编译，"
+  echo "请确保您已在本地运行 npm run build 进行了编译，"
   echo "并在打包时包含了生成的 dist 目录。"
   exit 1
 fi
@@ -69,12 +73,22 @@ echo -e "${GREEN}配置文件 .env 生成成功!${NC}\n"
 
 # 4. 执行部署
 echo -e "${YELLOW}4. 正在启动 Docker 容器...${NC}"
-if [ -x "$(command -v docker-compose)" ]; then
-  docker-compose down
-  docker-compose up -d --build
+if [ -n "$COMPOSE_CMD" ]; then
+  $COMPOSE_CMD down
+  $COMPOSE_CMD up -d --build
 else
-  docker compose down
-  docker compose up -d --build
+  docker build -t robot-web:latest . && \
+  docker rm -f robot-web >/dev/null 2>&1 && \
+  docker run -d \
+    --name robot-web \
+    --restart always \
+    --network host \
+    -e PORT="$HOST_PORT" \
+    -e BACKEND_URL="$BACKEND_URL" \
+    -e NODE_ENV=production \
+    --log-opt max-size=10m \
+    --log-opt max-file=3 \
+    robot-web:latest
 fi
 
 if [ $? -eq 0 ]; then
