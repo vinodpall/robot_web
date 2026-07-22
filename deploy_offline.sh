@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # ==========================================
-# robot_web 离线 Docker 一键部署脚本
+# robot_web 离线 Docker 一键部署脚本 (支持多架构智能识别)
 # ==========================================
 
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
 NC='\033[0m' # 无颜色
 
 echo -e "${GREEN}=== 启动 robot_web 离线 Docker 部署流程 ===${NC}\n"
@@ -24,22 +25,85 @@ if ! [ -x "$(command -v docker-compose)" ] && ! docker compose version &>/devnul
   exit 1
 fi
 
-# 3. 检查离线镜像文件是否存在
-OFFLINE_TAR="robot-web-offline.tar"
-if [ ! -f "$OFFLINE_TAR" ]; then
-  if [ -f "robot-web-image.tar" ]; then
-    OFFLINE_TAR="robot-web-image.tar"
-  elif [ -f "deploy/robot-web-offline.tar" ]; then
-    OFFLINE_TAR="deploy/robot-web-offline.tar"
-  else
-    echo -e "${RED}错误: 当前目录下未检测到离线镜像文件 ($OFFLINE_TAR)！${NC}"
-    echo "请确保已将离线镜像文件压缩包放置在与本脚本相同的目录下。"
-    exit 1
+# 3. 自动检测 CPU 架构并寻找对应离线镜像
+SYS_ARCH=$(uname -m)
+DETECTED_TYPE="x86_64"
+
+case "$SYS_ARCH" in
+  x86_64|amd64)
+    DETECTED_TYPE="x86_64"
+    PREFERRED_TAR="robot-web-x86_64.tar"
+    ;;
+  aarch64|arm64|armv8*)
+    DETECTED_TYPE="arm64"
+    PREFERRED_TAR="robot-web-arm64.tar"
+    ;;
+  *)
+    DETECTED_TYPE="x86_64"
+    PREFERRED_TAR="robot-web-x86_64.tar"
+    ;;
+esac
+
+echo -e "${CYAN}系统的 CPU 架构检测为: ${GREEN}${SYS_ARCH} (${DETECTED_TYPE})${NC}"
+
+# 收集可用镜像列表
+AVAILABLE_TARS=()
+[ -f "robot-web-x86_64.tar" ] && AVAILABLE_TARS+=("robot-web-x86_64.tar")
+[ -f "robot-web-arm64.tar" ] && AVAILABLE_TARS+=("robot-web-arm64.tar")
+[ -f "robot-web-offline.tar" ] && AVAILABLE_TARS+=("robot-web-offline.tar")
+[ -f "robot-web-image.tar" ] && AVAILABLE_TARS+=("robot-web-image.tar")
+
+# 兼容子目录查找
+[ -f "deploy/robot-web-x86_64.tar" ] && AVAILABLE_TARS+=("deploy/robot-web-x86_64.tar")
+[ -f "deploy/robot-web-arm64.tar" ] && AVAILABLE_TARS+=("deploy/robot-web-arm64.tar")
+[ -f "deploy/robot-web-offline.tar" ] && AVAILABLE_TARS+=("deploy/robot-web-offline.tar")
+
+if [ ${#AVAILABLE_TARS[@]} -eq 0 ]; then
+  echo -e "${RED}错误: 未检测到任何离线镜像文件 (.tar)！${NC}"
+  echo "请确保已将离线镜像包（如 robot-web-x86_64.tar 或 robot-web-arm64.tar）放置在当前目录下。"
+  exit 1
+fi
+
+# 匹配默认使用的镜像
+CHOSEN_TAR=""
+for tar_file in "${AVAILABLE_TARS[@]}"; do
+  if [[ "$tar_file" == *"$PREFERRED_TAR"* ]]; then
+    CHOSEN_TAR="$tar_file"
+    break
   fi
+done
+
+# 如果没有精确匹配到架构专属文件，则默认选第一个文件
+if [ -z "$CHOSEN_TAR" ]; then
+  CHOSEN_TAR="${AVAILABLE_TARS[0]}"
+fi
+
+echo -e "\n${YELLOW}请选择要加载的离线镜像版本:${NC}"
+INDEX=1
+DEFAULT_INDEX=1
+for tar_file in "${AVAILABLE_TARS[@]}"; do
+  EXTRA_TIPS=""
+  if [ "$tar_file" == "$CHOSEN_TAR" ]; then
+    EXTRA_TIPS=" ${GREEN}(推荐: 匹配当前系统架构 ${SYS_ARCH})${NC}"
+    DEFAULT_INDEX=$INDEX
+  fi
+  echo -e "  $INDEX) $tar_file $EXTRA_TIPS"
+  INDEX=$((INDEX + 1))
+done
+
+read -p "请输入序号 [1-$((INDEX-1))] (回车默认: $DEFAULT_INDEX): " user_choice
+user_choice=${user_choice:-$DEFAULT_INDEX}
+
+# 获取用户选择的文件
+OFFLINE_TAR="${AVAILABLE_TARS[$((user_choice-1))]}"
+
+if [ -z "$OFFLINE_TAR" ]; then
+  echo -e "${RED}选择无效，使用默认推荐镜像: $CHOSEN_TAR${NC}"
+  OFFLINE_TAR="$CHOSEN_TAR"
 fi
 
 # 4. 载入离线镜像包
-echo -e "${YELLOW}正在载入离线 Docker 镜像包 ($OFFLINE_TAR)...${NC}"
+echo -e "\n${YELLOW}正在载入离线 Docker 镜像包 ($OFFLINE_TAR)...${NC}"
 docker load -i "$OFFLINE_TAR"
 if [ $? -ne 0 ]; then
   echo -e "${RED}错误: 离线镜像导入失败，请检查文件完整性或 Docker 服务运行状态！${NC}"
@@ -81,7 +145,7 @@ BACKEND_URL=$BACKEND_URL
 EOF
 echo -e "${GREEN}配置文件 .env 生成成功!${NC}\n"
 
-# 8. 执行离线部署 (注意：无需 --build，使用已载入的离线镜像)
+# 8. 执行离线部署
 echo -e "${YELLOW}4. 正在启动 Docker 容器 (使用离线镜像)...${NC}"
 if [ -x "$(command -v docker-compose)" ]; then
   docker-compose down
