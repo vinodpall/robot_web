@@ -3367,14 +3367,13 @@ let sensorRefreshTimer: number | null = null
 // 动态获取机器人详情，保证数据最新
 const currentRobotDetail = ref<any>(null)
 watch(() => deviceStore.selectedRobotId, async (newId) => {
+  currentRobotDetail.value = null
   if (newId) {
     try {
       currentRobotDetail.value = await robotApi.getRobotDetail(newId)
     } catch (e) {
       currentRobotDetail.value = null
     }
-  } else {
-    currentRobotDetail.value = null
   }
 }, { immediate: true })
 
@@ -9181,35 +9180,83 @@ const updateSensorChartOption = () => {
   sensorChart.setOption(option, true)
 }
 
+// 按机器人ID记忆最后选中的传感器 Key
+const lastSelectedSensorKeys = ref<Record<string, string>>({})
+
+const restoreActiveSensorIndex = () => {
+  if (sensorsList.value.length === 0) {
+    activeSensorIndex.value = 0
+    return
+  }
+  const robotId = deviceStore.selectedRobotId
+  const savedKey = robotId ? lastSelectedSensorKeys.value[robotId] : null
+  if (savedKey) {
+    const foundIdx = sensorsList.value.findIndex(s => s.key === savedKey)
+    if (foundIdx >= 0) {
+      activeSensorIndex.value = foundIdx
+      return
+    }
+  }
+  if (activeSensorIndex.value < 0 || activeSensorIndex.value >= sensorsList.value.length) {
+    activeSensorIndex.value = 0
+  }
+}
+
+const saveSelectedSensorKey = () => {
+  const robotId = deviceStore.selectedRobotId
+  const currentSensor = sensorsList.value[activeSensorIndex.value]
+  if (robotId && currentSensor?.key) {
+    lastSelectedSensorKeys.value[robotId] = currentSensor.key
+  }
+}
+
 const prevSensor = () => {
   if (sensorsList.value.length === 0) return
   activeSensorIndex.value = (activeSensorIndex.value - 1 + sensorsList.value.length) % sensorsList.value.length
+  saveSelectedSensorKey()
   updateSensorChartOption()
 }
 
 const nextSensor = () => {
   if (sensorsList.value.length === 0) return
   activeSensorIndex.value = (activeSensorIndex.value + 1) % sensorsList.value.length
+  saveSelectedSensorKey()
   updateSensorChartOption()
 }
 
 // 初始化车载传感器折线图
-const initSensorChart = () => {
-  if (!sensorChartRef.value) return
+const initSensorChart = async () => {
+  if (selectedVehicleType.value !== 'four_wheel') return
+
+  await nextTick()
+  if (!sensorChartRef.value) {
+    // 若 DOM 节点尚未挂载成功，延时重试
+    setTimeout(() => {
+      if (sensorChartRef.value && selectedVehicleType.value === 'four_wheel' && sensorsList.value.length > 0) {
+        initSensorChart()
+      }
+    }, 100)
+    return
+  }
   
   if (sensorChart) {
-    sensorChart.dispose()
+    try {
+      sensorChart.dispose()
+    } catch {}
+    sensorChart = null
   }
   sensorChart = echarts.init(sensorChartRef.value)
-  
+
+  restoreActiveSensorIndex()
+
   const maxPoints = 10
   sensorTimeLabels.value = []
   sensorDataHistories.value = {}
-  
+
   sensorsList.value.forEach(sensor => {
     sensorDataHistories.value[sensor.key] = []
   })
-  
+
   const now = new Date()
   for (let i = maxPoints - 1; i >= 0; i--) {
     const t = new Date(now.getTime() - i * 3000)
@@ -9220,30 +9267,34 @@ const initSensorChart = () => {
       sensorDataHistories.value[sensor.key].push(val)
     })
   }
-  
+
   updateSensorChartOption()
-  
+
   if (sensorRefreshTimer) {
     clearInterval(sensorRefreshTimer)
+    sensorRefreshTimer = null
   }
-  
+
   sensorRefreshTimer = window.setInterval(() => {
-    if (!sensorChart) return
-    
+    if (!sensorChart || !sensorChartRef.value) return
+
     const time = new Date().toTimeString().split(' ')[0]
-    
+
     sensorTimeLabels.value.shift()
     sensorTimeLabels.value.push(time)
-    
+
     sensorsList.value.forEach(sensor => {
+      if (!sensorDataHistories.value[sensor.key]) {
+        sensorDataHistories.value[sensor.key] = Array(maxPoints).fill(null)
+      }
       const history = sensorDataHistories.value[sensor.key]
       if (!history || history.length === 0) return
-      
+
       const realValue = robotStore.realtimeSensorValues[sensor.key]
       let nextVal: number | null = null
       if (realValue !== undefined && realValue !== null) {
         nextVal = realValue
-        
+
         // 如果历史数据中有 null，用当前有效的第一个值填充，以保证图表曲线连贯不留白
         if (history.some(v => v === null)) {
           for (let i = 0; i < history.length; i++) {
@@ -9259,20 +9310,21 @@ const initSensorChart = () => {
           nextVal = lastVal
         }
       }
-      
+
       history.shift()
       history.push(nextVal)
     })
-    
+
     updateSensorChartOption()
   }, 3000)
 }
 
-// 监听车辆类型和传感器列表变化，如果是无人车（four_wheel），初始化/更新传感器图表
+// 监听车辆类型、所选机器人ID和传感器列表变化，如果是无人车（four_wheel），初始化/更新传感器图表
 watch(
-  [selectedVehicleType, () => sensorsList.value],
-  async ([newType]) => {
-    if (newType === 'four_wheel') {
+  [selectedVehicleType, () => deviceStore.selectedRobotId, () => sensorsList.value],
+  async ([newType, newRobotId]) => {
+    if (newType === 'four_wheel' && newRobotId) {
+      restoreActiveSensorIndex()
       await nextTick()
       if (sensorsList.value.length > 0) {
         initSensorChart()
@@ -9282,7 +9334,7 @@ watch(
           sensorRefreshTimer = null
         }
         if (sensorChart) {
-          sensorChart.dispose()
+          try { sensorChart.dispose() } catch {}
           sensorChart = null
         }
       }
@@ -9292,7 +9344,7 @@ watch(
         sensorRefreshTimer = null
       }
       if (sensorChart) {
-        sensorChart.dispose()
+        try { sensorChart.dispose() } catch {}
         sensorChart = null
       }
     }
@@ -9951,6 +10003,33 @@ onUnmounted(() => {
     stopAlarmSound = null
   }
   isAlarmPlaying.value = false
+})
+
+onActivated(async () => {
+  if (selectedVehicleType.value === 'four_wheel') {
+    await nextTick()
+    if (sensorsList.value.length > 0) {
+      initSensorChart()
+    }
+    if (deviceStore.selectedRobotId) {
+      void robotApi.getRobotDetail(deviceStore.selectedRobotId).then(detail => {
+        if (detail) currentRobotDetail.value = detail
+      }).catch(() => {})
+    }
+  }
+})
+
+onDeactivated(() => {
+  if (sensorRefreshTimer) {
+    clearInterval(sensorRefreshTimer)
+    sensorRefreshTimer = null
+  }
+  if (sensorChart) {
+    try {
+      sensorChart.dispose()
+    } catch {}
+    sensorChart = null
+  }
 })
 
 // 舱盖状态监听

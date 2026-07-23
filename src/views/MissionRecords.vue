@@ -2482,6 +2482,54 @@ const stopWebRTCPlayback = () => {
   isPlaying.value = false
 }
 
+const fetchPresetList = async () => {
+  const robotId = resolveSelectedRobotId()
+  const cameraListStr = localStorage.getItem('camera_list')
+  
+  if (robotId && cameraListStr) {
+    try {
+      const cameraList = JSON.parse(cameraListStr)
+      if (cameraList && cameraList.length > 0) {
+        const ptzName = cameraList[0].PtzName
+        if (ptzName) {
+          console.log('Fetching presets for:', ptzName)
+          try {
+            const res = await navigationApi.getPresets(robotId, ptzName)
+            if (res && Array.isArray(res.list)) {
+              // 重新组装列表，只保留接口返回的实际预置点
+              presetList.value = res.list.map((item: any) => ({
+                id: String(item.id),
+                name: `${item.id}.${item.presetName || item.preset_name || item.name || `预置点${item.id}`}`
+              })).sort((a, b) => Number(a.id) - Number(b.id))
+
+              // 重新根据最新加载的列表绑定当前选中项
+              const selectedId = String(presetDialog.value.form.id || '').trim()
+              if (selectedId) {
+                const selectedPreset = presetList.value.find(p => String(p.id) === selectedId)
+                if (selectedPreset) {
+                  presetDialog.value.form.selectedName = selectedPreset.name
+                  presetDialog.value.form.inputName = selectedPreset.name
+                }
+              } else if (presetList.value.length > 0) {
+                presetDialog.value.form.id = presetList.value[0].id
+                presetDialog.value.form.selectedName = presetList.value[0].name
+                if (!String(presetDialog.value.form.inputName || '').trim()) {
+                  presetDialog.value.form.inputName = presetList.value[0].name
+                }
+              }
+              console.log('Presets updated with API data')
+            }
+          } catch (err) {
+            console.error('Failed to get presets API:', err)
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing camera_list or fetching presets:', e)
+    }
+  }
+}
+
 const openPresetDialog = async () => {
   presetDialog.value.visible = true
 
@@ -2509,53 +2557,7 @@ const openPresetDialog = async () => {
     presetDialog.value.form.inputName = ''
   }
 
-  const robotId = resolveSelectedRobotId()
-  const cameraListStr = localStorage.getItem('camera_list')
-  
-  if (robotId && cameraListStr) {
-    void (async () => {
-      try {
-        const cameraList = JSON.parse(cameraListStr)
-        if (cameraList && cameraList.length > 0) {
-          const ptzName = cameraList[0].PtzName
-          if (ptzName) {
-             console.log('Fetching presets for:', ptzName)
-             try {
-               const res = await navigationApi.getPresets(robotId, ptzName)
-               if (res && Array.isArray(res.list)) {
-                  // 重新组装列表，只保留接口返回的实际预置点
-                  presetList.value = res.list.map((item: any) => ({
-                    id: String(item.id),
-                    name: `${item.id}.${item.presetName || item.preset_name || item.name || `预置点${item.id}`}`
-                  })).sort((a, b) => Number(a.id) - Number(b.id))
-
-                  // 重新根据最新加载的列表绑定当前选中项
-                  const selectedId = String(presetDialog.value.form.id || '').trim()
-                  if (selectedId) {
-                    const selectedPreset = presetList.value.find(p => String(p.id) === selectedId)
-                    if (selectedPreset) {
-                      presetDialog.value.form.selectedName = selectedPreset.name
-                      presetDialog.value.form.inputName = selectedPreset.name
-                    }
-                  } else if (presetList.value.length > 0) {
-                    presetDialog.value.form.id = presetList.value[0].id
-                    presetDialog.value.form.selectedName = presetList.value[0].name
-                    if (!String(presetDialog.value.form.inputName || '').trim()) {
-                      presetDialog.value.form.inputName = presetList.value[0].name
-                    }
-                  }
-                  console.log('Presets updated with API data')
-               }
-             } catch (err) {
-               console.error('Failed to get presets API:', err)
-             }
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing camera_list or fetching presets:', e)
-      }
-    })()
-  }
+  void fetchPresetList()
   
   nextTick(() => {
       try {
@@ -2657,6 +2659,10 @@ const handleSetPreset = async () => {
     return
   }
 
+  if (parsed.presetState) {
+    presetDialog.value.form.id = parsed.presetState
+  }
+
   try {
     await navigationApi.ptzControl(robotId, {
       device_name: deviceName,
@@ -2664,8 +2670,13 @@ const handleSetPreset = async () => {
       isPreset: -1,
       preset_state: parsed.presetState
     })
+    successMessage.value = { show: true, text: '设置预置点成功' }
+    setTimeout(() => { successMessage.value.show = false }, 2000)
+    await fetchPresetList()
   } catch (error) {
     console.error('[PTZ] 设置预置点失败:', error)
+    errorMessage.value = { show: true, text: '设置预置点失败' }
+    setTimeout(() => { errorMessage.value.show = false }, 2000)
   }
 }
 
