@@ -25,6 +25,105 @@
             >
               您的浏览器不支持视频播放
             </video>
+            <!-- 全屏模式左侧云台操控面板 -->
+            <div
+              v-if="currentFullscreenPanel === 'visible'"
+              class="fullscreen-ptz-panel"
+              :class="{ 'is-dragging': isPtzDragging }"
+              :style="ptzPanelPos ? { left: ptzPanelPos.x + 'px', top: ptzPanelPos.y + 'px', bottom: 'auto', transform: 'translateZ(0)' } : { transform: 'translateZ(0)' }"
+              @mousedown="startPtzDrag"
+              @click.stop
+            >
+              <!-- 方向操控盘 (上/下/左/右/复位) -->
+              <div class="ptz-direction-pad">
+                <button class="ptz-ctrl-btn ptz-up" title="向上" @mousedown="ptzMove('up')" @mouseup="ptzStop" @mouseleave="ptzStop">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                </button>
+                <div class="ptz-mid-row">
+                  <button class="ptz-ctrl-btn ptz-left" title="向左" @mousedown="ptzMove('left')" @mouseup="ptzStop" @mouseleave="ptzStop">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  </button>
+                  <button class="ptz-ctrl-btn ptz-reset" title="复位/归中" @click="ptzReset">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                  </button>
+                  <button class="ptz-ctrl-btn ptz-right" title="向右" @mousedown="ptzMove('right')" @mouseup="ptzStop" @mouseleave="ptzStop">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+                </div>
+                <button class="ptz-ctrl-btn ptz-down" title="向下" @mousedown="ptzMove('down')" @mouseup="ptzStop" @mouseleave="ptzStop">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+              </div>
+
+              <div class="ptz-divider"></div>
+
+              <!-- 变焦 / 放大缩小 -->
+              <div class="ptz-action-row">
+                <button class="ptz-func-btn" title="放大" @click="ptzZoom(true)">
+                  <span class="ptz-btn-symbol">+</span>
+                  <span class="ptz-btn-text">放大</span>
+                </button>
+                <button class="ptz-func-btn" title="缩小" @click="ptzZoom(false)">
+                  <span class="ptz-btn-symbol">-</span>
+                  <span class="ptz-btn-text">缩小</span>
+                </button>
+              </div>
+
+              <!-- 聚焦+ / 聚焦- -->
+              <div class="ptz-action-row">
+                <button class="ptz-func-btn ptz-focus-btn" title="聚焦+" @click="ptzFocus(true)">
+                  <div class="focus-icon dashed-box"></div>
+                  <span class="ptz-btn-text">聚焦+</span>
+                </button>
+                <button class="ptz-func-btn ptz-focus-btn" title="聚焦-" @click="ptzFocus(false)">
+                  <div class="focus-icon solid-box"></div>
+                  <span class="ptz-btn-text">聚焦-</span>
+                </button>
+              </div>
+
+              <div class="ptz-divider"></div>
+
+              <!-- 转速调节 -->
+              <div class="ptz-speed-control">
+                <button class="ptz-speed-btn" @click.stop="showPtzSpeedMenu = !showPtzSpeedMenu">
+                  <span>转速</span>
+                  <span class="speed-badge">{{ ptzSpeed }}档</span>
+                </button>
+                <div v-if="showPtzSpeedMenu" class="ptz-speed-popover">
+                  <div class="ptz-speed-title">云台转速档位</div>
+                  <div class="ptz-speed-grid">
+                    <div
+                      v-for="s in 7"
+                      :key="s"
+                      class="ptz-speed-item"
+                      :class="{ active: ptzSpeed === s }"
+                      @click="setPtzSpeed(s)"
+                    >
+                      {{ s }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 算法画框 Overlay -->
+            <div v-if="hasVisibleVideoFrame && !webrtcReconnecting && showVisibleVisionBoxes && visibleVisionBoxes.length > 0" class="vision-overlay-container">
+              <div
+                v-for="box in visibleVisionBoxes"
+                :key="box.id"
+                class="vision-box-item"
+                :style="{
+                  left: box.left + '%',
+                  top: box.top + '%',
+                  width: box.width + '%',
+                  height: box.height + '%'
+                }"
+              >
+                <div class="vision-box-label" :class="{ 'label-inside-top': box.top < 5 }">
+                  <span class="vision-label-type">{{ box.cnType }}</span>
+                </div>
+              </div>
+            </div>
             <!-- 重连 overlay：保留最后一帧，叠加半透明提示 -->
             <div v-if="webrtcReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
@@ -38,6 +137,14 @@
               暂无视频流
             </div>
             <div class="video-action-group">
+              <button
+                class="video-action-btn stream-mode-btn vision-toggle-btn"
+                :class="{ 'active': showVisibleVisionBoxes }"
+                :title="`算法画框：${showVisibleVisionBoxes ? '开启中（点击关闭）' : '已关闭（点击开启）'}`"
+                @click.stop="showVisibleVisionBoxes = !showVisibleVisionBoxes"
+              >
+                算
+              </button>
               <button
                 class="video-action-btn stream-mode-btn"
                 :disabled="isStreamSwitching.visible || !canSwitchVideoStream('visible')"
@@ -84,6 +191,105 @@
             >
               您的浏览器不支持视频播放
             </video>
+            <!-- 全屏模式左侧云台操控面板 -->
+            <div
+              v-if="currentFullscreenPanel === 'infrared'"
+              class="fullscreen-ptz-panel"
+              :class="{ 'is-dragging': isPtzDragging }"
+              :style="ptzPanelPos ? { left: ptzPanelPos.x + 'px', top: ptzPanelPos.y + 'px', bottom: 'auto', transform: 'translateZ(0)' } : { transform: 'translateZ(0)' }"
+              @mousedown="startPtzDrag"
+              @click.stop
+            >
+              <!-- 方向操控盘 (上/下/左/右/复位) -->
+              <div class="ptz-direction-pad">
+                <button class="ptz-ctrl-btn ptz-up" title="向上" @mousedown="ptzMove('up')" @mouseup="ptzStop" @mouseleave="ptzStop">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                </button>
+                <div class="ptz-mid-row">
+                  <button class="ptz-ctrl-btn ptz-left" title="向左" @mousedown="ptzMove('left')" @mouseup="ptzStop" @mouseleave="ptzStop">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  </button>
+                  <button class="ptz-ctrl-btn ptz-reset" title="复位/归中" @click="ptzReset">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                  </button>
+                  <button class="ptz-ctrl-btn ptz-right" title="向右" @mousedown="ptzMove('right')" @mouseup="ptzStop" @mouseleave="ptzStop">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+                </div>
+                <button class="ptz-ctrl-btn ptz-down" title="向下" @mousedown="ptzMove('down')" @mouseup="ptzStop" @mouseleave="ptzStop">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+              </div>
+
+              <div class="ptz-divider"></div>
+
+              <!-- 变焦 / 放大缩小 -->
+              <div class="ptz-action-row">
+                <button class="ptz-func-btn" title="放大" @click="ptzZoom(true)">
+                  <span class="ptz-btn-symbol">+</span>
+                  <span class="ptz-btn-text">放大</span>
+                </button>
+                <button class="ptz-func-btn" title="缩小" @click="ptzZoom(false)">
+                  <span class="ptz-btn-symbol">-</span>
+                  <span class="ptz-btn-text">缩小</span>
+                </button>
+              </div>
+
+              <!-- 聚焦+ / 聚焦- -->
+              <div class="ptz-action-row">
+                <button class="ptz-func-btn ptz-focus-btn" title="聚焦+" @click="ptzFocus(true)">
+                  <div class="focus-icon dashed-box"></div>
+                  <span class="ptz-btn-text">聚焦+</span>
+                </button>
+                <button class="ptz-func-btn ptz-focus-btn" title="聚焦-" @click="ptzFocus(false)">
+                  <div class="focus-icon solid-box"></div>
+                  <span class="ptz-btn-text">聚焦-</span>
+                </button>
+              </div>
+
+              <div class="ptz-divider"></div>
+
+              <!-- 转速调节 -->
+              <div class="ptz-speed-control">
+                <button class="ptz-speed-btn" @click.stop="showPtzSpeedMenu = !showPtzSpeedMenu">
+                  <span>转速</span>
+                  <span class="speed-badge">{{ ptzSpeed }}档</span>
+                </button>
+                <div v-if="showPtzSpeedMenu" class="ptz-speed-popover">
+                  <div class="ptz-speed-title">云台转速档位</div>
+                  <div class="ptz-speed-grid">
+                    <div
+                      v-for="s in 7"
+                      :key="s"
+                      class="ptz-speed-item"
+                      :class="{ active: ptzSpeed === s }"
+                      @click="setPtzSpeed(s)"
+                    >
+                      {{ s }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 红外算法画框 Overlay -->
+            <div v-if="hasInfraredVideoFrame && !infraredReconnecting && showInfraredVisionBoxes && infraredVisionBoxes.length > 0" class="vision-overlay-container">
+              <div
+                v-for="box in infraredVisionBoxes"
+                :key="box.id"
+                class="vision-box-item"
+                :style="{
+                  left: box.left + '%',
+                  top: box.top + '%',
+                  width: box.width + '%',
+                  height: box.height + '%'
+                }"
+              >
+                <div class="vision-box-label" :class="{ 'label-inside-top': box.top < 5 }">
+                  <span class="vision-label-type">{{ box.cnType }}</span>
+                </div>
+              </div>
+            </div>
             <!-- 红外重连 overlay -->
             <div v-if="infraredReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
@@ -97,6 +303,14 @@
               暂无视频流
             </div>
             <div class="video-action-group">
+              <button
+                class="video-action-btn stream-mode-btn vision-toggle-btn"
+                :class="{ 'active': showInfraredVisionBoxes }"
+                :title="`算法画框：${showInfraredVisionBoxes ? '开启中（点击关闭）' : '已关闭（点击开启）'}`"
+                @click.stop="showInfraredVisionBoxes = !showInfraredVisionBoxes"
+              >
+                算
+              </button>
               <button
                 class="video-action-btn stream-mode-btn"
                 :disabled="isStreamSwitching.infrared || !canSwitchVideoStream('infrared')"
@@ -1449,6 +1663,7 @@ import type { MeshData } from '../utils/threemfParser'
 import { getRobotMapCacheKeys, getRobotContextCacheKeys } from '../utils/robotBootstrap'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config, getCurrentEnvironment } from '../config/environment'
+import { translateVisionLabel } from '../config/visionLabelMap'
 import { useDeviceStore } from '../stores/device'
 import { useRobotStore } from '../stores/robot'
 import { useTaskExecutionStore } from '../stores/taskExecution'
@@ -4988,6 +5203,366 @@ const infraredError = ref('')
 let infraredPc: RTCPeerConnection | null = null
 let infraredSessionId = 0
 
+// 算法画框显示开关（默认关闭）
+const showVisibleVisionBoxes = ref(false)
+const showInfraredVisionBoxes = ref(false)
+
+// ===== 全屏模式云台 (PTZ) 操控逻辑 =====
+const ptzSpeed = ref<number>(3) // 转速档位 1~7，默认 3
+const showPtzSpeedMenu = ref(false)
+
+// ===== 全屏云台面板拖拽逻辑 =====
+const ptzPanelPos = ref<{ x: number; y: number } | null>(null)
+const isPtzDragging = ref(false)
+let ptzDragStartX = 0
+let ptzDragStartY = 0
+let ptzPanelStartLeft = 0
+let ptzPanelStartTop = 0
+
+const startPtzDrag = (e: MouseEvent) => {
+  if (e.button !== 0) return
+  const targetElem = e.target as HTMLElement
+  // 点击按钮或弹出菜单时不启动拖拽，保证操作灵敏
+  if (targetElem && (targetElem.closest('button') || targetElem.closest('.ptz-speed-popover'))) {
+    return
+  }
+  isPtzDragging.value = true
+  ptzDragStartX = e.clientX
+  ptzDragStartY = e.clientY
+
+  const panel = (e.currentTarget as HTMLElement).closest('.fullscreen-ptz-panel') as HTMLElement
+  if (panel) {
+    if (!ptzPanelPos.value) {
+      // 首次拖拽：从实际渲染位置（支持 bottom 定位）换算成 left/top
+      const rect = panel.getBoundingClientRect()
+      const parentRect = panel.parentElement?.getBoundingClientRect() ?? { left: 0, top: 0 }
+      ptzPanelPos.value = {
+        x: rect.left - parentRect.left,
+        y: rect.top - parentRect.top
+      }
+    }
+    ptzPanelStartLeft = ptzPanelPos.value.x
+    ptzPanelStartTop = ptzPanelPos.value.y
+  }
+
+  window.addEventListener('mousemove', onPtzDragMove)
+  window.addEventListener('mouseup', onPtzDragEnd)
+}
+
+const onPtzDragMove = (e: MouseEvent) => {
+  if (!isPtzDragging.value) return
+  const dx = e.clientX - ptzDragStartX
+  const dy = e.clientY - ptzDragStartY
+  
+  let newX = ptzPanelStartLeft + dx
+  let newY = ptzPanelStartTop + dy
+
+  const panelWidth = 200
+  const panelHeight = 420
+  const maxX = window.innerWidth - panelWidth
+  const maxY = window.innerHeight - panelHeight
+
+  newX = Math.max(10, Math.min(maxX, newX))
+  newY = Math.max(10, Math.min(maxY, newY))
+
+  ptzPanelPos.value = { x: newX, y: newY }
+}
+
+const onPtzDragEnd = () => {
+  isPtzDragging.value = false
+  window.removeEventListener('mousemove', onPtzDragMove)
+  window.removeEventListener('mouseup', onPtzDragEnd)
+}
+
+// 获取视频流设备标识 (如 cam_rtsp_left)
+const getStreamVideoIndex = (panelType?: 'visible' | 'infrared'): string => {
+  try {
+    const typeKey = (panelType || currentFullscreenPanel.value || 'visible') === 'infrared' ? 'drone_infrared' : 'drone_visible'
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    const stream = robotId ? getRobotVideoStreamByType(robotId, typeKey) : getVideoStream(typeKey)
+    if (stream?.video_index) {
+      return String(stream.video_index).trim()
+    }
+    const raw = robotId ? (localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list')) : localStorage.getItem('camera_list')
+    if (raw) {
+      const list = JSON.parse(raw)
+      if (Array.isArray(list) && list.length > 0) {
+        return String(list[0]?.video_index || list[0]?.CamKey || '').trim()
+      }
+    }
+  } catch (e) {}
+  return ''
+}
+
+// 缓存云台设备名，避免每次点击方向键都向后端发送网络请求阻塞主线程
+const cachedPtzDeviceNameMap = new Map<string, string>()
+
+// 获取云台设备名 (如 ptz_0)
+const getPtzDeviceName = async (panelType?: 'visible' | 'infrared'): Promise<string> => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return 'ptz0'
+
+  const streamIndex = getStreamVideoIndex(panelType)
+  const cacheKey = `${robotId}_${streamIndex}`
+  if (cachedPtzDeviceNameMap.has(cacheKey)) {
+    return cachedPtzDeviceNameMap.get(cacheKey)!
+  }
+
+  // 优先直接读取已有的相机列表缓存
+  try {
+    const raw = localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list')
+    if (raw) {
+      const cameraList = JSON.parse(raw)
+      if (Array.isArray(cameraList) && cameraList.length > 0) {
+        if (streamIndex) {
+          const matched = cameraList.find(item => {
+            const camKey = String(item?.CamKey || '').trim()
+            const videoIndex = String((item as any)?.video_index || '').trim()
+            return streamIndex === camKey || streamIndex === videoIndex
+          })
+          if (matched?.PtzName) {
+            cachedPtzDeviceNameMap.set(cacheKey, matched.PtzName)
+            return matched.PtzName
+          }
+        }
+        if (cameraList[0]?.PtzName) {
+          cachedPtzDeviceNameMap.set(cacheKey, cameraList[0].PtzName)
+          return cameraList[0].PtzName
+        }
+      }
+    }
+  } catch {}
+
+  // 本地无缓存时才发送网络请求
+  try {
+    const res = await cameraApi.getCameraList(robotId)
+    const cameraList = res?.data || []
+    if (cameraList.length > 0) {
+      if (streamIndex) {
+        const matched = cameraList.find(item => {
+          const camKey = String(item?.CamKey || '').trim()
+          const videoIndex = String((item as any)?.video_index || '').trim()
+          return streamIndex === camKey || streamIndex === videoIndex
+        })
+        if (matched?.PtzName) {
+          cachedPtzDeviceNameMap.set(cacheKey, matched.PtzName)
+          return matched.PtzName
+        }
+      }
+      if (cameraList[0]?.PtzName) {
+        cachedPtzDeviceNameMap.set(cacheKey, cameraList[0].PtzName)
+        return cameraList[0].PtzName
+      }
+    }
+  } catch (err) {
+    console.warn('[PTZ] 获取云台设备名称失败:', err)
+  }
+  return 'ptz0'
+}
+
+type PtzAction = 'up' | 'down' | 'left' | 'right' | 'stop' | 'zeropoint' | 'zoomup' | 'zoomdown' | 'focusup' | 'focusdown'
+
+const callPtzControl = async (action: PtzAction) => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+
+  const isDirection = ['up', 'down', 'left', 'right', 'stop', 'zeropoint'].includes(action)
+  let deviceName = ''
+  if (isDirection) {
+    deviceName = await getPtzDeviceName()
+  } else {
+    deviceName = getStreamVideoIndex()
+  }
+
+  if (!deviceName) {
+    console.warn('[PTZ] 未找到匹配的设备名称，忽略控制:', action)
+    return
+  }
+
+  try {
+    const presetState = action === 'zeropoint' ? 'zeropoint' : ''
+    await navigationApi.ptzControl(robotId, {
+      device_name: deviceName,
+      status: action,
+      isPreset: 0,
+      preset_state: presetState
+    })
+  } catch (err) {
+    console.error(`[PTZ] 云台指令 (${action}) 执行失败:`, err)
+  }
+}
+
+const activePtzDirection = ref<'left' | 'right' | 'up' | 'down' | null>(null)
+
+const ptzMove = (direction: 'up' | 'down' | 'left' | 'right') => {
+  activePtzDirection.value = direction
+  void callPtzControl(direction)
+}
+
+const ptzStop = () => {
+  if (!activePtzDirection.value) return
+  activePtzDirection.value = null
+  void callPtzControl('stop')
+}
+
+const ptzReset = () => {
+  activePtzDirection.value = null
+  void callPtzControl('zeropoint')
+}
+
+const ptzZoom = (zoomIn: boolean) => {
+  void callPtzControl(zoomIn ? 'zoomup' : 'zoomdown')
+}
+
+const ptzFocus = (focusIn: boolean) => {
+  void callPtzControl(focusIn ? 'focusup' : 'focusdown')
+}
+
+const fetchPtzSpeed = async () => {
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+  const deviceName = getStreamVideoIndex()
+  if (!deviceName) return
+  try {
+    const res = await navigationApi.ptzGetSpeed(robotId, deviceName) as any
+    const candidates = [
+      res?.speed,
+      res?.data?.speed,
+      res?.result?.speed,
+      res?.msg?.result?.speed,
+      res?.msg?.speed
+    ]
+    for (const item of candidates) {
+      const num = Number(item)
+      if (Number.isFinite(num)) {
+        ptzSpeed.value = Math.min(7, Math.max(1, Math.round(num)))
+        break
+      }
+    }
+  } catch (err) {
+    console.warn('[PTZ] 获取当前转速失败:', err)
+  }
+}
+
+const setPtzSpeed = async (speedVal: number) => {
+  ptzSpeed.value = speedVal
+  showPtzSpeedMenu.value = false
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) return
+  const deviceName = getStreamVideoIndex()
+  if (!deviceName) return
+  try {
+    await navigationApi.ptzSetSpeed(robotId, {
+      device_name: deviceName,
+      speed: speedVal
+    })
+  } catch (err) {
+    console.error('[PTZ] 设置转速失败:', err)
+  }
+}
+
+// ===== 算法实时画框对接逻辑 =====
+interface VisionBoxItem {
+  id: string
+  left: number
+  top: number
+  width: number
+  height: number
+  cnType: string
+  displayValue?: string
+}
+
+const parseVisionBoxes = (camKeys: string[]): VisionBoxItem[] => {
+  const visionMap = robotStore.visionRealTimeMap
+  if (!visionMap) return []
+
+  let matchedPayload: any = null
+  for (const key of camKeys) {
+    const item = visionMap[key]
+    if (item && item.timestamp && Date.now() - item.timestamp < 4000) {
+      matchedPayload = item
+      break
+    }
+  }
+
+  if (!matchedPayload || !matchedPayload.data) return []
+
+  const result: VisionBoxItem[] = []
+  const dataObj = matchedPayload.data
+
+  Object.keys(dataObj).forEach(algoKey => {
+    const algoItem = dataObj[algoKey]
+    if (!algoItem) return
+    const lResults = algoItem.lResults || algoItem.results || {}
+    const cnType = String(algoItem.cnType || algoItem.cn_type || algoItem.sType || 'AI检测').trim()
+    const rectList = Array.isArray(lResults.rect) ? lResults.rect : []
+    const textList = Array.isArray(lResults.text) ? lResults.text : []
+
+    rectList.forEach((rect: number[], idx: number) => {
+      if (!Array.isArray(rect) || rect.length < 4) return
+      let x = Number(rect[0]) || 0
+      let y = Number(rect[1]) || 0
+      let w = Number(rect[2]) || 0
+      let h = Number(rect[3]) || 0
+
+      if (x <= 1.0 && y <= 1.0 && w <= 1.0 && h <= 1.0) {
+        x = Math.max(0, Math.min(1, x)) * 100
+        y = Math.max(0, Math.min(1, y)) * 100
+        w = Math.max(0, Math.min(1 - x / 100, w)) * 100
+        h = Math.max(0, Math.min(1 - y / 100, h)) * 100
+      }
+
+      const rawVal = rect[4] !== undefined && rect[4] !== null ? Number(rect[4]) : null
+      let displayValue = ''
+      if (rawVal !== null && Number.isFinite(rawVal)) {
+        displayValue = cnType.includes('温度') ? `${rawVal.toFixed(1)}°C` : `${rawVal}`
+      }
+
+      let textLabel = ''
+      if (textList[idx]) {
+        const t = textList[idx]
+        textLabel = Array.isArray(t) ? String(t[0] || '') : String(t || '')
+      }
+
+      // 仅显示中英文匹配对应的中文标签（不用显示 cnType 的数据）
+      const rawTarget = textLabel || cnType || ''
+      const finalCnType = translateVisionLabel(rawTarget)
+
+      const boxId = `${algoKey}_${idx}_${Math.round(x * 10)}_${Math.round(y * 10)}`
+
+      result.push({
+        id: boxId,
+        left: Number(x.toFixed(2)),
+        top: Number(y.toFixed(2)),
+        width: Number(w.toFixed(2)),
+        height: Number(h.toFixed(2)),
+        cnType: finalCnType,
+        displayValue
+      })
+    })
+  })
+
+  return result
+}
+
+const visibleVisionBoxes = computed(() => {
+  if (!showVisibleVisionBoxes.value) return []
+  // 当画面未真正播放出来、处于加载中、正在重连中或视频地址为空时，绝对不渲染画框
+  if (!hasVisibleVideoFrame.value || visibleLoading.value || webrtcReconnecting.value || !videoStreamUrl.value) {
+    return []
+  }
+  return parseVisionBoxes(['cam_rtsp_left', 'visible', 'cam_visible', 'cam_left'])
+})
+
+const infraredVisionBoxes = computed(() => {
+  if (!showInfraredVisionBoxes.value) return []
+  // 当画面未真正播放出来、处于加载中、正在重连中或视频地址为空时，绝对不渲染画框
+  if (!hasInfraredVideoFrame.value || infraredLoading.value || infraredReconnecting.value || !infraredStreamUrl.value) {
+    return []
+  }
+  return parseVisionBoxes(['cam_rtsp_right', 'infrared', 'cam_infrared', 'cam_right'])
+})
+
 // ===== WebRTC 自动重连配置 =====
 const WEBRTC_MAX_RECONNECT = 10
 const WEBRTC_RECONNECT_BASE_DELAY = 3000   // 基础重连间隔 3s，最大退避 15s
@@ -5791,6 +6366,7 @@ const stopWebRTCPlaybackForReconnect = () => {
   webrtcSessionId++
   clearWebRTCStartTimer()
   clearWebRTCFreezeDetection()
+  hasVisibleVideoFrame.value = false
   if (pc) { pc.close(); pc = null }
   isPlaying = false
 }
@@ -6143,6 +6719,7 @@ const stopInfraredWebRTCPlaybackForReconnect = () => {
   infraredSessionId++
   clearInfraredStartTimer()
   clearInfraredFreezeDetection()
+  hasInfraredVideoFrame.value = false
   if (infraredPc) { infraredPc.close(); infraredPc = null }
 }
 
@@ -6364,15 +6941,45 @@ const handleToggleVideoStream = async (panel: 'visible' | 'infrared') => {
   }
 }
 
+const currentFullscreenPanel = ref<'visible' | 'infrared' | null>(null)
+
+const updateFullscreenPanelState = () => {
+  ptzPanelPos.value = null
+  const fsElem = document.fullscreenElement || (document as any).webkitFullscreenElement
+  if (fsElem && visibleVideoWrapper.value && (fsElem === visibleVideoWrapper.value || visibleVideoWrapper.value.contains(fsElem))) {
+    currentFullscreenPanel.value = 'visible'
+    void fetchPtzSpeed()
+  } else if (fsElem && infraredVideoWrapper.value && (fsElem === infraredVideoWrapper.value || infraredVideoWrapper.value.contains(fsElem))) {
+    currentFullscreenPanel.value = 'infrared'
+    void fetchPtzSpeed()
+  } else {
+    currentFullscreenPanel.value = null
+  }
+}
+
+if (typeof window !== 'undefined') {
+  document.addEventListener('fullscreenchange', updateFullscreenPanelState)
+  document.addEventListener('webkitfullscreenchange', updateFullscreenPanelState)
+}
+
 const toggleVideoPanelFullscreen = async (type: 'visible' | 'infrared') => {
   const panel = type === 'visible' ? visibleVideoWrapper.value : infraredVideoWrapper.value
   if (!panel) return
   try {
-    if (document.fullscreenElement === panel) {
-      await document.exitFullscreen()
+    const fsElem = document.fullscreenElement || (document as any).webkitFullscreenElement
+    if (fsElem === panel || panel.contains(fsElem as Node)) {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen()
+      } else if ((document as any).webkitExitFullscreen) {
+        await (document as any).webkitExitFullscreen()
+      }
       return
     }
-    await panel.requestFullscreen()
+    if (panel.requestFullscreen) {
+      await panel.requestFullscreen()
+    } else if ((panel as any).webkitRequestFullscreen) {
+      await (panel as any).webkitRequestFullscreen()
+    }
   } catch (error) {
     console.error('视频面板全屏切换失败:', error)
   }
@@ -15899,4 +16506,352 @@ const handlePageShow = () => {
 .home-grid-legend .feature-area-slope { stroke: #8b5cf6; fill: #8b5cf6; }
 .home-grid-legend .feature-area-narrow { stroke: #06b6d4; fill: #06b6d4; }
 .home-grid-legend .feature-area-grass { stroke: #22c55e; fill: #22c55e; }
+
+/* 实时算法画框覆盖层 */
+.vision-overlay-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 8;
+  overflow: hidden;
+}
+
+.vision-box-item {
+  position: absolute;
+  border: 2px solid #ff2d95;
+  border-radius: 4px;
+  background: transparent !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+  /* 移除 transition 过渡，防止多框数据帧交排时在屏幕上相互飞行乱跳 */
+}
+
+/* 顶部标签：桃粉红打底，深紫黑字 */
+.vision-box-label {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  margin-bottom: 2px;
+  background: #ff2d95;
+  color: #3b0764;
+  padding: 3px 8px;
+  border-radius: 4px 4px 0 0;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.2;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  user-select: none;
+  z-index: 10;
+}
+
+/* 当画框贴近/超出顶部边界 (box.top < 5%) 时，将标签放置于框内顶部展示，防止超出视野 */
+.vision-box-label.label-inside-top {
+  bottom: auto;
+  top: 0;
+  left: 0;
+  margin-bottom: 0;
+  margin-top: 0;
+  border-radius: 0 0 4px 0;
+}
+
+.vision-label-type {
+  color: #3b0764;
+  font-weight: bold;
+}
+
+.vision-label-val {
+  color: #000000;
+  font-weight: bold;
+  font-family: 'Consolas', monospace;
+}
+
+/* 算法画框开关按钮样式 */
+.video-action-btn.vision-toggle-btn {
+  min-width: 30px;
+  padding: 0 8px;
+  text-align: center;
+  transition: all 0.2s ease;
+  font-weight: bold;
+}
+
+.video-action-btn.vision-toggle-btn.active {
+  background: rgba(0, 225, 255, 0.22);
+  border-color: #00e1ff;
+  color: #00e1ff;
+  box-shadow: 0 0 8px rgba(0, 225, 255, 0.4);
+  font-weight: bold;
+}
+
+/* 全屏模式下左侧 PTZ 云台控制面板 */
+.fullscreen-ptz-panel {
+  position: absolute;
+  left: 24px;
+  bottom: 40px;
+  z-index: 99;
+  width: 172px;
+  background: rgba(12, 28, 48, 0.88);
+  border: 1px solid rgba(0, 225, 255, 0.28);
+  border-radius: 14px;
+  padding: 12px 14px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(0, 225, 255, 0.08);
+  user-select: none;
+  pointer-events: auto;
+  cursor: grab;
+  will-change: transform;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fullscreen-ptz-panel.is-dragging {
+  cursor: grabbing;
+  border-color: rgba(0, 225, 255, 0.55);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55), 0 0 16px rgba(0, 225, 255, 0.25);
+}
+
+/* 可拖拽抓手 Header */
+.ptz-drag-header {
+  width: 100%;
+  padding: 4px 0 6px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: grab;
+  border-bottom: 1px solid rgba(0, 225, 255, 0.15);
+}
+
+.ptz-drag-header:active {
+  cursor: grabbing;
+}
+
+.drag-handle-dots {
+  display: grid;
+  grid-template-columns: repeat(3, 4px);
+  grid-template-rows: repeat(2, 4px);
+  gap: 3px;
+}
+
+.drag-handle-dots span {
+  width: 3px;
+  height: 3px;
+  background: rgba(0, 225, 255, 0.6);
+  border-radius: 50%;
+}
+
+.ptz-header-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #67d5fd;
+  letter-spacing: 1px;
+}
+
+/* 分割线 */
+.ptz-divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 225, 255, 0.3) 50%, transparent 100%);
+  margin: 2px 0;
+}
+
+/* 十字方向键布局 */
+.ptz-direction-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.ptz-mid-row {
+  display: flex;
+  gap: 4px;
+}
+
+.ptz-ctrl-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: rgba(16, 42, 67, 0.55);
+  border: 1px solid rgba(0, 225, 255, 0.22);
+  color: #00e1ff;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ptz-ctrl-btn:hover {
+  background: rgba(0, 225, 255, 0.25);
+  color: #ffffff;
+  border-color: #00e1ff;
+  box-shadow: 0 0 12px rgba(0, 225, 255, 0.55);
+  transform: scale(1.05);
+}
+
+.ptz-ctrl-btn:active {
+  transform: scale(0.92);
+}
+
+.ptz-ctrl-btn.ptz-reset {
+  background: rgba(0, 225, 255, 0.12);
+}
+
+/* 功能按钮行 (+ / - / 聚焦) */
+.ptz-action-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.ptz-func-btn {
+  flex: 1;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(0, 150, 255, 0.08);
+  border: 1px solid rgba(0, 225, 255, 0.22);
+  color: #e2e8f0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ptz-btn-symbol {
+  font-size: 16px;
+  font-weight: bold;
+  color: #00e1ff;
+}
+
+.ptz-btn-text {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ptz-func-btn:hover {
+  background: rgba(0, 225, 255, 0.3);
+  color: #ffffff;
+  border-color: #00e1ff;
+  box-shadow: 0 0 10px rgba(0, 225, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.ptz-func-btn:active {
+  transform: scale(0.95);
+}
+
+/* 聚焦图标框 */
+.focus-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+.focus-icon.dashed-box {
+  border: 1.5px dashed #00e1ff;
+}
+.focus-icon.solid-box {
+  border: 1.5px solid #00e1ff;
+}
+
+/* 转速控制器 */
+.ptz-speed-control {
+  position: relative;
+  width: 100%;
+}
+
+.ptz-speed-btn {
+  width: 100%;
+  height: 32px;
+  background: rgba(0, 225, 255, 0.07);
+  border: 1px solid rgba(0, 225, 255, 0.22);
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  transition: all 0.18s ease;
+}
+
+.ptz-speed-btn:hover {
+  background: rgba(0, 225, 255, 0.25);
+  border-color: #00e1ff;
+  color: #ffffff;
+}
+
+.speed-badge {
+  background: rgba(0, 225, 255, 0.25);
+  color: #00e1ff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.ptz-speed-popover {
+  position: absolute;
+  left: 105%;
+  bottom: -10px;
+  background: rgba(10, 25, 47, 0.96);
+  border: 1px solid rgba(0, 225, 255, 0.45);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
+  z-index: 100;
+}
+
+.ptz-speed-title {
+  font-size: 10px;
+  color: #67d5fd;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.ptz-speed-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.ptz-speed-item {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  color: #cbd5e1;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  transition: all 0.15s ease;
+}
+
+.ptz-speed-item:hover, .ptz-speed-item.active {
+  background: #00e1ff;
+  color: #000000;
+  font-weight: bold;
+  box-shadow: 0 0 8px rgba(0, 225, 255, 0.6);
+}
 </style>

@@ -99,7 +99,7 @@ export const useRobotStore = defineStore('robot', () => {
   // ===== 实时建图机器人位姿（slam_pose_update） =====
   const slamPoseData = ref<{ x: number; y: number; z?: number; theta: number; frame_id?: string; timestamp?: number } | null>(null)
 
-  // ===== 停障避障报警（遇到障碍物连续3次） =====
+  // ===== 停障避障报警（遇到障碍物连续5次） =====
   const globalObstacleAlertActive = ref(false)
   let consecutiveObstacleCount = 0
 
@@ -108,7 +108,22 @@ export const useRobotStore = defineStore('robot', () => {
   const realtimeSensorValues = ref<Record<string, number>>({})
   const realtimeSensorUnits = ref<Record<string, string>>({})
 
+  // ===== 算法画框实时数据（vision_real_time） =====
+  const visionRealTimeMap = ref<Record<string, { cam_key: string; robot_id: string; filtered?: boolean; data: any; timestamp: number }>>({})
+
   // ===== mutations =====
+
+  const setVisionRealTimeData = (payload: any) => {
+    if (!payload || !payload.cam_key) return
+    const camKey = String(payload.cam_key).trim()
+    visionRealTimeMap.value[camKey] = {
+      cam_key: camKey,
+      robot_id: String(payload.robot_id || ''),
+      filtered: Boolean(payload.filtered),
+      data: payload.data || {},
+      timestamp: Date.now()
+    }
+  }
 
   const setOnlineStatus = (online: boolean) => {
     isOnline.value = online
@@ -125,12 +140,12 @@ export const useRobotStore = defineStore('robot', () => {
       cmdStatus.value = { ...cmdStatus.value, ...Object.fromEntries(Object.entries(data as Record<string, any>).filter(([, v]) => v !== undefined)) } as CmdStatusData
     }
 
-    // 检查是否遇到障碍物（app_nav_stop 的 result 连续3次为 1）
+    // 检查是否遇到障碍物（app_nav_stop 的 result 连续5次为 1）
     if (data.app_nav_stop !== undefined && data.app_nav_stop !== null) {
       const resultVal = Number(data.app_nav_stop.result)
       if (resultVal === 1) {
         consecutiveObstacleCount++
-        if (consecutiveObstacleCount >= 3) {
+        if (consecutiveObstacleCount >= 5) {
           globalObstacleAlertActive.value = true
         }
       } else {
@@ -306,6 +321,7 @@ export const useRobotStore = defineStore('robot', () => {
     slamPoseData.value = null
     realtimeSensorValues.value = {}
     realtimeSensorUnits.value = {}
+    visionRealTimeMap.value = {}
     gpsMessage.value = null
     stopState.value = null
     carTemperature.value = null
@@ -586,5 +602,7 @@ export const useRobotStore = defineStore('robot', () => {
     isSlam,
     realtimeSensorValues,
     realtimeSensorUnits,
+    visionRealTimeMap,
+    setVisionRealTimeData,
   }
 })

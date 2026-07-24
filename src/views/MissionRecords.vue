@@ -2177,6 +2177,22 @@ const confirmAddTask = async () => {
     extraConfig: addTaskDialog.value.form.extraConfig
   })
   
+  // 处理预置点信息：格式如 "4.测试预置点"
+  let presetValue = ''
+  let presetIDValue = ''
+  const formPreset = String(addTaskDialog.value.form.preset || '').trim()
+  if (formPreset) {
+    const match = formPreset.match(/^(\d+)\.(.+)$/)
+    if (match) {
+      const [, number, name] = match
+      presetValue = name  // "测试预置点"
+      presetIDValue = `预置点${number}`  // "预置点4"
+    } else {
+      presetValue = formPreset
+      presetIDValue = formPreset
+    }
+  }
+
   // 构建任务数据
   const existingTask = editingTaskIndex.value >= 0
     ? (selectedTaskDetail.value?.taskcontent[editingTaskIndex.value] as any)
@@ -2190,8 +2206,8 @@ const confirmAddTask = async () => {
     y: String(parseFloat(yText) || 0),
     z: String(parseFloat(zText) || 0),
     theta: String(parseFloat(addTaskDialog.value.form.angle) || 0),
-    preset: addTaskDialog.value.form.preset,
-    presetID: addTaskDialog.value.form.preset,
+    preset: presetValue,
+    presetID: presetIDValue,
     remark: addTaskDialog.value.form.description || '',
     extra: addTaskDialog.value.form.extraConfig || '',
     obs_mode: 2,
@@ -2278,6 +2294,23 @@ const handleEditTask = async (waypoint: any) => {
     targetIsMulti = typeNames.length > 1 ? '1' : '0'
   }
   
+  // 处理预置点信息：从 preset 和 presetID 组合回原始格式如 "4.测试预置点"
+  let presetDisplay = ''
+  const rawPreset = String(taskData.preset || '').trim()
+  const rawPresetID = String(taskData.presetID || '').trim()
+  if (rawPreset && rawPresetID) {
+    const match = rawPresetID.match(/预置点(\d+)/)
+    if (match) {
+      presetDisplay = `${match[1]}.${rawPreset}`
+    } else {
+      presetDisplay = rawPreset
+    }
+  } else if (rawPreset) {
+    presetDisplay = rawPreset
+  } else if (rawPresetID) {
+    presetDisplay = rawPresetID
+  }
+
   // 填充表单数据（编辑回填期间避免 watcher 清空 extraConfig）
   skipNextIsMultiReset = true
   suppressExtraConfigReset = true
@@ -2290,7 +2323,7 @@ const handleEditTask = async (waypoint: any) => {
       y: String(taskData.y || 0),
       z: String(taskData.z || 0),
       angle: String(taskData.theta || 0),
-      preset: taskData.preset || taskData.presetID || '',
+      preset: presetDisplay,
       remark: taskData.remark || '',
       extraConfig: taskData.extra || '',
       description: taskData.remark || '',

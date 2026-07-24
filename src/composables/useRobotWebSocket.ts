@@ -561,6 +561,13 @@ export function useRobotWebSocket() {
         }
         break
 
+      // ---- 实时算法画框数据 ----
+      case 'vision_real_time':
+        if (typeof (robotStore as any).setVisionRealTimeData === 'function') {
+          ;(robotStore as any).setVisionRealTimeData(msg)
+        }
+        break
+
       // ---- 电池状态 (用于无人车) ----
       case 'battery': {
         const rawData = data
