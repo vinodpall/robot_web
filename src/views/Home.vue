@@ -25,6 +25,13 @@
             >
               您的浏览器不支持视频播放
             </video>
+            <!-- 最后一帧快照（静止关流时保留） -->
+            <img 
+              v-if="visibleLastFrameUrl" 
+              :src="visibleLastFrameUrl" 
+              class="video-snapshot-overlay" 
+              alt="可见光视频最后一帧"
+            />
             <!-- 重连 overlay：保留最后一帧，叠加半透明提示 -->
             <div v-if="webrtcReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
@@ -84,6 +91,13 @@
             >
               您的浏览器不支持视频播放
             </video>
+            <!-- 最后一帧快照（静止关流时保留） -->
+            <img 
+              v-if="infraredLastFrameUrl" 
+              :src="infraredLastFrameUrl" 
+              class="video-snapshot-overlay" 
+              alt="红外视频最后一帧"
+            />
             <!-- 红外重连 overlay -->
             <div v-if="infraredReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
@@ -3146,6 +3160,216 @@ let foregroundRecoverRunning = false
 let visibleManualReconnectRunning = false
 let infraredManualReconnectRunning = false
 
+// ===== 页面鼠标无操作自动关流 (超过2小时) =====
+const MOUSE_IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000
+let mouseIdleTimer: ReturnType<typeof setTimeout> | null = null
+let lastMouseIdleResetAt = 0
+const isMouseIdle = ref(false)
+const isIdleStopping = ref(false)
+const isIdleStarting = ref(false)
+const visibleLastFrameUrl = ref('')
+const infraredLastFrameUrl = ref('')
+
+const captureVideoFrame = (videoEl: HTMLVideoElement | null): string => {
+  if (!videoEl || videoEl.readyState < 2 || !videoEl.videoWidth || !videoEl.videoHeight) {
+    return ''
+  }
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = videoEl.videoWidth
+    canvas.height = videoEl.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL('image/png')
+    }
+  } catch (err) {
+    console.warn('[帧捕获] 捕获画面失败:', err)
+  }
+  return ''
+}
+
+const updateRobotStreamCache = (robotId: string, updatedStream: VideoStream) => {
+  const streams = getRobotVideoStreams(robotId)
+  const updated = streams.map(item =>
+    item.type === updatedStream.type ? { ...item, ...updatedStream } : item
+  )
+  if (!updated.some(item => item.type === updatedStream.type)) {
+    updated.push(updatedStream)
+  }
+  setRobotVideoStreams(robotId, updated)
+}
+
+const handleIdleStopStreams = async () => {
+  if (isMouseIdle.value || isIdleStopping.value) return
+  isMouseIdle.value = true
+  isIdleStopping.value = true
+  console.log('[鼠标静止检测] 页面鼠标超过 2 小时未移动，截取当前画面并触发 stop 接口，保留最后一帧')
+
+  // 1. 截取可见光与红外当前的最后一帧画面快照，避免关流后黑屏
+  if (videoElement.value && hasVisibleVideoFrame.value) {
+    const frame = captureVideoFrame(videoElement.value)
+    if (frame) visibleLastFrameUrl.value = frame
+  }
+  if (infraredVideoElement.value && hasInfraredVideoFrame.value) {
+    const frame = captureVideoFrame(infraredVideoElement.value)
+    if (frame) infraredLastFrameUrl.value = frame
+  }
+
+  // 2. 清理重连与冻结检测定时器，防止静止状态下自动触发重连
+  clearWebRTCReconnectTimer()
+  clearWebRTCFreezeDetection()
+  clearWebRTCStartTimer()
+  webrtcReconnecting.value = false
+
+  clearInfraredReconnectTimer()
+  clearInfraredFreezeDetection()
+  clearInfraredStartTimer()
+  infraredReconnecting.value = false
+
+  // 3. 关闭本地 WebRTC 播放连接
+  stopWebRTCPlaybackForReconnect()
+  stopInfraredWebRTCPlaybackForReconnect()
+
+  // 4. 触发后端 stop 接口
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (robotId) {
+    const visibleStream = getRobotVideoStreamByType(robotId, 'drone_visible') || getVideoStream('drone_visible')
+    const infraredStream = getRobotVideoStreamByType(robotId, 'drone_infrared') || getVideoStream('drone_infrared')
+
+    const stopTasks: Promise<any>[] = []
+    if (visibleStream?.camera_index) {
+      stopTasks.push(
+        cameraApi.stopCameraStream(robotId, visibleStream.camera_index).catch(err => {
+          console.warn('[鼠标静止检测] 触发可见光 stop 接口失败:', err)
+        })
+      )
+    }
+    if (infraredStream?.camera_index) {
+      stopTasks.push(
+        cameraApi.stopCameraStream(robotId, infraredStream.camera_index).catch(err => {
+          console.warn('[鼠标静止检测] 触发红外 stop 接口失败:', err)
+        })
+      )
+    }
+    if (stopTasks.length > 0) {
+      await Promise.allSettled(stopTasks)
+    }
+  }
+  isIdleStopping.value = false
+}
+
+const handleIdleResumeStreams = async () => {
+  if (!isMouseIdle.value || isIdleStarting.value) return
+  isIdleStarting.value = true
+  console.log('[鼠标静止检测] 鼠标恢复移动，重新触发 start 接口并启动播放 (play)')
+
+  isMouseIdle.value = false
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+
+  try {
+    webrtcReconnectCount = 0
+    infraredReconnectCount = 0
+
+    if (robotId) {
+      const visibleStream = getRobotVideoStreamByType(robotId, 'drone_visible') || getVideoStream('drone_visible')
+      const infraredStream = getRobotVideoStreamByType(robotId, 'drone_infrared') || getVideoStream('drone_infrared')
+
+      const startTasks: Promise<any>[] = []
+
+      // 1. 显式针对可见光与红外摄像头触发 startCameraStream (start 接口)
+      if (visibleStream?.camera_index) {
+        startTasks.push(
+          cameraApi.startCameraStream(robotId, visibleStream.camera_index, visibleStream.use_sub_stream).then(res => {
+            if (res?.stream_url) {
+              const updated = { ...visibleStream, url: res.stream_url }
+              updateRobotStreamCache(robotId, updated)
+            }
+          }).catch(err => {
+            console.warn('[鼠标静止检测] 触发可见光 start 接口失败:', err)
+          })
+        )
+      }
+      if (infraredStream?.camera_index) {
+        startTasks.push(
+          cameraApi.startCameraStream(robotId, infraredStream.camera_index, infraredStream.use_sub_stream).then(res => {
+            if (res?.stream_url) {
+              const updated = { ...infraredStream, url: res.stream_url }
+              updateRobotStreamCache(robotId, updated)
+            }
+          }).catch(err => {
+            console.warn('[鼠标静止检测] 触发红外 start 接口失败:', err)
+          })
+        )
+      }
+
+      if (startTasks.length > 0) {
+        await Promise.allSettled(startTasks)
+      } else {
+        await initCameraStreams()
+      }
+
+      // 2. 获取最新流地址后触发 WebRTC 建立连接与 play 播放
+      initVideoPlayer()
+      initInfraredVideo()
+      await nextTick()
+      if (videoStreamUrl.value) {
+        startVideoPlayback()
+      }
+      if (infraredStreamUrl.value) {
+        startInfraredPlayback(true)
+      }
+    } else {
+      reloadVideo()
+      reloadInfraredStream()
+    }
+  } catch (err) {
+    console.error('[鼠标静止检测] 恢复视频流失败:', err)
+  } finally {
+    isIdleStarting.value = false
+  }
+}
+
+const resetMouseIdleTimer = () => {
+  const now = Date.now()
+  if (isMouseIdle.value) {
+    handleIdleResumeStreams()
+    lastMouseIdleResetAt = now
+  } else if (now - lastMouseIdleResetAt < 500) {
+    return
+  }
+  lastMouseIdleResetAt = now
+
+  if (mouseIdleTimer) {
+    clearTimeout(mouseIdleTimer)
+    mouseIdleTimer = null
+  }
+
+  mouseIdleTimer = setTimeout(() => {
+    handleIdleStopStreams()
+  }, MOUSE_IDLE_TIMEOUT_MS)
+}
+
+const setupMouseIdleListeners = () => {
+  const events = ['mousemove', 'mousedown', 'keydown', 'touchstart']
+  events.forEach(event => {
+    window.addEventListener(event, resetMouseIdleTimer, { passive: true })
+  })
+  resetMouseIdleTimer()
+}
+
+const removeMouseIdleListeners = () => {
+  if (mouseIdleTimer) {
+    clearTimeout(mouseIdleTimer)
+    mouseIdleTimer = null
+  }
+  const events = ['mousemove', 'mousedown', 'keydown', 'touchstart']
+  events.forEach(event => {
+    window.removeEventListener(event, resetMouseIdleTimer)
+  })
+}
+
+
 // ---------- 主视频重连辅助函数 ----------
 const clearWebRTCReconnectTimer = () => {
   if (webrtcReconnectTimer) {
@@ -3208,6 +3432,7 @@ const scheduleVisibleStreamBootstrapRetry = (robotId: string) => {
   }, delay)
 }
 const scheduleWebRTCReconnect = () => {
+  if (isMouseIdle.value) return
   if (!videoStreamUrl.value) {
     clearWebRTCReconnectTimer()
     clearWebRTCStartTimer()
@@ -3330,6 +3555,7 @@ const scheduleInfraredStreamBootstrapRetry = (robotId: string) => {
   }, delay)
 }
 const scheduleInfraredReconnect = () => {
+  if (isMouseIdle.value) return
   if (!infraredStreamUrl.value) {
     clearInfraredReconnectTimer()
     clearInfraredStartTimer()
@@ -3805,6 +4031,7 @@ const startWebRTCPlayback = async () => {
         videoEl.srcObject = e.streams[0]
         hasVisibleVideoFrame.value = true
         visibleLoading.value = false
+        visibleLastFrameUrl.value = ''  // 新流接收，清除最后一帧快照
         clearWebRTCReconnectTimer()
         clearWebRTCStartTimer()
         webrtcReconnecting.value = false  // 隐藏 overlay
@@ -4121,6 +4348,7 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
       // 新流到来，直接替换 srcObject（重连时旧流已保留最后一帧）
       infraredVideoElement.value.srcObject = e.streams[0]
       hasInfraredVideoFrame.value = true
+      infraredLastFrameUrl.value = ''  // 新流接收，清除最后一帧快照
       clearInfraredReconnectTimer()
       clearInfraredStartTimer()
       infraredReconnecting.value = false  // 隐藏 overlay
@@ -7194,6 +7422,7 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('focus', handleWindowFocus)
   window.addEventListener('pageshow', handlePageShow)
+  setupMouseIdleListeners()
 
   // 初始化警报声（使用Web Audio API生成）
   
@@ -7461,6 +7690,7 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('focus', handleWindowFocus)
   window.removeEventListener('pageshow', handlePageShow)
+  removeMouseIdleListeners()
   if (foregroundRecoverTimer) {
     clearTimeout(foregroundRecoverTimer)
     foregroundRecoverTimer = null
@@ -8476,6 +8706,7 @@ onMounted(async () => {
 // 从其他页面切回首页时（keep-alive 缓存，onMounted 不再重复执行）
 onActivated(async () => {
   isHomePageActive.value = true
+  setupMouseIdleListeners()
   if (!hasHomeActivatedOnce) {
     hasHomeActivatedOnce = true
     // 首次激活也执行一次视频恢复兜底，避免错过 robot-camera-ready 事件时首屏无流
@@ -8512,9 +8743,11 @@ onActivated(async () => {
 
 onDeactivated(() => {
   isHomePageActive.value = false
+  removeMouseIdleListeners()
 })
 
 const recoverVideoStreamsOnForeground = async () => {
+  if (isMouseIdle.value) return
   if (foregroundRecoverRunning) return
   if (!isHomePageActive.value) return
   if (document.hidden) return
@@ -10990,6 +11223,17 @@ const handlePageShow = () => {
 
 .video-hidden {
   display: none !important;
+}
+
+.video-snapshot-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .video-action-group {

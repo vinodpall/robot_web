@@ -33,3 +33,8 @@ Thumbs.db
 *.cache
 /temp_test.py
 /Home_original.vue
+
+# Deploy directory and archives
+deploy/
+*.zip
+
