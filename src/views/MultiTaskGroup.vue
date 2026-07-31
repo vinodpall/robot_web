@@ -132,8 +132,8 @@
     </main>
     
     <!-- Create Multi Task Group Modal -->
-    <div v-if="createGroupDialog.visible" class="custom-dialog-mask">
-      <div class="simple-modal-card" style="width: 420px; margin-top: 100px; background: linear-gradient(135deg, #102a43 0%, #172a3a 100%); border: 1px solid rgba(103, 213, 253, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); border-radius: 12px;">
+    <div v-if="createGroupDialog.visible" class="custom-dialog-mask" @click="closeCreateGroupDialog">
+      <div class="simple-modal-card" @click.stop style="width: 420px; background: linear-gradient(135deg, #102a43 0%, #172a3a 100%); border: 1px solid rgba(103, 213, 253, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); border-radius: 12px;">
         <div class="simple-modal-header" style="position: relative; height: 50px; display: flex; align-items: center; justify-content: center; background: linear-gradient(to right, rgba(103, 213, 253, 0.1), transparent); border-bottom: 1px solid rgba(103, 213, 253, 0.15);">
           <span style="color: #fff; font-size: 18px; font-weight: 600; text-shadow: 0 0 10px rgba(103, 213, 253, 0.3);">创建多任务组</span>
           <span class="simple-close-icon" @click="closeCreateGroupDialog" style="position: absolute; right: 20px; color: rgba(255, 255, 255, 0.6); font-size: 24px; cursor: pointer; transition: color 0.3s; line-height: 1;">×</span>
@@ -166,8 +166,8 @@
     />
 
     <!-- Add Task Group Modal -->
-    <div v-if="addTaskGroupDialog.visible" class="custom-dialog-mask">
-      <div class="simple-modal-card add-task-group-modal-card" style="margin-top: 20px; background: linear-gradient(135deg, #102a43 0%, #172a3a 100%); border: 1px solid rgba(103, 213, 253, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); border-radius: 12px;">
+    <div v-if="addTaskGroupDialog.visible" class="custom-dialog-mask" @click="closeAddTaskGroupDialog">
+      <div class="simple-modal-card add-task-group-modal-card" @click.stop style="background: linear-gradient(135deg, #102a43 0%, #172a3a 100%); border: 1px solid rgba(103, 213, 253, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); border-radius: 12px;">
         <div class="simple-modal-header" style="position: relative; height: 50px; display: flex; align-items: center; justify-content: center; background: linear-gradient(to right, rgba(103, 213, 253, 0.1), transparent); border-bottom: 1px solid rgba(103, 213, 253, 0.15);">
           <span style="color: #fff; font-size: 18px; font-weight: 600; text-shadow: 0 0 10px rgba(103, 213, 253, 0.3);">{{ addTaskGroupDialog.isEdit ? '编辑任务组' : '添加任务组' }}</span>
           <span class="simple-close-icon" @click="closeAddTaskGroupDialog" style="position: absolute; right: 20px; color: rgba(255, 255, 255, 0.6); font-size: 24px; cursor: pointer; transition: color 0.3s; line-height: 1;">×</span>

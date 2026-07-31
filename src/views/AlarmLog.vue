@@ -516,7 +516,7 @@
                   <tr>
                     <th>任务名称</th>
                     <th>任务时间</th>
-                    <th>巡检点位总数</th>
+                    <th>总点位数</th>
                     <th>异常点位数</th>
                     <th>操作</th>
                   </tr>
@@ -1577,7 +1577,7 @@ onUnmounted(() => {
 
 .track-toolbar-row {
   flex-wrap: nowrap;
-  column-gap: 12px;
+  column-gap: 8px;
   row-gap: 8px;
   padding: 4px 0;
   margin-bottom: 4px;
@@ -1589,19 +1589,19 @@ onUnmounted(() => {
 
 .track-toolbar-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
 }
 
 .track-toolbar-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .track-toolbar-group .mission-toolbar-label {
-  width: 80px;
-  min-width: 80px;
+  width: 72px;
+  min-width: 72px;
   text-align: right;
   margin: 0;
   white-space: nowrap;
@@ -1633,8 +1633,8 @@ onUnmounted(() => {
 .track-toolbar-row .mission-btn {
   height: 32px;
   line-height: 32px;
-  min-width: 72px;
-  padding: 0 14px;
+  min-width: 64px;
+  padding: 0 10px;
   font-size: 13px;
   white-space: nowrap;
 }
@@ -1650,9 +1650,9 @@ onUnmounted(() => {
 }
 
 .track-time-input {
-  width: 200px !important;
-  min-width: 190px !important;
-  max-width: 200px !important;
+  width: 170px !important;
+  min-width: 160px !important;
+  max-width: 175px !important;
   height: 32px !important;
   line-height: 32px !important;
   padding: 0 34px 0 10px !important;
@@ -1704,8 +1704,8 @@ onUnmounted(() => {
 
 .track-time-picker-wrap {
   position: relative;
-  width: 200px;
-  min-width: 190px;
+  width: 170px;
+  min-width: 160px;
 }
 
 .track-time-trigger {
@@ -2653,7 +2653,7 @@ select.track-filter-input:hover {
 /* 特定列宽度及排版控制 */
 .round-dialog-table th:nth-child(1),
 .round-td-name {
-  width: 46%;
+  width: 36%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2673,13 +2673,13 @@ select.track-filter-input:hover {
 
 .round-dialog-table th:nth-child(3),
 .round-td-count {
-  width: 8%;
+  width: 13%;
   text-align: center;
 }
 
 .round-dialog-table th:nth-child(4),
 .round-td-abnormal {
-  width: 8%;
+  width: 13%;
   text-align: center;
   font-weight: bold;
 }

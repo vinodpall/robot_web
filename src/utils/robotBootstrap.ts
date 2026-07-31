@@ -36,6 +36,7 @@ const getTrackTaskGroupName = (task: any) => (
 interface RefreshRobotCacheOptions {
   forceResetMapSelection?: boolean
   skipMapRefresh?: boolean
+  isOffline?: boolean
 }
 
 const isAbortError = (e: any) => e?.name === 'AbortError' || e?.message === 'canceled'
@@ -61,8 +62,13 @@ export const getRobotContextCacheKeys = (robotId: string) => ({
 })
 
 // 第一阶段：仅获取摄像头列表并写入缓存，供主界面尽快启动视频流
-export const refreshCameraCache = async (robotId: string, signal?: AbortSignal) => {
+export const refreshCameraCache = async (
+  robotId: string,
+  signal?: AbortSignal,
+  options?: { isOffline?: boolean }
+) => {
   if (!robotId) return
+  if (options?.isOffline) return
   try {
     const cameraResponse = await cameraApi.getCameraList(robotId, signal)
     if (signal?.aborted) return
@@ -85,6 +91,38 @@ export const refreshMapCache = async (
 ) => {
   if (!robotId) return
 
+  const { mapListKey, mapUpdateTimeKey, selectedMapKey } = getRobotMapCacheKeys(robotId)
+
+  if (options.isOffline) {
+    try {
+      const cachedMapListRaw = localStorage.getItem(mapListKey) || localStorage.getItem('cached_map_list')
+      const mapList: string[] = cachedMapListRaw ? JSON.parse(cachedMapListRaw) : []
+      const currentSelectedMap =
+        localStorage.getItem(selectedMapKey)
+        || localStorage.getItem('selected_map_name')
+        || ''
+      const isCurrentMapValid = currentSelectedMap && mapList.includes(currentSelectedMap)
+      const navConfirmedMap = localStorage.getItem('nav_confirmed_map') || ''
+
+      if (mapList.length > 0) {
+        if (navConfirmedMap && mapList.includes(navConfirmedMap)) {
+          localStorage.setItem(selectedMapKey, navConfirmedMap)
+          if (shouldSyncLegacyCache(robotId)) {
+            localStorage.setItem('selected_map_name', navConfirmedMap)
+          }
+        } else if (options.forceResetMapSelection || !isCurrentMapValid) {
+          localStorage.setItem(selectedMapKey, mapList[0])
+          if (shouldSyncLegacyCache(robotId)) {
+            localStorage.setItem('selected_map_name', mapList[0])
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('离线使用地图缓存失败:', e)
+    }
+    return
+  }
+
   try {
     const mapListResponse = await navigationApi.getMapList(robotId, signal)
     if (signal?.aborted) return
@@ -105,7 +143,6 @@ export const refreshMapCache = async (
       }
     })
 
-    const { mapListKey, mapUpdateTimeKey, selectedMapKey } = getRobotMapCacheKeys(robotId)
     localStorage.setItem(mapListKey, JSON.stringify(mapList))
     localStorage.setItem(mapUpdateTimeKey, JSON.stringify(mapUpdateTimeMap))
     if (shouldSyncLegacyCache(robotId)) {
@@ -151,6 +188,7 @@ export const refreshRobotRelatedCache = async (
   signal?: AbortSignal
 ) => {
   if (!robotId) return
+  if (options.isOffline) return
   const contextKeys = getRobotContextCacheKeys(robotId)
 
   // 摄像头列表已由 refreshCameraCache 单独处理，此处不重复请求

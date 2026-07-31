@@ -153,7 +153,7 @@
                   <button class="map-btn" :class="isTrackTaskRunning ? 'map-btn-primary' : 'map-btn-secondary'" :disabled="!isTrackTaskRunning" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handleCircleMode">循迹避障模式</button>
                   <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
                   <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleSetOrigin">原点设置</button>
-                  <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled || !selectedNavMap" v-permission-click-dialog="'nav-navmanage-startnav'" @click="openReloModal">重定位</button>
+                  <button class="map-btn map-btn-secondary" :disabled="!selectedNavMap" v-permission-click-dialog="'nav-navmanage-startnav'" @click="openReloModal">重定位</button>
                 </div>
               </div>
 
@@ -761,8 +761,8 @@
                   </div>
                 </div>
                 <button 
-                  class="map-btn map-btn-secondary track-btn" 
-                  :class="{'map-btn-danger': isTrackRecording}"
+                  class="map-btn track-btn" 
+                  :class="[isTrackRecording ? 'map-btn-danger' : (!navigationEnabled || isTrackRunning ? 'map-btn-disabled-visual' : 'map-btn-secondary')]"
                   :disabled="isTrackRunning || !navigationEnabled"
                   v-permission-click-dialog="'nav-trackrecord-create'"
                   @click="handleTrackRecord"
@@ -1735,6 +1735,53 @@
       @close="closeSuccessMessage"
     />
 
+    <!-- MSF 定位模式选择弹窗 -->
+    <Teleport to="body">
+      <div v-if="msfModeDialogVisible" class="recording-dialog-overlay" @click="msfModeDialogVisible = false" style="z-index: 10000;">
+        <div class="recording-dialog-card card msf-mode-dialog" @click.stop style="max-width: 320px; width: 90%;">
+          <div class="recording-dialog-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>选择 MSF 定位模式</span>
+            <button class="dialog-close-btn" @click="msfModeDialogVisible = false">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="recording-dialog-body" style="padding: 16px 20px;">
+            <div class="msf-mode-options" style="display: flex; flex-direction: column; gap: 10px;">
+              <label 
+                class="msf-mode-option-card"
+                :class="{ active: selectedMsfMode === 3 }"
+                style="display: flex; align-items: center; padding: 10px 14px; background: rgba(12, 42, 62, 0.6); border: 1px solid rgba(103, 213, 253, 0.25); border-radius: 6px; cursor: pointer; transition: all 0.2s ease;"
+              >
+                <input type="radio" v-model="selectedMsfMode" :value="3" style="margin-right: 10px; accent-color: #67d5fd;" />
+                <span style="font-weight: 500; color: #ffffff; font-size: 14px;">融合定位</span>
+              </label>
+
+              <label 
+                class="msf-mode-option-card"
+                :class="{ active: selectedMsfMode === 2 }"
+                style="display: flex; align-items: center; padding: 10px 14px; background: rgba(12, 42, 62, 0.6); border: 1px solid rgba(103, 213, 253, 0.25); border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+              >
+                <input type="radio" v-model="selectedMsfMode" :value="2" style="margin-right: 10px; accent-color: #67d5fd;" />
+                <span style="font-weight: 500; color: #ffffff; font-size: 14px;">卫星定位</span>
+              </label>
+            </div>
+          </div>
+          <div class="recording-dialog-actions" style="padding: 12px 16px; display: flex; justify-content: center; gap: 16px; border-top: 1px solid rgba(103, 213, 253, 0.15);">
+            <button class="map-btn map-btn-primary" :disabled="msfModeSubmitting" @click="confirmMsfModeDialog" style="min-width: 84px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg v-if="msfModeSubmitting" class="msf-btn-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+                <path d="M12 2 a 10 10 0 0 1 10 10"></path>
+              </svg>
+              <span>确定</span>
+            </button>
+            <button class="map-btn map-btn-secondary" :disabled="msfModeSubmitting" @click="msfModeDialogVisible = false" style="min-width: 84px;">取消</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- 错误提示 -->
     <ErrorMessage
       :show="errorMessage.show"
@@ -2024,9 +2071,9 @@ const renderRouteEditOnAMap = async () => {
     if (c) {
       const marker = new (AMap as any).CircleMarker({
         center: c,
-        radius: 7,
+        radius: 4.5,
         strokeColor: '#ffffff',
-        strokeWeight: 2,
+        strokeWeight: 1.5,
         fillColor: '#ff9500',
         fillOpacity: 1,
         zIndex: 110,
@@ -2062,9 +2109,9 @@ const renderRouteEditOnAMap = async () => {
       if (!c) return
       const marker = new (AMap as any).CircleMarker({
         center: c,
-        radius: 5,
+        radius: 3.5,
         strokeColor: '#ffffff',
-        strokeWeight: 2,
+        strokeWeight: 1.5,
         fillColor: '#ff9500',
         fillOpacity: 1,
         zIndex: 111,
@@ -2104,9 +2151,9 @@ const renderRouteEditOnAMap = async () => {
         if (!c) return
         const marker = new (AMap as any).CircleMarker({
           center: c,
-          radius: 8,
+          radius: 4.5,
           strokeColor: '#ffffff',
-          strokeWeight: 2,
+          strokeWeight: 1.5,
           fillColor: '#ff9500',
           fillOpacity: 1,
           zIndex: 112,
@@ -4678,6 +4725,34 @@ const handleInitINS = () => {
   })
 }
 
+const msfModeDialogVisible = ref(false)
+const selectedMsfMode = ref<number>(3)
+const msfModeSubmitting = ref(false)
+
+const confirmMsfModeDialog = async () => {
+  try {
+    msfModeSubmitting.value = true
+    const robotId = deviceStore.selectedRobotId
+    if (!robotId) {
+      showErrorMessage('未选择机器人')
+      return
+    }
+
+    await navigationApi.msfControl(robotId, {
+      action: 1,
+      mode: selectedMsfMode.value,
+      session: selectedNavMap.value
+    })
+    showSuccessMessage('开启MSF成功')
+    msfModeDialogVisible.value = false
+  } catch (err) {
+    console.error('开启MSF失败:', err)
+    showErrorMessage('开启MSF失败')
+  } finally {
+    msfModeSubmitting.value = false
+  }
+}
+
 const handleStartMSF = () => {
   if (navigationEnabled.value || insEnabled.value) {
     showErrorMessage('请先关闭导航或INS')
@@ -4689,30 +4764,34 @@ const handleStartMSF = () => {
     return
   }
 
-  const action = msfEnabled.value ? '关闭' : '开启'
-  showConfirmDialog({
-    title: `${action}MSF`,
-    message: `确定要${action}MSF吗？`,
-    onConfirm: async () => {
-      try {
-        const robotId = deviceStore.selectedRobotId
-        if (!robotId) {
-          showErrorMessage('未选择机器人')
-          return
-        }
+  if (msfEnabled.value) {
+    showConfirmDialog({
+      title: '关闭MSF',
+      message: '确定要关闭MSF吗？',
+      onConfirm: async () => {
+        try {
+          const robotId = deviceStore.selectedRobotId
+          if (!robotId) {
+            showErrorMessage('未选择机器人')
+            return
+          }
 
-        await navigationApi.msfControl(robotId, {
-          action: msfEnabled.value ? 0 : 1,
-          mode: 3,
-          session: selectedNavMap.value
-        })
-        showSuccessMessage(`${action}MSF成功`)
-      } catch (err) {
-        console.error(`${action}MSF失败:`, err)
-        showErrorMessage(`${action}MSF失败`)
+          await navigationApi.msfControl(robotId, {
+            action: 0,
+            mode: 3,
+            session: selectedNavMap.value
+          })
+          showSuccessMessage('关闭MSF成功')
+        } catch (err) {
+          console.error('关闭MSF失败:', err)
+          showErrorMessage('关闭MSF失败')
+        }
       }
-    }
-  })
+    })
+  } else {
+    selectedMsfMode.value = 3
+    msfModeDialogVisible.value = true
+  }
 }
 
 const handleCircleMode = () => {
@@ -7152,10 +7231,10 @@ const drawRouteEditOnGrid = (
       if (isValidRouteEditIndex(idx) && idx < points.length) {
         const sp = toCanvas(points[idx])
         ctx.beginPath()
-        ctx.arc(sp.x, sp.y, Math.max(4.0, 7 / zoom), 0, Math.PI * 2)
+        ctx.arc(sp.x, sp.y, Math.max(2.5, 4.5 / zoom), 0, Math.PI * 2)
         ctx.fillStyle = '#ff9500'
         ctx.strokeStyle = '#ffffff'
-        ctx.lineWidth = 1.5 / zoom
+        ctx.lineWidth = 1.0 / zoom
         ctx.fill()
         ctx.stroke()
       }
@@ -7779,21 +7858,76 @@ const drawSlamOnlineGridMap = (map: any) => {
     hasRobot = true
   }
 
+  // 辅助解析格子的 [cx, cy] 二维坐标 (兼容一维索引、二维点对、对象等各种后端推送格式)
+  const getCellCoord = (item: any, width: number): [number, number] | null => {
+    if (typeof item === 'number') {
+      if (width > 0) {
+        const cx = item % width
+        const cy = Math.floor(item / width)
+        return [cx, cy]
+      }
+    } else if (Array.isArray(item)) {
+      if (item.length >= 2 && typeof item[0] === 'number' && typeof item[1] === 'number') {
+        return [item[0], item[1]]
+      }
+    } else if (item && typeof item === 'object') {
+      const cx = typeof item.x === 'number' ? item.x : (typeof item.cx === 'number' ? item.cx : null)
+      const cy = typeof item.y === 'number' ? item.y : (typeof item.cy === 'number' ? item.cy : null)
+      if (cx !== null && cy !== null) return [cx, cy]
+    }
+    return null
+  }
+
+  // 解析并收集所有有效的自由格与占用格坐标
+  const freeCellList: [number, number][] = []
+  const occCellList: [number, number][] = []
+
+  if (Array.isArray(map.free_cells)) {
+    map.free_cells.forEach((item: any) => {
+      const coord = getCellCoord(item, mapW)
+      if (coord) freeCellList.push(coord)
+    })
+  }
+
+  if (Array.isArray(map.occupied_cells)) {
+    map.occupied_cells.forEach((item: any) => {
+      const coord = getCellCoord(item, mapW)
+      if (coord) occCellList.push(coord)
+    })
+  }
+
+  // 兼容直接发全量 data 数组的情况 (OccupancyGrid: 0=free, 100/1=occupied)
+  if (Array.isArray(map.data) && freeCellList.length === 0 && occCellList.length === 0) {
+    map.data.forEach((val: number, idx: number) => {
+      if (val === 0) {
+        const coord = getCellCoord(idx, mapW)
+        if (coord) freeCellList.push(coord)
+      } else if (val > 0) {
+        const coord = getCellCoord(idx, mapW)
+        if (coord) occCellList.push(coord)
+      }
+    })
+  }
+
   let cellX = mapW / 2
   let cellY = mapH / 2
 
   if (map.origin && hasRobot) {
     cellX = (rx - map.origin.x) / map.resolution
     cellY = (ry - map.origin.y) / map.resolution
+  } else if (occCellList.length > 0 || freeCellList.length > 0) {
+    // 即使暂无机器人位姿，也根据有效格子分布计算几何中心，确保画面居中
+    const all = [...occCellList, ...freeCellList]
+    const sumX = all.reduce((acc, c) => acc + c[0], 0)
+    const sumY = all.reduce((acc, c) => acc + c[1], 0)
+    cellX = sumX / all.length
+    cellY = sumY / all.length
   }
 
-  // 3. 以机器人为视图中心，计算最大半径来确定比例尺
+  // 3. 以视图中心计算最大半径确定比例尺
   let maxRadius = 20
-  const allCells = [
-    ...(Array.isArray(map.occupied_cells) ? map.occupied_cells : []),
-    ...(Array.isArray(map.free_cells) ? map.free_cells : [])
-  ]
-  allCells.forEach(([cx, cy]: [number, number]) => {
+  const allCells = [...occCellList, ...freeCellList]
+  allCells.forEach(([cx, cy]) => {
     const r = Math.max(Math.abs(cx - cellX), Math.abs(cy - cellY))
     if (r > maxRadius) maxRadius = r
   })
@@ -7802,7 +7936,6 @@ const drawSlamOnlineGridMap = (map: any) => {
   const halfView = Math.min(containerWidth, containerHeight) / 2
   const baseScale = Math.max(4.0, halfView / maxRadius)
 
-  // 视图中心 = 机器人位置，画布中点对应机器人
   const viewCX = cellX
   const viewCY = cellY
 
@@ -7819,18 +7952,18 @@ const drawSlamOnlineGridMap = (map: any) => {
   })
 
   // 4. 绘制空闲格（已探测、无障碍）—— 亮灰色
-  if (Array.isArray(map.free_cells) && map.free_cells.length > 0) {
+  if (freeCellList.length > 0) {
     ctx.fillStyle = COLOR_FREE
-    map.free_cells.forEach(([cx, cy]: [number, number]) => {
+    freeCellList.forEach(([cx, cy]) => {
       const { x, y } = toCanvas(cx, cy)
       ctx.fillRect(x - 0.2, y - 0.2, baseScale + 0.4, baseScale + 0.4)
     })
   }
 
   // 5. 绘制占用格（有障碍）—— 深色
-  if (Array.isArray(map.occupied_cells) && map.occupied_cells.length > 0) {
+  if (occCellList.length > 0) {
     ctx.fillStyle = COLOR_OCCUPIED
-    map.occupied_cells.forEach(([cx, cy]: [number, number]) => {
+    occCellList.forEach(([cx, cy]) => {
       const { x, y } = toCanvas(cx, cy)
       ctx.fillRect(x - 0.2, y - 0.2, baseScale + 0.4, baseScale + 0.4)
     })
@@ -9768,6 +9901,10 @@ const reloResetZoom = () => {
 
 // 打开 / 关闭重定位弹窗
 const openReloModal = () => {
+  if (!navigationEnabled.value) {
+    showErrorMessage('请先开启导航')
+    return
+  }
   if (!selectedNavMap.value) {
     showErrorMessage('当前没有选择的导航地图，无法开启重定位')
     return
@@ -14384,9 +14521,11 @@ select.recording-input option {
   border-color: rgba(59, 130, 246, 0.85);
   box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
 }
-.grid-map-realtime-btn svg {
-  width: 100%;
-  height: 100%;
+.msf-btn-spinner {
+  animation: msf-spin 0.8s linear infinite;
 }
-
+@keyframes msf-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 </style>

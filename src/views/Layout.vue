@@ -415,7 +415,9 @@ const loadRobotList = async () => {
 
       const stillExists = deviceStore.robots.some(robot => String(robot.robot_id) === String(deviceStore.selectedRobotId))
       if (!stillExists && deviceStore.robots.length > 0) {
-        deviceStore.setSelectedRobot(deviceStore.robots[0].robot_id)
+        const firstOnlineRobot = deviceStore.robots.find(robot => robot.status?.toLowerCase() === 'online')
+        const targetRobot = firstOnlineRobot || deviceStore.robots[0]
+        deviceStore.setSelectedRobot(targetRobot.robot_id)
       } else if (deviceStore.robots.length === 0) {
         deviceStore.setSelectedRobot('')
       }
@@ -700,6 +702,17 @@ const toggleStop = async () => {
 let switchToken = 0
 let currentAbortController: AbortController | null = null
 
+const checkIsRobotOnline = (robotId: string) => {
+  const robot = deviceStore.robots.find(r => String(r.robot_id) === String(robotId))
+  if (robot && robot.status) {
+    return robot.status.toLowerCase() === 'online'
+  }
+  if (String(robotId) === String(deviceStore.selectedRobotId)) {
+    return isSelectedRobotOnline.value
+  }
+  return false
+}
+
 const refreshRobotContext = async (robotId: string) => {
   if (currentAbortController) currentAbortController.abort()
   currentAbortController = new AbortController()
@@ -710,20 +723,22 @@ const refreshRobotContext = async (robotId: string) => {
   await fetchDeviceStatus(robotId)
   if (switchToken !== myToken) return
 
-  await refreshCameraCache(robotId, signal)
+  const isOffline = !checkIsRobotOnline(robotId)
+
+  await refreshCameraCache(robotId, signal, { isOffline })
   if (switchToken !== myToken) return
 
   window.dispatchEvent(new CustomEvent('robot-camera-ready', {
     detail: { robotId, timestamp: Date.now() }
   }))
 
-  await refreshMapCache(robotId, { forceResetMapSelection: true }, signal)
+  await refreshMapCache(robotId, { forceResetMapSelection: true, isOffline }, signal)
   if (switchToken !== myToken) return
   window.dispatchEvent(new CustomEvent('robot-map-list-ready', {
     detail: { robotId, timestamp: Date.now() }
   }))
 
-  refreshRobotRelatedCache(robotId, { forceResetMapSelection: true, skipMapRefresh: true }, signal).then(() => {
+  refreshRobotRelatedCache(robotId, { forceResetMapSelection: true, skipMapRefresh: true, isOffline }, signal).then(() => {
     if (switchToken !== myToken) return
     window.dispatchEvent(new CustomEvent('robot-context-refreshed', {
       detail: { robotId, timestamp: Date.now() }

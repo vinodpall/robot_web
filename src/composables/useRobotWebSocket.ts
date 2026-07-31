@@ -88,9 +88,10 @@ export interface SlamGridMapData {
     y: number
     z: number
   }
-  occupied_cells: [number, number][]   // 占用格（有障碍）
-  free_cells?: [number, number][]      // 空闲格（已探测、无障碍）
-  pose?: [number, number, number]      // [x, y, theta] 无人车实时位置
+  occupied_cells: [number, number][] | number[]   // 占用格（支持 2D 坐标对数组或 1D 展平索引数组）
+  free_cells?: [number, number][] | number[]      // 空闲格（支持 2D 坐标对数组或 1D 展平索引数组）
+  pose?: [number, number, number] | { x: number; y: number; theta: number } | null
+  data?: number[]
 }
 
 export interface MsfStatusData {

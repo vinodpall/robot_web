@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -89,7 +89,7 @@
     </main>
 
     <!-- 新增定时任务弹窗 -->
-    <div v-if="showCreateDialog" class="custom-dialog-mask">
+    <div v-if="showCreateDialog" class="custom-dialog-mask" @click="closeCreateDialog">
       <div class="simple-modal-card" style="width: 500px;" @click.stop>
         <div class="simple-modal-header">
           <span>新增定时任务</span>
@@ -111,15 +111,58 @@
           </div>
           <div class="task-form-row">
             <label class="task-form-label">开始时间：</label>
-            <div class="time-input-wrapper" @click="focusTimeInput">
-              <input
-                ref="timeInputRef"
-                v-model="createForm.start_time"
-                type="time"
-                class="task-form-input"
-                :class="{ 'is-error': createFormErrors.start_time }"
-                placeholder="HH:MM"
-              />
+            <div class="custom-time-picker-container">
+              <div 
+                class="custom-time-input" 
+                :class="{ 'is-error': createFormErrors.start_time, 'active': showTimePicker }"
+                @click.stop="toggleCustomTimePicker"
+              >
+                <span v-if="createForm.start_time" class="time-val-text">{{ createForm.start_time }}</span>
+                <span v-else class="time-placeholder-text">HH:MM</span>
+                <svg class="time-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#67d5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M12 6V12L16 14" stroke="#67d5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+
+              <!-- 科技感时间选择弹窗浮层 -->
+              <div v-if="showTimePicker" class="custom-time-picker-popover" @click.stop>
+                <div class="time-picker-header">
+                  <span class="time-picker-title">选择时间</span>
+                </div>
+                <div class="time-picker-columns">
+                  <!-- 小时列 -->
+                  <div class="time-picker-column">
+                    <div class="column-title">时</div>
+                    <div class="column-list" ref="hourListRef">
+                      <div 
+                        v-for="h in hourOptions" 
+                        :key="h" 
+                        class="column-item"
+                        :class="{ 'selected': h === pickerHour }"
+                        @click="selectHour(h)"
+                      >
+                        {{ h }}
+                      </div>
+                    </div>
+                  </div>
+                  <!-- 分钟列 -->
+                  <div class="time-picker-column">
+                    <div class="column-title">分</div>
+                    <div class="column-list" ref="minuteListRef">
+                      <div 
+                        v-for="m in minuteOptions" 
+                        :key="m" 
+                        class="column-item"
+                        :class="{ 'selected': m === pickerMinute }"
+                        @click="selectMinute(m)"
+                      >
+                        {{ m }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <div v-if="createFormErrors.start_time" class="task-form-error-tip">请选择开始时间</div>
@@ -134,153 +177,153 @@
     <!-- 大图预览弹窗 -->
     <div v-if="showBigImage" class="big-image-mask" @click="closeBigImage">
       <div class="big-image-content" @click.stop>
-      <img v-if="bigImageUrl" :src="bigImageUrl" class="big-image" @load="handleBigImageLoaded" @error="handleBigImageErrored" />
-      <div v-if="bigImageLoading" class="big-image-loading">
-        <div class="spinner"></div>
-        <div class="loading-text">图片加载中...</div>
+        <img v-if="bigImageUrl" :src="bigImageUrl" class="big-image" @load="handleBigImageLoaded" @error="handleBigImageErrored" />
+        <div v-if="bigImageLoading" class="big-image-loading">
+          <div class="spinner"></div>
+          <div class="loading-text">图片加载中...</div>
+        </div>
+        <div v-if="bigImageError" class="big-image-error">{{ bigImageError }}</div>
       </div>
-      <div v-if="bigImageError" class="big-image-error">{{ bigImageError }}</div>
     </div>
-  </div>
-  
-  <!-- 位置预览弹窗 -->
-  <div v-if="showLocationModal" class="location-modal-mask" @click="closeLocationModal">
-    <div class="location-modal-content" @click.stop>
-      <div class="location-modal-header">
-        <h3>位置预览</h3>
-        <button class="location-modal-close" @click="closeLocationModal">×</button>
-      </div>
-      <div class="location-modal-body">
-        <div id="location-map-container" class="location-map-container"></div>
-        <div class="location-map-watermark">
-          <div>经度：{{ selectedAlert?.longitude?.toFixed(6) }}　纬度：{{ selectedAlert?.latitude?.toFixed(6) }}</div>
-          <div v-if="selectedAlert?.altitude">高度：{{ selectedAlert.altitude.toFixed(2) }} 米</div>
-          <div>检测时间：{{ selectedAlert?.detection_time ? formatTime(selectedAlert.detection_time) : '--' }}</div>
-          <div>位置：<span style="word-break: break-all;">{{ selectedAddress || '地址查询中...' }}</span></div>
+
+    <!-- 位置预览弹窗 -->
+    <div v-if="showLocationModal" class="location-modal-mask" @click="closeLocationModal">
+      <div class="location-modal-content" @click.stop>
+        <div class="location-modal-header">
+          <h3>位置预览</h3>
+          <button class="location-modal-close" @click="closeLocationModal">×</button>
+        </div>
+        <div class="location-modal-body">
+          <div id="location-map-container" class="location-map-container"></div>
+          <div class="location-map-watermark">
+            <div>经度：{{ selectedAlert?.longitude?.toFixed(6) }}　纬度：{{ selectedAlert?.latitude?.toFixed(6) }}</div>
+            <div v-if="selectedAlert?.altitude">高度：{{ selectedAlert.altitude.toFixed(2) }} 米</div>
+            <div>检测时间：{{ selectedAlert?.detection_time ? formatTime(selectedAlert.detection_time) : '--' }}</div>
+            <div>位置：<span style="word-break: break-all;">{{ selectedAddress || '地址查询中...' }}</span></div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- 状态处理弹窗 -->
-  <div v-if="showStatusDialog" class="status-dialog-mask">
-    <div class="status-dialog-content">
-      <div class="status-dialog-header">
-        <h3>处理告警</h3>
-        <button class="status-dialog-close" @click="closeStatusDialog">×</button>
-      </div>
-      <div class="status-dialog-body">
-        <div class="status-form">
-          <div class="form-row">
-            <label>处理方式：</label>
-            <div class="radio-group">
-              <label class="radio-item">
-                <input 
-                  type="radio" 
-                  v-model="statusForm.handleType" 
-                  value="false_alarm" 
-                  name="handleType"
-                />
-                <span>误报</span>
-              </label>
-              <label class="radio-item">
-                <input 
-                  type="radio" 
-                  v-model="statusForm.handleType" 
-                  value="real_alarm" 
-                  name="handleType"
-                />
-                <span>非误报</span>
-              </label>
+    <!-- 状态处理弹窗 -->
+    <div v-if="showStatusDialog" class="status-dialog-mask">
+      <div class="status-dialog-content">
+        <div class="status-dialog-header">
+          <h3>处理告警</h3>
+          <button class="status-dialog-close" @click="closeStatusDialog">×</button>
+        </div>
+        <div class="status-dialog-body">
+          <div class="status-form">
+            <div class="form-row">
+              <label>处理方式：</label>
+              <div class="radio-group">
+                <label class="radio-item">
+                  <input 
+                    type="radio" 
+                    v-model="statusForm.handleType" 
+                    value="false_alarm" 
+                    name="handleType"
+                  />
+                  <span>误报</span>
+                </label>
+                <label class="radio-item">
+                  <input 
+                    type="radio" 
+                    v-model="statusForm.handleType" 
+                    value="real_alarm" 
+                    name="handleType"
+                  />
+                  <span>非误报</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-row">
+              <label>处理描述：</label>
+              <textarea 
+                v-model="statusForm.handleNote" 
+                class="handle-note-input"
+                placeholder="请输入处理描述"
+                :class="{ 'required': statusForm.handleType === 'real_alarm' }"
+              ></textarea>
             </div>
           </div>
-          <div class="form-row">
-            <label>处理描述：</label>
-            <textarea 
-              v-model="statusForm.handleNote" 
-              class="handle-note-input"
-              placeholder="请输入处理描述"
-              :class="{ 'required': statusForm.handleType === 'real_alarm' }"
-            ></textarea>
-          </div>
-        </div>
-        <div class="status-dialog-actions">
-          <button class="status-btn status-btn-cancel" @click="closeStatusDialog">取消</button>
-          <button 
-            class="status-btn status-btn-submit" 
-            @click="submitStatus"
-            :disabled="!canSubmit"
-          >
-            提交
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 详情弹窗 -->
-  <div v-if="showDetailDialog" class="detail-dialog-mask">
-    <div class="detail-dialog-content">
-      <div class="detail-dialog-header">
-        <h3>处理详情</h3>
-        <button class="detail-dialog-close" @click="closeDetailDialog">×</button>
-      </div>
-      <div class="detail-dialog-body">
-        <div class="detail-info">
-          <div class="detail-row">
-            <span class="detail-label">处理结果：</span>
-            <span class="detail-value" :class="selectedAlert?.status ? getStatusColorClass(selectedAlert.status) : ''">
-              {{ selectedAlert?.status ? getStatusText(selectedAlert.status) : '--' }}
-            </span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">处理内容：</span>
-            <span class="detail-value">{{ selectedAlert?.handle_note || '--' }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">处理人：</span>
-            <span class="detail-value">{{ selectedAlert?.handler_name || '--' }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">处理时间：</span>
-            <span class="detail-value">{{ selectedAlert?.handle_time ? formatTime(selectedAlert.handle_time) : '--' }}</span>
+          <div class="status-dialog-actions">
+            <button class="status-btn status-btn-cancel" @click="closeStatusDialog">取消</button>
+            <button 
+              class="status-btn status-btn-submit" 
+              @click="submitStatus"
+              :disabled="!canSubmit"
+            >
+              提交
+            </button>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- 成功提示 -->
-  <SuccessMessage 
-    :show="successMessage.show" 
-    :message="successMessage.text"
-    @close="successMessage.show = false"
-  />
+    <!-- 详情弹窗 -->
+    <div v-if="showDetailDialog" class="detail-dialog-mask">
+      <div class="detail-dialog-content">
+        <div class="detail-dialog-header">
+          <h3>处理详情</h3>
+          <button class="detail-dialog-close" @click="closeDetailDialog">×</button>
+        </div>
+        <div class="detail-dialog-body">
+          <div class="detail-info">
+            <div class="detail-row">
+              <span class="detail-label">处理结果：</span>
+              <span class="detail-value" :class="selectedAlert?.status ? getStatusColorClass(selectedAlert.status) : ''">
+                {{ selectedAlert?.status ? getStatusText(selectedAlert.status) : '--' }}
+              </span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">处理内容：</span>
+              <span class="detail-value">{{ selectedAlert?.handle_note || '--' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">处理人：</span>
+              <span class="detail-value">{{ selectedAlert?.handler_name || '--' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">处理时间：</span>
+              <span class="detail-value">{{ selectedAlert?.handle_time ? formatTime(selectedAlert.handle_time) : '--' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-  <!-- 错误提示 -->
-  <ErrorMessage 
-    :show="errorMessage.show" 
-    :message="errorMessage.text"
-    @close="errorMessage.show = false"
-  />
+    <!-- 成功提示 -->
+    <SuccessMessage 
+      :show="successMessage.show" 
+      :message="successMessage.text"
+      @close="successMessage.show = false"
+    />
 
-  <!-- 删除确认对话框 -->
-  <ConfirmDialog
-    :show="showDeleteConfirm"
-    title="删除定时任务"
-    :message="`确定要删除定时任务「${taskToDelete?.track_name}」吗？`"
-    type="warning"
-    confirm-text="删除"
-    cancel-text="取消"
-    @confirm="confirmDeleteScheduledTask"
-    @cancel="cancelDeleteScheduledTask"
-    @close="showDeleteConfirm = false"
-  />
+    <!-- 错误提示 -->
+    <ErrorMessage 
+      :show="errorMessage.show" 
+      :message="errorMessage.text"
+      @close="errorMessage.show = false"
+    />
+
+    <!-- 删除确认对话框 -->
+    <ConfirmDialog
+      :show="showDeleteConfirm"
+      title="删除定时任务"
+      :message="`确定要删除定时任务「${taskToDelete?.track_name}」吗？`"
+      type="warning"
+      confirm-text="删除"
+      cancel-text="取消"
+      @confirm="confirmDeleteScheduledTask"
+      @cancel="cancelDeleteScheduledTask"
+      @close="showDeleteConfirm = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { visionApi, navigationApi } from '@/api/services'
 import { API_BASE_URL } from '@/api/config'
@@ -289,22 +332,6 @@ import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-// 统一构建图片请求URL，避免本地出现 /api/v1/api/v1 的重复
-const buildImageFetchUrl = (path: string) => {
-  if (!path) return ''
-  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) {
-    return path
-  }
-  // 如果后端已经返回了 /api/ 前缀，直接使用
-  if (path.startsWith('/api/')) {
-    return path
-  }
-  // 兼容返回以 / 开头但未带 /api 的路径
-  if (path.startsWith('/')) {
-    return `${API_BASE_URL}${path}`
-  }
-  return `${API_BASE_URL}/${path}`
-}
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { useTaskExecutionStore } from '@/stores/taskExecution'
@@ -313,6 +340,21 @@ import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
 import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
+
+// 统一构建图片请求URL，避免本地出现 /api/v1/api/v1 的重复
+const buildImageFetchUrl = (path: string) => {
+  if (!path) return ''
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) {
+    return path
+  }
+  if (path.startsWith('/api/')) {
+    return path
+  }
+  if (path.startsWith('/')) {
+    return `${API_BASE_URL}${path}`
+  }
+  return `${API_BASE_URL}/${path}`
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -345,12 +387,6 @@ const handleTabClick = (tab: any) => {
   }
 }
 
-// 筛选条件
-const filters = ref({
-  status: '',
-  job_id: ''
-})
-
 // 分页参数
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -378,6 +414,83 @@ const createFormErrors = ref({
   start_time: false
 })
 const createTaskGroupList = ref<string[]>([])
+
+// 科技感时间选择器组件状态
+const showTimePicker = ref(false)
+const pickerHour = ref('12')
+const pickerMinute = ref('00')
+const hourListRef = ref<HTMLElement | null>(null)
+const minuteListRef = ref<HTMLElement | null>(null)
+
+const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+const minuteOptions = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
+
+const scrollToSelected = () => {
+  nextTick(() => {
+    if (hourListRef.value) {
+      const hIndex = hourOptions.indexOf(pickerHour.value)
+      if (hIndex > -1) {
+        hourListRef.value.scrollTop = hIndex * 28 - 56
+      }
+    }
+    if (minuteListRef.value) {
+      const mIndex = minuteOptions.indexOf(pickerMinute.value)
+      if (mIndex > -1) {
+        minuteListRef.value.scrollTop = mIndex * 28 - 56
+      }
+    }
+  })
+}
+
+const toggleCustomTimePicker = () => {
+  showTimePicker.value = !showTimePicker.value
+  if (showTimePicker.value) {
+    if (createForm.value.start_time && createForm.value.start_time.includes(':')) {
+      const parts = createForm.value.start_time.split(':')
+      pickerHour.value = parts[0].padStart(2, '0')
+      pickerMinute.value = parts[1].padStart(2, '0')
+    } else {
+      const now = new Date()
+      pickerHour.value = String(now.getHours()).padStart(2, '0')
+      pickerMinute.value = String(now.getMinutes()).padStart(2, '0')
+      createForm.value.start_time = `${pickerHour.value}:${pickerMinute.value}`
+    }
+    scrollToSelected()
+  }
+}
+
+const selectHour = (h: string) => {
+  pickerHour.value = h
+  createForm.value.start_time = `${pickerHour.value}:${pickerMinute.value}`
+}
+
+const selectMinute = (m: string) => {
+  pickerMinute.value = m
+  createForm.value.start_time = `${pickerHour.value}:${pickerMinute.value}`
+  showTimePicker.value = false
+}
+
+const setCurrentTime = () => {
+  const now = new Date()
+  pickerHour.value = String(now.getHours()).padStart(2, '0')
+  pickerMinute.value = String(now.getMinutes()).padStart(2, '0')
+  createForm.value.start_time = `${pickerHour.value}:${pickerMinute.value}`
+  scrollToSelected()
+}
+
+const confirmCustomTime = () => {
+  if (!createForm.value.start_time) {
+    createForm.value.start_time = `${pickerHour.value}:${pickerMinute.value}`
+  }
+  showTimePicker.value = false
+}
+
+const handleDocumentClickClosePicker = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  if (showTimePicker.value && !target.closest('.custom-time-picker-container')) {
+    showTimePicker.value = false
+  }
+}
 
 // 时间输入框引用
 const timeInputRef = ref<HTMLInputElement | null>(null)
@@ -430,55 +543,13 @@ const loadTrackList = async () => {
   }
 }
 
-// 监听筛选后的轨迹列表变化
-watch(filteredTrackList, (newList) => {
-  if (newList.length === 0 || !newList.includes(selectedTrackName.value)) {
-    selectedTrackName.value = ''
-  }
-  if (!newList.includes(createForm.value.track_name)) {
-    createForm.value.track_name = ''
-    createForm.value.track_point_name = ''
-    createTaskGroupList.value = []
-  }
-}, { immediate: true })
-
-// 监听轨迹选择变化，加载任务组列表
-watch(selectedTrackName, async (newVal) => {
-  taskGroupList.value = []
-  selectedTaskPointName.value = ''
-  
-  // 重新加载定时任务列表
-  await loadScheduledTasks()
-  
-  if (!newVal) return
-  
-  const robotId = localStorage.getItem('selected_robot_id')
-  if (!robotId) return
-  
-  try {
-    const response = await navigationApi.getTaskpointList(robotId, newVal)
-    if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
-      taskGroupList.value = response.msg.result
-    }
-  } catch (err) {
-    console.error('获取任务组列表失败:', err)
-  }
-})
-
-// 监听任务组选择变化，重新加载数据
-watch(selectedTaskPointName, () => {
-  loadScheduledTasks()
-})
-
 // 已移除设备和任务筛选
 
 // 获取workspaceId
 const getWorkspaceId = () => {
-  // 从用户store中获取workspaceId
   if (userStore.user?.workspace_id) {
     return userStore.user.workspace_id
   }
-  // 如果用户信息中没有workspaceId，使用默认值
   return '123456'
 }
 
@@ -488,7 +559,6 @@ const loadScheduledTasks = async () => {
   if (!robotId) return
   
   try {
-    // 根据选择的条件构建参数
     const params: any = {}
     if (selectedTrackName.value) {
       params.track_name = selectedTrackName.value
@@ -499,11 +569,7 @@ const loadScheduledTasks = async () => {
     
     const response = await navigationApi.getScheduledTasks(robotId, params)
     
-    console.log('定时任务列表返回:', response)
-    
-    // 根据返回的数据结构处理
     if (response && response.data && Array.isArray(response.data)) {
-      // 反转数组顺序，让新添加的显示在最上面
       alerts.value = response.data.reverse()
       total.value = response.data.length
     } else {
@@ -531,7 +597,6 @@ watch(() => createForm.value.track_name, async (newVal) => {
     const response = await navigationApi.getTaskpointList(robotId, newVal)
     if (response && response.msg && response.msg.error_code === 0 && response.msg.result) {
       createTaskGroupList.value = response.msg.result
-      // 自动选择第一个任务组
       if (createTaskGroupList.value.length > 0) {
         createForm.value.track_point_name = createTaskGroupList.value[0]
       }
@@ -551,7 +616,6 @@ watch(() => createForm.value.start_time, (newVal) => {
 const handleOpenCreateDialog = () => {
   showCreateDialog.value = true
   createFormErrors.value.start_time = false
-  // 如果有轨迹列表，默认选择第一个
   if (filteredTrackList.value.length > 0) {
     createForm.value.track_name = filteredTrackList.value[0]
   }
@@ -567,6 +631,7 @@ const focusTimeInput = () => {
 // 关闭新增弹窗
 const closeCreateDialog = () => {
   showCreateDialog.value = false
+  showTimePicker.value = false
   createForm.value = {
     track_name: '',
     track_point_name: '',
@@ -578,7 +643,6 @@ const closeCreateDialog = () => {
 
 // 新增定时任务
 const handleCreateScheduledTask = async () => {
-  // 验证表单
   if (!createForm.value.track_name) {
     errorMessage.value = { show: true, text: '请选择循迹任务' }
     return
@@ -605,16 +669,12 @@ const handleCreateScheduledTask = async () => {
       start_time: createForm.value.start_time
     })
     
-    console.log('新增定时任务返回:', response)
-    
-    // 根据返回结构判断成功
     if (response && response.response && response.response.msg && response.response.msg.error_code === 0) {
       successMessage.value = { show: true, text: '新增定时任务成功' }
       setTimeout(() => {
         successMessage.value.show = false
       }, 2000)
       closeCreateDialog()
-      // 重新加载定时任务列表
       await loadScheduledTasks()
     } else {
       const errorMsg = response?.response?.msg?.error_msg || '未知错误'
@@ -646,14 +706,10 @@ const confirmDeleteScheduledTask = async () => {
   
   try {
     const response = await navigationApi.deleteScheduledTask(robotId, taskToDelete.value.id)
-    console.log('删除定时任务返回:', response)
-    
     successMessage.value = { show: true, text: '删除定时任务成功' }
     setTimeout(() => {
       successMessage.value.show = false
     }, 2000)
-    
-    // 重新加载定时任务列表
     await loadScheduledTasks()
   } catch (error: any) {
     console.error('删除定时任务失败:', error)
@@ -687,36 +743,6 @@ const jumpToPage = () => {
   }
 }
 
-// 获取报警等级颜色
-const getAlertLevelColor = (level: string) => {
-  switch (level) {
-    case 'LOW': return '#52c41a'
-    case 'MEDIUM': return '#faad14'
-    case 'HIGH': return '#ff4d4f'
-    default: return '#666'
-  }
-}
-
-// 获取报警等级文本
-const getAlertLevelText = (level: string) => {
-  switch (level) {
-    case 'LOW': return '低'
-    case 'MEDIUM': return '中'
-    case 'HIGH': return '高'
-    default: return level
-  }
-}
-
-// 获取状态颜色
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'PENDING': return '#faad14'
-    case 'HANDLED': return '#52c41a'
-    case 'IGNORED': return '#666'
-    default: return '#666'
-  }
-}
-
 // 获取状态文本
 const getStatusText = (status: string) => {
   switch (status) {
@@ -724,34 +750,6 @@ const getStatusText = (status: string) => {
     case 'HANDLED': return '已处理'
     case 'IGNORED': return '已忽略'
     default: return status
-  }
-}
-
-// 状态按钮相关函数
-const getStatusBtnText = (status: string) => {
-  switch (status) {
-    case 'PENDING': return '待处理'
-    case 'HANDLED': return '已处理'
-    case 'IGNORED': return '已忽略'
-    default: return status
-  }
-}
-
-const getStatusBtnClass = (status: string) => {
-  switch (status) {
-    case 'PENDING': return 'status-btn-pending'
-    case 'HANDLED': return 'status-btn-handled'
-    case 'IGNORED': return 'status-btn-ignored'
-    default: return 'status-btn-default'
-  }
-}
-
-const getStatusBtnTitle = (status: string) => {
-  switch (status) {
-    case 'PENDING': return '点击处理告警'
-    case 'HANDLED': return '点击查看详情'
-    case 'IGNORED': return '点击查看详情'
-    default: return '点击操作'
   }
 }
 
@@ -777,39 +775,11 @@ const formatTime = (timestamp: number) => {
   })
 }
 
-const formatTimeHM = (timestamp: number) => {
-  const date = new Date(timestamp)
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  return `${hours}:${minutes}`
-}
-
-// 获取算法名称
-const getAlgorithmName = (targetType: string | number) => {
-  // 如果target_type是unknown，显示"无"
-  if (targetType === 'unknown' || targetType === 'Unknown') {
-    return '无'
-  }
-  
-  const algorithmMap: { [key: string]: string } = {
-    '49': '常熟1号线路灯',
-    '50': '常熟2号线路灯',
-    '51': '常熟3号线路灯',
-    '52': '常熟楼宇亮化',
-    '9': '人车检测'
-  }
-  return algorithmMap[targetType?.toString()] || `算法${targetType}`
-}
-
 // 图片缓存
 const imageCache = ref<Record<string, string>>({})
 
-// 下载并缓存图片
 const downloadAndCacheImage = async (imagePath: string) => {
-  if (imageCache.value[imagePath]) {
-    return // 已经缓存过了
-  }
-
+  if (imageCache.value[imagePath]) return
   try {
     const token = userStore.token
     const response = await fetch(buildImageFetchUrl(imagePath), {
@@ -818,40 +788,16 @@ const downloadAndCacheImage = async (imagePath: string) => {
         'Accept': 'image/*'
       }
     })
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status}`)
-    }
-    
+    if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`)
     const blob = await response.blob()
     const url = URL.createObjectURL(blob)
-    
-    // 更新缓存
     imageCache.value[imagePath] = url
   } catch (error) {
     console.error('Failed to load image:', error)
   }
 }
 
-// 批量下载图片
-const downloadImages = async (alerts: VisionAlert[]) => {
-  const imagePromises = alerts
-    .filter(alert => alert.marked_image_url)
-    .map(alert => downloadAndCacheImage(alert.marked_image_url))
-  
-  await Promise.allSettled(imagePromises)
-}
-
-// 图片加载错误处理
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-  // 可以在这里添加错误处理逻辑
-}
-
-// 清理图片缓存
 const clearImageCache = () => {
-  // 释放所有blob URL
   Object.values(imageCache.value).forEach(url => {
     URL.revokeObjectURL(url)
   })
@@ -866,7 +812,6 @@ const bigImageError = ref('')
 
 const handleImageClick = async (markedUrl: string) => {
   if (!markedUrl) return
-  // 先弹出弹窗，显示加载中，再去拉图片
   showBigImage.value = true
   bigImageLoading.value = true
   bigImageError.value = ''
@@ -883,7 +828,6 @@ const handleImageClick = async (markedUrl: string) => {
     const blob = await response.blob()
     const url = URL.createObjectURL(blob)
     bigImageUrl.value = url
-    // 等待 <img> 的 onload 再隐藏 loading
   } catch (e) {
     bigImageUrl.value = ''
     bigImageLoading.value = false
@@ -905,7 +849,6 @@ const closeBigImage = () => {
   bigImageUrl.value = ''
   bigImageLoading.value = false
   bigImageError.value = ''
-  // 清理事件绑定，避免内存泄漏（如果弹窗关闭时不再需要）
 }
 
 const thumbCache = ref<Record<string, string>>({})
@@ -939,36 +882,6 @@ const getThumbnailUrl = async (thumbPath: string) => {
   }
 }
 
-// 页面加载时获取数据
-onMounted(() => {
-  // 加载轨迹列表
-  loadTrackList()
-  // 加载定时任务列表
-  loadScheduledTasks()
-  pageInput.value = currentPage.value.toString()
-  // 监听从地图缩略图触发的大图打开事件
-  window.addEventListener('openBigImageFromMap', async (e: any) => {
-    const url = e?.detail?.url as string
-    if (url) {
-      await handleImageClick(url)
-    }
-  })
-})
-
-// 监听token变化，清理缓存
-watch(() => userStore.token, (newToken, oldToken) => {
-  if (newToken !== oldToken) {
-    clearImageCache()
-  }
-})
-
-// 页面加载和alerts变化时批量下载缩略图
-watch(alerts, (newAlerts: VisionAlert[]) => {
-  newAlerts.forEach((alert: VisionAlert) => {
-    if (alert.thumbnail_image_url) getThumbnailUrl(alert.thumbnail_image_url)
-  })
-}, { immediate: true })
-
 // 位置预览相关
 const showLocationModal = ref(false)
 const selectedAlert = ref<VisionAlert | null>(null)
@@ -979,11 +892,10 @@ let locationMapInstance: any = null
 const showStatusDialog = ref(false)
 const showDetailDialog = ref(false)
 const statusForm = ref({
-  handleType: 'false_alarm', // false_alarm: 误报, real_alarm: 非误报
+  handleType: 'false_alarm',
   handleNote: ''
 })
 
-// 计算是否可以提交
 const canSubmit = computed(() => {
   if (statusForm.value.handleType === 'real_alarm') {
     return statusForm.value.handleNote.trim().length > 0
@@ -991,29 +903,9 @@ const canSubmit = computed(() => {
   return true
 })
 
-// 状态处理相关函数
-const handleStatusClick = (alert: VisionAlert) => {
-  selectedAlert.value = alert
-  
-  if (alert.status === 'PENDING') {
-    // 待处理状态，显示处理弹窗
-    console.log('显示状态处理弹窗')
-    showStatusDialog.value = true
-    // 重置表单
-    statusForm.value.handleType = 'false_alarm'
-    statusForm.value.handleNote = ''
-  } else {
-    // 已处理或已忽略状态，显示详情弹窗
-    console.log('显示详情弹窗')
-    showDetailDialog.value = true
-  }
-}
-
 const closeStatusDialog = () => {
-  console.log('关闭状态弹窗')
   showStatusDialog.value = false
   selectedAlert.value = null
-  // 重置表单
   statusForm.value.handleType = 'false_alarm'
   statusForm.value.handleNote = ''
 }
@@ -1025,34 +917,16 @@ const closeDetailDialog = () => {
 
 const submitStatus = async () => {
   if (!selectedAlert.value) return
-  
   try {
     const workspaceId = getWorkspaceId()
     const alertId = selectedAlert.value.id
-    
-    // 根据处理方式确定状态
-    let status: 'HANDLED' | 'IGNORED'
-    if (statusForm.value.handleType === 'false_alarm') {
-      status = 'IGNORED' // 误报标记为已忽略
-    } else {
-      status = 'HANDLED' // 非误报标记为已处理
-    }
-    
+    let status: 'HANDLED' | 'IGNORED' = statusForm.value.handleType === 'false_alarm' ? 'IGNORED' : 'HANDLED'
     const requestData = {
       status: status,
       handle_note: statusForm.value.handleNote
     }
-    
-    // 调用API更新状态
     await visionApi.updateAlertStatus(workspaceId, alertId, requestData)
-    
-    // 关闭弹窗
     closeStatusDialog()
-    
-    // 重新加载数据（定时任务页面不需要）
-    // await loadScheduledTasks()
-    
-    // 显示成功提示
     alert('状态更新成功')
   } catch (error) {
     console.error('更新状态失败:', error)
@@ -1060,15 +934,35 @@ const submitStatus = async () => {
   }
 }
 
-// 显示位置预览
-const showLocationPreview = (alert: VisionAlert) => {
-  selectedAlert.value = alert
-  selectedAddress.value = ''
-  showLocationModal.value = true
-  nextTick(() => {
-    initLocationMap()
+// 页面加载时获取数据
+onMounted(() => {
+  loadTrackList()
+  loadScheduledTasks()
+  pageInput.value = currentPage.value.toString()
+  window.addEventListener('openBigImageFromMap', async (e: any) => {
+    const url = e?.detail?.url as string
+    if (url) {
+      await handleImageClick(url)
+    }
   })
-}
+  document.addEventListener('click', handleDocumentClickClosePicker)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocumentClickClosePicker)
+})
+
+watch(() => userStore.token, (newToken, oldToken) => {
+  if (newToken !== oldToken) {
+    clearImageCache()
+  }
+})
+
+watch(alerts, (newAlerts: VisionAlert[]) => {
+  newAlerts.forEach((alert: VisionAlert) => {
+    if (alert.thumbnail_image_url) getThumbnailUrl(alert.thumbnail_image_url)
+  })
+}, { immediate: true })
 
 // 关闭位置预览
 const closeLocationModal = () => {
@@ -1086,7 +980,6 @@ const initLocationMap = async () => {
   if (!selectedAlert.value?.latitude || !selectedAlert.value?.longitude) return
   
   try {
-    // 读取凭据：优先使用通过 vite.define 注入的常量，其次使用 VITE_ 环境变量
     // @ts-ignore
     const definedAmapKey = (typeof __AMAP_KEY__ !== 'undefined' ? __AMAP_KEY__ : '') as string
     // @ts-ignore
@@ -1106,7 +999,6 @@ const initLocationMap = async () => {
       plugins: ['AMap.ToolBar', 'AMap.Geolocation', 'AMap.PlaceSearch', 'AMap.MapType', 'AMap.Geocoder']
     })
     
-    // 将WGS84坐标转换为GCJ-02坐标
     const wgsLongitude = selectedAlert.value.longitude
     const wgsLatitude = selectedAlert.value.latitude
     const gcjCoords = transformWGS84ToGCJ02(wgsLongitude, wgsLatitude)
@@ -1123,7 +1015,6 @@ const initLocationMap = async () => {
       ]
     })
     
-    // 添加标记点（图标 + 文字“检测点”）
     const marker = new AMap.Marker({
       position: [gcjCoords.longitude, gcjCoords.latitude],
       title: `检测位置`,
@@ -1140,7 +1031,6 @@ const initLocationMap = async () => {
       offset: new AMap.Pixel(0, 0)
     })
 
-    // 在图标右侧添加“检测点”标签
     marker.setLabel({
       direction: 'right',
       offset: new AMap.Pixel(6, 0),
@@ -1158,7 +1048,6 @@ const initLocationMap = async () => {
 
     locationMapInstance.add(marker)
 
-    // 在坐标点上方显示报警缩略图
     try {
       const thumbPath = selectedAlert.value?.thumbnail_image_url as string | undefined
       if (thumbPath) {
@@ -1187,11 +1076,8 @@ const initLocationMap = async () => {
       }
     } catch {}
 
-    // 逆地理编码：在右侧信息面板显示地址
     try {
-      const geocoder = new AMap.Geocoder({
-        // 默认城市自动判断
-      })
+      const geocoder = new AMap.Geocoder({})
       geocoder.getAddress([gcjCoords.longitude, gcjCoords.latitude], (status: string, result: any) => {
         if (status === 'complete' && result?.regeocode?.formattedAddress) {
           const addr = result.regeocode.formattedAddress as string
@@ -1233,12 +1119,10 @@ const transformWGS84ToGCJ02 = (wgsLng: number, wgsLat: number) => {
   return { longitude: mgLng, latitude: mgLat }
 }
 
-// 辅助函数：判断是否在中国境内
 const outOfChina = (lng: number, lat: number) => {
   return (lng < 72.004 || lng > 137.8347) || (lat < 0.8293 || lat > 55.8271)
 }
 
-// 辅助函数：纬度转换
 const transformLat = (lng: number, lat: number) => {
   const PI = Math.PI
   let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng))
@@ -1248,7 +1132,6 @@ const transformLat = (lng: number, lat: number) => {
   return ret
 }
 
-// 辅助函数：经度转换
 const transformLng = (lng: number, lat: number) => {
   let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng))
   ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0
@@ -1284,695 +1167,6 @@ const transformLng = (lng: number, lat: number) => {
   color: #67d5fd;
   font-size: 14px;
   font-weight: 400;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pagination-btn {
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 400;
-  padding: 6px 12px;
-  cursor: pointer;
-  border: none;
-  transition: background 0.2s, color 0.2s, border 0.2s;
-}
-
-.pagination-btn-icon {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  background: #0c3c56;
-  color: #67d5fd;
-  border: 1px solid rgba(38, 131, 182, 0.8);
-}
-
-.pagination-btn-icon:hover:not(:disabled) {
-  background: #0c4666;
-  color: #67d5fd;
-}
-
-.pagination-btn-icon:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pagination-page-input {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  background: #0a2a3a;
-  border-radius: 4px;
-  padding: 0;
-  border: 1px solid #164159;
-  min-width: 80px;
-  height: 36px;
-}
-
-.page-input {
-  width: 35px;
-  height: 36px;
-  padding: 0 2px;
-  border: none;
-  background: transparent;
-  text-align: center;
-  font-size: 12px;
-  color: #fff;
-  font-weight: 400;
-}
-
-.page-input:focus {
-  outline: none;
-  background: #0c3c56;
-  border-radius: 2px;
-}
-
-.page-input::placeholder {
-  color: #67d5fd;
-}
-
-.page-separator {
-  color: #67d5fd;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 36px;
-}
-
-.total-pages {
-  color: #67d5fd;
-  font-size: 12px;
-  font-weight: 400;
-  min-width: 16px;
-  line-height: 36px;
-}
-
-.pagination-btn-jump {
-  background: #0c3c56;
-  color: #67d5fd;
-  border: 1px solid rgba(38, 131, 182, 0.8);
-  padding: 6px 12px;
-  height: 36px;
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.pagination-btn-jump:hover {
-  background: #0c4666;
-  color: #67d5fd;
-}
-
-.target-image {
-  max-width: 60px;
-  max-height: 40px;
-  border-radius: 4px;
-  object-fit: cover;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-  border: 1px solid #164159;
-  display: block;
-  margin: 0 auto;
-}
-
-.target-image:hover {
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(103, 213, 253, 0.3);
-}
-
-.loading-image {
-  width: 60px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #0a2a3a;
-  border: 1px solid #164159;
-  border-radius: 4px;
-  font-size: 10px;
-  color: #67d5fd;
-}
-
-/* 目标图片列居中显示 */
-.mission-td:nth-child(4) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.no-image {
-  color: #666;
-  font-size: 12px;
-}
-
-.big-image-mask {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0,0,0,0.7);
-  z-index: 10050; /* 高于位置预览弹窗，确保置顶 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.big-image-content {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 200px;
-  min-height: 200px;
-}
-.big-image-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: #67d5fd;
-}
-.loading-text {
-  font-size: 12px;
-}
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(103, 213, 253, 0.2);
-  border-top-color: #67d5fd;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-/* 位置预览按钮样式 */
-.location-preview-btn {
-  background: #0c3c56;
-  color: #67d5fd;
-  border: 1px solid rgba(38, 131, 182, 0.8);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.location-preview-btn:hover {
-  background: #0c4666;
-  color: #67d5fd;
-  border-color: #67d5fd;
-}
-
-.no-location {
-  color: #666;
-  font-size: 12px;
-}
-
-/* 位置预览弹窗样式 */
-.location-modal-mask {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0,0,0,0.7);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.location-modal-content {
-  position: relative;
-  background: #0a0f1c;
-  border: 1px solid #164159;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 1200px;
-  height: 80%;
-  max-height: 820px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.location-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid #164159;
-  background: #0c3c56;
-}
-
-.location-modal-header h3 {
-  color: #67d5fd;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.location-modal-close {
-  background: none;
-  border: none;
-  color: #67d5fd;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.location-modal-close:hover {
-  background: rgba(103, 213, 253, 0.1);
-}
-
-.location-modal-body {
-  flex: 1;
-  position: relative;
-  display: flex;
-  overflow: hidden;
-}
-
-.location-map-container {
-  flex: 1;
-  height: 100%;
-}
-
-/* 地图信息水印，显示经纬度/高度/时间/地址 */
-.location-map-watermark {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  z-index: 2;
-  max-width: 50%;
-  color: #e6f7ff;
-  font-size: 12px;
-  line-height: 1.6;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(103, 213, 253, 0.25);
-  padding: 8px 10px;
-  border-radius: 6px;
-  backdrop-filter: blur(2px);
-}
-
-/* 覆盖 AMap 默认标签样式：去掉白色背景与蓝色边框 */
-.location-map-container .amap-marker-label {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-}
-
-.location-info {
-  width: 200px;
-  padding: 16px;
-  background: #0a2a3a;
-  border-left: 1px solid #164159;
-  overflow-y: auto;
-}
-
-.location-info p {
-  margin: 8px 0;
-  color: #67d5fd;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.location-info strong {
-  color: #fff;
-  font-weight: 500;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.big-image-error {
-  color: #f56c6c;
-  background: rgba(245,108,108,0.08);
-  border: 1px solid rgba(245,108,108,0.4);
-  padding: 10px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-.big-image {
-  max-width: 60vw; /* 比位置预览稍小 */
-  max-height: 60vh;
-  border-radius: 8px;
-  box-shadow: 0 4px 24px #000a;
-  background: #fff;
-}
-
-/* 状态按钮样式 */
-.status-btn {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 60px;
-}
-
-.status-btn-pending {
-  background: #faad14;
-  color: #fff;
-}
-
-.status-btn-pending:hover {
-  background: #d48806;
-}
-
-.status-btn-handled {
-  background: #52c41a;
-  color: #fff;
-}
-
-.status-btn-handled:hover {
-  background: #389e0d;
-}
-
-.status-btn-ignored {
-  background: #666;
-  color: #fff;
-}
-
-.status-btn-ignored:hover {
-  background: #4d4d4d;
-}
-
-.status-btn-default {
-  background: #666;
-  color: #fff;
-}
-
-.status-btn-default:hover {
-  background: #4d4d4d;
-}
-
-/* 状态弹窗样式 */
-.status-dialog-mask {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  cursor: pointer;
-}
-
-.status-dialog-content {
-  background: #172233;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px #0008;
-  width: 90%;
-  max-width: 500px;
-  max-height: 85vh;
-  overflow: hidden;
-  border: 1px solid #18344a;
-  cursor: default;
-}
-
-.status-dialog-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid #18344a;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.status-dialog-header h3 {
-  margin: 0;
-  color: #67d5fd;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.status-dialog-close {
-  background: none;
-  border: none;
-  color: #67d5fd;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.status-dialog-close:hover {
-  background: rgba(103, 213, 253, 0.1);
-}
-
-.status-dialog-body {
-  padding: 24px;
-}
-
-.status-form {
-  margin-bottom: 20px;
-}
-
-.form-row {
-  margin-bottom: 16px;
-}
-
-.form-row label {
-  display: block;
-  margin-bottom: 8px;
-  color: #b8c7d9;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.radio-group {
-  display: flex;
-  gap: 16px;
-}
-
-.radio-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  color: #fff;
-  font-size: 14px;
-}
-
-.radio-item input[type="radio"] {
-  accent-color: #67d5fd;
-  cursor: pointer;
-}
-
-.handle-note-input {
-  width: 100%;
-  min-height: 80px;
-  padding: 12px;
-  border: 1px solid #164159;
-  border-radius: 6px;
-  background: transparent;
-  color: #fff;
-  font-size: 14px;
-  resize: vertical;
-  box-shadow: 0 0 0 1px #164159 inset;
-  transition: border 0.2s, box-shadow 0.2s;
-}
-
-.handle-note-input:focus {
-  outline: none;
-  border: 1.5px solid #67d5fd;
-  box-shadow: 0 0 0 2px rgba(103, 213, 253, 0.15);
-}
-
-.handle-note-input.required {
-  border-color: #faad14;
-  box-shadow: 0 0 0 1px #faad14 inset;
-}
-
-.status-dialog-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-}
-
-.status-btn-cancel {
-  background: #666;
-  color: #fff;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.status-btn-cancel:hover {
-  background: #4d4d4d;
-}
-
-.status-btn-submit {
-  background: #67d5fd;
-  color: #fff;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.status-btn-submit:hover {
-  background: #4db8e8;
-}
-
-.status-btn-submit:disabled {
-  background: #666;
-  cursor: not-allowed;
-}
-
-/* 详情弹窗样式 */
-.detail-dialog-mask {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  cursor: pointer;
-}
-
-.detail-dialog-content {
-  background: #172233;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px #0008;
-  width: 90%;
-  max-width: 500px;
-  max-height: 85vh;
-  overflow: hidden;
-  border: 1px solid #18344a;
-  cursor: default;
-}
-
-.detail-dialog-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid #18344a;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.detail-dialog-header h3 {
-  margin: 0;
-  color: #67d5fd;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.detail-dialog-close {
-  background: none;
-  border: none;
-  color: #67d5fd;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.detail-dialog-close:hover {
-  background: rgba(103, 213, 253, 0.1);
-}
-
-.detail-dialog-body {
-  padding: 24px;
-}
-
-.detail-info {
-  color: #fff;
-}
-
-.detail-row {
-  display: flex;
-  margin-bottom: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid #18344a;
-}
-
-.detail-row:last-child {
-  border-bottom: none;
-}
-
-.detail-label {
-  min-width: 100px;
-  color: #b8c7d9;
-  font-size: 14px;
-}
-
-.detail-value {
-  flex: 1;
-  color: #fff;
-  font-size: 14px;
-}
-
-.status-pending {
-  color: #faad14;
-}
-
-.status-handled {
-  color: #52c41a;
-}
-
-.status-ignored {
-  color: #666;
-}
-
-.status-default {
-  color: #666;
-}
-
-/* Action button styles */
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  padding: 0 8px;
-  min-width: auto;
-}
-
-.action-btn img {
-  width: 14px;
-  height: 14px;
 }
 
 .action-btn-delete {
@@ -2058,7 +1252,7 @@ const transformLng = (lng: number, lat: number) => {
   display: flex;
   flex-direction: column;
   max-height: 90vh;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .simple-modal-header {
@@ -2088,12 +1282,13 @@ const transformLng = (lng: number, lat: number) => {
 
 .simple-modal-body {
   padding: 24px 40px;
-  overflow-y: auto;
+  overflow: visible;
   flex: 1;
 }
 
 .simple-modal-body::-webkit-scrollbar {
-  width: 6px;
+  display: none;
+  width: 0;
 }
 
 .simple-modal-body::-webkit-scrollbar-track {
@@ -2167,28 +1362,201 @@ const transformLng = (lng: number, lat: number) => {
   color: #fff;
 }
 
-.simple-modal-card .time-input-wrapper {
+/* 自定义科技感时间选择器样式 */
+.custom-time-picker-container {
   flex: 1;
-  cursor: pointer;
   position: relative;
-  display: flex;
-}
-
-.simple-modal-card .time-input-wrapper .task-form-input {
-  cursor: pointer;
   width: 100%;
-  flex: 1;
 }
 
-.simple-modal-card .time-input-wrapper .task-form-input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(1.8);
-  opacity: 0.95;
+.custom-time-input {
+  height: 36px;
+  background: #0c3c56;
+  border: 1px solid rgba(38, 131, 182, 0.4);
+  border-radius: 6px;
+  color: #fff;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
-.simple-modal-card .task-form-input.is-error {
+.custom-time-input:hover,
+.custom-time-input.active {
+  border-color: #67d5fd;
+  box-shadow: 0 0 8px rgba(103, 213, 253, 0.3);
+}
+
+.custom-time-input.is-error {
   border-color: #ff6b6b !important;
   box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.15) !important;
+}
+
+.time-val-text {
+  color: #67d5fd;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.time-placeholder-text {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 14px;
+}
+
+.time-icon {
+  opacity: 0.85;
+  transition: transform 0.2s;
+}
+
+.custom-time-input:hover .time-icon {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.custom-time-picker-popover {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  width: 220px;
+  background: linear-gradient(135deg, #0e273f 0%, #10324e 100%);
+  border: 1px solid rgba(103, 213, 253, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), inset 0 0 12px rgba(103, 213, 253, 0.08);
+  border-radius: 8px;
+  z-index: 10050;
+  padding: 12px;
+  animation: popover-fade-in 0.15s ease-out;
+}
+
+@keyframes popover-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.time-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.15);
+}
+
+.time-picker-title {
+  color: #dff5ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.time-picker-now-btn {
+  background: transparent;
+  border: none;
+  color: #67d5fd;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.time-picker-now-btn:hover {
+  background: rgba(103, 213, 253, 0.15);
+}
+
+.time-picker-columns {
+  display: flex;
+  gap: 10px;
+  height: 150px;
+}
+
+.time-picker-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: rgba(5, 18, 31, 0.6);
+  border: 1px solid rgba(103, 213, 253, 0.15);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.column-title {
+  text-align: center;
+  font-size: 12px;
+  color: #67d5fd;
+  background: rgba(103, 213, 253, 0.1);
+  padding: 4px 0;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(103, 213, 253, 0.1);
+}
+
+.column-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.column-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.column-item {
+  height: 28px;
+  line-height: 28px;
+  text-align: center;
+  font-size: 13px;
+  color: #b0c4de;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.column-item:hover {
+  background: rgba(103, 213, 253, 0.15);
+  color: #fff;
+}
+
+.column-item.selected {
+  background: rgba(103, 213, 253, 0.25);
+  color: #67d5fd;
+  font-weight: bold;
+  border-left: 3px solid #67d5fd;
+  text-shadow: 0 0 6px rgba(103, 213, 253, 0.5);
+}
+
+.time-picker-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.time-picker-confirm {
+  width: 100%;
+  height: 30px;
+  background: rgba(103, 213, 253, 0.15);
+  border: 1px solid #67d5fd;
+  color: #67d5fd;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.time-picker-confirm:hover {
+  background: #67d5fd;
+  color: #092a40;
+  box-shadow: 0 0 8px rgba(103, 213, 253, 0.4);
 }
 
 .task-form-error-tip {
@@ -2198,4 +1566,3 @@ const transformLng = (lng: number, lat: number) => {
   line-height: 1.2;
 }
 </style>
-

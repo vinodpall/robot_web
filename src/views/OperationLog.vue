@@ -1003,8 +1003,8 @@ select.track-filter-input:hover {
 
 .track-time-picker-wrap {
   position: relative;
-  width: 200px;
-  min-width: 190px;
+  width: 170px;
+  min-width: 160px;
 }
 
 .track-time-trigger {

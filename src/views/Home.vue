@@ -1492,6 +1492,53 @@
         </div>
       </div>
 
+    <!-- MSF 定位模式选择弹窗 -->
+    <Teleport to="body">
+      <div v-if="msfModeDialogVisible" class="recording-dialog-overlay" @click="msfModeDialogVisible = false" style="z-index: 10000;">
+        <div class="recording-dialog-card card msf-mode-dialog" @click.stop style="max-width: 320px; width: 90%;">
+          <div class="recording-dialog-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>选择 MSF 定位模式</span>
+            <button class="dialog-close-btn" @click="msfModeDialogVisible = false">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="recording-dialog-body" style="padding: 16px 20px;">
+            <div class="msf-mode-options" style="display: flex; flex-direction: column; gap: 10px;">
+              <label 
+                class="msf-mode-option-card"
+                :class="{ active: selectedMsfMode === 3 }"
+                style="display: flex; align-items: center; padding: 10px 14px; background: rgba(12, 42, 62, 0.6); border: 1px solid rgba(103, 213, 253, 0.25); border-radius: 6px; cursor: pointer; transition: all 0.2s ease;"
+              >
+                <input type="radio" v-model="selectedMsfMode" :value="3" style="margin-right: 10px; accent-color: #67d5fd;" />
+                <span style="font-weight: 500; color: #ffffff; font-size: 14px;">融合定位</span>
+              </label>
+
+              <label 
+                class="msf-mode-option-card"
+                :class="{ active: selectedMsfMode === 2 }"
+                style="display: flex; align-items: center; padding: 10px 14px; background: rgba(12, 42, 62, 0.6); border: 1px solid rgba(103, 213, 253, 0.25); border-radius: 8px; cursor: pointer; transition: all 0.2s ease;"
+              >
+                <input type="radio" v-model="selectedMsfMode" :value="2" style="margin-right: 10px; accent-color: #67d5fd;" />
+                <span style="font-weight: 500; color: #ffffff; font-size: 14px;">卫星定位</span>
+              </label>
+            </div>
+          </div>
+          <div class="recording-dialog-actions" style="padding: 12px 16px; display: flex; justify-content: center; gap: 16px; border-top: 1px solid rgba(103, 213, 253, 0.15);">
+            <button class="map-btn map-btn-primary" :disabled="msfModeSubmitting" @click="confirmMsfModeDialog" style="min-width: 84px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg v-if="msfModeSubmitting" class="msf-btn-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+                <path d="M12 2 a 10 10 0 0 1 10 10"></path>
+              </svg>
+              <span>确定</span>
+            </button>
+            <button class="map-btn map-btn-secondary" :disabled="msfModeSubmitting" @click="msfModeDialogVisible = false" style="min-width: 84px;">取消</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- 实时警情警告大弹窗 -->
     <div v-if="alarmAlertDialog.visible" class="custom-dialog-mask alarm-alert-mask" @click="alarmAlertDialog.visible = false">
       <!-- 醒目的报警边缘光晕动画 -->
@@ -8564,40 +8611,66 @@ const handleEnableIns = () => {
   })
 }
 
+const msfModeDialogVisible = ref(false)
+const selectedMsfMode = ref<number>(3)
+const msfModeSubmitting = ref(false)
+
+const confirmMsfModeDialog = async () => {
+  try {
+    msfModeSubmitting.value = true
+    const robotId = deviceStore.selectedRobotId
+    if (!robotId) return
+
+    await navigationApi.msfControl(robotId, {
+      action: 1,
+      mode: selectedMsfMode.value,
+      session: selectedMap.value
+    })
+    msfModeDialogVisible.value = false
+  } catch (err) {
+    console.error('开启MSF失败:', err)
+    alert('开启MSF失败')
+  } finally {
+    msfModeSubmitting.value = false
+  }
+}
+
 const handleEnableMsf = () => {
   if (!hasRobotRtk.value) {
     showError('当前机器人未配置RTK，无法操作MSF')
     return
   }
-  // 检查是否被禁用
   if (navigationEnabled.value || insEnabled.value) {
+    alert('请先关闭导航或INS')
     return
   }
-  
   if (!selectedMap.value) {
     alert('请先选择地图')
     return
   }
   
-  const action = msfEnabled.value ? '关闭' : '开启'
-  showConfirmDialog(`确定要${action}MSF吗？`, async () => {
-    msfLoading.value = true
-    try {
-      const robotId = deviceStore.selectedRobotId
-      if (!robotId) { msfLoading.value = false; return }
+  if (msfEnabled.value) {
+    showConfirmDialog('确定要关闭MSF吗？', async () => {
+      msfLoading.value = true
+      try {
+        const robotId = deviceStore.selectedRobotId
+        if (!robotId) { msfLoading.value = false; return }
 
-      // action: 1 开启, 0 关闭；状态由 cmd_status WebSocket 反馈更新
-      await navigationApi.msfControl(robotId, {
-        action: msfEnabled.value ? 0 : 1,
-        mode: 3,
-        session: selectedMap.value
-      })
-    } catch (err) {
-      msfLoading.value = false
-      console.error(`${action}MSF失败:`, err)
-      alert(`${action}MSF失败`)
-    }
-  })
+        await navigationApi.msfControl(robotId, {
+          action: 0,
+          mode: 3,
+          session: selectedMap.value
+        })
+      } catch (err) {
+        msfLoading.value = false
+        console.error('关闭MSF失败:', err)
+        alert('关闭MSF失败')
+      }
+    })
+  } else {
+    selectedMsfMode.value = 3
+    msfModeDialogVisible.value = true
+  }
 }
 
 // 返回当前本地时间+4分钟（到分钟）的最小值，供 datetime-local 作为最小值
@@ -16853,5 +16926,13 @@ const handlePageShow = () => {
   color: #000000;
   font-weight: bold;
   box-shadow: 0 0 8px rgba(0, 225, 255, 0.6);
+}
+
+.msf-btn-spinner {
+  animation: msf-spin 0.8s linear infinite;
+}
+@keyframes msf-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
