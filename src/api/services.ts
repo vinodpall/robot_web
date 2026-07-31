@@ -1,4 +1,4 @@
-﻿import { apiClient, API_BASE_URL, type ApiResponse, type PaginatedResponse } from './config'
+import { apiClient, API_BASE_URL, type ApiResponse, type PaginatedResponse } from './config'
 import type { User, Dock, Drone, Mission, MissionRecord, Alert, Role, Device, HmsAlert, VisionAlert, VisionAlertsResponse, Permission, Robot, RobotsResponse } from '../types'
 import { getCurrentConfig } from '../config/environment'
 
@@ -1393,6 +1393,18 @@ export interface CameraInfo {
   SubUrl: string
 }
 
+export interface CameraStreamStatusItem {
+  cam_key: string
+  is_active: boolean
+  stream_url: string
+}
+
+export interface CameraStreamStatusResponse {
+  streams: CameraStreamStatusItem[]
+  count: number
+  request_id: string
+}
+
 export const cameraApi = {
   getCameraList: (robotId: string, signal?: AbortSignal) => {
     return apiClient.get<{ data: CameraInfo[]; request_id: string }>(`/cameras/${robotId}/list`, undefined, { signal })
@@ -1409,6 +1421,9 @@ export const cameraApi = {
       `/cameras/${robotId}/stream/stop`,
       { cam_key: camKey }
     )
+  },
+  getCameraStreamStatus: (robotId: string, signal?: AbortSignal) => {
+    return apiClient.get<CameraStreamStatusResponse>(`/cameras/${robotId}/stream/status`, undefined, { signal })
   }
 }
 

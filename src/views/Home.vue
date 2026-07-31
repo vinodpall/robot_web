@@ -3160,15 +3160,25 @@ let foregroundRecoverRunning = false
 let visibleManualReconnectRunning = false
 let infraredManualReconnectRunning = false
 
-// ===== 页面鼠标无操作自动关流 (超过2小时) =====
-const MOUSE_IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000
+// ===== 页面鼠标无操作自动关流 (超过1.5小时) =====
+const MOUSE_IDLE_TIMEOUT_MS = 1.5 * 60 * 60 * 1000
 let mouseIdleTimer: ReturnType<typeof setTimeout> | null = null
+let cameraStatusPollTimer: ReturnType<typeof setTimeout> | null = null
+let isPollingCameraStatus = false
 let lastMouseIdleResetAt = 0
 const isMouseIdle = ref(false)
 const isIdleStopping = ref(false)
 const isIdleStarting = ref(false)
 const visibleLastFrameUrl = ref('')
 const infraredLastFrameUrl = ref('')
+
+const clearCameraStatusPollTimer = () => {
+  if (cameraStatusPollTimer) {
+    clearTimeout(cameraStatusPollTimer)
+    cameraStatusPollTimer = null
+  }
+  isPollingCameraStatus = false
+}
 
 const captureVideoFrame = (videoEl: HTMLVideoElement | null): string => {
   if (!videoEl || videoEl.readyState < 2 || !videoEl.videoWidth || !videoEl.videoHeight) {
@@ -3200,11 +3210,83 @@ const updateRobotStreamCache = (robotId: string, updatedStream: VideoStream) => 
   setRobotVideoStreams(robotId, updated)
 }
 
+const pollCameraStreamStatusAndPlay = (robotId: string) => {
+  if (!robotId) return
+  clearCameraStatusPollTimer()
+  isPollingCameraStatus = true
+
+  const checkStatus = async () => {
+    if (!isPollingCameraStatus) return
+
+    try {
+      const res = await cameraApi.getCameraStreamStatus(robotId)
+      const streams = res?.streams || []
+      const activeStreams = streams.filter(s => s && s.is_active && s.stream_url)
+
+      if (activeStreams.length === 0) {
+        console.log('[流状态轮询] /stream/status 返回空或无活跃流，5 秒后继续轮询...')
+        if (isPollingCameraStatus) {
+          cameraStatusPollTimer = setTimeout(checkStatus, 5000)
+        }
+        return
+      }
+
+      console.log('[流状态轮询] /stream/status 返回活跃流，停止轮询并触发 play:', activeStreams)
+      clearCameraStatusPollTimer()
+      // 防呆：更新状态为非静止，防止后续鼠标移动再次重复触发 start/play
+      isMouseIdle.value = false
+      isIdleStarting.value = false
+
+      const cachedStreams = getRobotVideoStreams(robotId)
+      let hasUpdated = false
+
+      activeStreams.forEach(item => {
+        const matched = cachedStreams.find(s => String(s.camera_index || s.video_index) === String(item.cam_key))
+        if (matched) {
+          matched.url = item.stream_url
+          hasUpdated = true
+        } else {
+          const isInfrared = /(infrared|thermal|ir|红外)/i.test(item.cam_key)
+          const targetType = isInfrared ? 'drone_infrared' : 'drone_visible'
+          const streamObj = cachedStreams.find(s => s.type === targetType)
+          if (streamObj) {
+            streamObj.url = item.stream_url
+            hasUpdated = true
+          }
+        }
+      })
+
+      if (hasUpdated) {
+        setRobotVideoStreams(robotId, cachedStreams)
+      }
+
+      initVideoPlayer()
+      initInfraredVideo()
+      await nextTick()
+      if (videoStreamUrl.value) {
+        startVideoPlayback()
+      }
+      if (infraredStreamUrl.value) {
+        startInfraredPlayback(true)
+      }
+    } catch (err) {
+      console.warn('[流状态轮询] 请求异常，5 秒后重试:', err)
+      if (isPollingCameraStatus) {
+        cameraStatusPollTimer = setTimeout(checkStatus, 5000)
+      }
+    }
+  }
+
+  void checkStatus()
+}
+
 const handleIdleStopStreams = async () => {
   if (isMouseIdle.value || isIdleStopping.value) return
   isMouseIdle.value = true
   isIdleStopping.value = true
-  console.log('[鼠标静止检测] 页面鼠标超过 2 小时未移动，截取当前画面并触发 stop 接口，保留最后一帧')
+  console.log('[鼠标静止检测] 页面鼠标超过 1.5 小时未移动，截取当前画面并触发 stop 接口，保留最后一帧')
+
+  clearCameraStatusPollTimer()
 
   // 1. 截取可见光与红外当前的最后一帧画面快照，避免关流后黑屏
   if (videoElement.value && hasVisibleVideoFrame.value) {
@@ -3255,6 +3337,9 @@ const handleIdleStopStreams = async () => {
     if (stopTasks.length > 0) {
       await Promise.allSettled(stopTasks)
     }
+
+    // 触发 stop 后开始轮询 /v1/cameras/{robot_id}/stream/status
+    pollCameraStreamStatusAndPlay(robotId)
   }
   isIdleStopping.value = false
 }
@@ -3262,7 +3347,7 @@ const handleIdleStopStreams = async () => {
 const handleIdleResumeStreams = async () => {
   if (!isMouseIdle.value || isIdleStarting.value) return
   isIdleStarting.value = true
-  console.log('[鼠标静止检测] 鼠标恢复移动，重新触发 start 接口并启动播放 (play)')
+  console.log('[鼠标静止检测] 鼠标恢复移动，重新触发 start 接口并轮询流状态准备 play')
 
   isMouseIdle.value = false
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
@@ -3309,16 +3394,8 @@ const handleIdleResumeStreams = async () => {
         await initCameraStreams()
       }
 
-      // 2. 获取最新流地址后触发 WebRTC 建立连接与 play 播放
-      initVideoPlayer()
-      initInfraredVideo()
-      await nextTick()
-      if (videoStreamUrl.value) {
-        startVideoPlayback()
-      }
-      if (infraredStreamUrl.value) {
-        startInfraredPlayback(true)
-      }
+      // 2. 轮询 /v1/cameras/{robot_id}/stream/status 确认流激活后触发 play
+      pollCameraStreamStatusAndPlay(robotId)
     } else {
       reloadVideo()
       reloadInfraredStream()
@@ -3359,6 +3436,7 @@ const setupMouseIdleListeners = () => {
 }
 
 const removeMouseIdleListeners = () => {
+  clearCameraStatusPollTimer()
   if (mouseIdleTimer) {
     clearTimeout(mouseIdleTimer)
     mouseIdleTimer = null
