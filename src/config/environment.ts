@@ -33,16 +33,16 @@ const intranetConfig: EnvironmentConfig = {
   },
   websocket: {
     host: '172.16.88.152',
-    port: 8000,
-    fullUrl: 'ws://172.16.88.152:8000'
+    port: 18000,
+    fullUrl: 'ws://172.16.88.152:18000'
   },
   video: {
-    webrtcDomain: 'webrtc://172.16.88.152:8000',
-    rtmpDomain: 'rtmp://172.16.88.152:8000'
+    webrtcDomain: 'webrtc://172.16.88.152:18000',
+    rtmpDomain: 'rtmp://172.16.88.152:18000'
   },
   services: {
-    vision: 'http://172.16.88.152:8000',
-    livestream: 'http://172.16.88.152:8000',
+    vision: 'http://172.16.88.152:18000',
+    livestream: 'http://172.16.88.152:18000',
     mapFile: 'http://172.16.88.152:5000'
   }
 }
@@ -53,18 +53,18 @@ const internetConfig: EnvironmentConfig = {
     domain: '/v1'
   },
   websocket: {
-    host: '39.185.83.71',
-    port: 8000,
-    fullUrl: 'ws://39.185.83.71:8000'
+    host: '172.16.106.50',
+    port: 18000,
+    fullUrl: 'ws://172.16.106.50:18000'
   },
   video: {
-    webrtcDomain: 'webrtc://39.185.83.71:8000',
-    rtmpDomain: 'rtmp://39.185.83.71:8000'
+    webrtcDomain: 'webrtc://172.16.106.50:18000',
+    rtmpDomain: 'rtmp://172.16.106.50:18000'
   },
   services: {
-    vision: 'http://39.185.83.71:8000',
-    livestream: 'http://39.185.83.71:8000',
-    mapFile: 'http://39.185.83.71:5000'
+    vision: 'http://172.16.106.50:18000',
+    livestream: 'http://172.16.106.50:18000',
+    mapFile: 'http://172.16.106.50:5000'
   }
 }
 

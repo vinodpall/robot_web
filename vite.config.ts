@@ -3,8 +3,8 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
-import { createRequire } from 'node:module'
 import * as httpModule from 'node:http'
+import envConfig from './env.config.js'
 
 // 璇诲彇鐜閰嶇疆鏂囦欢
 function loadEnvConfig() {
@@ -19,18 +19,10 @@ function loadEnvConfig() {
     ]
     const existing = candidates.find(p => existsSync(p))
     if (!existing) {
-      // 灏濊瘯鍥為€€璇诲彇 env.config.js锛圕ommonJS 鏍煎紡锛?
-      const configDir = fileURLToPath(new URL('.', import.meta.url))
-      const envConfigJs = resolve(configDir, 'env.config.js')
-      if (existsSync(envConfigJs)) {
-        try {
-          const _require = createRequire(import.meta.url)
-          const jsConfig = _require(envConfigJs) as Record<string, string>
-          console.log('Loaded env vars from env.config.js:', jsConfig.VITE_APP_ENVIRONMENT)
-          return jsConfig
-        } catch (e) {
-          console.log('Failed to read env.config.js:', e)
-        }
+      const resolvedConfig = (envConfig ?? {}) as Record<string, string>
+      if (resolvedConfig && Object.keys(resolvedConfig).length > 0) {
+        console.log('Loaded env vars from env.config.js:', resolvedConfig.VITE_APP_ENVIRONMENT)
+        return resolvedConfig
       }
       console.log('env.local not found, using default environment (intranet)')
       return {}
@@ -216,18 +208,18 @@ export default defineConfig(({ mode }) => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     console.log('Vite config - current environment:', environment)
     if (environment === 'internet') {
-      console.log('Vite config - using internet proxy:', 'http://39.185.83.71:8000')
-      return 'http://39.185.83.71:8000'
+      console.log('Vite config - using internet proxy:', 'http://172.16.106.50:18000')
+      return 'http://172.16.106.50:18000'
     } else {
-      console.log('Vite config - using intranet proxy:', 'http://172.16.88.152:8000')
-      return 'http://172.16.88.152:8000'
+      console.log('Vite config - using intranet proxy:', 'http://172.16.88.152:18000')
+      return 'http://172.16.88.152:18000'
     }
   }
 
   const getDxrApiTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     if (environment === 'internet') {
-      return 'http://39.185.83.71:81'
+      return 'http://172.16.106.50:81'
     } else {
       return 'http://172.16.88.152:81'
     }
@@ -282,22 +274,22 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         '/navigation_list': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://172.16.106.50:5000',
           changeOrigin: true,
           secure: false,
         },
         '/navigation_delete': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://172.16.106.50:5000',
           changeOrigin: true,
           secure: false,
         },
         '/download_file': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://172.16.106.50:5000',
           changeOrigin: true,
           secure: false,
         },
         '/upload_single_file': {
-          target: 'http://39.185.83.71:5000',
+          target: 'http://172.16.106.50:5000',
           changeOrigin: true,
           secure: false,
         },
