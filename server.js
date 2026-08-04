@@ -287,6 +287,10 @@ const server = http.createServer((req, res) => {
   ], req, res)
 })
 
+// 设置合理的 keepAliveTimeout (65秒) 和 headersTimeout，防止客户端复用死 Socket 发生 ERR_CONNECTION_RESET
+server.keepAliveTimeout = 65000
+server.headersTimeout = 66000
+
 // ---- WebSocket 升级代理 ----
 server.on('upgrade', (req, socket, head) => {
   if (!BACKEND_URL || !req.url) {

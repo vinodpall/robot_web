@@ -6,6 +6,20 @@
   <link rel="icon" type="image/svg+xml" href="./src/assets/source_data/dog_logo_black.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>机器狗管控平台</title>
+  <script>
+    // 监听全局静态资源（SCRIPT/LINK）加载失败事件（应对服务器重启后 net::ERR_CONNECTION_RESET 或旧 Hash 脚本缺失导致白屏）
+    window.addEventListener('error', function (e) {
+      var target = e.target || e.srcElement;
+      if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+        console.warn('静态资源加载失败，自动尝试刷新重连:', target.src || target.href);
+        var reloadedKey = 'auto_reloaded_' + (target.src || target.href);
+        if (!sessionStorage.getItem(reloadedKey)) {
+          sessionStorage.setItem(reloadedKey, 'true');
+          window.location.reload(true);
+        }
+      }
+    }, true);
+  </script>
 </head>
 
 <body>
