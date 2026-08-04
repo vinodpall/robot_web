@@ -19,62 +19,68 @@
         <div class="login-form-container">
           <h2 class="form-title">账号登录</h2>
           
-          <form @submit.prevent="handleLogin" class="login-form">
+          <form novalidate @submit.prevent="handleLogin" class="login-form">
             <div class="form-group">
               <input
                 v-model="loginForm.username"
                 type="text"
                 placeholder="请输入用户名"
                 class="form-input"
-                required
+                :class="{ 'input-error': usernameError }"
+                @input="usernameError = ''"
               />
+              <div v-if="usernameError" class="field-error-tip">{{ usernameError }}</div>
             </div>
             
-            <div class="form-group password-group">
-              <input
-                v-model="loginForm.password"
-                :type="showPassword ? 'text' : 'password'"
-                placeholder="请输入密码"
-                class="form-input password-input"
-                required
-              />
-              <button
-                type="button"
-                class="password-toggle-btn"
-                @click="showPassword = !showPassword"
-                title="切换密码显示/隐藏"
-              >
-                <svg
-                  v-if="showPassword"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  width="20"
-                  height="20"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
+            <div class="form-group">
+              <div class="password-input-wrap">
+                <input
+                  v-model="loginForm.password"
+                  :type="showPassword ? 'text' : 'password'"
+                  placeholder="请输入密码"
+                  class="form-input password-input"
+                  :class="{ 'input-error': passwordError }"
+                  @input="passwordError = ''"
+                />
+                <button
+                  type="button"
+                  class="password-toggle-btn"
+                  @click="showPassword = !showPassword"
+                  title="切换密码显示/隐藏"
                 >
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                <svg
-                  v-else
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  width="20"
-                  height="20"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
-              </button>
+                  <svg
+                    v-if="showPassword"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                </button>
+              </div>
+              <div v-if="passwordError" class="field-error-tip">{{ passwordError }}</div>
             </div>
             
             <div class="form-group remember-section">
@@ -137,6 +143,8 @@ const loginForm = ref({
 const errorMessage = ref('')
 const showErrorDialog = ref(false)
 const showPassword = ref(false)
+const usernameError = ref('')
+const passwordError = ref('')
 
 
 
@@ -188,6 +196,19 @@ const handleLogin = async () => {
   try {
     errorMessage.value = ''
     showErrorDialog.value = false
+    usernameError.value = ''
+    passwordError.value = ''
+
+    let hasError = false
+    if (!loginForm.value.username.trim()) {
+      usernameError.value = '请填写用户名'
+      hasError = true
+    }
+    if (!loginForm.value.password) {
+      passwordError.value = '请填写密码'
+      hasError = true
+    }
+    if (hasError) return
     
     const response = await login(loginForm.value)
     
@@ -357,11 +378,13 @@ const closeErrorDialog = () => {
   flex-direction: column;
 }
 
-.password-group {
+.password-input-wrap {
   position: relative;
+  width: 100%;
 }
 
 .password-input {
+  width: 100%;
   padding-right: 3rem !important;
 }
 
@@ -387,6 +410,7 @@ const closeErrorDialog = () => {
 }
 
 .form-input {
+  width: 100%;
   padding: 1rem;
   border: 1px solid rgba(0, 188, 212, 0.3);
   border-radius: 6px;
@@ -394,6 +418,19 @@ const closeErrorDialog = () => {
   color: #ffffff;
   font-size: 1rem;
   transition: border-color 0.3s ease;
+}
+
+.input-error {
+  border-color: #f44336 !important;
+  box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.2) !important;
+}
+
+.field-error-tip {
+  color: #f44336;
+  font-size: 0.85rem;
+  margin-top: 0.35rem;
+  padding-left: 0.25rem;
+  animation: fadeIn 0.2s ease;
 }
 
 .form-input:focus {
