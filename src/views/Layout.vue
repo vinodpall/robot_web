@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="layout-container">
     <div v-if="globalFallAlertActive" class="global-fall-alert-frame" aria-hidden="true">
       <div class="global-fall-alert-edge top"></div>
@@ -8,7 +8,7 @@
     </div>
     <div class="header">
       <div class="header-left">
-        <img src="/src/assets/source_data/dog_logo.svg" alt="logo" class="logo" />
+        <img :src="dogLogo" alt="logo" class="logo" />
         <span class="title">机器人控制平台</span>
       </div>
       
@@ -77,7 +77,7 @@
         </span>
 
         <div class="user-info" @click="toggleUserMenu">
-          <img src="/src/assets/source_data/avatar.jpg" alt="avatar" class="avatar" />
+          <img :src="avatarImg" alt="avatar" class="avatar" />
           <div class="right-sel">
             <span class="name">{{ user?.username || 'admin' }}</span>
             <span class="triangle" :class="{ 'is-active': isUserMenuVisible }"></span>
@@ -198,7 +198,9 @@ import { refreshRobotRelatedCache, refreshCameraCache, refreshMapCache } from '.
 import ErrorMessage from '../components/ErrorMessage.vue'
 import SuccessMessage from '../components/SuccessMessage.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import titleBg from '/src/assets/source_data/bg_data/title.png'
+import dogLogo from '../assets/source_data/dog_logo.svg'
+import avatarImg from '../assets/source_data/avatar.jpg'
+import titleBg from '../assets/source_data/bg_data/title.png'
 
 const router = useRouter()
 const route = useRoute()

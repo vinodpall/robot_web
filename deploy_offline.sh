@@ -161,8 +161,9 @@ else
   docker run -d \
     --name robot-web \
     --restart always \
-    --network host \
-    -e PORT="$HOST_PORT" \
+    -p "$HOST_PORT":4173 \
+    --add-host host.docker.internal:host-gateway \
+    -e PORT=4173 \
     -e BACKEND_URL="$BACKEND_URL" \
     -e NODE_ENV=production \
     --log-opt max-size=10m \

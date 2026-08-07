@@ -4,6 +4,7 @@ FROM docker.m.daocloud.io/library/node:20-alpine
 WORKDIR /app
 
 # 拷贝运行代理服务器所需的代码
+COPY package.json ./
 COPY server.js ./
 
 # 拷贝本地已编译好的前端静态制品文件（dist 目录）

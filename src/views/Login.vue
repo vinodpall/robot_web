@@ -1,17 +1,17 @@
 <template>
   <div class="login-container">
     <div class="login-background">
-      <img src="/src/assets/source_data/bg_data/mian_pg_bg.png" alt="background" />
+      <img :src="mianPgBg" alt="background" />
     </div>
     
     <div class="login-content">
       <div class="login-left">
         <div class="logo-section">
-          <img src="/src/assets/source_data/dog_logo.svg" alt="logo" class="logo" />
+          <img :src="dogLogo" alt="logo" class="logo" />
           <h1 class="title">机器狗管控平台</h1>
         </div>
         <div class="drone-illustration">
-          <img src="/src/assets/source_data/bg_data/main_pg_front.png" alt="drone" />
+          <img :src="mainPgFront" alt="drone" />
         </div>
       </div>
       
@@ -84,6 +84,9 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useAuth } from '../composables/useApi'
 import { initUserPermissions, initAllPermissions } from '../utils/initPermissions'
+import mianPgBg from '../assets/source_data/bg_data/mian_pg_bg.png'
+import dogLogo from '../assets/source_data/dog_logo.svg'
+import mainPgFront from '../assets/source_data/bg_data/main_pg_front.png'
 
 const router = useRouter()
 const userStore = useUserStore()

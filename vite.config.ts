@@ -211,8 +211,8 @@ export default defineConfig(({ mode }) => {
       console.log('Vite config - using internet proxy:', 'http://192.168.5.27:8000')
       return 'http://192.168.5.27:8000'
     } else {
-      console.log('Vite config - using intranet proxy:', 'http://172.16.88.152:18000')
-      return 'http://172.16.88.152:18000'
+      console.log('Vite config - using intranet proxy:', 'http://172.16.106.50:18000')
+      return 'http://172.16.106.50:18000'
     }
   }
 
@@ -221,12 +221,12 @@ export default defineConfig(({ mode }) => {
     if (environment === 'internet') {
       return 'http://192.168.5.27:81'
     } else {
-      return 'http://172.16.88.152:81'
+      return 'http://172.16.106.50:81'
     }
   }
 
   return {
-    base: './',
+    base: '/',
     plugins: [
       vue(),
       // 鍔ㄦ€佹満鍣ㄤ汉浠ｇ悊鎻掍欢锛氭嫤鎴�?robot_ip 鍙傛暟鐨勮姹傦紝杞彂鍒板搴旀満鍣ㄤ�?

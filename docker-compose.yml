@@ -10,7 +10,6 @@ services:
     image: robot-web:latest
     container_name: robot-web
     restart: always
-    network_mode: "host"
     ports:
       - "${HOST_PORT:-5173}:4173"
     extra_hosts:
