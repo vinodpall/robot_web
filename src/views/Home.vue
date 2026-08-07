@@ -519,8 +519,8 @@
         <div class="on3-bottom">
           <div class="on3-bottom-center">
             <div class="task-row">
-              <div class="map-dropdown-wrapper" :class="{ 'disabled': navigationEnabled || insEnabled || msfEnabled }">
-                <select class="map-dropdown" v-model="selectedMap" :disabled="navigationEnabled || insEnabled || msfEnabled">
+              <div class="map-dropdown-wrapper" :class="{ 'disabled': navigationEnabled || insEnabled }">
+                <select class="map-dropdown" v-model="selectedMap" :disabled="navigationEnabled || insEnabled">
                   <option v-if="mapList.length === 0" value="">选择地图</option>
                   <option v-for="map in mapList" :key="map" :value="map">
                     {{ map }}
@@ -537,7 +537,7 @@
                   class="task-btn" 
                   :class="{ 
                     'active': navigationEnabled, 
-                    'disabled': insEnabled || msfEnabled,
+                    'disabled': insEnabled,
                     'loading': navigationLoading
                   }"
                   v-permission-click-dialog="'main-taskdispatch'"
@@ -547,7 +547,7 @@
                   class="task-btn" 
                   :class="{ 
                     'active': insEnabled, 
-                    'disabled': navigationEnabled || msfEnabled || !hasRobotRtk,
+                    'disabled': navigationEnabled || !hasRobotRtk,
                     'loading': insLoading
                   }"
                   v-permission-click-dialog="'main-taskdispatch'"
@@ -555,14 +555,9 @@
                 >INS</span>
                 <span 
                   class="task-btn" 
-                  :class="{ 
-                    'active': msfEnabled, 
-                    'disabled': navigationEnabled || insEnabled || !hasRobotRtk,
-                    'loading': msfLoading
-                  }"
                   v-permission-click-dialog="'main-taskdispatch'"
-                  @click="handleEnableMsf"
-                >MSF</span>
+                  @click="handleLeaveDock"
+                >离桩</span>
               </div>
             </div>
             <div class="wayline-control-list">
@@ -984,11 +979,11 @@
     
     <ConfirmDialog
       :show="confirmDialog.visible"
-      title="操作确认"
+      :title="confirmDialog.title || '操作确认'"
       :message="confirmDialog.message"
-      type="warning"
+      :type="confirmDialog.type || 'warning'"
       confirm-text="确认"
-      cancel-text="取消"
+      :cancel-text="confirmDialog.cancelText !== undefined ? confirmDialog.cancelText : '取消'"
       @confirm="onConfirmOk"
       @cancel="onConfirmCancel"
       @close="onConfirmCancel"
@@ -1718,8 +1713,26 @@ const overlayTrackTrajectory = async (trackName: string) => {
 
   trackOverlayInFlightKey.value = overlayKey
   try {
-    // 1. 读取轨迹路线数据
-    const blob = await getTrajectoryFile(normalizedTrackName)
+    // 1. 读取轨迹路线数据（优先从 IndexedDB 缓存读，未命中则即时下载）
+    let blob = await getTrajectoryFile(normalizedTrackName)
+    if (!blob) {
+      console.log('[点云轨迹] 本地缓存未找到轨迹文件，尝试下载:', normalizedTrackName)
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        const downloaded = await downloadTrajectoryFile(robotId, normalizedTrackName)
+        if (downloaded) {
+          const text = await downloaded.text()
+          if (!text.trim().startsWith('<') && !text.includes('error_code')) {
+            await saveTrajectoryFile(normalizedTrackName, downloaded)
+            blob = downloaded
+            console.log('[点云轨迹] 下载并缓存成功:', normalizedTrackName)
+          } else {
+            console.warn('[点云轨迹] 下载内容无效，跳过:', normalizedTrackName)
+          }
+        }
+      }
+    }
+
     const trajectoryPoints: Array<{x: number, y: number, z: number}> = []
 
     if (blob) {
@@ -1884,6 +1897,7 @@ const syncPointCloudOverlayByRuntimeState = async () => {
   const currentTrackName = activeOverlayTrackName.value || normalizeTrackName(selectedTrack.value)
   if (robotStore.isTracking && currentTrackName) {
     activeOverlayTrackName.value = currentTrackName
+    lastTrackOverlayKey.value = ''
     await overlayTrackTrajectory(currentTrackName)
     return
   }
@@ -2014,6 +2028,7 @@ const refreshPointCloud = async (options?: { silent?: boolean; force?: boolean }
     lastTrackOverlayTaskPointCount.value = 0
     trackOverlayInFlightKey.value = ''
     lastPointTaskOverlayKey.value = ''
+    await syncPointCloudOverlayByRuntimeState()
     await nextTick()
     threePointCloudRef.value?.fitCameraToScene?.()
   } catch (error) {
@@ -4815,16 +4830,31 @@ const activeTrackInfo = ref({ track_name: '', taskpoint_name: '' })
 const confirmDialog = ref({
   visible: false,
   message: '',
+  title: '操作确认',
+  type: 'warning' as 'warning' | 'info' | 'success' | 'error',
+  cancelText: '取消',
   onConfirm: null as (() => void) | null
 })
 
 // 显示确认对话框
-const showConfirmDialog = (message: string, onConfirm: () => void) => {
+const showConfirmDialog = (
+  message: string,
+  onConfirm: () => void,
+  options?: { title?: string; type?: 'warning' | 'info' | 'success' | 'error'; cancelText?: string }
+) => {
   confirmDialog.value = {
     visible: true,
     message,
+    title: options?.title || '操作确认',
+    type: options?.type || 'warning',
+    cancelText: options?.cancelText !== undefined ? options.cancelText : '取消',
     onConfirm
   }
+}
+
+// 显示提示弹窗（单确定按钮）
+const showAlertDialog = (message: string, type: 'warning' | 'info' | 'success' | 'error' = 'success', title = '提示') => {
+  showConfirmDialog(message, () => {}, { title, type, cancelText: '' })
 }
 
 // 确认对话框 - 确定
@@ -6331,6 +6361,25 @@ const handleEnableMsf = () => {
       console.error(`${action}MSF失败:`, err)
       alert(`${action}MSF失败`)
     }
+  })
+}
+
+// 离桩操作处理：发送 POST /v1/charging/{robot_id}/one_key_exit_charge，确认后直接弹窗提示“已发送离桩指令，请等待机器狗离桩完成后再进行操作”，无需等待响应
+const handleLeaveDock = () => {
+  showConfirmDialog('该功能仅适用机器狗位于充电桩上，确定离桩？', () => {
+    const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    if (!robotId) {
+      showError('未选择机器人，无法发送控制指令')
+      return
+    }
+
+    // 后台异步发送离桩请求
+    navigationApi.oneKeyExitCharge(robotId).catch(err => {
+      console.error('一键离桩发送异常:', err)
+    })
+
+    // 确认后立即弹窗提示
+    showAlertDialog('已发送离桩指令，请等待机器狗离桩完成后再进行操作', 'info', '提示')
   })
 }
 

@@ -200,21 +200,16 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const localEnv = loadEnvConfig()
 
-  // 鍚堝苟鐜鍙橀噺锛屾湰鍦伴厤缃紭�?
+  // 鍚堝苟鐜鍙橀噺锛屾湰鍦伴厤缃紭?
   const mergedEnv = { ...env, ...localEnv }
 
-  // 鏍规嵁鐜鍙橀噺鍔ㄦ€侀厤缃唬�?
+  // 鏍规嵁鐜鍙橀噺鍔ㄦ€侀厤缃唬?
   const getProxyTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     console.log('Vite config - current environment:', environment)
     if (environment === 'internet') {
-<<<<<<< HEAD
       console.log('Vite config - using internet proxy:', 'http://192.168.5.27:8000')
       return 'http://192.168.5.27:8000'
-=======
-      console.log('Vite config - using internet proxy:', 'http://172.16.106.50:18000')
-      return 'http://172.16.106.50:18000'
->>>>>>> ea55d4f948e93b6432c2212a385787e08fa704a7
     } else {
       console.log('Vite config - using intranet proxy:', 'http://172.16.88.152:18000')
       return 'http://172.16.88.152:18000'
@@ -224,11 +219,7 @@ export default defineConfig(({ mode }) => {
   const getDxrApiTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     if (environment === 'internet') {
-<<<<<<< HEAD
       return 'http://192.168.5.27:81'
-=======
-      return 'http://172.16.106.50:81'
->>>>>>> ea55d4f948e93b6432c2212a385787e08fa704a7
     } else {
       return 'http://172.16.88.152:81'
     }
@@ -283,38 +274,22 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         '/navigation_list': {
-<<<<<<< HEAD
           target: 'http://192.168.5.27:5000',
-=======
-          target: 'http://172.16.106.50:5000',
->>>>>>> ea55d4f948e93b6432c2212a385787e08fa704a7
           changeOrigin: true,
           secure: false,
         },
         '/navigation_delete': {
-<<<<<<< HEAD
           target: 'http://192.168.5.27:5000',
-=======
-          target: 'http://172.16.106.50:5000',
->>>>>>> ea55d4f948e93b6432c2212a385787e08fa704a7
           changeOrigin: true,
           secure: false,
         },
         '/download_file': {
-<<<<<<< HEAD
           target: 'http://192.168.5.27:5000',
-=======
-          target: 'http://172.16.106.50:5000',
->>>>>>> ea55d4f948e93b6432c2212a385787e08fa704a7
           changeOrigin: true,
           secure: false,
         },
         '/upload_single_file': {
-<<<<<<< HEAD
           target: 'http://192.168.5.27:5000',
-=======
-          target: 'http://172.16.106.50:5000',
->>>>>>> ea55d4f948e93b6432c2212a385787e08fa704a7
           changeOrigin: true,
           secure: false,
         },

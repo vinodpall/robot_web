@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -136,6 +136,7 @@
                   <button class="map-btn" :class="isTrackTaskRunning ? 'map-btn-primary' : 'map-btn-secondary'" :disabled="!isTrackTaskRunning" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handleCircleMode">循迹避障模式</button>
                   <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
                   <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleSetOrigin">原点设置</button>
+                  <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleLeaveDock">离桩</button>
                 </div>
               </div>
 
@@ -1154,7 +1155,7 @@ import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import { load3MF } from '../utils/threemfParser'
 import type { MeshData } from '../utils/threemfParser'
 import { useRobotStore } from '../stores/robot'
-import { navigationApi, mapFileApi } from '../api/services'
+import { navigationApi, mapFileApi, dogApi } from '../api/services'
 import { useDeviceStore } from '../stores/device'
 import { useTaskExecutionStore } from '../stores/taskExecution'
 import { usePermissionStore } from '@/stores/permission'
@@ -1220,11 +1221,23 @@ const showConfirmDialog = (options: Partial<ConfirmDialogState>) => {
     title: options.title || '确认操作',
     message: options.message || '您确定要执行此操作吗?',
     confirmText: options.confirmText || '确认',
-    cancelText: options.cancelText || '取消',
+    cancelText: options.cancelText !== undefined ? options.cancelText : '取消',
     type: options.type || 'warning',
     onConfirm: options.onConfirm || (() => {}),
     onCancel: options.onCancel || (() => {})
   }
+}
+
+// 显示提示弹窗
+const showAlertDialog = (options: { title?: string; message: string; type?: 'success' | 'warning' | 'info' | 'error'; onConfirm?: () => void }) => {
+  showConfirmDialog({
+    title: options.title || '提示',
+    message: options.message,
+    confirmText: '确定',
+    cancelText: '',
+    type: options.type || 'success',
+    onConfirm: options.onConfirm
+  })
 }
 
 const closeConfirmDialog = () => {
@@ -3592,10 +3605,47 @@ const handleSetOrigin = () => {
         }))
 
         showSuccessMessage('原点设置成功')
+
+        showAlertDialog({
+          title: '提示',
+          message: '原点设置完成',
+          type: 'success'
+        })
       } catch (err) {
         console.error('原点设置失败:', err)
         showErrorMessage('原点设置失败')
       }
+    }
+  })
+}
+
+// 离桩操作处理：发送 POST /v1/charging/{robot_id}/one_key_exit_charge，确认后直接弹窗提示“已发送离桩指令，请等待机器狗离桩完成后再进行操作”，无需等待响应
+const handleLeaveDock = () => {
+  if (!navigationEnabled.value) {
+    return
+  }
+
+  showConfirmDialog({
+    title: '离桩操作',
+    message: '该功能仅适用机器狗位于充电桩上，确定离桩？',
+    onConfirm: () => {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (!robotId) {
+        showErrorMessage('未选择机器人')
+        return
+      }
+
+      // 后台异步发送离桩请求
+      navigationApi.oneKeyExitCharge(robotId).catch(err => {
+        console.error('一键离桩发送异常:', err)
+      })
+
+      // 确认后立即弹窗提示
+      showAlertDialog({
+        title: '提示',
+        message: '已发送离桩指令，请等待机器狗离桩完成后再进行操作',
+        type: 'info'
+      })
     }
   })
 }

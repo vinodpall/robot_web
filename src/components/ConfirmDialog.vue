@@ -6,7 +6,9 @@
         <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
           <circle cx="24" cy="24" r="24" :fill="iconColor" opacity="0.1"/>
           <path d="M24 12C17.373 12 12 17.373 12 24C12 30.627 17.373 36 24 36C30.627 36 36 30.627 36 24C36 17.373 30.627 12 24 12ZM24 34C18.486 34 14 29.514 14 24C14 18.486 18.486 14 24 14C29.514 14 34 18.486 34 24C34 29.514 29.514 34 24 34Z" :fill="iconColor"/>
-          <path d="M24 18V26M24 30V30.5" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <path v-if="type === 'success'" d="M17 24L22 29L31 19" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path v-else-if="type === 'error'" d="M18 18L30 30M30 18L18 30" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+          <path v-else d="M24 18V26M24 30V30.5" stroke="white" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </div>
       <div class="confirm-title">{{ title }}</div>
@@ -17,7 +19,7 @@
         <button class="confirm-btn confirm-btn-confirm" @click="handleConfirm">
           {{ confirmText }}
         </button>
-        <button class="confirm-btn confirm-btn-cancel" @click="handleCancel">
+        <button v-if="cancelText" class="confirm-btn confirm-btn-cancel" @click="handleCancel">
           {{ cancelText }}
         </button>
       </div>

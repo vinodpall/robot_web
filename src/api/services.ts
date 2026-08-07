@@ -1329,6 +1329,9 @@ export const navigationApi = {
   oneKeyRecharge: (robotId: string, data: { chargeIndex: number }) => {
     return apiClient.post(`/charging/${robotId}/one_key_recharge`, data)
   },
+  oneKeyExitCharge: (robotId: string) => {
+    return apiClient.post<{ code?: number; message?: string; msg?: string }>(`/charging/${encodeURIComponent(robotId)}/one_key_exit_charge`)
+  },
   pauseNavigation: (robotId: string, data: any = {}) => {
     return apiClient.post(`/navigation/${robotId}/nav_pause`, data)
   },
