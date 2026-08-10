@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -751,7 +751,21 @@ const handleExecuteTaskGroup = async () => {
 
     console.log('开始多任务组返回:', res)
 
-    if (res && res.message) {
+    // 优先检查响应内部 response.msg 中的错误结果
+    const innerMsg = res?.response?.msg || res?.msg
+    if (innerMsg && typeof innerMsg === 'object') {
+      const result = innerMsg.result
+      const errCode = innerMsg.err_code ?? innerMsg.error_code
+      const errMsg = innerMsg.err_msg || innerMsg.error_msg
+
+      if (result === 0 || (errCode !== undefined && errCode !== 0)) {
+        console.error('开始执行多任务组失败，后端返回错误:', innerMsg)
+        showErrorMessage(errMsg || '开始执行多任务组失败')
+        return
+      }
+    }
+
+    if (res && (res.message || res.code === 200)) {
       taskExecutionStore.markMultiTaskStarted()
       showSuccessMessage(res.message || '开始执行多任务组成功')
     } else {

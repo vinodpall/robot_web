@@ -136,7 +136,15 @@
                   <button class="map-btn" :class="isTrackTaskRunning ? 'map-btn-primary' : 'map-btn-secondary'" :disabled="!isTrackTaskRunning" v-permission-click-dialog="'nav-navmanage-pausenav'" @click="handleCircleMode">循迹避障模式</button>
                   <button class="map-btn map-btn-secondary" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleCloseGPS">{{ gpsEnabled ? '关闭GPS' : '开启GPS' }}</button>
                   <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleSetOrigin">原点设置</button>
-                  <button class="map-btn map-btn-secondary" :disabled="!navigationEnabled" v-permission-click-dialog="'nav-navmanage-startnav'" @click="handleLeaveDock">离桩</button>
+                  <button 
+                    class="map-btn map-btn-secondary" 
+                    :class="{ loading: leaveDockLoading }"
+                    :disabled="!navigationEnabled || leaveDockLoading" 
+                    v-permission-click-dialog="'nav-navmanage-startnav'" 
+                    @click="handleLeaveDock"
+                  >
+                    离桩
+                  </button>
                 </div>
               </div>
 
@@ -3619,9 +3627,12 @@ const handleSetOrigin = () => {
   })
 }
 
+let leaveDockTimer: any = null
+const leaveDockLoading = ref(false)
+
 // 离桩操作处理：发送 POST /v1/charging/{robot_id}/one_key_exit_charge，确认后直接弹窗提示“已发送离桩指令，请等待机器狗离桩完成后再进行操作”，无需等待响应
 const handleLeaveDock = () => {
-  if (!navigationEnabled.value) {
+  if (!navigationEnabled.value || leaveDockLoading.value) {
     return
   }
 
@@ -3634,6 +3645,16 @@ const handleLeaveDock = () => {
         showErrorMessage('未选择机器人')
         return
       }
+
+      // 触发 10 秒离桩转圈加载动画
+      leaveDockLoading.value = true
+      if (leaveDockTimer) {
+        clearTimeout(leaveDockTimer)
+      }
+      leaveDockTimer = setTimeout(() => {
+        leaveDockLoading.value = false
+        leaveDockTimer = null
+      }, 10000)
 
       // 后台异步发送离桩请求
       navigationApi.oneKeyExitCharge(robotId).catch(err => {

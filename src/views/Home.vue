@@ -555,6 +555,10 @@
                 >INS</span>
                 <span 
                   class="task-btn" 
+                  :class="{ 
+                    'loading': leaveDockLoading,
+                    'disabled': leaveDockLoading
+                  }"
                   v-permission-click-dialog="'main-taskdispatch'"
                   @click="handleLeaveDock"
                 >离桩</span>
@@ -1334,6 +1338,8 @@ const hasRobotRtk = computed(() => {
 const navigationLoading = ref(false)
 const insLoading = ref(false)
 const msfLoading = ref(false)
+const leaveDockLoading = ref(false)
+let leaveDockTimer: ReturnType<typeof setTimeout> | null = null
 
 // cmd_status 同步到本地按钮状态
 watch(() => robotStore.cmdStatus, (status) => {
@@ -6366,12 +6372,23 @@ const handleEnableMsf = () => {
 
 // 离桩操作处理：发送 POST /v1/charging/{robot_id}/one_key_exit_charge，确认后直接弹窗提示“已发送离桩指令，请等待机器狗离桩完成后再进行操作”，无需等待响应
 const handleLeaveDock = () => {
+  if (leaveDockLoading.value) return
   showConfirmDialog('该功能仅适用机器狗位于充电桩上，确定离桩？', () => {
     const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
     if (!robotId) {
       showError('未选择机器人，无法发送控制指令')
       return
     }
+
+    // 触发 10 秒离桩转圈加载动画
+    leaveDockLoading.value = true
+    if (leaveDockTimer) {
+      clearTimeout(leaveDockTimer)
+    }
+    leaveDockTimer = setTimeout(() => {
+      leaveDockLoading.value = false
+      leaveDockTimer = null
+    }, 10000)
 
     // 后台异步发送离桩请求
     navigationApi.oneKeyExitCharge(robotId).catch(err => {
@@ -6836,19 +6853,24 @@ const onMultiTaskStartConfirm = async () => {
     })
     
     // 根据返回结果判断是否成功
-    if (response && (response as any).response && (response as any).response.msg) {
-      const { error_code, error_msg } = (response as any).response.msg
-      if (error_code === 0) {
-        activeTaskType.value = 'multi'
-        taskExecutionStore.markMultiTaskStarted()
-        showSuccess((response as any).message || '多任务组启动成功')
-      } else {
-        showError(`启动失败: ${error_msg || '未知错误'}`)
+    const innerMsg = (response as any)?.response?.msg || (response as any)?.msg
+    if (innerMsg && typeof innerMsg === 'object') {
+      const result = innerMsg.result
+      const errCode = innerMsg.err_code ?? innerMsg.error_code
+      const errMsg = innerMsg.err_msg || innerMsg.error_msg
+
+      if (result === 0 || (errCode !== undefined && errCode !== 0)) {
+        showError(`启动失败: ${errMsg || '未知错误'}`)
+        return
       }
-    } else {
+    }
+
+    if (response && ((response as any).message || (response as any).code === 200)) {
       activeTaskType.value = 'multi'
       taskExecutionStore.markMultiTaskStarted()
-      showSuccess('多任务组启动成功')
+      showSuccess((response as any).message || '多任务组启动成功')
+    } else {
+      showError('启动多任务组失败')
     }
   } catch (error) {
     console.error('启动多任务组失败:', error)
@@ -8871,6 +8893,13 @@ onActivated(async () => {
 onDeactivated(() => {
   isHomePageActive.value = false
   removeMouseIdleListeners()
+})
+
+onUnmounted(() => {
+  if (leaveDockTimer) {
+    clearTimeout(leaveDockTimer)
+    leaveDockTimer = null
+  }
 })
 
 const recoverVideoStreamsOnForeground = async () => {
