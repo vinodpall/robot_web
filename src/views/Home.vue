@@ -2288,7 +2288,7 @@ const fetchLatestAlarmLogs = async () => {
         imageFallbackTried: false,
         camera,
         content: outmsg?.message || '--',
-        description: row.task_point_description || '--',
+        description: row.task_poin_description || row.task_point_description || '--',
         time: formatTs(row.create_time)
       }
     })

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main">
     <aside class="sidebar-menu">
       <div class="sidebar-tabs">
@@ -233,7 +233,7 @@
                       <span v-else-if="row.results" class="trc-result-badge">{{ row.results }}</span>
                       <span v-else class="trc-empty">-</span>
                     </div>
-                    <div class="file-table-cell trc-desc" :title="row.remark || '-'">{{ row.remark || '-' }}</div>
+                    <div class="file-table-cell trc-desc" :title="row.task_poin_description || row.task_point_description || row.remark || '-'">{{ row.task_poin_description || row.task_point_description || row.remark || '-' }}</div>
                     <div class="file-table-cell trc-pic">
                       <span v-if="!getDisplayImage(row)" class="no-image">-</span>
                       <img
@@ -365,7 +365,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useDeviceStore } from '@/stores/device'
 import { usePermissionStore } from '@/stores/permission'
 import { navigationApi, visionApi } from '@/api/services'
-import { buildRobotHttpAssetUrl } from '@/utils/robotHttpProxy'
+import { buildRobotHttpAssetUrl, withBackendOrigin } from '@/utils/robotHttpProxy'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import trackRecordIcon from '@/assets/source_data/svg_data/robot_source/track_record.svg'
@@ -833,13 +833,38 @@ const resolveExportUrls = (payload: any): string[] => {
   ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
 }
 
-const normalizeExportUrl = (rawUrl: string): string => {
-  if (!rawUrl) return ''
-  const value = rawUrl.trim()
-  if (!value) return ''
+const normalizeExportUrls = (rawUrl: string): string[] => {
+  if (!rawUrl) return []
+  let value = rawUrl.trim()
+  if (!value) return []
+
+  // 将返回的 download_url 中的 /v1/proxy/ 替换为 /v1/robots/
+  if (value.startsWith('/v1/proxy/')) {
+    value = value.replace('/v1/proxy/', '/v1/robots/')
+  }
+
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
-  if (!robotId) return value
-  return buildRobotHttpAssetUrl(robotId, 81, value)
+  const results: string[] = []
+
+  // 1. 如果是 /v1/ 开头的路径（如 /v1/robots/robot_dog_001/http/81/...）
+  // 在开发环境转换为与后台接口一致的服务源基地址（如 http://172.16.106.50:18000/v1/robots/...）
+  if (value.startsWith('/v1/')) {
+    results.push(withBackendOrigin(value))
+  }
+
+  if (robotId) {
+    const encodedRobot = encodeURIComponent(robotId)
+    const cleanPath = value.replace(/^\/+/, '')
+    if (!cleanPath.startsWith('v1/')) {
+      results.push(withBackendOrigin(`/v1/robots/${encodedRobot}/http/81/${cleanPath}`))
+      results.push(withBackendOrigin(`/v1/robots/${encodedRobot}/http/5000/${cleanPath}`))
+    }
+    const directUrl81 = buildRobotHttpAssetUrl(robotId, 81, value, { preferDirectForPort81: true })
+    results.push(directUrl81)
+  }
+
+  results.push(withBackendOrigin(value))
+  return results.filter((u, idx, arr) => !!u && arr.indexOf(u) === idx)
 }
 
 const appendTokenToDownloadUrl = (downloadUrl: string): string => {
@@ -853,6 +878,54 @@ const appendTokenToDownloadUrl = (downloadUrl: string): string => {
     return url.toString()
   } catch {
     return downloadUrl
+  }
+}
+
+const downloadFileAsBlob = async (downloadUrl: string, timeoutMs = 3000): Promise<boolean> => {
+  const token = localStorage.getItem('token') || ''
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(downloadUrl, { credentials: 'same-origin', headers, signal: controller.signal })
+    clearTimeout(timer)
+    if (!response.ok) {
+      return false
+    }
+
+    const blob = await response.blob()
+    if (!blob || blob.size === 0) {
+      return false
+    }
+
+    if (blob.type.includes('text/html') || blob.type.includes('application/json')) {
+      const text = await blob.text()
+      if (text.includes('error') || text.includes('404') || text.includes('Detail') || text.includes('code')) {
+        return false
+      }
+    }
+
+    let fileName = downloadUrl.split('?')[0].split('/').pop() || 'track_log.xlsx'
+    if (!fileName.includes('.')) fileName += '.xlsx'
+
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = fileName
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000)
+    return true
+  } catch {
+    clearTimeout(timer)
+    return false
   }
 }
 
@@ -904,26 +977,24 @@ const handleExport = async () => {
     }
 
     const response = await navigationApi.exportTrackLog(robotId, payload)
-    const candidateUrls = resolveExportUrls(response)
-      .map(normalizeExportUrl)
-      .map(appendTokenToDownloadUrl)
-      .filter((u, idx, arr) => !!u && arr.indexOf(u) === idx)
+    
+    // 接口 200 返回后立即关闭“正在生成”弹窗
+    exportGenerating.value.show = false
 
-    if (candidateUrls.length === 0) {
+    const rawUrls = resolveExportUrls(response)
+    const candidateUrls: string[] = []
+    for (const raw of rawUrls) {
+      candidateUrls.push(...normalizeExportUrls(raw).map(appendTokenToDownloadUrl))
+    }
+    const uniqueUrls = candidateUrls.filter((u, idx, arr) => !!u && arr.indexOf(u) === idx)
+
+    if (uniqueUrls.length === 0) {
       throw new Error('接口未返回下载地址')
     }
 
-    exportGenerating.value.show = false
-    let lastError: any = null
-    for (const url of candidateUrls) {
-      try {
-        triggerDownloadByUrl(url)
-        return
-      } catch (err) {
-        lastError = err
-      }
-    }
-    throw lastError || new Error('下载失败')
+    // 接口返回下载地址后，直接触发浏览器原生 <a> 标签下载，立即弹入浏览器下载管理器
+    const firstUrl = uniqueUrls[0]
+    triggerDownloadByUrl(firstUrl)
   } catch (e: any) {
     const rawMsg =
       e?.detail ||

@@ -108,6 +108,10 @@ fi
 
 # 4. 载入离线镜像包
 echo -e "\n${YELLOW}正在载入离线 Docker 镜像包 ($OFFLINE_TAR)...${NC}"
+if [ ! -s "$OFFLINE_TAR" ]; then
+  echo -e "${RED}错误: 镜像文件 $OFFLINE_TAR 为空文件 (0 字节) 或损害！请检查传输过程并重新打包。${NC}"
+  exit 1
+fi
 docker load -i "$OFFLINE_TAR"
 if [ $? -ne 0 ]; then
   echo -e "${RED}错误: 离线镜像导入失败，请检查文件完整性或 Docker 服务运行状态！${NC}"

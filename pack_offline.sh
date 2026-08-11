@@ -34,7 +34,7 @@ pack_choice=${pack_choice:-1}
 build_x86() {
   echo -e "\n${YELLOW}正在构建 x86_64 (amd64) 架构镜像...${NC}"
   if [ "$USE_BUILDX" = true ]; then
-    docker buildx build --platform linux/amd64 -t robot-web:latest --output type=docker,dest=deploy/robot-web-x86_64.tar .
+    docker buildx build --platform linux/amd64 -t robot-web:latest --provenance=false --output type=docker,dest=deploy/robot-web-x86_64.tar .
   else
     docker build -t robot-web:latest .
     docker save -o deploy/robot-web-x86_64.tar robot-web:latest
@@ -45,7 +45,7 @@ build_x86() {
 build_arm() {
   echo -e "\n${YELLOW}正在构建 ARM64 (aarch64) 架构镜像...${NC}"
   if [ "$USE_BUILDX" = true ]; then
-    docker buildx build --platform linux/arm64 -t robot-web:latest --output type=docker,dest=deploy/robot-web-arm64.tar .
+    docker buildx build --platform linux/arm64 -t robot-web:latest --provenance=false --output type=docker,dest=deploy/robot-web-arm64.tar .
   else
     echo -e "${YELLOW}注意: 当前未检测到 docker buildx，将使用本机环境构建。请确保本机为 ARM 架构！${NC}"
     docker build -t robot-web:latest .

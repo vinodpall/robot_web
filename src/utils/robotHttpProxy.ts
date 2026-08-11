@@ -29,7 +29,7 @@ const getSelectedRobotIp = (robotId: string): string => {
   }
 }
 
-const withBackendOrigin = (pathOrUrl: string): string => {
+export const withBackendOrigin = (pathOrUrl: string): string => {
   const value = String(pathOrUrl || '').trim()
   if (!value) return ''
   if (/^https?:\/\//i.test(value)) return value

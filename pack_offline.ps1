@@ -39,7 +39,7 @@ if ([string]::IsNullOrWhiteSpace($packChoice)) { $packChoice = "1" }
 function Build-X86 {
     Write-Host "`n正在构建 x86_64 (amd64) 架构镜像..." -ForegroundColor Yellow
     if ($useBuildx) {
-        docker buildx build --platform linux/amd64 -t robot-web:latest --output type=docker,dest=deploy/robot-web-x86_64.tar .
+        docker buildx build --platform linux/amd64 -t robot-web:latest --provenance=false --output type=docker,dest=deploy/robot-web-x86_64.tar .
     } else {
         docker build -t robot-web:latest .
         docker save -o deploy/robot-web-x86_64.tar robot-web:latest
@@ -52,7 +52,7 @@ function Build-X86 {
 function Build-Arm {
     Write-Host "`n正在构建 ARM64 (aarch64) 架构镜像..." -ForegroundColor Yellow
     if ($useBuildx) {
-        docker buildx build --platform linux/arm64 -t robot-web:latest --output type=docker,dest=deploy/robot-web-arm64.tar .
+        docker buildx build --platform linux/arm64 -t robot-web:latest --provenance=false --output type=docker,dest=deploy/robot-web-arm64.tar .
     } else {
         Write-Host "注意: 当前未检测到 docker buildx，将使用本机环境构建。请确保本机为 ARM 架构！" -ForegroundColor Yellow
         docker build -t robot-web:latest .
