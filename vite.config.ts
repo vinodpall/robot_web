@@ -211,8 +211,8 @@ export default defineConfig(({ mode }) => {
       console.log('Vite config - using internet proxy:', 'http://192.168.5.27:8000')
       return 'http://192.168.5.27:8000'
     } else {
-      console.log('Vite config - using intranet proxy:', 'http://172.16.106.50:18000')
-      return 'http://172.16.106.50:18000'
+      console.log('Vite config - using intranet proxy:', 'http://10.10.1.84:18000')
+      return 'http://10.10.1.84:18000'
     }
   }
 
@@ -221,7 +221,7 @@ export default defineConfig(({ mode }) => {
     if (environment === 'internet') {
       return 'http://192.168.5.27:81'
     } else {
-      return 'http://172.16.106.50:81'
+      return 'http://10.10.1.84:81'
     }
   }
 

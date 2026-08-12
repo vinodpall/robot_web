@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main" @click="closeDropdown">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -444,12 +444,12 @@
     <!-- Preset Selection Modal -->
    <Teleport to="body">
       <div v-if="presetDialog.visible" class="custom-dialog-mask">
-         <div class="simple-modal-card" style="width: 1160px; max-width: 95vw; height: 610px;">
+         <div class="simple-modal-card" style="width: 1160px; max-width: 95vw; height: 620px; display: flex; flex-direction: column;">
             <div class="simple-modal-header">
                <span>设置预置点</span>
                <span class="simple-close-icon" @click="closePresetDialog">×</span>
             </div>
-            <div class="simple-modal-body" style="display: flex; gap: 20px; padding: 20px; overflow: hidden; height: 100%;">
+            <div class="simple-modal-body" style="display: flex; gap: 20px; padding: 20px; flex: 1; min-height: 0; position: relative; overflow: hidden;">
                <!-- Left Video -->
                <div style="flex: 0 0 800px; height: 450px; background: #000; position: relative; border: 1px solid #244f78; display: flex; align-items: center; justify-content: center; color: #aaa; overflow: hidden;">
                    <video 
@@ -497,7 +497,7 @@
                                  <span>{{ presetDialog.form.selectedName || '请选择预置点' }}</span>
                                  <span style="font-size:12px; transform: scaleY(0.6);">▼</span>
                              </div>
-                             <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="max-height: 340px; background: #102a43; border: 1px solid #244f78;">
+                             <div v-show="isPresetDropdownOpen" class="custom-select-dropdown preset-select-dropdown" style="bottom: 100% !important; top: auto !important; margin-bottom: 6px !important; margin-top: 0 !important; max-height: 220px !important; background: #102a43; border: 1px solid #244f78; box-shadow: 0 -4px 16px rgba(0,0,0,0.6);">
                                   <div 
                                     v-for="p in presetList" 
                                     :key="p.id" 
@@ -4070,6 +4070,16 @@ const handleDeleteJob = (job: any) => {
   z-index: 10100;
   margin-top: 4px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+.preset-select-dropdown,
+div[v-show="isPresetDropdownOpen"].custom-select-dropdown {
+  bottom: 100% !important;
+  top: auto !important;
+  margin-bottom: 6px !important;
+  margin-top: 0 !important;
+  max-height: 220px !important;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.6) !important;
+  z-index: 10100 !important;
 }
 .custom-select-option {
   padding: 8px 12px;

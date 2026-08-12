@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="drone-control-main" @click="closeDropdown">
     <!-- 侧边栏菜单 -->
     <aside class="sidebar-menu">
@@ -660,12 +660,12 @@
     <!-- Preset Selection Modal -->
    <Teleport to="body">
       <div v-if="presetDialog.visible" class="custom-dialog-mask">
-         <div class="simple-modal-card" style="width: 1160px; max-width: 95vw; height: 610px;">
+         <div class="simple-modal-card" style="width: 1160px; max-width: 95vw; height: 620px; display: flex; flex-direction: column;">
             <div class="simple-modal-header">
                <span>设置预置点</span>
                <span class="simple-close-icon" @click="closePresetDialog">×</span>
             </div>
-            <div class="simple-modal-body" style="display: flex; gap: 20px; padding: 20px; overflow: hidden; height: 100%;">
+            <div class="simple-modal-body" style="display: flex; gap: 20px; padding: 20px; flex: 1; min-height: 0; position: relative; overflow: hidden;">
                <!-- Left Video -->
                <div ref="presetVideoWrapper" class="video-only-wrapper" style="flex: 0 0 800px; height: 450px; border: 1px solid #244f78; border-radius: 0;">
                    <video 
@@ -756,7 +756,7 @@
                                  <span>{{ presetDialog.form.selectedName || '请选择预置点' }}</span>
                                  <span style="font-size:12px; transform: scaleY(0.6);">▼</span>
                              </div>
-                             <div v-show="isPresetDropdownOpen" class="custom-select-dropdown" style="max-height: 340px; background: #102a43; border: 1px solid #244f78;">
+                             <div v-show="isPresetDropdownOpen" class="custom-select-dropdown preset-select-dropdown" style="bottom: 100% !important; top: auto !important; margin-bottom: 6px !important; margin-top: 0 !important; max-height: 220px !important; background: #102a43; border: 1px solid #244f78; box-shadow: 0 -4px 16px rgba(0,0,0,0.6);">
                                   <div
                                     v-for="p in presetList"
                                     :key="p.id"
@@ -2505,7 +2505,7 @@ const waypointsData = computed(() => {
         extra: task.extra,
         gait: task.gait,
         ground: task.ground,
-        nostop: task.nostop ?? task.no_switch,
+        nostop: task.nostop,
         // 保留原始数据以备后用
         rawData: task
       }
@@ -3529,24 +3529,15 @@ const handleAddTask = () => {
   void fetchTaskTypeList({ force: true })
 }
 
-const parseBooleanLike = (value: unknown): boolean | null => {
-  if (value === true || value === 'true' || value === 1 || value === '1') return true
-  if (value === false || value === 'false' || value === 0 || value === '0') return false
-  return null
+const parseBooleanLike = (value: unknown): boolean => {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value === 1
+  const text = String(value ?? '').trim().toLowerCase()
+  return text === 'true' || text === '1'
 }
 
 const resolveStopAtPointFromTask = (task: any): boolean => {
-  // 循迹任务接口返回值与UI开关语义保持一致：false=关闭，true=开启
-  const noStop = parseBooleanLike(task?.nostop ?? task?.no_stop)
-  if (noStop !== null) return noStop
-
-  const noSwitch = parseBooleanLike(task?.no_switch ?? task?.noSwitch)
-  if (noSwitch !== null) return noSwitch
-
-  const stopAtPoint = parseBooleanLike(task?.stopAtPoint ?? task?.stop_at_point)
-  if (stopAtPoint !== null) return stopAtPoint
-
-  return false
+  return parseBooleanLike(task?.nostop)
 }
 
 const getNextTrackTaskTime = () => {
@@ -3885,6 +3876,63 @@ const presetDialog = ref({
   }
 })
 
+const extractPresetsFromResponse = (res: any): { id: string; name: string }[] => {
+  if (!res) return []
+  let rawList: any[] = []
+  
+  if (Array.isArray(res)) {
+    rawList = res
+  } else if (Array.isArray(res.list)) {
+    rawList = res.list
+  } else if (Array.isArray(res.data)) {
+    rawList = res.data
+  } else if (Array.isArray(res.data?.list)) {
+    rawList = res.data.list
+  } else if (Array.isArray(res.result)) {
+    rawList = res.result
+  } else if (Array.isArray(res.msg?.result)) {
+    rawList = res.msg.result
+  } else if (Array.isArray(res.response?.data)) {
+    rawList = res.response.data
+  }
+
+  if (!rawList || rawList.length === 0) return []
+
+  const formatted = rawList.map((item: any) => {
+    const rawId = item?.id ?? item?.preset_id ?? item?.presetId ?? item?.index ?? ''
+    const idStr = String(rawId).trim()
+    const rawName = item?.presetName ?? item?.preset_name ?? item?.name ?? item?.preset ?? item?.label ?? ''
+    const nameStr = String(rawName).trim()
+
+    let displayName = ''
+    if (nameStr.includes('.')) {
+      displayName = nameStr
+    } else if (idStr && nameStr) {
+      displayName = `${idStr}.${nameStr}`
+    } else if (nameStr) {
+      displayName = nameStr
+    } else if (idStr) {
+      displayName = `${idStr}.预置点${idStr}`
+    }
+
+    return {
+      id: idStr,
+      name: displayName
+    }
+  }).filter(item => Boolean(item.id || item.name))
+
+  formatted.sort((a, b) => {
+    const numA = Number(a.id)
+    const numB = Number(b.id)
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return numA - numB
+    }
+    return a.id.localeCompare(b.id)
+  })
+
+  return formatted
+}
+
 // Mock preset list for UI layout - replace with API call later if needed
 const presetList = ref<{id: string, name: string}[]>(
   Array.from({ length: 300 }, (_, i) => ({
@@ -4207,88 +4255,80 @@ const openPresetDialog = async () => {
   })
   
   // Get robot ID and camera list
-  const robotId = getCurrentRobotId()
-  const cameraListStr = robotId
-    ? (localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list'))
-    : localStorage.getItem('camera_list')
-  
-  // presets 后台拉取，避免阻塞视频首帧
-  if (robotId && cameraListStr) {
-    void (async () => {
-      try {
-        const cameraList = JSON.parse(cameraListStr)
-        if (cameraList && cameraList.length > 0) {
-          const ptzName = cameraList[0].PtzName
-          if (ptzName) {
-            console.log('Fetching presets for:', ptzName)
-            const res = await navigationApi.getPresets(robotId, ptzName)
-            if (res && res.code === 200 && Array.isArray(res.list)) {
-              res.list.forEach((item: any) => {
-                const idStr = String(item.id)
-                const existingIndex = presetList.value.findIndex(p => p.id === idStr)
-                if (existingIndex !== -1) {
-                  presetList.value[existingIndex].name = `${idStr}.${item.presetName}`
-                } else {
-                  presetList.value.push({
-                    id: idStr,
-                    name: `${idStr}.${item.presetName}`
-                  })
-                }
-              })
-              presetList.value.sort((a, b) => Number(a.id) - Number(b.id))
-
-              const selectedId = String(presetDialog.value.form.id || '').trim()
-              if (selectedId) {
-                const selectedPreset = presetList.value.find(p => String(p.id) === selectedId)
-                if (selectedPreset) {
-                  presetDialog.value.form.selectedName = selectedPreset.name
-                }
-              } else if (presetList.value.length > 0) {
-                presetDialog.value.form.id = presetList.value[0].id
-                presetDialog.value.form.selectedName = presetList.value[0].name
-                if (!String(presetDialog.value.form.inputName || '').trim()) {
-                  presetDialog.value.form.inputName = presetList.value[0].name
-                }
-              }
-
-              console.log('Presets updated with API data')
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing camera_list or fetching presets:', e)
+  const robotId = resolveSelectedRobotId() || getCurrentRobotId()
+  let ptzName = ''
+  try {
+    const cameraListStr = robotId
+      ? (localStorage.getItem(getRobotCameraListCacheKey(robotId)) || localStorage.getItem('camera_list'))
+      : localStorage.getItem('camera_list')
+    if (cameraListStr) {
+      const cameraList = JSON.parse(cameraListStr)
+      if (Array.isArray(cameraList) && cameraList.length > 0) {
+        ptzName = cameraList[0]?.PtzName || cameraList[0]?.ptzName || cameraList[0]?.device_name || cameraList[0]?.name || ''
       }
-    })()
+    }
+  } catch (e) {
+    console.error('Error parsing camera_list:', e)
   }
 
-  // 根据当前选中的预置点设置选中项
-  if (currentPreset) {
-    // 从当前值中提取预置点名称（格式可能是 "4.测试点123"）
-    const match = currentPreset.match(/^(\d+)\.(.+)$/)
-    let targetPreset = null
-    
-    if (match) {
-      const [, number, name] = match
-      // 在 presetList 中查找匹配的项
-      targetPreset = presetList.value.find(p => {
-        const pMatch = p.name.match(/^(\d+)\.(.+)$/)
-        return pMatch && pMatch[1] === number
-      })
-    }
-    
-    if (targetPreset) {
-      presetDialog.value.form.id = targetPreset.id
-      presetDialog.value.form.selectedName = targetPreset.name
-      presetDialog.value.form.inputName = currentPreset
+  const syncPresetState = () => {
+    if (currentPreset) {
+      const match = currentPreset.match(/^(\d+)\.(.+)$/)
+      let targetPreset = null
+      if (match) {
+        const [, number] = match
+        targetPreset = presetList.value.find(p => {
+          const pMatch = p.name.match(/^(\d+)\.(.+)$/)
+          return pMatch && pMatch[1] === number
+        })
+      }
+      if (!targetPreset) {
+        targetPreset = presetList.value.find(p => p.name === currentPreset || p.name.includes(currentPreset))
+      }
+
+      if (targetPreset) {
+        presetDialog.value.form.id = targetPreset.id
+        presetDialog.value.form.selectedName = targetPreset.name
+        presetDialog.value.form.inputName = currentPreset
+      } else if (presetList.value.length > 0) {
+        presetDialog.value.form.id = presetList.value[0].id
+        presetDialog.value.form.selectedName = presetList.value[0].name
+        presetDialog.value.form.inputName = currentPreset
+      }
     } else if (presetList.value.length > 0) {
-      presetDialog.value.form.id = presetList.value[0].id
-      presetDialog.value.form.selectedName = presetList.value[0].name
-      presetDialog.value.form.inputName = currentPreset
+      const selectedId = String(presetDialog.value.form.id || '').trim()
+      const selectedPreset = presetList.value.find(p => String(p.id) === selectedId)
+      if (selectedPreset) {
+        presetDialog.value.form.selectedName = selectedPreset.name
+      } else {
+        presetDialog.value.form.id = presetList.value[0].id
+        presetDialog.value.form.selectedName = presetList.value[0].name
+        presetDialog.value.form.inputName = presetList.value[0].name
+      }
     }
-  } else if (presetList.value.length > 0) {
-    presetDialog.value.form.id = presetList.value[0].id
-    presetDialog.value.form.selectedName = presetList.value[0].name
-    presetDialog.value.form.inputName = presetList.value[0].name
+  }
+
+  if (robotId) {
+    void (async () => {
+      try {
+        console.log('Fetching presets for robotId:', robotId, 'ptzName:', ptzName)
+        const res = await navigationApi.getPresets(robotId, ptzName)
+        console.log('getPresets raw response:', res)
+        const realPresets = extractPresetsFromResponse(res)
+        if (realPresets && realPresets.length > 0) {
+          presetList.value = realPresets
+          console.log('Presets updated with real API data, count:', realPresets.length)
+        } else {
+          console.warn('API returned empty or unrecognized preset list structure:', res)
+        }
+      } catch (e) {
+        console.error('Error fetching presets:', e)
+      } finally {
+        syncPresetState()
+      }
+    })()
+  } else {
+    syncPresetState()
   }
 }
 
@@ -5666,6 +5706,8 @@ const confirmExtraConfig = () => {
 .simple-switch.active .simple-switch-dot { left: 20px; }
 .simple-modal-footer { padding: 16px 20px; border-top: 1px solid #244f78; display: flex; justify-content: center; gap: 20px; background: #102a43; flex-shrink: 0; }
 .custom-select-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #102a43; border: 1px solid #244f78; border-radius: 4px; max-height: 340px; overflow-y: auto; z-index: 10100; margin-top: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+.preset-select-dropdown,
+div[v-show="isPresetDropdownOpen"].custom-select-dropdown { bottom: 100% !important; top: auto !important; margin-bottom: 6px !important; margin-top: 0 !important; max-height: 220px !important; box-shadow: 0 -4px 16px rgba(0,0,0,0.6) !important; z-index: 10100 !important; }
 .custom-select-option { padding: 8px 12px; cursor: pointer; color: #fff; font-size: 13px; transition: background 0.2s; }
 .custom-select-option:hover { background: #1e4b7a; }
 .custom-select-option.selected { background: #1e4b7a; color: #409eff; font-weight: 500; }

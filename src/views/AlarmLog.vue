@@ -847,7 +847,7 @@ const normalizeExportUrls = (rawUrl: string): string[] => {
   const results: string[] = []
 
   // 1. 如果是 /v1/ 开头的路径（如 /v1/robots/robot_dog_001/http/81/...）
-  // 在开发环境转换为与后台接口一致的服务源基地址（如 http://172.16.106.50:18000/v1/robots/...）
+  // 在开发环境转换为与后台接口一致的服务源基地址（如 http://10.10.1.84:18000/v1/robots/...）
   if (value.startsWith('/v1/')) {
     results.push(withBackendOrigin(value))
   }
