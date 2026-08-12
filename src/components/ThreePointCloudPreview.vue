@@ -5,6 +5,62 @@
     <div v-else-if="error" class="three-pointcloud-overlay error">{{ error }}</div>
     <div v-else-if="!hasDisplayData" class="three-pointcloud-overlay">暂无点云数据</div>
     
+    <!-- 点云地图清晰度/配色设置按钮组 (靠左上角) -->
+    <div v-if="showSettingsButton" class="pcd-density-switcher" @click.stop>
+      <button 
+        class="pcd-tool-btn pcd-settings-btn" 
+        :class="{ active: showSettingsDropdown }" 
+        @click.stop="showSettingsDropdown = !showSettingsDropdown" 
+        title="地图清晰度与配色设置"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <transition name="layer-menu-fade">
+        <div v-show="showSettingsDropdown" class="pcd-density-menu-dropdown" @click.stop>
+          <div class="pcd-density-menu-title">地图清晰度</div>
+          <div 
+            class="pcd-density-option" 
+            :class="{ active: activeDensityMode === 'sparse' }" 
+            @click.stop="selectDensityMode('sparse')"
+          >
+            <span class="pcd-option-radio" :class="{ checked: activeDensityMode === 'sparse' }"></span>
+            <span class="pcd-option-text">稀疏</span>
+          </div>
+          <div 
+            class="pcd-density-option" 
+            :class="{ active: activeDensityMode === 'fine' }" 
+            @click.stop="selectDensityMode('fine')"
+          >
+            <span class="pcd-option-radio" :class="{ checked: activeDensityMode === 'fine' }"></span>
+            <span class="pcd-option-text">精细</span>
+          </div>
+
+          <div class="pcd-density-menu-divider"></div>
+
+          <div class="pcd-density-menu-title">配色方案</div>
+          <div 
+            class="pcd-density-option" 
+            :class="{ active: activeColorMode === 'classic' }" 
+            @click.stop="selectColorMode('classic')"
+          >
+            <span class="pcd-option-radio" :class="{ checked: activeColorMode === 'classic' }"></span>
+            <span class="pcd-option-text">科技经典蓝</span>
+          </div>
+          <div 
+            class="pcd-density-option" 
+            :class="{ active: activeColorMode === 'gradient' }" 
+            @click.stop="selectColorMode('gradient')"
+          >
+            <span class="pcd-option-radio" :class="{ checked: activeColorMode === 'gradient' }"></span>
+            <span class="pcd-option-text">高程彩虹</span>
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <!-- Hover Tooltip -->
     <div 
       v-show="tooltip.visible" 
@@ -28,35 +84,45 @@ import type {
 } from '@/composables/usePointCloudRenderer'
 import type { MeshData } from '@/utils/threemfParser'
 
-const props = defineProps<{
-  points: PointCloudPoint[]
-  loading?: boolean
-  loadingText?: string
-  error?: string
-  autoFitOnDataChange?: boolean
-  normalizationParams: NormalizationParams
-  navigationOrigin?: { x: number; y: number; z: number } | null
-  robotPose?: RobotPose | null
-  robotMesh?: MeshData | null
-  interactionMode?: 'view' | 'pick' | 'draw'
-  interactionPlaneZ?: number
-  trajectoryPoints?: PointCloudPoint[]
-  selectedTrajectoryRange?: { start: number; end: number } | null
-  draftPoints?: PointCloudPoint[]
-  drawPointMarkers?: PointCloudPoint[]
-  trajectoryBreaks?: number[]
-  snapToTrajectory?: boolean
-  snapPixelRadius?: number
-  snapPriorityIndex?: number | null
-  robotType?: string
-  featureAreas?: Array<{
-    name: string
-    type: string
-    geometry: string
-    coordinates: Array<[number, number]>
-  }>
-  showFeatureAreas?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    points: PointCloudPoint[]
+    loading?: boolean
+    loadingText?: string
+    error?: string
+    autoFitOnDataChange?: boolean
+    normalizationParams: NormalizationParams
+    navigationOrigin?: { x: number; y: number; z: number } | null
+    robotPose?: RobotPose | null
+    robotMesh?: MeshData | null
+    interactionMode?: 'view' | 'pick' | 'draw'
+    interactionPlaneZ?: number
+    trajectoryPoints?: PointCloudPoint[]
+    selectedTrajectoryRange?: { start: number; end: number } | null
+    draftPoints?: PointCloudPoint[]
+    drawPointMarkers?: PointCloudPoint[]
+    trajectoryBreaks?: number[]
+    snapToTrajectory?: boolean
+    snapPixelRadius?: number
+    snapPriorityIndex?: number | null
+    robotType?: string
+    featureAreas?: Array<{
+      name: string
+      type: string
+      geometry: string
+      coordinates: Array<[number, number]>
+    }>
+    showFeatureAreas?: boolean
+    densityMode?: 'sparse' | 'standard' | 'fine'
+    colorMode?: 'gradient' | 'classic'
+    pointOpacity?: number
+    showSettingsButton?: boolean
+  }>(),
+  {
+    showSettingsButton: true,
+    autoFitOnDataChange: true,
+  }
+)
 
 const emit = defineEmits<{
   (e: 'trajectory-point-click', payload: { index: number; point: PointCloudPoint }): void
@@ -67,6 +133,8 @@ const emit = defineEmits<{
     normalized: { x: number; y: number; z: number }
     snappedIndex?: number
   }): void
+  (e: 'switch-density', densityKey: 'sparse' | 'fine'): void
+  (e: 'color-mode-change', colorMode: 'gradient' | 'classic'): void
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -87,6 +155,42 @@ const tooltip = ref({
   type: '',
   typeLabel: '',
 })
+
+// 内置左上角齿轮设置下拉菜单状态管理
+const showSettingsDropdown = ref(false)
+const internalDensityMode = ref<'sparse' | 'standard' | 'fine'>(props.densityMode || 'sparse')
+const internalColorMode = ref<'gradient' | 'classic'>(props.colorMode || 'classic')
+
+const activeDensityMode = computed(() => props.densityMode || internalDensityMode.value)
+const activeColorMode = computed(() => props.colorMode || internalColorMode.value)
+
+watch(() => props.densityMode, (val) => {
+  if (val) internalDensityMode.value = val
+})
+
+watch(() => props.colorMode, (val) => {
+  if (val) internalColorMode.value = val
+})
+
+const selectDensityMode = (mode: 'sparse' | 'fine') => {
+  internalDensityMode.value = mode
+  showSettingsDropdown.value = false
+  emit('switch-density', mode)
+}
+
+const selectColorMode = (mode: 'gradient' | 'classic') => {
+  internalColorMode.value = mode
+  showSettingsDropdown.value = false
+  emit('color-mode-change', mode)
+  rebuildSceneContent()
+}
+
+const handleOutsideClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  if (showSettingsDropdown.value && !target.closest('.pcd-density-switcher')) {
+    showSettingsDropdown.value = false
+  }
+}
 let animationFrameId = 0
 let renderLoopStarted = false
 let pendingStartTimer = 0
@@ -200,6 +304,44 @@ const createLabelSprite = (text: string, options: {
   return sprite
 }
 
+/**
+ * RViz 标准建图高程彩虹渐变色算法 (RViz Z-Axis Rainbow Colormap)
+ * t: [0, 1] 归一化高程 (0.0 为最低高程地面，1.0 为最高高程)
+ * 0.00 - 0.25: 蓝 (0,0,1) -> 青 (0,1,1)
+ * 0.25 - 0.50: 青 (0,1,1) -> 绿 (0,1,0)
+ * 0.50 - 0.75: 绿 (0,1,0) -> 黄 (1,1,0)
+ * 0.75 - 1.00: 黄 (1,1,0) -> 红 (1,0,0)
+ */
+const getRvizRainbowColor = (t: number, target: THREE.Color) => {
+  const v = Math.min(1, Math.max(0, t))
+  let r = 0, g = 0, b = 0
+
+  if (v < 0.25) {
+    const k = v / 0.25
+    r = 0
+    g = k
+    b = 1
+  } else if (v < 0.5) {
+    const k = (v - 0.25) / 0.25
+    r = 0
+    g = 1
+    b = 1 - k
+  } else if (v < 0.75) {
+    const k = (v - 0.5) / 0.25
+    r = k
+    g = 1
+    b = 0
+  } else {
+    const k = (v - 0.75) / 0.25
+    r = 1
+    g = 1 - k
+    b = 0
+  }
+
+  target.setRGB(r, g, b)
+  return target
+}
+
 const createPointsObject = (
   points: PointCloudPoint[],
   filter: (point: PointCloudPoint) => boolean,
@@ -209,9 +351,22 @@ const createPointsObject = (
   const selected = points.filter(filter)
   if (!selected.length) return null
 
+  // 使用 1% - 99% 百分位数剔除极低/极高离群噪点，精准定位真实地面 Z_min 与最高点 Z_max
+  const zList: number[] = []
+  for (let index = 0; index < selected.length; index++) {
+    zList.push(selected[index].z)
+  }
+  zList.sort((a, b) => a - b)
+  const p1Idx = Math.floor(zList.length * 0.01)
+  const p99Idx = Math.min(zList.length - 1, Math.floor(zList.length * 0.99))
+  const minZ = zList[p1Idx] ?? zList[0] ?? 0
+  const maxZ = zList[p99Idx] ?? zList[zList.length - 1] ?? 1
+  const rangeZ = (maxZ - minZ) || 1e-5
+
   const positions = new Float32Array(selected.length * 3)
   const colors = new Float32Array(selected.length * 3)
   const overrideColor = colorOverride ? new THREE.Color(colorOverride) : null
+  const isGradient = activeColorMode.value !== 'classic'
 
   for (let index = 0; index < selected.length; index++) {
     const point = selected[index]
@@ -228,6 +383,10 @@ const createPointsObject = (
       color.setRGB(0.08, 1, 0.28)
     } else if (point.intensity >= 1.7) {
       color.setRGB(1, 0.86, 0.15)
+    } else if (isGradient) {
+      // RViz Z 轴高程彩虹渐变：使用 1%-99% 归一化比例，地面纯蓝(#0000FF)，顶部纯红(#FF0000)
+      const normHeight = Math.min(1, Math.max(0, (point.z - minZ) / rangeZ))
+      getRvizRainbowColor(normHeight, color)
     } else {
       color.setHSL(0.59 - point.intensity * 0.1, 0.9, 0.48 + point.intensity * 0.18)
     }
@@ -241,12 +400,16 @@ const createPointsObject = (
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   geometry.computeBoundingSphere()
 
+  // 透明度与点大小设置：默认使用 0.60 透明度
+  const opacity = props.pointOpacity !== undefined ? props.pointOpacity : 0.60
+  const calculatedSize = activeDensityMode.value === 'fine' ? size * 1.1 : size
+
   const material = new THREE.PointsMaterial({
-    size,
+    size: calculatedSize,
     sizeAttenuation: false,
     vertexColors: true,
     transparent: true,
-    opacity: 0.95,
+    opacity,
   })
 
   return new THREE.Points(geometry, material)
@@ -1432,12 +1595,13 @@ const ensureRendererReady = (retryCount = 16) => {
     window.clearTimeout(pendingStartTimer)
   }
   pendingStartTimer = window.setTimeout(() => {
+    window.addEventListener('resize', resizeRenderer)
     ensureRendererReady(retryCount - 1)
   }, 80)
 }
 
 watch(
-  () => [props.points, props.trajectoryPoints, props.normalizationParams, props.selectedTrajectoryRange, props.draftPoints, props.drawPointMarkers, props.trajectoryBreaks, props.featureAreas, props.showFeatureAreas] as const,
+  () => [props.points, props.trajectoryPoints, props.normalizationParams, props.selectedTrajectoryRange, props.draftPoints, props.drawPointMarkers, props.trajectoryBreaks, props.featureAreas, props.showFeatureAreas, props.densityMode, props.colorMode, props.pointOpacity] as const,
   () => {
     rebuildSceneContent()
     rebuildRobotObject()
@@ -1571,9 +1735,11 @@ onMounted(() => {
     }
   })
   resizeObserver.observe(container)
+  document.addEventListener('click', handleOutsideClick)
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('click', handleOutsideClick)
   if (animationFrameId) {
     window.cancelAnimationFrame(animationFrameId)
   }
@@ -1681,4 +1847,126 @@ defineExpose({
 .tooltip-type.type-slope { color: #8b5cf6; }
 .tooltip-type.type-narrow { color: #06b6d4; }
 .tooltip-type.type-grass { color: #22c55e; }
+
+/* 左上角点云地图清晰度/配色设置按钮组 */
+.pcd-density-switcher {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+}
+
+.pcd-tool-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: rgba(10, 30, 45, 0.75);
+  border: 1px solid #164159;
+  color: #9adfff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(4px);
+}
+
+.pcd-tool-btn svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.3s ease;
+}
+
+.pcd-tool-btn:hover,
+.pcd-tool-btn.active {
+  background: rgba(0, 225, 255, 0.2);
+  color: #00e1ff;
+  border-color: #00e1ff;
+  box-shadow: 0 0 10px rgba(0, 225, 255, 0.4);
+}
+
+.pcd-tool-btn.active svg {
+  transform: rotate(60deg);
+}
+
+.pcd-density-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 145px;
+  background: rgba(10, 30, 45, 0.92);
+  border: 1px solid #164159;
+  border-radius: 6px;
+  padding: 8px 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 225, 255, 0.1);
+  backdrop-filter: blur(8px);
+  z-index: 11;
+}
+
+.pcd-density-menu-divider {
+  height: 1px;
+  background: rgba(22, 65, 89, 0.6);
+  margin: 6px 0;
+}
+
+.pcd-density-menu-title {
+  padding: 4px 12px 6px 12px;
+  font-size: 11px;
+  color: #8ab4f8;
+  border-bottom: 1px solid rgba(22, 65, 89, 0.6);
+  margin-bottom: 4px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.pcd-density-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: #d1e9fa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pcd-density-option:hover {
+  background: rgba(0, 225, 255, 0.12);
+  color: #00e1ff;
+}
+
+.pcd-density-option.active {
+  color: #00e1ff;
+  font-weight: bold;
+  background: rgba(0, 225, 255, 0.08);
+}
+
+.pcd-option-radio {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid #164159;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.pcd-option-radio.checked {
+  border-color: #00e1ff;
+  box-shadow: 0 0 6px rgba(0, 225, 255, 0.4);
+}
+
+.pcd-option-radio.checked::after {
+  content: '';
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #00e1ff;
+}
+
+.pcd-option-text {
+  user-select: none;
+}
 </style>

@@ -287,6 +287,8 @@
                           :robot-pose="robotStore.pose"
                           :robot-mesh="arrowMesh"
                           :robot-type="selectedVehicleType"
+                          :density-mode="selectedNavPcdDensity"
+                          @switch-density="switchNavPcdDensity"
                         />
                       </div>
 
@@ -869,6 +871,8 @@
                         :robot-pose="robotStore.pose"
                         :robot-mesh="arrowMesh"
                         :robot-type="selectedVehicleType"
+                        :density-mode="selectedNavPcdDensity"
+                        @switch-density="switchNavPcdDensity"
                       />
                     </div>
                   </div>
@@ -3127,6 +3131,7 @@ type RouteEditPoint = {
   x: number
   y: number
   z: number
+  theta?: number
   snappedIndex?: number
 }
 
@@ -3484,7 +3489,7 @@ const createDefaultRouteEditFileFormat = (): RouteEditFileFormat => ({
   headerLines: [],
   delimiter: 'space',
   columnCount: 6,
-  tailValues: ['0', '0'],
+  tailValues: ['0'],
 })
 
 const parseEditableTrajectoryText = (text: string): { points: RouteEditPoint[]; format: RouteEditFileFormat } => {
@@ -3512,18 +3517,22 @@ const parseEditableTrajectoryText = (text: string): { points: RouteEditPoint[]; 
     const x = Number(parts[1])
     const y = Number(parts[2])
     const z = columnCount === 6 ? Number(parts[3]) : 0
+    const rawTheta = columnCount === 6 ? Number(parts[4]) : Number(parts[3])
+    const theta = Number.isFinite(rawTheta) ? rawTheta : undefined
+
     if (![x, y, z].every(Number.isFinite)) {
       headerLines.push(line)
       continue
     }
 
-    points.push({ x, y, z })
+    points.push({ x, y, z, theta })
     if (!format) {
+      const tailSlice = columnCount === 6 ? parts.slice(5) : parts.slice(4)
       format = {
         headerLines,
         delimiter,
         columnCount,
-        tailValues: columnCount === 6 ? parts.slice(4) : parts.slice(3),
+        tailValues: tailSlice.length ? tailSlice : ['0'],
       }
     }
   }
@@ -3534,7 +3543,7 @@ const parseEditableTrajectoryText = (text: string): { points: RouteEditPoint[]; 
       headerLines,
       delimiter: 'space',
       columnCount: 6,
-      tailValues: ['0', '0'],
+      tailValues: ['0'],
     }
   }
 }
@@ -3618,6 +3627,36 @@ const generateCircularArcPoints = (
   return result
 }
 
+const calculateRoutePointThetas = (points: RouteEditPoint[], breaks: number[] = []): RouteEditPoint[] => {
+  if (points.length === 0) return []
+  const breakSet = new Set(breaks)
+  const result: RouteEditPoint[] = points.map(p => ({ ...p }))
+
+  for (let i = 0; i < result.length; i++) {
+    const isEndOfSegment = (i === result.length - 1) || breakSet.has(i)
+    if (!isEndOfSegment) {
+      const next = result[i + 1]
+      const dx = next.x - result[i].x
+      const dy = next.y - result[i].y
+      if (Math.hypot(dx, dy) > 1e-6) {
+        result[i].theta = Number(Math.atan2(dy, dx).toFixed(6))
+      } else if (i > 0 && !breakSet.has(i - 1) && result[i - 1].theta !== undefined) {
+        result[i].theta = result[i - 1].theta
+      } else if (result[i].theta === undefined) {
+        result[i].theta = 0
+      }
+    } else {
+      if (i > 0 && !breakSet.has(i - 1) && result[i - 1].theta !== undefined) {
+        result[i].theta = result[i - 1].theta
+      } else if (result[i].theta === undefined) {
+        result[i].theta = 0
+      }
+    }
+  }
+
+  return result
+}
+
 const interpolateRouteEditPointsList = (points: RouteEditPoint[], step: number): RouteEditPoint[] => {
   if (points.length < 2) return points
   const result: RouteEditPoint[] = []
@@ -3643,10 +3682,22 @@ const interpolateRouteEditPointsList = (points: RouteEditPoint[], step: number):
           break
         }
         const ratio = curDist / dist
+        
+        let interpTheta = p1.theta
+        if (p1.theta !== undefined && p2.theta !== undefined) {
+          let diff = p2.theta - p1.theta
+          while (diff > Math.PI) diff -= 2 * Math.PI
+          while (diff < -Math.PI) diff += 2 * Math.PI
+          interpTheta = Number((p1.theta + diff * ratio).toFixed(6))
+        } else if (Math.hypot(dx, dy) > 1e-6) {
+          interpTheta = Number(Math.atan2(dy, dx).toFixed(6))
+        }
+
         result.push({
           x: p1.x + dx * ratio,
           y: p1.y + dy * ratio,
           z: p1.z + dz * ratio,
+          theta: interpTheta,
         })
       }
     }
@@ -3662,15 +3713,21 @@ const interpolateRouteEditPointsList = (points: RouteEditPoint[], step: number):
 
 const serializeRouteEditPoints = () => {
   const baseFormat = routeEditFileFormat.value || createDefaultRouteEditFileFormat()
-  const interpolated = interpolateRouteEditPointsList(routeEditPoints.value, routeEditStep.value)
+  let interpolated = interpolateRouteEditPointsList(routeEditPoints.value, routeEditStep.value)
+  interpolated = calculateRoutePointThetas(interpolated, routeEditBreaks.value)
+
   const shouldWriteZ = baseFormat.columnCount === 6 || interpolated.some(point => Math.abs(point.z) > 1e-9)
   const format = shouldWriteZ ? { ...baseFormat, columnCount: 6 as const } : baseFormat
   const separator = format.delimiter === 'comma' ? ',' : ' '
   const lines = [...format.headerLines]
+
   interpolated.forEach((point, index) => {
+    const thetaStr = formatRouteEditNumber(point.theta ?? 0)
+    const tailStr = format.tailValues.length ? format.tailValues : ['0']
+
     const core = format.columnCount === 6
-      ? [String(index), formatRouteEditNumber(point.x), formatRouteEditNumber(point.y), formatRouteEditNumber(point.z), ...(format.tailValues.length ? format.tailValues : ['0', '0'])]
-      : [String(index), formatRouteEditNumber(point.x), formatRouteEditNumber(point.y), ...(format.tailValues.length ? format.tailValues : ['0', '0'])]
+      ? [String(index), formatRouteEditNumber(point.x), formatRouteEditNumber(point.y), formatRouteEditNumber(point.z), thetaStr, ...tailStr]
+      : [String(index), formatRouteEditNumber(point.x), formatRouteEditNumber(point.y), thetaStr, ...tailStr]
     lines.push(core.join(separator))
   })
   return lines.join('\n') + '\n'
@@ -5259,6 +5316,70 @@ const arrowMesh = ref<MeshData | null>(null)
 const navPointCloudPreviewRef = ref<InstanceType<typeof ThreePointCloudPreview> | null>(null)
 const lastLoadedNavPointCloudMap = ref('')
 let navPointCloudLoadToken = 0
+const selectedNavPcdDensity = ref<'sparse' | 'fine'>('sparse')
+const currentLoadedNavPcdFileName = ref('tinyMap.pcd')
+
+const switchNavPcdDensity = async (densityKey: 'sparse' | 'fine') => {
+  const mapName = selectedNavMap.value
+  if (!mapName) {
+    showErrorMessage('请先选择地图')
+    return
+  }
+
+  const fileName = densityKey === 'fine' ? 'finalCloud.pcd' : 'tinyMap.pcd'
+  const label = densityKey === 'fine' ? '精细' : '稀疏'
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+
+  if (selectedNavPcdDensity.value === densityKey && navPointCloudData.value.length > 0 && currentLoadedNavPcdFileName.value === fileName) {
+    return
+  }
+
+  selectedNavPcdDensity.value = densityKey
+  navPointCloudLoading.value = true
+  navPointCloudLoadingText.value = `正在加载${label}点云地图...`
+  navPointCloudError.value = ''
+
+  try {
+    let pcdBlob = await getMapFile(mapName, fileName)
+
+    if (!pcdBlob || pcdBlob.size === 0) {
+      if (!robotId) {
+        navPointCloudError.value = '未选择机器人，无法下载地图'
+        showErrorMessage('未选择机器人，无法下载地图')
+        navPointCloudLoading.value = false
+        return
+      }
+      navPointCloudLoadingText.value = `正在下载${label}点云地图(${fileName})...`
+      pcdBlob = await mapFileApi.downloadMapFile(robotId, mapName, fileName)
+      if (pcdBlob && pcdBlob.size > 0) {
+        await saveMapFile(mapName, fileName, pcdBlob)
+      }
+    }
+
+    if (!pcdBlob || pcdBlob.size === 0) {
+      navPointCloudError.value = `未找到${label}点云地图文件(${fileName})`
+      navPointCloudLoading.value = false
+      return
+    }
+
+    navPointCloudLoadingText.value = `正在解析${label}点云地图...`
+    const arrayBuffer = await pcdBlob.arrayBuffer()
+    const result = await parsePcdBufferInWorker(arrayBuffer)
+
+    navPointCloudData.value = result.points
+    navPointCloudNormalizationParams.value = result.normParams
+    currentLoadedNavPcdFileName.value = fileName
+    navPointCloudLoading.value = false
+
+    nextTick(() => {
+      navPointCloudPreviewRef.value?.fitCameraToScene?.()
+    })
+  } catch (err: any) {
+    console.error(`[导航点云] 切换到${label}地图失败:`, err)
+    navPointCloudError.value = `加载${label}点云地图失败: ` + (err?.message || String(err))
+    navPointCloudLoading.value = false
+  }
+}
 
 // 导航地图多视图切换 (点云图、栅格图、卫星图)
 const navViewType = ref<'pointcloud' | 'grid' | 'map'>('pointcloud')

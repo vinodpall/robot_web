@@ -342,6 +342,20 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
     const drawStep = data.value.length > drawBudget ? Math.ceil(data.value.length / drawBudget) : 1
     const pointBoost = data.value.length <= 40000 ? 1.35 : data.value.length <= 80000 ? 1.15 : 1
 
+    // 1%-99% 百分位数计算地图点云高程极值 Z_min / Z_max
+    const zList: number[] = []
+    for (let i = 0; i < data.value.length; i++) {
+      if (data.value[i].intensity < 1.7) {
+        zList.push(data.value[i].z)
+      }
+    }
+    zList.sort((a, b) => a - b)
+    const p1Idx = Math.floor(zList.length * 0.01)
+    const p99Idx = Math.min(zList.length - 1, Math.floor(zList.length * 0.99))
+    const minZ = zList[p1Idx] ?? zList[0] ?? 0
+    const maxZ = zList[p99Idx] ?? zList[zList.length - 1] ?? 1
+    const rangeZ = (maxZ - minZ) || 1e-5
+
     // — 绘制点云 —
     for (let index = 0; index < data.value.length; index += drawStep) {
       const point = data.value[index]
@@ -442,9 +456,33 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
           ctx.fillText(lbl, px, ty + tagH / 2)
         }
       } else {
-        // 普通点云 →蓝色渐变
-        const r = (1.2 + point.intensity * 2) * persp * pointSize.value * pointBoost
-        ctx.fillStyle = `rgba(${Math.floor(40 + point.intensity * 200)}, ${Math.floor(120 + point.intensity * 100)}, 255, ${0.35 + point.intensity * 0.4})`
+        // 普通点云 → RViz Z 轴高程彩虹渐变色 (蓝 -> 青 -> 绿 -> 黄 -> 红)
+        const normV = Math.min(1, Math.max(0, (point.z - minZ) / rangeZ))
+        let cr = 0, cg = 0, cb = 0
+        if (normV < 0.25) {
+          const k = normV / 0.25
+          cr = 0
+          cg = Math.floor(255 * k)
+          cb = 255
+        } else if (normV < 0.5) {
+          const k = (normV - 0.25) / 0.25
+          cr = 0
+          cg = 255
+          cb = Math.floor(255 * (1 - k))
+        } else if (normV < 0.75) {
+          const k = (normV - 0.5) / 0.25
+          cr = Math.floor(255 * k)
+          cg = 255
+          cb = 0
+        } else {
+          const k = (normV - 0.75) / 0.25
+          cr = 255
+          cg = Math.floor(255 * (1 - k))
+          cb = 0
+        }
+
+        const r = (1.2 + normV * 1.5) * persp * pointSize.value * pointBoost
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${0.65 + normV * 0.3})`
         ctx.beginPath()
         ctx.arc(px, py, r, 0, Math.PI * 2)
         ctx.fill()

@@ -442,6 +442,10 @@
               :robot-type="selectedVehicleType"
               :feature-areas="featureAreas3D"
               :show-feature-areas="showFeatureAreas"
+              :density-mode="selectedPcdDensity"
+              :color-mode="selectedPcdColorMode"
+              :point-opacity="selectedPcdOpacity"
+              @switch-density="switchPcdDensity"
             />
           </div>
           <div class="pointcloud-view grid-view" v-show="currentViewType === 'grid'">
@@ -2331,10 +2335,12 @@ const closeRtkPopupOnOutside = (e: MouseEvent) => {
 onMounted(() => {
   document.addEventListener('click', closeRtkPopupOnOutside)
   document.addEventListener('click', closeLayerMenuOnOutside)
+  document.addEventListener('click', closePcdSettingsMenuOnOutside)
 })
 onUnmounted(() => {
   document.removeEventListener('click', closeRtkPopupOnOutside)
   document.removeEventListener('click', closeLayerMenuOnOutside)
+  document.removeEventListener('click', closePcdSettingsMenuOnOutside)
 })
 
 // 归一化/转换 GPS 坐标单位
@@ -2440,6 +2446,108 @@ const POINT_CLOUD_REFRESH_DEDUPE_WINDOW_MS = 8000
 const isPointCloudFullscreen = ref(false)
 const togglePointCloudFullscreen = () => {
   isPointCloudFullscreen.value = !isPointCloudFullscreen.value
+}
+
+// ================= 点云地图清晰度（密度）设置 ================
+export type PcdDensityKey = 'sparse' | 'standard' | 'fine'
+
+interface PcdDensityOption {
+  key: PcdDensityKey
+  label: string
+  fileName: string
+}
+
+const PCD_DENSITY_OPTIONS: PcdDensityOption[] = [
+  { key: 'sparse', label: '稀疏', fileName: 'tinyMap.pcd' },
+  { key: 'fine', label: '精细', fileName: 'finalCloud.pcd' }
+]
+
+const selectedPcdDensity = ref<PcdDensityKey>('sparse')
+const selectedPcdColorMode = ref<'gradient' | 'classic'>('classic')
+const selectedPcdOpacity = ref<number>(0.6)
+const showPcdSettingsMenu = ref(false)
+const currentLoadedPcdFileName = ref('tinyMap.pcd')
+
+const closePcdSettingsMenuOnOutside = (e: MouseEvent) => {
+  const el = (e.target as HTMLElement).closest('.pcd-density-switcher')
+  if (!el) showPcdSettingsMenu.value = false
+}
+
+const switchPcdDensity = async (densityKey: PcdDensityKey) => {
+  if (!selectedMap.value) {
+    showError('请先选择地图')
+    return
+  }
+
+  const option = PCD_DENSITY_OPTIONS.find(o => o.key === densityKey)
+  if (!option) return
+
+  selectedPcdDensity.value = densityKey
+
+  // 点击当前已被激活的密度，且数据非空时，仅关闭下拉菜单
+  if (selectedPcdDensity.value === densityKey && basePointCloudData.value.length > 0 && currentLoadedPcdFileName.value === option.fileName) {
+    showPcdSettingsMenu.value = false
+    return
+  }
+
+  showPcdSettingsMenu.value = false
+  const mapName = selectedMap.value
+  const fileName = option.fileName
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+
+  pointCloudLoading.value = true
+  pointCloudLoadingText.value = `正在加载${option.label}地图...`
+  pointCloudError.value = ''
+
+  try {
+    // 1. 检查 IndexedDB 本地缓存是否存在
+    let pcdBlob = await getMapFile(mapName, fileName)
+
+    // 2. 若本地缓存不存在，从服务端按需下载
+    if (!pcdBlob || pcdBlob.size === 0) {
+      if (!robotId) {
+        pointCloudError.value = '未选择机器人，无法下载地图'
+        showError('未选择机器人，无法下载地图')
+        return
+      }
+      pointCloudLoadingText.value = `正在下载${option.label}地图(${fileName})...`
+      pcdBlob = await mapFileApi.downloadMapFile(robotId, mapName, fileName)
+      if (pcdBlob && pcdBlob.size > 0) {
+        await saveMapFile(mapName, fileName, pcdBlob)
+        showSuccess(`${option.label}地图下载成功`)
+      } else {
+        pointCloudError.value = `${option.label}地图（${fileName}）不存在`
+        showError(`${option.label}地图（${fileName}）不存在`)
+        return
+      }
+    }
+
+    // 3. ArrayBuffer 移交 Worker 零拷贝解析并渲染
+    pointCloudLoadingText.value = `正在解析${option.label}地图...`
+    const ab = await pcdBlob.arrayBuffer()
+    const { points, normParams } = await parsePcdBufferInWorker(ab)
+    if (points.length === 0) {
+      pointCloudError.value = '点云数据为空'
+      showError('点云数据为空')
+      return
+    }
+
+    selectedPcdDensity.value = densityKey
+    currentLoadedPcdFileName.value = fileName
+    pointCloudNormalizationParams.value = normParams
+    pointCloudData.value = points
+    basePointCloudData.value = points
+
+    await syncPointCloudOverlayByRuntimeState()
+    await nextTick()
+    threePointCloudRef.value?.fitCameraToScene?.()
+  } catch (err) {
+    console.error(`[点云] 切换至${option.label}地图失败:`, err)
+    pointCloudError.value = '地图加载失败'
+    showError('地图加载失败')
+  } finally {
+    pointCloudLoading.value = false
+  }
 }
 
 const FEATURE_AREA_FILE_NAME = 'task.json'
@@ -7852,10 +7960,14 @@ const filteredTrackList = computed(() => {
   return Array.from(new Set(mapMatchedList))
 })
 
-// 监听地图变化，重置选中的循迹任务并下载地图文件
+// 监听地图变化，重置选中的循迹任务与点云清晰度为默认稀疏档位，并下载地图文件
 watch(selectedMap, async (newMapName) => {
   // store setter 已写入 localStorage，无需再重复写入
   selectedTrack.value = ''
+  // 切换地图时重置清晰度选择为默认稀疏档位
+  selectedPcdDensity.value = 'sparse'
+  currentLoadedPcdFileName.value = 'tinyMap.pcd'
+  showPcdSettingsMenu.value = false
   // 自动选择第一个
   if (filteredTrackList.value.length > 0) {
     selectedTrack.value = filteredTrackList.value[0]
@@ -16934,5 +17046,94 @@ const handlePageShow = () => {
 @keyframes msf-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* 点云图左上角清晰度设置组 */
+.pcd-density-switcher {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+}
+
+.pcd-density-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 145px;
+  background: rgba(10, 30, 45, 0.92);
+  border: 1px solid #164159;
+  border-radius: 6px;
+  padding: 8px 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 225, 255, 0.1);
+  backdrop-filter: blur(8px);
+  z-index: 11;
+}
+
+.pcd-density-menu-divider {
+  height: 1px;
+  background: rgba(22, 65, 89, 0.6);
+  margin: 6px 0;
+}
+
+.pcd-density-menu-title {
+  padding: 4px 12px 6px 12px;
+  font-size: 11px;
+  color: #8ab4f8;
+  border-bottom: 1px solid rgba(22, 65, 89, 0.6);
+  margin-bottom: 4px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.pcd-density-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: #d1e9fa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pcd-density-option:hover {
+  background: rgba(0, 225, 255, 0.12);
+  color: #00e1ff;
+}
+
+.pcd-density-option.active {
+  color: #00e1ff;
+  font-weight: bold;
+  background: rgba(0, 225, 255, 0.08);
+}
+
+.pcd-option-radio {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid #164159;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.pcd-option-radio.checked {
+  border-color: #00e1ff;
+  box-shadow: 0 0 6px rgba(0, 225, 255, 0.4);
+}
+
+.pcd-option-radio.checked::after {
+  content: '';
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #00e1ff;
+}
+
+.pcd-option-text {
+  user-select: none;
 }
 </style>
