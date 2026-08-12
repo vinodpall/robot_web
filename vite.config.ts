@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 import * as httpModule from 'node:http'
+// @ts-expect-error env.config.js is JS configuration file
 import envConfig from './env.config.js'
 
 // 璇诲彇鐜閰嶇疆鏂囦欢
