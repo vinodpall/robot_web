@@ -58,9 +58,9 @@
                 <span class="status-text" style="font-size: 13px; font-weight: bold; color: #EAF7FF;">{{ getStatusLabel(robotData.status) }}</span>
               </div>
               <img 
-                :src="['dog', 'robot_dog'].includes(robotData.robot_type) ? dogImg : carImg" 
+                :src="getRobotImage(robotData.robot_type, robotData.robot_id)" 
+                :class="['model-img', getRobotModelClass(robotData.robot_type, robotData.robot_id)]" 
                 alt="Robot Model" 
-                class="model-img" 
               />
             </div>
             <div class="model-info">
@@ -328,8 +328,7 @@ import userIcon from '@/assets/source_data/svg_data/user.svg'
 import roleIcon from '@/assets/source_data/svg_data/role.svg'
 import permissionIcon from '@/assets/source_data/svg_data/permission.svg'
 import robotInfoIcon from '@/assets/source_data/svg_data/robot_source/robot_info.svg'
-import dogImg from '@/assets/source_data/dog.png'
-import carImg from '@/assets/source_data/car.png'
+import { getRobotImage, getRobotModelClass } from '@/utils/robotImage'
 
 const router = useRouter()
 const route = useRoute()
@@ -804,10 +803,30 @@ onUnmounted(() => {
   min-height: 120px;
 }
 .model-img {
-  max-width: 80%;
-  max-height: 80%;
+  max-width: 85%;
+  max-height: 85%;
   object-fit: contain;
-  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.5));
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.5));
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.model-img.is-dog {
+  transform: scale(1.22);
+}
+
+.model-img.is-apollo {
+  transform: scale(1.18);
+  filter: drop-shadow(0 8px 20px rgba(0, 210, 255, 0.3));
+}
+
+.model-img.is-pudu-d5 {
+  transform: scale(1.15);
+  filter: drop-shadow(0 8px 20px rgba(0, 210, 255, 0.3));
+}
+
+.model-img.is-car {
+  transform: scale(1.22);
+  filter: drop-shadow(0 8px 20px rgba(0, 210, 255, 0.3));
 }
 .model-info {
   display: flex;

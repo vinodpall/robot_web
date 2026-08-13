@@ -161,8 +161,8 @@ const showSettingsDropdown = ref(false)
 const internalDensityMode = ref<'sparse' | 'standard' | 'fine'>(props.densityMode || 'sparse')
 const internalColorMode = ref<'gradient' | 'classic'>(props.colorMode || 'classic')
 
-const activeDensityMode = computed(() => props.densityMode || internalDensityMode.value)
-const activeColorMode = computed(() => props.colorMode || internalColorMode.value)
+const activeDensityMode = computed(() => internalDensityMode.value)
+const activeColorMode = computed(() => internalColorMode.value)
 
 watch(() => props.densityMode, (val) => {
   if (val) internalDensityMode.value = val

@@ -446,6 +446,7 @@
               :color-mode="selectedPcdColorMode"
               :point-opacity="selectedPcdOpacity"
               @switch-density="switchPcdDensity"
+              @color-mode-change="selectedPcdColorMode = $event"
             />
           </div>
           <div class="pointcloud-view grid-view" v-show="currentViewType === 'grid'">
@@ -729,8 +730,8 @@
                 <div class="zhuangtai4">
                   <div :class="isRobotOnline ? 'robot-status-online' : 'robot-status-offline'">{{ isRobotOnline ? '在线' : '离线' }}</div>
                 </div>
-                <div class="img" :class="{ 'is-car-img': selectedVehicleType === 'four_wheel' }">
-                  <img :src="selectedVehicleType === 'four_wheel' ? carImg : dogImg" alt="device" />
+                <div class="img" :class="currentRobotModelClass">
+                  <img :src="currentRobotDisplayImage" alt="device" />
                 </div>
               </div>
               <div class="b-top-right">
@@ -1733,6 +1734,7 @@ import mkfOnIcon from '@/assets/source_data/svg_data/mkf_on.svg'
 import mkfOffIcon from '@/assets/source_data/svg_data/mkf_off.svg'
 import dogImg from '@/assets/source_data/dog.png'
 import carImg from '@/assets/source_data/car.png'
+import { getRobotImage, getRobotModelClass } from '@/utils/robotImage'
 import carMapIcon from '@/assets/source_data/svg_data/robot_source/car_icon.svg'
 import dogMapIcon from '@/assets/source_data/svg_data/robot_source/dog_icon.svg'
 
@@ -3726,6 +3728,14 @@ const lineChartRef = ref<HTMLElement | null>(null)
 // 选中车辆类型与传感器监控相关变量
 const selectedVehicleType = computed(() => {
   return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
+})
+const currentRobotDisplayImage = computed(() => {
+  const robotId = deviceStore.selectedRobotId || deviceStore.selectedRobot?.robot_id || localStorage.getItem('selected_robot_id') || ''
+  return getRobotImage(selectedVehicleType.value, robotId)
+})
+const currentRobotModelClass = computed(() => {
+  const robotId = deviceStore.selectedRobotId || deviceStore.selectedRobot?.robot_id || localStorage.getItem('selected_robot_id') || ''
+  return getRobotModelClass(selectedVehicleType.value, robotId)
 })
 const sensorChartRef = ref<HTMLElement | null>(null)
 let sensorChart: echarts.ECharts | null = null
@@ -13064,26 +13074,43 @@ const handlePageShow = () => {
 }
 
 .img {
-  width: 55%;
-  aspect-ratio: 100/100;
-  max-width: 100px;
-  max-height: 100px;
-  margin-left: 10px;
-}
-
-.img.is-car-img {
-  width: 78%;
-  aspect-ratio: 15/10;
-  max-width: 140px;
-  max-height: 100px;
-  transform: scale(1.5);
-  margin-left: 20px;
+  flex: 1;
+  height: 100%;
+  max-height: 110px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-left: 6px;
+  position: relative;
 }
 
 .img img {
   width: 100%;
   height: 100%;
+  max-height: 105px;
   object-fit: contain;
+  transition: transform 0.3s ease, filter 0.3s ease;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.5));
+}
+
+/* 各产品 PNG 图标视觉比例与尺寸归一化微调 */
+.img.is-dog img {
+  transform: scale(1.36);
+}
+
+.img.is-apollo img {
+  transform: scale(1.3);
+  filter: drop-shadow(0 6px 16px rgba(0, 210, 255, 0.35));
+}
+
+.img.is-pudu-d5 img {
+  transform: scale(1.28);
+  filter: drop-shadow(0 6px 16px rgba(0, 210, 255, 0.35));
+}
+
+.img.is-car img {
+  transform: scale(1.42);
+  filter: drop-shadow(0 6px 16px rgba(0, 210, 255, 0.35));
 }
 
 .b-top-rightCard {
