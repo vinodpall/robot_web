@@ -36,7 +36,9 @@ Thumbs.db
 /Home_original.vue
 
 # Deployments and exported offline packages
-deploy/
+# 允许提交 deploy 目录下的打包脚本与部署配置文件（.sh, .ps1, .json, .yml, Dockerfile, .js 等）
+!deploy/
+deploy/dist/
 *.tar
 *.zip
 

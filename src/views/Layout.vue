@@ -51,7 +51,7 @@
                   v-if="selectedRobot"
                   class="robot-type-icon" 
                   :class="[
-                    selectedRobot.robot_type === 'four_wheel' ? 'is-car' : 'is-dog',
+                    isVehicleType(selectedRobot.robot_type, selectedRobot.robot_id) ? 'is-car' : 'is-dog',
                     isSelectedRobotOnline ? 'is-online' : 'is-offline'
                   ]"
                 ></span>
@@ -79,7 +79,7 @@
                 <span 
                   class="robot-type-icon" 
                   :class="[
-                    robot.robot_type === 'four_wheel' ? 'is-car' : 'is-dog',
+                    isVehicleType(robot.robot_type, robot.robot_id) ? 'is-car' : 'is-dog',
                     isRobotItemOnline(robot) ? 'is-online' : 'is-offline'
                   ]"
                 ></span>
@@ -228,6 +228,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import titleBg from '/src/assets/source_data/bg_data/title.png'
 import dogLogo from '/src/assets/source_data/dog_logo.svg'
 import carLogo from '/src/assets/source_data/car_logo.svg'
+import { isVehicleType } from '../utils/robotImage'
 
 const router = useRouter()
 const route = useRoute()

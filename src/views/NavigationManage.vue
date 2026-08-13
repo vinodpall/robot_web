@@ -288,7 +288,9 @@
                           :robot-mesh="arrowMesh"
                           :robot-type="selectedVehicleType"
                           :density-mode="selectedNavPcdDensity"
+                          :color-mode="selectedNavPcdColorMode"
                           @switch-density="switchNavPcdDensity"
+                          @color-mode-change="selectedNavPcdColorMode = $event"
                         />
                       </div>
 
@@ -872,7 +874,9 @@
                         :robot-mesh="arrowMesh"
                         :robot-type="selectedVehicleType"
                         :density-mode="selectedNavPcdDensity"
+                        :color-mode="selectedNavPcdColorMode"
                         @switch-density="switchNavPcdDensity"
+                        @color-mode-change="selectedNavPcdColorMode = $event"
                       />
                     </div>
                   </div>
@@ -4520,9 +4524,22 @@ const MIN_TASK_SPEED = 0.3
 const MAX_TASK_SPEED = 1.2
 const taskSpeed = ref(1.0)
 const setSpeedLoading = ref(false)
-const navData = ref({
-  w: 0,
-  v: '0, 0',
+const navData = ref<{
+  w: string | number
+  v: string
+  x: number
+  y: number
+  z: number
+  theta: number
+  brake: number
+  lidar: string
+  imu: string
+  satellite: string
+  msfStatus: string
+  insOrigin: string
+}>({
+  w: '0.00',
+  v: '0.00 m/s',
   x: 0,
   y: 0,
   z: 0,
@@ -4568,6 +4585,54 @@ const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
 const selectedVehicleType = computed(() => {
   return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
 })
+
+// 格式化/同步 W 角速度与 V 线速度数据（来自 speed_status 中的 w 与 v，参考首页当前速度数据逻辑）
+const syncNavSpeedData = () => {
+  // 1. W 角速度（来自 speed_status w）
+  const rawW = robotStore.speedStatus?.w
+  if (typeof rawW === 'number' && Number.isFinite(rawW)) {
+    const normalizedW = Math.abs(rawW) < 0.005 ? 0 : rawW
+    navData.value.w = normalizedW.toFixed(2)
+  } else {
+    navData.value.w = '0.00'
+  }
+
+  // 2. V 线速度（来自 speed_status v，参考 Home.vue 首页逻辑）
+  if (selectedVehicleType.value === 'four_wheel') {
+    const rawV = robotStore.speedStatus?.v
+    if (typeof rawV === 'number' && Number.isFinite(rawV)) {
+      const normalizedV = Math.abs(rawV) < 0.005 ? 0 : rawV
+      navData.value.v = `${normalizedV.toFixed(2)} m/s`
+    } else {
+      navData.value.v = '--'
+    }
+    return
+  }
+
+  // 非四轮底盘（如机器狗）：优先使用 speed_status.v，若无则备选使用 motionState leg_odom_vel
+  const rawV = robotStore.speedStatus?.v
+  if (typeof rawV === 'number' && Number.isFinite(rawV)) {
+    const normalizedV = Math.abs(rawV) < 0.005 ? 0 : rawV
+    navData.value.v = `${normalizedV.toFixed(2)} m/s`
+  } else {
+    const velocity = robotStore.motionState?.leg_odom_vel
+    const vx = Array.isArray(velocity) ? velocity[0] : undefined
+    if (typeof vx === 'number' && Number.isFinite(vx)) {
+      const normalizedVx = Math.abs(vx) < 0.005 ? 0 : vx
+      navData.value.v = `${normalizedVx.toFixed(2)} m/s`
+    } else {
+      navData.value.v = '--'
+    }
+  }
+}
+
+watch(
+  [() => robotStore.speedStatus, () => robotStore.motionState, selectedVehicleType],
+  () => {
+    syncNavSpeedData()
+  },
+  { immediate: true, deep: true }
+)
 const hasRobotRtk = computed(() => {
   const robot = deviceStore.selectedRobot as any
   const extraRaw = robot?.extra_data ?? null
@@ -5317,6 +5382,12 @@ const navPointCloudPreviewRef = ref<InstanceType<typeof ThreePointCloudPreview> 
 const lastLoadedNavPointCloudMap = ref('')
 let navPointCloudLoadToken = 0
 const selectedNavPcdDensity = ref<'sparse' | 'fine'>('sparse')
+const selectedNavPcdColorMode = ref<'gradient' | 'classic'>(
+  (localStorage.getItem('pcd_color_mode') as 'gradient' | 'classic') || 'classic'
+)
+watch(selectedNavPcdColorMode, (val) => {
+  if (val) localStorage.setItem('pcd_color_mode', val)
+})
 const currentLoadedNavPcdFileName = ref('tinyMap.pcd')
 
 const switchNavPcdDensity = async (densityKey: 'sparse' | 'fine') => {
@@ -5365,11 +5436,30 @@ const switchNavPcdDensity = async (densityKey: 'sparse' | 'fine') => {
     navPointCloudLoadingText.value = `正在解析${label}点云地图...`
     const arrayBuffer = await pcdBlob.arrayBuffer()
     const result = await parsePcdBufferInWorker(arrayBuffer)
-
     navPointCloudData.value = result.points
+    baseNavPointCloudData.value = result.points
     navPointCloudNormalizationParams.value = result.normParams
     currentLoadedNavPcdFileName.value = fileName
     navPointCloudLoading.value = false
+
+    const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
+    const shouldOverlayTrack = robotStore.cmdStatus?.track === 1 && !!trackNameFromStatus
+    if (shouldOverlayTrack) {
+      activeNavOverlayTrackName.value = trackNameFromStatus
+      await overlayNavTrackTrajectory(trackNameFromStatus)
+    } else if (robotStore.isPointTaskRunning) {
+      await fetchNavPointTaskList()
+      const runningPointTaskName = String(robotStore.taskStatus?.task_name || '').trim()
+      let matched = filteredNavPointTaskList.value.find(task => String(task.task_name || '').trim() === runningPointTaskName)
+      if (!matched && activeNavOverlayPointTaskId.value) {
+        matched = navPointTaskList.value.find(task => String(task.task_id) === String(activeNavOverlayPointTaskId.value))
+      }
+      if (matched) {
+        selectedNavPointTaskId.value = matched.task_id
+        activeNavOverlayPointTaskId.value = matched.task_id
+        await overlayNavPointTaskWaypoints(matched.task_id, matched.task_name)
+      }
+    }
 
     nextTick(() => {
       navPointCloudPreviewRef.value?.fitCameraToScene?.()
@@ -6353,7 +6443,9 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
   const silentRefresh = !!options?.silent && hasExistingPointCloud && !isMapChanged
 
   if (isMapChanged) {
-    // 切换地图时先清空旧点云，避免进入页面先看到旧/默认点云再跳变。
+    // 切换地图时重置密度模式为稀疏并清空旧点云，避免先看到旧/默认点云再跳变。
+    selectedNavPcdDensity.value = 'sparse'
+    currentLoadedNavPcdFileName.value = 'tinyMap.pcd'
     navPointCloudData.value = []
     baseNavPointCloudData.value = []
   }
@@ -6367,9 +6459,10 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
   navPointCloudError.value = ''
   console.log('开始加载导航点云数据，地图:', targetMap)
   
+  const targetPcdFileName = selectedNavPcdDensity.value === 'fine' ? 'finalCloud.pcd' : 'tinyMap.pcd'
   try {
     // 1. 尝试从 IndexedDB 获取
-    let blob = await getMapFile(targetMap, 'tinyMap.pcd')
+    let blob = await getMapFile(targetMap, targetPcdFileName)
     
     // 2. 如果缓存中没有，尝试下载
     if (!blob) {
@@ -6377,7 +6470,7 @@ const refreshNavPointCloud = async (mapName?: string, options?: { silent?: boole
         navPointCloudLoadingText.value = '地图文件下载中...'
         console.log('本地缓存未找到点云文件，尝试下载...')
         await downloadMapFiles(targetMap)
-        blob = await getMapFile(targetMap, 'tinyMap.pcd')
+        blob = await getMapFile(targetMap, targetPcdFileName)
       } catch (downloadErr) {
         console.error('下载地图文件失败:', downloadErr)
       }

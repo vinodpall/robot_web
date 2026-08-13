@@ -2465,7 +2465,12 @@ const PCD_DENSITY_OPTIONS: PcdDensityOption[] = [
 ]
 
 const selectedPcdDensity = ref<PcdDensityKey>('sparse')
-const selectedPcdColorMode = ref<'gradient' | 'classic'>('classic')
+const selectedPcdColorMode = ref<'gradient' | 'classic'>(
+  (localStorage.getItem('pcd_color_mode') as 'gradient' | 'classic') || 'classic'
+)
+watch(selectedPcdColorMode, (val) => {
+  if (val) localStorage.setItem('pcd_color_mode', val)
+})
 const selectedPcdOpacity = ref<number>(0.6)
 const showPcdSettingsMenu = ref(false)
 const currentLoadedPcdFileName = ref('tinyMap.pcd')

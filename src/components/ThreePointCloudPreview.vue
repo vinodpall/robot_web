@@ -159,7 +159,9 @@ const tooltip = ref({
 // 内置左上角齿轮设置下拉菜单状态管理
 const showSettingsDropdown = ref(false)
 const internalDensityMode = ref<'sparse' | 'standard' | 'fine'>(props.densityMode || 'sparse')
-const internalColorMode = ref<'gradient' | 'classic'>(props.colorMode || 'classic')
+const internalColorMode = ref<'gradient' | 'classic'>(
+  props.colorMode || (localStorage.getItem('pcd_color_mode') as 'gradient' | 'classic') || 'classic'
+)
 
 const activeDensityMode = computed(() => internalDensityMode.value)
 const activeColorMode = computed(() => internalColorMode.value)
@@ -170,6 +172,13 @@ watch(() => props.densityMode, (val) => {
 
 watch(() => props.colorMode, (val) => {
   if (val) internalColorMode.value = val
+})
+
+watch(internalColorMode, (newVal) => {
+  if (newVal) {
+    localStorage.setItem('pcd_color_mode', newVal)
+    rebuildSceneContent()
+  }
 })
 
 const selectDensityMode = (mode: 'sparse' | 'fine') => {

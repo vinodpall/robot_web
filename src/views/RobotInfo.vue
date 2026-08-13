@@ -493,6 +493,10 @@ const getRobotTypeLabel = (type: string | null | undefined) => {
   if (!type) return '通用底盘'
   switch (type.toLowerCase()) {
     case 'four_wheel': return '四轮底盘'
+    case 'eight_wheel':
+    case 'eight-wheel':
+    case 'eightwheel':
+    case '8wheel': return '八轮底盘'
     case 'robot_dog':
     case 'dog': return '四足机器狗'
     case 'tracked': return '履带式机器人'
