@@ -4417,8 +4417,8 @@ const MAX_TASK_SPEED = 1.2
 const taskSpeed = ref(1.0)
 const setSpeedLoading = ref(false)
 const navData = ref({
-  w: 0,
-  v: '0, 0',
+  w: '0.00',
+  v: '0.00 m/s',
   x: 0,
   y: 0,
   z: 0,
@@ -4525,6 +4525,40 @@ watch(() => robotStore.sensorStatus, (status) => {
   navData.value.imu = formatSensorMessageStatus(status?.imu_msg)
   navData.value.satellite = formatSensorMessageStatus(status?.gps_msg)
 }, { immediate: true, deep: true })
+
+// 监听 WebSocket 实时速度状态（speed_status 消息中的 v 和 w）
+watch(
+  [() => robotStore.speedStatus, () => robotStore.motionState, selectedVehicleType],
+  () => {
+    if (selectedVehicleType.value === 'four_wheel') {
+      const speed = robotStore.speedStatus
+      if (speed) {
+        const v = typeof speed.v === 'number' && Number.isFinite(speed.v) ? (Math.abs(speed.v) < 0.005 ? 0 : speed.v) : 0
+        const w = typeof speed.w === 'number' && Number.isFinite(speed.w) ? (Math.abs(speed.w) < 0.005 ? 0 : speed.w) : 0
+        navData.value.v = `${v.toFixed(2)} m/s`
+        navData.value.w = w.toFixed(2) as any
+        return
+      }
+    } else {
+      // 优先读取 speedStatus，回退读取 motionState 腿部里程计
+      const speed = robotStore.speedStatus
+      if (speed && typeof speed.v === 'number') {
+        const v = Math.abs(speed.v) < 0.005 ? 0 : speed.v
+        const w = typeof speed.w === 'number' && Number.isFinite(speed.w) ? (Math.abs(speed.w) < 0.005 ? 0 : speed.w) : 0
+        navData.value.v = `${v.toFixed(2)} m/s`
+        navData.value.w = w.toFixed(2) as any
+        return
+      }
+      const vel = robotStore.motionState?.leg_odom_vel
+      const vx = Array.isArray(vel) ? vel[0] : undefined
+      if (typeof vx === 'number' && Number.isFinite(vx)) {
+        const normalizedVx = Math.abs(vx) < 0.005 ? 0 : vx
+        navData.value.v = `${normalizedVx.toFixed(2)} m/s`
+      }
+    }
+  },
+  { immediate: true, deep: true }
+)
 
 const navigationLoading = ref(false)
 // isMapSelectionLocked 改为使用 taskExecutionStore 统一计算（nav/ins/msf 任一开启则锁定）

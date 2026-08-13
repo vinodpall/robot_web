@@ -32,18 +32,18 @@ const intranetConfig: EnvironmentConfig = {
     domain: '/v1'
   },
   websocket: {
-    host: '172.16.88.152',
+    host: '39.185.83.71',
     port: 8000,
-    fullUrl: 'ws://172.16.88.152:8000'
+    fullUrl: 'ws://39.185.83.71:8000'
   },
   video: {
-    webrtcDomain: 'webrtc://172.16.88.152:8000',
-    rtmpDomain: 'rtmp://172.16.88.152:8000'
+    webrtcDomain: 'webrtc://39.185.83.71:8000',
+    rtmpDomain: 'rtmp://39.185.83.71:8000'
   },
   services: {
-    vision: 'http://172.16.88.152:8000',
-    livestream: 'http://172.16.88.152:8000',
-    mapFile: 'http://172.16.88.152:5000'
+    vision: 'http://39.185.83.71:8000',
+    livestream: 'http://39.185.83.71:8000',
+    mapFile: 'http://39.185.83.71:5000'
   }
 }
 
