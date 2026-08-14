@@ -371,7 +371,7 @@
                       <span v-else-if="row.results" class="trc-result-badge">{{ row.results }}</span>
                       <span v-else class="trc-empty">-</span>
                     </div>
-                    <div class="file-table-cell trc-desc" :title="row.remark || '-'">{{ row.remark || '-' }}</div>
+                    <div class="file-table-cell trc-desc" :title="row.task_point_description || row.remark || '-'">{{ row.task_point_description || row.remark || '-' }}</div>
                     <div class="file-table-cell trc-pic">
                       <span v-if="!getDisplayImage(row)" class="no-image">-</span>
                       <img
@@ -603,7 +603,7 @@
                     <span v-else-if="row.results" class="trc-result-badge">{{ row.results }}</span>
                     <span v-else class="trc-empty">-</span>
                   </div>
-                  <div class="file-table-cell trc-desc" :title="row.remark || '-'">{{ row.remark || '-' }}</div>
+                  <div class="file-table-cell trc-desc" :title="row.task_point_description || row.remark || '-'">{{ row.task_point_description || row.remark || '-' }}</div>
                   <div class="file-table-cell trc-pic">
                     <span v-if="!getDisplayImage(row)" class="no-image">-</span>
                     <img
