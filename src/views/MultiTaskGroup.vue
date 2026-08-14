@@ -361,7 +361,7 @@ const getCurrentRobotId = (): string => {
 }
 
 const selectedVehicleType = computed(() => {
-  return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
+  return deviceStore.selectedVehicleType || (deviceStore.isVehicle ? 'four_wheel' : 'dog')
 })
 
 const sidebarTabs = [

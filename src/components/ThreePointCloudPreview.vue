@@ -83,6 +83,7 @@ import type {
   RobotPose,
 } from '@/composables/usePointCloudRenderer'
 import type { MeshData } from '@/utils/threemfParser'
+import { isVehicleType } from '@/utils/robotImage'
 
 const props = withDefaults(
   defineProps<{
@@ -816,7 +817,7 @@ const createRobotObject = () => {
     group.userData.headingTargets = [cone, edges]
   }
 
-  const labelText = props.robotType === 'four_wheel' ? '无人车' : '机器狗'
+  const labelText = isVehicleType(props.robotType) ? '无人车' : '机器狗'
   const label = createLabelSprite(labelText, {
     textColor: '#FF88FF',
     borderColor: 'rgba(255, 150, 255, 0.55)',

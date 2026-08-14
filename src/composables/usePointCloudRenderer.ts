@@ -11,6 +11,7 @@
 
 import { ref, shallowRef } from 'vue'
 import type { MeshData } from '@/utils/threemfParser'
+import { isVehicleType } from '@/utils/robotImage'
 
 // ==================== Types ====================
 
@@ -653,7 +654,10 @@ export function usePointCloudRenderer(options: UsePointCloudRendererOptions = {}
         }
         // 标注文字
         ;{
-          const isCar = typeof window !== 'undefined' && localStorage.getItem('selected_vehicle_type') === 'four_wheel'
+          const isCar = typeof window !== 'undefined' && (
+            localStorage.getItem('selected_vehicle_type') === 'four_wheel' ||
+            isVehicleType(localStorage.getItem('selected_vehicle_type'), localStorage.getItem('selected_robot_id'))
+          )
           const lbl = isCar ? '无人车' : '机器狗'
           const fontPx = Math.round(8 * labelZoomScale * dpr)
           ctx.font = `bold ${fontPx}px Arial`

@@ -4583,7 +4583,7 @@ const isTrackTaskRunning = computed(() => taskExecutionStore.isTrackTaskRunning)
 const insEnabled = computed(() => robotStore.cmdStatus?.ins === 1)
 const msfEnabled = computed(() => robotStore.cmdStatus?.msf === 1)
 const selectedVehicleType = computed(() => {
-  return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
+  return deviceStore.selectedVehicleType || (deviceStore.isVehicle ? 'four_wheel' : 'dog')
 })
 
 // 格式化/同步 W 角速度与 V 线速度数据（来自 speed_status 中的 w 与 v，参考首页当前速度数据逻辑）

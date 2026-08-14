@@ -14,8 +14,8 @@
     </div>
     <div class="header">
       <div class="header-left">
-        <img :src="selectedVehicleType === 'four_wheel' ? carLogo : dogLogo" alt="logo" class="logo" />
-        <span class="title">{{ selectedVehicleType === 'four_wheel' ? '无人车控制平台' : '机器狗控制平台' }}</span>
+        <img :src="isVehicle ? carLogo : dogLogo" alt="logo" class="logo" />
+        <span class="title">{{ isVehicle ? '无人车控制平台' : '机器狗控制平台' }}</span>
       </div>
       
       <nav class="nav-menu">
@@ -94,7 +94,7 @@
             <span>{{ isStopActive ? '启动' : '急停' }}</span>
           </div>
           <!-- 悬浮提示框 -->
-          <div v-if="isStopActive && selectedRobot?.robot_type === 'four_wheel' && activeStopLabels.length" class="stop-tooltip">
+          <div v-if="isStopActive && isVehicle && activeStopLabels.length" class="stop-tooltip">
             <div class="stop-tooltip-title">急停触发源</div>
             <div class="stop-tooltip-item" v-for="label in activeStopLabels" :key="label">
               <span class="stop-tooltip-dot"></span>
@@ -227,7 +227,8 @@ import SuccessMessage from '../components/SuccessMessage.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import titleBg from '/src/assets/source_data/bg_data/title.png'
 import dogLogo from '/src/assets/source_data/dog_logo.svg'
-import carLogo from '/src/assets/source_data/car_logo.svg'
+import dogLogoBlack from '/src/assets/source_data/dog_logo_black.svg'
+import carLogo from '@/assets/source_data/svg_data/robot_source/car_icon.svg'
 import { isVehicleType } from '../utils/robotImage'
 
 const router = useRouter()
@@ -364,12 +365,40 @@ const robots = computed(() => {
 })
 
 const selectedRobot = computed(() => {
-  return robots.value.find(robot => robot.robot_id === selectedRobotId.value)
+  return robots.value.find(robot => String(robot.robot_id) === String(selectedRobotId.value)) || deviceStore.selectedRobot
+})
+
+const isVehicle = computed(() => {
+  const robot = selectedRobot.value || deviceStore.selectedRobot
+  const type = robot?.robot_type || localStorage.getItem('selected_vehicle_type') || ''
+  const id = robot?.robot_id || selectedRobotId.value || localStorage.getItem('selected_robot_id') || ''
+  return isVehicleType(type, id)
 })
 
 const selectedVehicleType = computed(() => {
-  return selectedRobot.value?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
+  return isVehicle.value ? 'four_wheel' : 'dog'
 })
+
+const updateFavicon = (iconUrl: string) => {
+  if (typeof document === 'undefined') return
+  try {
+    const existingLinks = document.querySelectorAll<HTMLLinkElement>("link[rel*='icon']")
+    existingLinks.forEach(el => el.remove())
+
+    const newLink = document.createElement('link')
+    newLink.rel = 'icon'
+    newLink.type = 'image/svg+xml'
+    newLink.href = iconUrl
+    document.head.appendChild(newLink)
+  } catch (err) {
+    console.warn('Failed to update favicon:', err)
+  }
+}
+
+watch(isVehicle, (vehicle) => {
+  document.title = vehicle ? '无人车控制平台' : '机器狗控制平台'
+  updateFavicon(vehicle ? carLogo : dogLogoBlack)
+}, { immediate: true })
 
 const isSelectActive = ref(false)
 const robotSwitching = ref(false)
@@ -580,7 +609,7 @@ const closeUserMenu = () => {
 document.addEventListener('click', closeUserMenu)
 
 const isStopActive = computed(() => {
-  if (selectedRobot.value?.robot_type === 'four_wheel') {
+  if (isVehicle.value) {
     const s = robotStore.stopState
     if (s) {
       return s.state === 1 || s.button === 1 || s.collision === 1 || s.sonic === 1 || s.soft === 1
@@ -689,7 +718,7 @@ const toggleStop = async () => {
   }
 
   try {
-    if (selectedRobot.value?.robot_type === 'four_wheel') {
+    if (isVehicle.value) {
       const controlVal = isStopActive.value ? 0 : 1
       await navigationApi.softwareStop(selectedRobotId.value, { control: controlVal })
     } else {
@@ -1054,6 +1083,7 @@ onUnmounted(() => {
 .logo {
   width: clamp(24px, 3vw, 36px);
   height: clamp(24px, 3vw, 36px);
+  object-fit: contain;
   filter: brightness(0) saturate(100%) invert(100%);
   flex-shrink: 0;
   margin-left: 5px;

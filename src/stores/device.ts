@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Device, Robot } from '../types'
+import { isVehicleType } from '../utils/robotImage'
 
 export const useDeviceStore = defineStore('device', () => {
   const devices = ref<Device[]>([])
@@ -25,7 +26,20 @@ export const useDeviceStore = defineStore('device', () => {
 
   // 计算属性：选中的机器人
   const selectedRobot = computed(() => {
-    return robots.value.find(robot => robot.robot_id === selectedRobotId.value)
+    return robots.value.find(robot => String(robot.robot_id) === String(selectedRobotId.value))
+  })
+
+  // 计算属性：当前选中机器人是否为车类/底盘设备
+  const isVehicle = computed(() => {
+    const robot = selectedRobot.value
+    const type = robot?.robot_type || localStorage.getItem('selected_vehicle_type') || ''
+    const id = robot?.robot_id || selectedRobotId.value || localStorage.getItem('selected_robot_id') || ''
+    return isVehicleType(type, id)
+  })
+
+  // 计算属性：当前选中的车辆类型 ('four_wheel' | 'dog')
+  const selectedVehicleType = computed(() => {
+    return isVehicle.value ? 'four_wheel' : (selectedRobot.value?.robot_type || 'dog')
   })
 
   // 设置设备列表
@@ -38,10 +52,11 @@ export const useDeviceStore = defineStore('device', () => {
     robots.value = robotList
     // 更新缓存中的选中机器人信息
     if (selectedRobotId.value) {
-      const robot = robotList.find(r => r.robot_id === selectedRobotId.value)
+      const robot = robotList.find(r => String(r.robot_id) === String(selectedRobotId.value))
       if (robot) {
         localStorage.setItem('selected_robot_info', JSON.stringify(robot))
-        localStorage.setItem('selected_vehicle_type', robot.robot_type)
+        const vehicle = isVehicleType(robot.robot_type, robot.robot_id)
+        localStorage.setItem('selected_vehicle_type', vehicle ? 'four_wheel' : (robot.robot_type || 'dog'))
       }
     }
   }
@@ -56,10 +71,14 @@ export const useDeviceStore = defineStore('device', () => {
   const setSelectedRobot = (robotId: string) => {
     selectedRobotId.value = robotId
     localStorage.setItem('selected_robot_id', robotId)
-    const robot = robots.value.find(r => r.robot_id === robotId)
+    const robot = robots.value.find(r => String(r.robot_id) === String(robotId))
     if (robot) {
       localStorage.setItem('selected_robot_info', JSON.stringify(robot))
-      localStorage.setItem('selected_vehicle_type', robot.robot_type)
+      const vehicle = isVehicleType(robot.robot_type, robot.robot_id)
+      localStorage.setItem('selected_vehicle_type', vehicle ? 'four_wheel' : (robot.robot_type || 'dog'))
+    } else if (robotId) {
+      const vehicle = isVehicleType('', robotId)
+      localStorage.setItem('selected_vehicle_type', vehicle ? 'four_wheel' : 'dog')
     }
   }
 
@@ -99,6 +118,8 @@ export const useDeviceStore = defineStore('device', () => {
     selectedRobotId,
     selectedDock,
     selectedRobot,
+    isVehicle,
+    selectedVehicleType,
     setDevices,
     setRobots,
     setSelectedDock,

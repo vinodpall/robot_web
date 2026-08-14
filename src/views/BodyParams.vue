@@ -194,7 +194,7 @@ const robotStore = useRobotStore()
 const permissionStore = usePermissionStore()
 const deviceStore = useDeviceStore()
 
-const isFourWheel = computed(() => deviceStore.selectedRobot?.robot_type === 'four_wheel')
+const isFourWheel = computed(() => deviceStore.isVehicle)
 
 const sidebarTabs = [
   { key: 'body', label: '本体参数', icon: bodyInfoIcon, path: '/dashboard/body-params', permission: 'system-body-show' },

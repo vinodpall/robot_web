@@ -3732,7 +3732,7 @@ const lineChartRef = ref<HTMLElement | null>(null)
 
 // 选中车辆类型与传感器监控相关变量
 const selectedVehicleType = computed(() => {
-  return deviceStore.selectedRobot?.robot_type || localStorage.getItem('selected_vehicle_type') || 'dog'
+  return deviceStore.selectedVehicleType || (deviceStore.isVehicle ? 'four_wheel' : 'dog')
 })
 const currentRobotDisplayImage = computed(() => {
   const robotId = deviceStore.selectedRobotId || deviceStore.selectedRobot?.robot_id || localStorage.getItem('selected_robot_id') || ''

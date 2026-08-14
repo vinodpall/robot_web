@@ -7,8 +7,8 @@
     <div class="login-content">
       <div class="login-left">
         <div class="logo-section">
-          <img src="/src/assets/source_data/dog_logo.svg" alt="logo" class="logo" />
-          <h1 class="title">机器狗管控平台</h1>
+          <img :src="loginPageIcon" alt="logo" class="logo" />
+          <h1 class="title">机器人综合管控平台</h1>
         </div>
         <div class="drone-illustration">
           <img src="/src/assets/source_data/bg_data/main_pg_front.png" alt="drone" />
@@ -129,6 +129,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useAuth } from '../composables/useApi'
 import { initUserPermissions, initAllPermissions } from '../utils/initPermissions'
+import loginPageIcon from '@/assets/source_data/login_page_icon.svg'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -169,6 +170,7 @@ const extractTrackTaskList = (payload: any): any[] => {
 
 // 页面加载时检查是否有保存的登录信息
 onMounted(() => {
+  document.title = '机器人综合管控平台'
   const savedUsername = localStorage.getItem('savedUsername')
   const savedPassword = localStorage.getItem('savedPassword')
   const savedExpireTime = localStorage.getItem('savedExpireTime')
@@ -314,6 +316,7 @@ const closeErrorDialog = () => {
 .logo {
   width: 70px;
   height: 70px;
+  object-fit: contain;
   margin-right: 1rem;
 }
 

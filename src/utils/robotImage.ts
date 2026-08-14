@@ -34,22 +34,37 @@ function getSpecificModelImageByRobotId(robotId?: string | null): string | null 
  */
 export function isVehicleType(robotType?: string | null, robotId?: string | null): boolean {
   if (robotType) {
-    const lowerType = robotType.toLowerCase()
+    const lowerType = robotType.toLowerCase().trim()
     if (
       lowerType === 'four_wheel' ||
+      lowerType === 'four-wheel' ||
+      lowerType === 'fourwheel' ||
+      lowerType === '4wheel' ||
+      lowerType === '4_wheel' ||
       lowerType === 'eight_wheel' ||
       lowerType === 'eight-wheel' ||
       lowerType === 'eightwheel' ||
       lowerType === '8wheel' ||
+      lowerType === '8_wheel' ||
+      lowerType === 'tracked' ||
+      lowerType === 'track' ||
+      lowerType === 'car' ||
+      lowerType === 'vehicle' ||
+      lowerType === 'ugv' ||
+      lowerType === 'chassis' ||
       lowerType.includes('wheel') ||
-      lowerType.includes('car')
+      lowerType.includes('car') ||
+      lowerType.includes('vehicle') ||
+      lowerType.includes('ugv') ||
+      lowerType.includes('chassis') ||
+      lowerType.includes('tracked')
     ) {
       return true
     }
   }
 
   if (robotId) {
-    const lowerId = robotId.toLowerCase()
+    const lowerId = robotId.toLowerCase().trim()
     if (
       lowerId.includes('eight_wheel') ||
       lowerId.includes('eight-wheel') ||
@@ -57,7 +72,16 @@ export function isVehicleType(robotType?: string | null, robotId?: string | null
       lowerId.includes('8wheel') ||
       lowerId.includes('8_wheel') ||
       lowerId.includes('four_wheel') ||
-      lowerId.includes('four-wheel')
+      lowerId.includes('four-wheel') ||
+      lowerId.includes('fourwheel') ||
+      lowerId.includes('4wheel') ||
+      lowerId.includes('4_wheel') ||
+      lowerId.includes('car') ||
+      lowerId.includes('vehicle') ||
+      lowerId.includes('ugv') ||
+      lowerId.includes('wheel') ||
+      lowerId.includes('chassis') ||
+      lowerId.includes('tracked')
     ) {
       return true
     }
