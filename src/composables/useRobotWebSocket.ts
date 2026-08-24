@@ -476,9 +476,18 @@ export function useRobotWebSocket() {
         break
 
       // ---- 传感器状态（激光雷达/IMU/GPS） ----
-      case 'sensor_status':
-        robotStore.setSensorStatus(data as SensorStatusData)
+      case 'sensor_status': {
+        let sensorPayload = data
+        if (typeof sensorPayload === 'string') {
+          try {
+            sensorPayload = JSON.parse(sensorPayload)
+          } catch (e) {
+            console.error('Failed to parse sensor_status string', e)
+          }
+        }
+        robotStore.setSensorStatus(sensorPayload as SensorStatusData)
         break
+      }
 
       // ---- 机器狗 UDP 数据（含心跳） ----
       case 'dog_udp_message': {

@@ -54,6 +54,11 @@ export const useRobotStore = defineStore('robot', () => {
   const locStatus = ref<LocStatusData | null>(null)
   const sensorStatus = ref<SensorStatusData | null>(null)
 
+  // ===== 传感器最后收到有效数据的时间戳（毫秒），用于防抖与超时保持 =====
+  const lastLidarActiveTime = ref(0)
+  const lastImuActiveTime = ref(0)
+  const lastGpsActiveTime = ref(0)
+
   // ===== 机器狗 UDP 原始消息（最新一条） =====
   const latestDogUdpMessage = ref<DogUdpData | null>(null)
 
@@ -178,8 +183,58 @@ export const useRobotStore = defineStore('robot', () => {
     locStatus.value = data
   }
 
-  const setSensorStatus = (data: SensorStatusData) => {
-    sensorStatus.value = data
+  const normalizeSensorFlag = (val: any): string => {
+    if (val === true || val === 1 || val === '1' || val === 'true' || val === 'ok' || val === 'normal' || val === 'received' || val === '收到') {
+      return '1'
+    }
+    return '0'
+  }
+
+  const setSensorStatus = (data: Partial<SensorStatusData> | any) => {
+    if (!data) return
+    let payload = data
+    if (typeof payload === 'string') {
+      try {
+        payload = JSON.parse(payload)
+      } catch {
+        return
+      }
+    }
+    if (typeof payload !== 'object') return
+
+    const lidarVal = payload.lidar_msg ?? payload.lidar ?? payload.lidar_status ?? payload.laser_msg ?? payload.laser
+    const imuVal = payload.imu_msg ?? payload.imu ?? payload.imu_status
+    const gpsVal = payload.gps_msg ?? payload.gps ?? payload.gps_status ?? payload.satellite
+    const chargeVal = payload.charge_msg ?? payload.charge ?? payload.charge_status
+
+    const prev = sensorStatus.value || {
+      charge_msg: '0',
+      lidar_msg: '0',
+      imu_msg: '0',
+      gps_msg: '0'
+    }
+
+    const nextLidar = lidarVal !== undefined ? normalizeSensorFlag(lidarVal) : prev.lidar_msg
+    const nextImu = imuVal !== undefined ? normalizeSensorFlag(imuVal) : prev.imu_msg
+    const nextGps = gpsVal !== undefined ? normalizeSensorFlag(gpsVal) : prev.gps_msg
+    const nextCharge = chargeVal !== undefined ? normalizeSensorFlag(chargeVal) : prev.charge_msg
+
+    if (nextLidar === '1') {
+      lastLidarActiveTime.value = Date.now()
+    }
+    if (nextImu === '1') {
+      lastImuActiveTime.value = Date.now()
+    }
+    if (nextGps === '1') {
+      lastGpsActiveTime.value = Date.now()
+    }
+
+    sensorStatus.value = {
+      charge_msg: nextCharge,
+      lidar_msg: nextLidar,
+      imu_msg: nextImu,
+      gps_msg: nextGps
+    }
   }
 
   const setDogUdpMessage = (data: DogUdpData) => {
@@ -210,6 +265,7 @@ export const useRobotStore = defineStore('robot', () => {
   const setSensorData = (data: SensorData) => {
     if (!data?.imu_data) return
     sensorData.value = data
+    lastImuActiveTime.value = Date.now()
   }
 
   const setSystemTelemetry = (data: SystemTelemetryData) => {
@@ -235,6 +291,7 @@ export const useRobotStore = defineStore('robot', () => {
   const setGpsMessage = (data: GpsMessageData) => {
     if (!data) return
     gpsMessage.value = data
+    lastGpsActiveTime.value = Date.now()
   }
 
   const setStopState = (data: StopStateData) => {
@@ -264,8 +321,11 @@ export const useRobotStore = defineStore('robot', () => {
     multitaskStatus.value = data
   }
 
-  const setCurrentScan = (data: { timestamp: number; data: [number, number][] }) => {
+  const setCurrentScan = (data: { timestamp: number; data: [number, number][] } | any) => {
     currentScan.value = data
+    if (data && (Array.isArray(data.data) ? data.data.length > 0 : true)) {
+      lastLidarActiveTime.value = Date.now()
+    }
   }
 
   const setSlamGridMap = (data: SlamGridMapData) => {
@@ -305,6 +365,9 @@ export const useRobotStore = defineStore('robot', () => {
     msfStatus.value = null
     locStatus.value = null
     sensorStatus.value = null
+    lastLidarActiveTime.value = 0
+    lastImuActiveTime.value = 0
+    lastGpsActiveTime.value = 0
     latestDogUdpMessage.value = null
     rcsData.value = null
     motionState.value = null
@@ -514,6 +577,9 @@ export const useRobotStore = defineStore('robot', () => {
     msfStatus,
     locStatus,
     sensorStatus,
+    lastLidarActiveTime,
+    lastImuActiveTime,
+    lastGpsActiveTime,
     latestDogUdpMessage,
     rcsData,
     motionState,

@@ -4554,7 +4554,11 @@ const navData = ref<{
 
 const formatSensorMessageStatus = (value: string | number | null | undefined) => {
   if (value == null || value === '') return '未收到'
-  return String(value) === '1' ? '收到' : '未收到'
+  const str = String(value).trim().toLowerCase()
+  if (str === '1' || str === 'true' || str === 'ok' || str === 'received' || str === '收到' || str === 'normal') {
+    return '收到'
+  }
+  return '未收到'
 }
 
 const brakeStatusText = computed(() => {
@@ -4689,11 +4693,75 @@ watch(() => robotStore.cmdStatus?.ins_origin, (val) => {
   navData.value.insOrigin = val === 1 ? '已初始化' : '未初始化'
 }, { immediate: true })
 
-watch(() => robotStore.sensorStatus, (status) => {
-  navData.value.lidar = formatSensorMessageStatus(status?.lidar_msg)
-  navData.value.imu = formatSensorMessageStatus(status?.imu_msg)
-  navData.value.satellite = formatSensorMessageStatus(status?.gps_msg)
-}, { immediate: true, deep: true })
+// 传感器状态超时保持时间（毫秒），防止高频消息刷新或轻微丢帧引起状态在“收到”与“未收到”之间来回抖动
+const SENSOR_ACTIVE_TIMEOUT = 3500
+
+// 统一判断激光雷达是否收到数据（融合显式状态码与实时点云流/点云时间戳）
+const isLidarSensorActive = computed(() => {
+  if (!robotStore.isOnline) return false
+  if (robotStore.sensorStatus?.lidar_msg === '1') return true
+  const now = Date.now()
+  if (robotStore.lastLidarActiveTime && (now - robotStore.lastLidarActiveTime < SENSOR_ACTIVE_TIMEOUT)) {
+    return true
+  }
+  if (robotStore.currentScan?.data && robotStore.currentScan.data.length > 0) {
+    return true
+  }
+  return false
+})
+
+// 统一判断IMU是否收到数据（融合显式状态码与实时IMU数据帧）
+const isImuSensorActive = computed(() => {
+  if (!robotStore.isOnline) return false
+  if (robotStore.sensorStatus?.imu_msg === '1') return true
+  const now = Date.now()
+  if (robotStore.lastImuActiveTime && (now - robotStore.lastImuActiveTime < SENSOR_ACTIVE_TIMEOUT)) {
+    return true
+  }
+  if (robotStore.sensorData?.imu_data) {
+    return true
+  }
+  return false
+})
+
+// 统一判断卫星/GPS是否收到数据（融合显式状态码与GPS消息）
+const isGpsSensorActive = computed(() => {
+  if (!robotStore.isOnline) return false
+  if (robotStore.sensorStatus?.gps_msg === '1') return true
+  const now = Date.now()
+  if (robotStore.lastGpsActiveTime && (now - robotStore.lastGpsActiveTime < SENSOR_ACTIVE_TIMEOUT)) {
+    return true
+  }
+  if (robotStore.gpsMessage) {
+    return true
+  }
+  return false
+})
+
+const syncNavSensorStatuses = () => {
+  navData.value.lidar = isLidarSensorActive.value ? '收到' : '未收到'
+  navData.value.imu = isImuSensorActive.value ? '收到' : '未收到'
+  navData.value.satellite = isGpsSensorActive.value ? '收到' : '未收到'
+}
+
+watch(
+  [
+    () => robotStore.sensorStatus,
+    () => robotStore.lastLidarActiveTime,
+    () => robotStore.lastImuActiveTime,
+    () => robotStore.lastGpsActiveTime,
+    () => robotStore.currentScan,
+    () => robotStore.sensorData,
+    () => robotStore.gpsMessage,
+    () => robotStore.isOnline
+  ],
+  () => {
+    syncNavSensorStatuses()
+  },
+  { immediate: true, deep: true }
+)
+
+let navSensorStatusTimer: ReturnType<typeof setInterval> | null = null
 
 const navigationLoading = ref(false)
 // isMapSelectionLocked 改为使用 taskExecutionStore 统一计算（nav/ins/msf 任一开启则锁定）
@@ -4793,6 +4861,11 @@ const handleToggleNavStop = async () => {
 }
 
 const handleStartINS = () => {
+  if (!hasRobotRtk.value) {
+    showErrorMessage('当前机器人未搭载RTK设备，无法操作INS')
+    return
+  }
+
   if (navigationEnabled.value || msfEnabled.value) {
     showErrorMessage('请先关闭导航或MSF')
     return
@@ -4823,6 +4896,16 @@ const handleStartINS = () => {
 }
 
 const handleInitINS = () => {
+  if (!hasRobotRtk.value) {
+    showErrorMessage('当前机器人未搭载RTK设备，无法进行INS初始化')
+    return
+  }
+
+  if (navigationEnabled.value || msfEnabled.value) {
+    showErrorMessage('请先关闭导航或MSF')
+    return
+  }
+
   showConfirmDialog({
     title: 'INS初始化',
     message: '确定要进行INS初始化吗？',
@@ -4852,6 +4935,11 @@ const selectedMsfMode = ref<number>(3)
 const msfModeSubmitting = ref(false)
 
 const confirmMsfModeDialog = async () => {
+  if (!hasRobotRtk.value) {
+    showErrorMessage('当前机器人未搭载RTK设备，无法开启MSF')
+    return
+  }
+
   try {
     msfModeSubmitting.value = true
     const robotId = deviceStore.selectedRobotId
@@ -4876,6 +4964,11 @@ const confirmMsfModeDialog = async () => {
 }
 
 const handleStartMSF = () => {
+  if (!hasRobotRtk.value) {
+    showErrorMessage('当前机器人未搭载RTK设备，无法操作MSF')
+    return
+  }
+
   if (navigationEnabled.value || insEnabled.value) {
     showErrorMessage('请先关闭导航或INS')
     return
@@ -7781,6 +7874,13 @@ onMounted(async () => {
   window.addEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   document.addEventListener('click', handleGlobalClick)
   document.addEventListener('click', closeNavLayerMenuOnOutside)
+  // 启动传感器状态定时检查与初始化同步
+  syncNavSensorStatuses()
+  if (!navSensorStatusTimer) {
+    navSensorStatusTimer = setInterval(() => {
+      syncNavSensorStatuses()
+    }, 1000)
+  }
   await fetchNavPointTaskList()
 })
 
@@ -7858,6 +7958,10 @@ onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick)
   document.removeEventListener('click', closeNavLayerMenuOnOutside)
   clearNavPointCloudErrorTimer()
+  if (navSensorStatusTimer) {
+    clearInterval(navSensorStatusTimer)
+    navSensorStatusTimer = null
+  }
 })
 
 // 录包建图相关状态
@@ -11880,13 +11984,15 @@ const handleDelete = (item: any) => {
 }
 
 .map-btn-disabled-visual,
-.map-btn-disabled-visual:disabled {
-  background: rgba(70, 89, 104, 0.36);
-  color: rgba(174, 194, 210, 0.62);
-  border-color: rgba(120, 141, 157, 0.28);
-  box-shadow: none;
-  cursor: not-allowed;
-  opacity: 1;
+.map-btn-disabled-visual:disabled,
+.map-btn:disabled {
+  background: rgba(70, 89, 104, 0.36) !important;
+  color: rgba(174, 194, 210, 0.62) !important;
+  border-color: rgba(120, 141, 157, 0.28) !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
 }
 
 .map-btn-secondary {

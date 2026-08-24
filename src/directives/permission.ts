@@ -50,9 +50,6 @@ function applyNoPermissionState(el: HTMLElement, noPermission: boolean) {
   el.classList.remove('permission-disabled')
   el.style.pointerEvents = ''
   el.style.opacity = ''
-  if ('disabled' in el) {
-    ;(el as HTMLButtonElement).disabled = false
-  }
 }
 
 export const permission = {
