@@ -356,18 +356,6 @@ export const useRobotStore = defineStore('robot', () => {
       : data
     gpsMessage.value = normalized
     lastGpsActiveTime.value = Date.now()
-
-    // 如果包含 heading 字段（INS 下 GPS 坐标提供的朝向角度），同步设定无人车头部朝向角度
-    if (normalized.heading !== undefined && normalized.heading !== null && normalized.heading !== '') {
-      const h = Number(normalized.heading)
-      if (Number.isFinite(h)) {
-        if (!pose.value) {
-          pose.value = { x: 0, y: 0, z: 0, theta: h }
-        } else {
-          pose.value = { ...pose.value, theta: h }
-        }
-      }
-    }
   }
 
   const setStopState = (data: StopStateData) => {

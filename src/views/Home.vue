@@ -5240,13 +5240,16 @@ const updateRobotMapMarker = (shouldCenter = false) => {
   const gcj = transformWGS84ToGCJ02(wgsLng, wgsLat)
   const AMap = amapApiRef
 
-  // 机器人朝向角度 (从弧度转换为度数，INS 下 GPS 坐标提供的 heading 字段优先)
+  // 机器人朝向角度 (仅在开启 INS 模式时，才使用 GPS 数据中的 heading 航向角；未开启 INS 时使用 SLAM pose.theta)
+  const isInsEnabled = robotStore.cmdStatus?.ins === 1
   let headingRad: number | null = null
-  const gpsHeading = gps?.heading
-  if (gpsHeading !== undefined && gpsHeading !== null && gpsHeading !== '') {
-    const h = Number(gpsHeading)
-    if (Number.isFinite(h)) {
-      headingRad = h
+  if (isInsEnabled) {
+    const gpsHeading = gps?.heading
+    if (gpsHeading !== undefined && gpsHeading !== null && gpsHeading !== '') {
+      const h = Number(gpsHeading)
+      if (Number.isFinite(h)) {
+        headingRad = h
+      }
     }
   }
   const theta = headingRad !== null ? headingRad : (robotStore.pose?.theta ?? robotStore.effectiveTheta)
