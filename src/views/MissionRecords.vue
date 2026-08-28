@@ -35,13 +35,13 @@
             <div class="mission-toolbar">
               <!-- 任务组选择 -->
               <span class="mission-toolbar-label" style="margin-right: -8px;">任务组名称：</span>
-              <select v-model="selectedPointTaskId" class="mission-toolbar-select" style="min-width: 180px;">
+              <select v-model="selectedPointTaskId" class="mission-toolbar-select" style="width: 200px; max-width: 200px;" :title="selectedPointTaskId">
                 <option v-if="filteredPointTaskList.length === 0" :value="NO_TASK_GROUP_VALUE">暂无任务组</option>
-                <option v-for="task in filteredPointTaskList" :key="task.task_id" :value="task.task_id">{{ task.task_name }}</option>
+                <option v-for="task in filteredPointTaskList" :key="task.task_id" :value="task.task_id" :title="task.task_name">{{ task.task_name }}</option>
               </select>
               
               <!-- 操作按钮组 -->
-              <div style="display: flex; gap: 12px; margin-left: 8px;">
+              <div style="display: flex; gap: 12px; margin-left: 8px; flex-shrink: 0;">
                 <button
                   class="mission-btn"
                   :class="isPointTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"

@@ -36,20 +36,20 @@
             <div class="mission-toolbar">
               <!-- 任务组选择 -->
               <span class="mission-toolbar-label" style="margin-right: -8px;">路线名称：</span>
-              <select v-model="selectedRouteName" class="mission-toolbar-select" style="min-width: 180px;" :disabled="isTrackTaskRunning">
+              <select v-model="selectedRouteName" class="mission-toolbar-select" style="width: 200px; max-width: 200px;" :title="selectedRouteName" :disabled="isTrackTaskRunning">
                 <option v-if="filteredRouteList.length === 0" :value="NO_ROUTE_VALUE">暂无路线</option>
-                <option v-for="route in filteredRouteList" :key="route" :value="route">{{ route }}</option>
+                <option v-for="route in filteredRouteList" :key="route" :value="route" :title="route">{{ route }}</option>
               </select>
               
               <!-- 关键点选择 -->
               <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">任务组名称：</span>
-              <select v-model="selectedTaskGroupName" class="mission-toolbar-select" style="min-width: 180px;">
+              <select v-model="selectedTaskGroupName" class="mission-toolbar-select" style="width: 200px; max-width: 200px;" :title="selectedTaskGroupName">
                 <option v-if="taskGroupList.length === 0" :value="NO_TASK_GROUP_VALUE">暂无任务组</option>
-                <option v-for="group in taskGroupList" :key="group" :value="group">{{ group }}</option>
+                <option v-for="group in taskGroupList" :key="group" :value="group" :title="group">{{ group }}</option>
               </select>
               
               <!-- 操作按钮组 -->
-              <div style="display: flex; gap: 12px; margin-left: 8px;">
+              <div style="display: flex; gap: 12px; margin-left: 8px; flex-shrink: 0;">
                 <button
                   class="mission-btn"
                   :class="isTrackTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary'"

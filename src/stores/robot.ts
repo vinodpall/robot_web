@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type {
   PoseUpdateData,
   CmdStatusData,
@@ -29,6 +29,13 @@ import type {
   CarMotorInfoData,
   SlamGridMapData,
 } from '../composables/useRobotWebSocket'
+import {
+  type InsOriginCoordinates,
+  checkAndFetchInsOrigin,
+  getInsOriginFromCache,
+  setInsOriginToCache,
+  clearInsOriginCache
+} from '../utils/insOrigin'
 
 export const useRobotStore = defineStore('robot', () => {
   // ===== 在线状态 =====
@@ -36,6 +43,9 @@ export const useRobotStore = defineStore('robot', () => {
 
   // ===== 位姿 =====
   const pose = ref<PoseUpdateData | null>(null)
+
+  // ===== INS 原点坐标缓存 =====
+  const insOriginCoordinates = ref<InsOriginCoordinates | null>(null)
 
   // ===== 任务状态 =====
   const cmdStatus = ref<CmdStatusData | null>(null)
@@ -135,6 +145,17 @@ export const useRobotStore = defineStore('robot', () => {
   }
 
   const setPose = (data: PoseUpdateData) => {
+    if (!data) return
+    // 如果 INS 处于启动状态且 gpsMessage 中包含有效的 heading，优先使用 gpsMessage 的 heading
+    const isIns = cmdStatus.value?.ins === 1
+    const gpsHeading = gpsMessage.value?.heading
+    if (isIns && gpsHeading !== undefined && gpsHeading !== null && gpsHeading !== '') {
+      const h = Number(gpsHeading)
+      if (Number.isFinite(h)) {
+        pose.value = { ...data, theta: h }
+        return
+      }
+    }
     pose.value = data
   }
 
@@ -158,7 +179,47 @@ export const useRobotStore = defineStore('robot', () => {
         globalObstacleAlertActive.value = false
       }
     }
+
+    // 如果 INS 处于启动状态，且缓存中没有原点坐标，则触发获取 INS 原点接口
+    if (data.ins === 1) {
+      const robotId = localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        void syncInsOrigin(robotId)
+      }
+    }
   }
+
+  const syncInsOrigin = async (robotId?: string) => {
+    const currentRobotId = robotId || localStorage.getItem('selected_robot_id') || ''
+    if (!currentRobotId) return null
+    const cached = getInsOriginFromCache(currentRobotId)
+    if (cached) {
+      insOriginCoordinates.value = cached
+      return cached
+    }
+    if (cmdStatus.value?.ins === 1) {
+      const coords = await checkAndFetchInsOrigin(currentRobotId)
+      if (coords) {
+        insOriginCoordinates.value = coords
+      }
+      return coords
+    }
+    return null
+  }
+
+  // 监听 INS 启动状态，若启动且无缓存则静默请求原点
+  watch(
+    () => cmdStatus.value?.ins === 1,
+    (running) => {
+      if (running) {
+        const robotId = localStorage.getItem('selected_robot_id') || ''
+        if (robotId) {
+          void syncInsOrigin(robotId)
+        }
+      }
+    },
+    { immediate: true }
+  )
 
   const setTrackInfo = (data: TrackInfoData) => {
     trackInfo.value = data
@@ -290,8 +351,23 @@ export const useRobotStore = defineStore('robot', () => {
 
   const setGpsMessage = (data: GpsMessageData) => {
     if (!data) return
-    gpsMessage.value = data
+    const normalized: GpsMessageData = (data && typeof data === 'object' && (data as any).msg) 
+      ? { ...data, ...(data as any).msg } 
+      : data
+    gpsMessage.value = normalized
     lastGpsActiveTime.value = Date.now()
+
+    // 如果包含 heading 字段（INS 下 GPS 坐标提供的朝向角度），同步设定无人车头部朝向角度
+    if (normalized.heading !== undefined && normalized.heading !== null && normalized.heading !== '') {
+      const h = Number(normalized.heading)
+      if (Number.isFinite(h)) {
+        if (!pose.value) {
+          pose.value = { x: 0, y: 0, z: 0, theta: h }
+        } else {
+          pose.value = { ...pose.value, theta: h }
+        }
+      }
+    }
   }
 
   const setStopState = (data: StopStateData) => {
@@ -389,6 +465,7 @@ export const useRobotStore = defineStore('robot', () => {
     stopState.value = null
     carTemperature.value = null
     carMotorInfo.value = null
+    insOriginCoordinates.value = null
     globalObstacleAlertActive.value = false
     consecutiveObstacleCount = 0
   }
@@ -566,6 +643,29 @@ export const useRobotStore = defineStore('robot', () => {
   /** 建图是否运行中（来自 cmd_status.slam） */
   const isSlam = computed(() => cmdStatus.value?.slam === 1)
 
+  /** 当前有效的机器人头部朝向弧度（INS 模式下优先使用 gpsMessage.heading，否则使用 pose.theta） */
+  const effectiveTheta = computed(() => {
+    const isIns = cmdStatus.value?.ins === 1
+    const gpsHeading = gpsMessage.value?.heading
+    if (isIns && gpsHeading !== undefined && gpsHeading !== null && gpsHeading !== '') {
+      const h = Number(gpsHeading)
+      if (Number.isFinite(h)) return h
+    }
+    if (pose.value?.theta !== undefined && Number.isFinite(pose.value.theta)) {
+      return pose.value.theta
+    }
+    if (gpsHeading !== undefined && gpsHeading !== null && gpsHeading !== '') {
+      const h = Number(gpsHeading)
+      if (Number.isFinite(h)) return h
+    }
+    return 0
+  })
+
+  /** 当前机器人头部朝向角度（度数） */
+  const headingAngle = computed(() => {
+    return effectiveTheta.value * (180 / Math.PI)
+  })
+
   return {
     // state
     isOnline,
@@ -636,6 +736,8 @@ export const useRobotStore = defineStore('robot', () => {
     setSlamPoseData,
     clearSlamGridMap,
     resetRuntimeState,
+    insOriginCoordinates,
+    syncInsOrigin,
     // computed
     batteryLevel,
     voltage,
@@ -666,6 +768,8 @@ export const useRobotStore = defineStore('robot', () => {
     isInsRunning,
     isCharging,
     isSlam,
+    effectiveTheta,
+    headingAngle,
     realtimeSensorValues,
     realtimeSensorUnits,
     visionRealTimeMap,

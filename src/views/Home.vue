@@ -1635,6 +1635,10 @@
               <span class="rtk-popup-label">海拔</span>
               <span class="rtk-popup-value">{{ formatRtkAlt(robotStore.gpsMessage?.altitude) }} m</span>
             </div>
+            <div class="rtk-popup-row">
+              <span class="rtk-popup-label">航向</span>
+              <span class="rtk-popup-value">{{ formatRtkHeading(robotStore.gpsMessage?.heading) }} rad</span>
+            </div>
           </div>
         </div>
       </transition>
@@ -1713,6 +1717,7 @@ import type { NormalizationParams, PointCloudPoint } from '../composables/usePoi
 import { load3MF } from '../utils/threemfParser'
 import type { MeshData } from '../utils/threemfParser'
 import { getRobotMapCacheKeys, getRobotContextCacheKeys } from '../utils/robotBootstrap'
+import { resolveEffectiveGnssOrigin } from '../utils/insOrigin'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import { config, getCurrentEnvironment } from '../config/environment'
 import { translateVisionLabel } from '../config/visionLabelMap'
@@ -2021,6 +2026,21 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
   }
 })
 
+// 当 INS 状态或 INS 原点更新，且处于循迹中时，重新应用卫星图轨迹与任务点坐标转换
+watch(
+  [() => robotStore.cmdStatus?.ins, () => robotStore.insOriginCoordinates],
+  () => {
+    if (robotStore.cmdStatus?.track === 1) {
+      const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')
+      const trackName = trackNameFromStatus || activeOverlayTrackName.value || normalizeTrackName(selectedTrack.value)
+      if (trackName) {
+        lastTrackOverlayKey.value = ''
+        overlayTrackTrajectory(trackName)
+      }
+    }
+  }
+)
+
 // multitask_status 同步 activeTaskType：WebSocket 反馈多任务组运行状态
 watch(() => robotStore.multitaskStatus?.status, (running) => {
   if (running === true) {
@@ -2292,7 +2312,15 @@ const formatLatency = () => {
 const formatRtkStatus = () => {
   const gps = robotStore.gpsMessage
   if (!gps) return '--'
-  const statusText = gps.status_text || '--'
+  let statusText = gps.status_text
+  if (!statusText) {
+    const s = Number(gps.status)
+    if (s === 4) statusText = 'RTK固定解'
+    else if (s === 5) statusText = 'RTK浮点解'
+    else if (s === 1 || s === 2) statusText = '单点定位'
+    else if (s === 0) statusText = '未定位'
+    else statusText = gps.status != null ? `状态${gps.status}` : '--'
+  }
   const satNum = gps.sat_num != null ? gps.sat_num : '--'
   return `${statusText} (${satNum}星)`
 }
@@ -2300,10 +2328,11 @@ const formatRtkStatus = () => {
 // RTK 状态对应颜色 class
 const getRtkStatusClass = () => {
   const status = robotStore.gpsMessage?.status
-  if (status === undefined || status === null) return ''
-  if (status >= 4) return 'rtk-status-good'   // RTK固定解/浮点解
-  if (status >= 1) return 'rtk-status-warn'   // 普通定位
-  return 'rtk-status-bad'                      // 无效定位
+  if (status === undefined || status === null || status === '') return ''
+  const s = Number(status)
+  if (s >= 4) return 'rtk-status-good'   // RTK固定解/浮点解
+  if (s >= 1) return 'rtk-status-warn'   // 普通定位
+  return 'rtk-status-bad'                // 无效定位
 }
 
 // RTK 气泡弹窗
@@ -2431,6 +2460,13 @@ const formatRtkAlt = (val: string | number | undefined | null): string => {
   const n = Number(val)
   return isNaN(n) ? '--' : n.toFixed(2)
 }
+
+// 格式化航向（RTK heading 弧度值显示）
+const formatRtkHeading = (val: string | number | undefined | null): string => {
+  if (val === undefined || val === null || val === '' || String(val).toLowerCase() === 'nan') return '--'
+  const n = Number(val)
+  return isNaN(n) ? '--' : n.toFixed(4)
+}
 const pointCloudData = ref<PointCloudPoint[]>([])
 const basePointCloudData = ref<PointCloudPoint[]>([])
 const threePointCloudRef = ref<InstanceType<typeof ThreePointCloudPreview> | null>(null)
@@ -2449,6 +2485,28 @@ const isPointCloudFullscreen = ref(false)
 const togglePointCloudFullscreen = () => {
   isPointCloudFullscreen.value = !isPointCloudFullscreen.value
 }
+
+// 键盘联动：按下 ESC 键退出最大化/全屏
+const handleEscKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' || event.key === 'Esc' || event.keyCode === 27) {
+    if (isPointCloudFullscreen.value) {
+      isPointCloudFullscreen.value = false
+    }
+    if (document.fullscreenElement && document.exitFullscreen) {
+      void document.exitFullscreen()
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', handleEscKeydown)
+}
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', handleEscKeydown)
+  }
+})
 
 // ================= 点云地图清晰度（密度）设置 ================
 export type PcdDensityKey = 'sparse' | 'standard' | 'fine'
@@ -2906,7 +2964,12 @@ const overlayTrackTrajectory = async (trackName: string) => {
       clearRobotTrajectoryOnMap()
       
       const AMap = amapApiRef
-      const gnssOrigin = await loadGnssOrigin(selectedMap.value)
+      const currentRobotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      const gnssOrigin = await resolveEffectiveGnssOrigin(selectedMap.value, currentRobotId, {
+        isInsRunning: robotStore.cmdStatus?.ins === 1 || robotStore.isInsRunning,
+        isTracking: robotStore.cmdStatus?.track === 1 || robotStore.isTracking,
+        loadMapGnssOrigin: loadGnssOrigin
+      })
       
       // 转换轨迹点
       const mapPath: [number, number][] = []
@@ -2918,15 +2981,19 @@ const overlayTrackTrajectory = async (trackName: string) => {
         }
       })
       
-      // 画轨迹线
+      // 画轨迹线（参考导航路线风格）
       if (mapPath.length > 1) {
         robotTrajectoryPolyline.value = new AMap.Polyline({
           path: mapPath,
-          strokeColor: '#39b54a', // 亮绿色
-          strokeWeight: 4,
-          strokeOpacity: 0.85,
+          strokeColor: '#30b85b', // 导航路线高亮绿
+          strokeWeight: 8,
+          strokeOpacity: 0.95,
           strokeStyle: 'solid',
           lineJoin: 'round',
+          lineCap: 'round',
+          isOutline: true,
+          outlineColor: '#135336', // 深绿质感描边
+          borderWeight: 2,
           showDir: true,
           zIndex: 105 // 确保折线层级低于底图的文字标注图层 (115)
         })
@@ -2945,8 +3012,8 @@ const overlayTrackTrajectory = async (trackName: string) => {
             anchor: 'center',
             content: `
               <div class="robot-map-taskpoint" title="${p.name}">
-                <div class="taskpoint-dot">${index + 1}</div>
                 <div class="taskpoint-label">${p.name}</div>
+                <div class="taskpoint-dot"></div>
               </div>
             `
           })
@@ -5173,8 +5240,16 @@ const updateRobotMapMarker = (shouldCenter = false) => {
   const gcj = transformWGS84ToGCJ02(wgsLng, wgsLat)
   const AMap = amapApiRef
 
-  // 机器人朝向角度 (从弧度转换为度数)
-  const theta = robotStore.pose?.theta
+  // 机器人朝向角度 (从弧度转换为度数，INS 下 GPS 坐标提供的 heading 字段优先)
+  let headingRad: number | null = null
+  const gpsHeading = gps?.heading
+  if (gpsHeading !== undefined && gpsHeading !== null && gpsHeading !== '') {
+    const h = Number(gpsHeading)
+    if (Number.isFinite(h)) {
+      headingRad = h
+    }
+  }
+  const theta = headingRad !== null ? headingRad : (robotStore.pose?.theta ?? robotStore.effectiveTheta)
   const angle = typeof theta === 'number' && Number.isFinite(theta) ? theta * (180 / Math.PI) : 0
 
   const labelText = selectedVehicleType.value === 'four_wheel' ? '无人车' : '机器狗'
@@ -5185,10 +5260,24 @@ const updateRobotMapMarker = (shouldCenter = false) => {
       title: labelText,
       content: `
         <div class="robot-location-indicator">
-          <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${angle}deg); transform-origin: center; display: block;">
-            <path d="M18 5L12 14H24Z" fill="#00a0e9"/>
-            <circle cx="18" cy="18" r="9.5" fill="#ffffff" stroke="rgba(0,0,0,0.1)" stroke-width="0.5"/>
-            <circle cx="18" cy="18" r="7.5" fill="#00a0e9"/>
+          <svg class="robot-nav-arrow" width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${angle}deg); transform-origin: center; display: block;">
+            <defs>
+              <linearGradient id="robotNavArrowLeft" x1="6" y1="20" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#ff77ed"/>
+                <stop offset="100%" stop-color="#e024c3"/>
+              </linearGradient>
+              <linearGradient id="robotNavArrowRight" x1="20" y1="20" x2="34" y2="20" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#c026d3"/>
+                <stop offset="100%" stop-color="#86198f"/>
+              </linearGradient>
+              <filter id="robotNavShadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5"/>
+              </filter>
+            </defs>
+            <path d="M20 4L7 35L20 27L33 35L20 4Z" fill="#c026d3" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" filter="url(#robotNavShadow)"/>
+            <path d="M20 4L7 35L20 27Z" fill="url(#robotNavArrowLeft)"/>
+            <path d="M20 4L20 27L33 35Z" fill="url(#robotNavArrowRight)"/>
+            <path d="M20 5L20 26.5" stroke="rgba(255,255,255,0.7)" stroke-width="1.2" stroke-linecap="round"/>
           </svg>
           <div class="robot-location-label">${labelText}</div>
         </div>
@@ -5203,10 +5292,24 @@ const updateRobotMapMarker = (shouldCenter = false) => {
     robotMarker.setAngle(0) // 不使用 AMap 的 Marker 旋转，使文字保持水平
     robotMarker.setContent(`
       <div class="robot-location-indicator">
-        <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${angle}deg); transform-origin: center; display: block;">
-          <path d="M18 5L12 14H24Z" fill="#00a0e9"/>
-          <circle cx="18" cy="18" r="9.5" fill="#ffffff" stroke="rgba(0,0,0,0.1)" stroke-width="0.5"/>
-          <circle cx="18" cy="18" r="7.5" fill="#00a0e9"/>
+        <svg class="robot-nav-arrow" width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${angle}deg); transform-origin: center; display: block;">
+          <defs>
+            <linearGradient id="robotNavArrowLeft" x1="6" y1="20" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#ff77ed"/>
+                <stop offset="100%" stop-color="#e024c3"/>
+              </linearGradient>
+              <linearGradient id="robotNavArrowRight" x1="20" y1="20" x2="34" y2="20" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#c026d3"/>
+                <stop offset="100%" stop-color="#86198f"/>
+              </linearGradient>
+            <filter id="robotNavShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5"/>
+            </filter>
+          </defs>
+          <path d="M20 4L7 35L20 27L33 35L20 4Z" fill="#c026d3" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" filter="url(#robotNavShadow)"/>
+          <path d="M20 4L7 35L20 27Z" fill="url(#robotNavArrowLeft)"/>
+          <path d="M20 4L20 27L33 35Z" fill="url(#robotNavArrowRight)"/>
+          <path d="M20 5L20 26.5" stroke="rgba(255,255,255,0.7)" stroke-width="1.2" stroke-linecap="round"/>
         </svg>
         <div class="robot-location-label">${labelText}</div>
       </div>
@@ -10424,7 +10527,13 @@ watch(showSatelliteMap, (newVal) => {
 
 // 监听机器人 GPS 及朝向变化，实时更新地图上的 Marker
 watch(
-  [() => robotStore.gpsMessage, () => robotStore.pose, () => robotStore.pose?.theta],
+  [
+    () => robotStore.gpsMessage,
+    () => robotStore.gpsMessage?.heading,
+    () => robotStore.pose,
+    () => robotStore.pose?.theta,
+    () => robotStore.effectiveTheta
+  ],
   () => {
     if (showSatelliteMap.value) {
       updateRobotMapMarker(false)
@@ -12064,20 +12173,32 @@ const handlePageShow = () => {
   justify-content: center;
   align-items: center;
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   pointer-events: none;
+}
+:deep(.robot-nav-arrow) {
+  width: 40px;
+  height: 40px;
+  transition: transform 0.15s ease-out;
 }
 :deep(.robot-location-label) {
   position: absolute;
-  top: 38px;
+  top: 42px;
   left: 50%;
   transform: translateX(-50%);
-  color: #00a0e9;
-  font-size: 13px;
+  color: #ffffff;
+  background: rgba(5, 15, 35, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1.5px solid rgba(255, 150, 255, 0.75);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 12px;
   font-weight: bold;
   white-space: nowrap;
-  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  letter-spacing: 0.5px;
 }
 
 /* 机器人地图原点样式 */
@@ -12100,36 +12221,41 @@ const handlePageShow = () => {
   text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
 }
 
-/* 机器人地图任务点样式 */
+/* 机器人地图任务点样式（匹配点云图黄圈+金字黑底气泡风格） */
 :deep(.robot-map-taskpoint) {
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
+  cursor: pointer;
 }
 :deep(.robot-map-taskpoint) .taskpoint-dot {
-  width: 18px;
-  height: 18px;
-  background: #ff9500;
-  border: 2px solid #ffffff;
+  width: 14px;
+  height: 14px;
+  background: #ffd21f;
+  border: 2.5px solid #ffffff;
   border-radius: 50%;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  box-shadow: 0 0 6px rgba(255, 210, 31, 0.6), 0 2px 6px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
 }
 :deep(.robot-map-taskpoint) .taskpoint-label {
   position: absolute;
-  top: 20px;
-  color: #ff9500;
-  font-size: 13px;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #FFD800;
+  background: rgba(5, 15, 35, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1.5px solid rgba(255, 216, 0, 0.85);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
   font-weight: bold;
   white-space: nowrap;
-  text-shadow: 0 0 3px #ffffff, 0 0 3px #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   pointer-events: none;
+  letter-spacing: 0.5px;
 }
 
 /* 航线选择器样式 */

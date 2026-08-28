@@ -41,6 +41,9 @@ const TEMP_EXACT_KEYS = [
   'livestream_capacity',
   'camera_zoom_factor',
 
+  // INS 原点坐标缓存
+  'cached_ins_origin',
+  'ins_origin_coordinates',
 ] as const
 
 const TEMP_PREFIX_KEYS = [
@@ -54,6 +57,8 @@ const TEMP_PREFIX_KEYS = [
   'cached_point_task_list_',
   'cached_multi_task_list_',
   'selected_point_task_id_',
+  'cached_ins_origin_',
+  'ins_origin_coordinates_',
 
   // 按机器人分区的视频/相机缓存
   'camera_list_',

@@ -27,14 +27,14 @@
           <div class="mission-content-wrapper">
             <div class="mission-toolbar">
               <span class="mission-toolbar-label" style="margin-right: -8px;">多任务组名称：</span>
-              <select v-model="selectedMultiTaskName" class="mission-toolbar-select" style="min-width: 180px;">
+              <select v-model="selectedMultiTaskName" class="mission-toolbar-select" style="width: 200px; max-width: 200px;" :title="selectedMultiTaskName">
                 <option v-if="multiTaskList.length === 0" value="">暂无任务组</option>
-                <option v-for="group in multiTaskList" :key="group.multitask_id" :value="group.multitask_name">
+                <option v-for="group in multiTaskList" :key="group.multitask_id" :value="group.multitask_name" :title="group.multitask_name">
                   {{ group.multitask_name }}
                 </option>
               </select>
 
-              <div style="display: flex; gap: 12px; margin-left: 8px;">
+              <div style="display: flex; gap: 12px; margin-left: 8px; flex-shrink: 0;">
                 <button
                   class="mission-btn"
                   :class="[isMultiTaskRunning ? 'mission-btn-stop' : 'mission-btn-primary', { loading: executeLoading }]"

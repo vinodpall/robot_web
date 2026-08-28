@@ -26,18 +26,18 @@
           </div>
           <div class="mission-content-wrapper">
             <div class="mission-toolbar">
-              <button class="mission-btn mission-btn-primary" v-permission-click-dialog="'task-plantracklist-create'" @click="handleOpenCreateDialog">新增定时任务</button>
+              <button class="mission-btn mission-btn-primary" style="flex-shrink: 0;" v-permission-click-dialog="'task-plantracklist-create'" @click="handleOpenCreateDialog">新增定时任务</button>
 
               <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">循迹任务名称：</span>
-              <select v-model="selectedTrackName" class="mission-toolbar-select" style="min-width: 180px;">
+              <select v-model="selectedTrackName" class="mission-toolbar-select" style="width: 200px; max-width: 200px;" :title="selectedTrackName">
                 <option value="">{{ filteredTrackList.length === 0 ? '暂无循迹任务' : '全部' }}</option>
-                <option v-for="track in filteredTrackList" :key="track" :value="track">{{ track }}</option>
+                <option v-for="track in filteredTrackList" :key="track" :value="track" :title="track">{{ track }}</option>
               </select>
 
               <span class="mission-toolbar-label" style="margin-left: 20px; margin-right: -8px;">任务组名称：</span>
-              <select v-model="selectedTaskPointName" class="mission-toolbar-select" style="min-width: 180px;">
+              <select v-model="selectedTaskPointName" class="mission-toolbar-select" style="width: 200px; max-width: 200px;" :title="selectedTaskPointName">
                 <option value="">全部</option>
-                <option v-for="group in taskGroupList" :key="group" :value="group">{{ group }}</option>
+                <option v-for="group in taskGroupList" :key="group" :value="group" :title="group">{{ group }}</option>
               </select>
             </div>
             <div class="file-table file-table-adaptive">

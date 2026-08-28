@@ -265,10 +265,11 @@ export interface GpsMessageData {
   latitude: string | number
   longitude: string | number
   altitude: string | number
-  status: number
-  status_text: string
-  sat_num: number
-  timestamp: string
+  status: number | string
+  status_text?: string
+  sat_num?: number | string
+  heading?: number | string
+  timestamp?: string
 }
 
 /** stop_state 无人车急停状态消息 */
@@ -641,13 +642,15 @@ export function useRobotWebSocket() {
         break
 
       // ---- GPS/RTK 定位消息 ----
-      case 'gps_message':
+      case 'gps_message': {
+        const payload = (data && typeof data === 'object' && 'msg' in data && data.msg) ? { ...data, ...data.msg } : data
         if (typeof (robotStore as any).setGpsMessage === 'function') {
-          ;(robotStore as any).setGpsMessage(data as GpsMessageData)
+          ;(robotStore as any).setGpsMessage(payload as GpsMessageData)
         } else {
-          ;(robotStore as any).gpsMessage = data as GpsMessageData
+          ;(robotStore as any).gpsMessage = payload as GpsMessageData
         }
         break
+      }
 
       // ---- 无人车急停状态 ----
       case 'stop_state':

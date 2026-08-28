@@ -70,7 +70,12 @@ export const useTaskExecutionStore = defineStore('taskExecution', () => {
   const isTrackTaskRunning = computed(() => robotStore.isTracking)
   const isPointTaskRunning = computed(() => robotStore.isPointTaskRunning)
   const isMultiTaskRunning = computed(() => robotStore.multitaskStatus?.status === true)
-  const isNavigationEnabled = computed(() => robotStore.isNavigating)
+  
+  /** 导航/INS/MSF 是否开启 */
+  const isNavigationEnabled = computed(() => {
+    const cmd = robotStore.cmdStatus
+    return cmd?.nav === 1 || cmd?.ins === 1 || cmd?.msf === 1
+  })
   const navPaused = ref(false)
 
   const runningTaskType = computed<'track' | 'point' | 'multi' | null>(() => {
@@ -104,6 +109,17 @@ export const useTaskExecutionStore = defineStore('taskExecution', () => {
       persistMultiRunning(false)
     }
   })
+
+  // 同步后端的导航暂停状态
+  watch(
+    () => (robotStore.cmdStatus as any)?.app_nav_pause?.result,
+    (val) => {
+      if (val !== undefined && val !== null) {
+        navPaused.value = Number(val) === 1
+      }
+    },
+    { immediate: true }
+  )
 
   watch(isNavigationEnabled, (enabled) => {
     if (!enabled) {

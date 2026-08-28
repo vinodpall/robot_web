@@ -1089,10 +1089,72 @@ export const navigationApi = {
   }) => {
     return apiClient.post(`/navigation/${robotId}/ins_control`, data)
   },
+  setInsOrigin: (robotId: string, data: {
+    action: number;
+  }) => {
+    return apiClient.post<{
+      message?: string;
+      response?: {
+        msg?: {
+          error_code?: number;
+          error_msg?: string;
+          result?: number;
+        };
+        request_id?: string;
+      };
+      msg?: {
+        error_code?: number;
+        error_msg?: string;
+        result?: number;
+      };
+      request_id?: string;
+    }>(`/navigation/${robotId}/set_ins_origin`, data)
+  },
   initINS: (robotId: string, data: {
     action: number;
   }) => {
-    return apiClient.post(`/speed/${robotId}/nav_stop`, data)
+    return apiClient.post<{
+      message?: string;
+      response?: {
+        msg?: {
+          error_code?: number;
+          error_msg?: string;
+          result?: number;
+        };
+        request_id?: string;
+      };
+      msg?: {
+        error_code?: number;
+        error_msg?: string;
+        result?: number;
+      };
+      request_id?: string;
+    }>(`/navigation/${robotId}/set_ins_origin`, data)
+  },
+  getInsOrigin: (robotId: string, options?: { signal?: AbortSignal }) => {
+    return apiClient.get<{
+      message?: string;
+      response?: {
+        msg?: {
+          latitude?: number;
+          longitude?: number;
+          altitude?: number;
+          result: number;
+          error_code?: number;
+          error_msg?: string;
+        };
+        request_id?: string;
+      };
+      msg?: {
+        latitude?: number;
+        longitude?: number;
+        altitude?: number;
+        result: number;
+        error_code?: number;
+        error_msg?: string;
+      };
+      request_id?: string;
+    }>(`/navigation/${robotId}/ins_origin`, undefined, { signal: options?.signal })
   },
   setSpeed: (robotId: string, data: { speed: number }) => {
     return apiClient.post(`/speed/${robotId}/set_speed`, data)

@@ -129,6 +129,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useAuth } from '../composables/useApi'
 import { initUserPermissions, initAllPermissions } from '../utils/initPermissions'
+import { clearInsOriginCache } from '../utils/insOrigin'
 import loginPageIcon from '@/assets/source_data/login_page_icon.svg'
 
 const router = useRouter()
@@ -214,10 +215,11 @@ const handleLogin = async () => {
     
     const response = await login(loginForm.value)
     
-    // 登录验证成功后，清除原设备缓存并直接进入系统
+    // 登录验证成功后，清除原设备缓存及INS原点坐标并直接进入系统
     localStorage.removeItem('selected_vehicle_type')
     localStorage.removeItem('selected_robot_id')
     localStorage.removeItem('selected_robot_info')
+    clearInsOriginCache()
 
     userStore.setUser((response as any).user)
     userStore.setToken((response as any).token)
