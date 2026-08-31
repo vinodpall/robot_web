@@ -272,161 +272,17 @@
                 <!-- 右侧地图可视化区域 -->
                 <div class="nav-map-container">
                   <div class="nav-map-canvas">
-                    <div class="pointcloud-wrapper">
-                      <!-- 1. 点云图视图 -->
-                      <div class="pointcloud-view" v-show="navViewType === 'pointcloud'">
-                        <ThreePointCloudPreview
-                          ref="navPointCloudPreviewRef"
-                          :points="navPointCloudData"
-                          :loading="navPointCloudLoading"
-                          :loading-text="navPointCloudLoadingText"
-                          :error="navPointCloudError"
-                          :auto-fit-on-data-change="false"
-                          :normalization-params="navPointCloudNormalizationParams"
-                          :navigation-origin="navPointCloudNavigationOrigin"
-                          :robot-pose="robotStore.pose"
-                          :robot-mesh="arrowMesh"
-                          :robot-type="selectedVehicleType"
-                          :density-mode="selectedNavPcdDensity"
-                          :color-mode="selectedNavPcdColorMode"
-                          @switch-density="switchNavPcdDensity"
-                          @color-mode-change="selectedNavPcdColorMode = $event"
-                        />
-                      </div>
-
-                      <!-- 2. 2D 栅格图视图 -->
-                      <div class="pointcloud-view grid-view" v-show="navViewType === 'grid'">
-                        <div class="grid-map-container" ref="navGridMapContainerRef">
-                          <canvas 
-                            ref="navGridMapCanvasRef" 
-                            class="grid-map-canvas"
-                            @wheel="handleNavGridMapWheel"
-                            @mousedown="handleNavGridMapMouseDown"
-                            @mousemove="handleNavGridMapMouseMove"
-                            @mouseup="handleNavGridMapMouseUp"
-                            @mouseleave="handleNavGridMapMouseUp"
-                            style="cursor: grab;"
-                          ></canvas>
-                          <div v-if="navGridMapLoading" class="grid-map-overlay">栅格地图加载中...</div>
-                          <div v-else-if="navGridMapError" class="grid-map-overlay error">{{ navGridMapError }}</div>
-                          
-                          <!-- 实时点云开关按钮 -->
-                          <button 
-                            v-if="!navGridMapLoading && !navGridMapError" 
-                            class="grid-map-realtime-btn"
-                            :class="{ active: showRealtimeScan }"
-                            @click.stop="showRealtimeScan = !showRealtimeScan"
-                            title="实时点云开关"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                              <path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z" stroke-dasharray="2 2"/>
-                              <path d="M12 3v18" stroke-dasharray="2 2"/>
-                              <path d="M12 12L4 7.5" stroke-dasharray="2 2"/>
-                              <path d="M12 12l8-4.5" stroke-dasharray="2 2"/>
-                              <circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/>
-                              <circle cx="4" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
-                              <circle cx="20" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
-                              <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-                              <circle cx="4" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
-                              <circle cx="20" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
-                              <circle cx="12" cy="21" r="1.5" fill="currentColor" stroke="none"/>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-
-                      <!-- 3. 高德标准/卫星地图视图 -->
-                      <div class="pointcloud-view map-view" v-show="navViewType === 'map'">
-                        <div ref="navMapContainer" style="width: 100%; height: 100%;"></div>
-                        
-                        <!-- 地图图层切换器 -->
-                        <div class="map-layer-switcher">
-                          <button class="layer-switch-trigger" @click.stop="toggleNavLayerMenu">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                              <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>图层</span>
-                          </button>
-                          <transition name="layer-menu-fade">
-                            <div v-show="navShowLayerMenu" class="layer-menu-dropdown">
-                              <div class="layer-option" :class="{ active: navMapType === 'standard' }" @click.stop="setNavMapType('standard')">
-                                <span class="option-icon standard-icon"></span>
-                                <span>标准地图</span>
-                              </div>
-                              <div class="layer-option" :class="{ active: navMapType === 'satellite' }" @click.stop="setNavMapType('satellite')">
-                                <span class="option-icon satellite-icon"></span>
-                                <span>卫星地图</span>
-                              </div>
-
-                              <div class="layer-divider"></div>
-                              <div class="layer-option" :class="{ active: navShowTraffic }" @click.stop="toggleNavTraffic">
-                                <span class="option-checkbox" :class="{ checked: navShowTraffic }"></span>
-                                <span>实时路况</span>
-                              </div>
-                            </div>
-                          </transition>
-                        </div>
-                      </div>
-
-                      <!-- 视图模式切换组 (靠左侧) -->
-                      <div class="map-view-switcher-group">
-                        <button 
-                          class="view-switch-btn" 
-                          :class="{ active: navViewType === 'pointcloud' }" 
-                          @click.stop="navViewType = 'pointcloud'"
-                          title="点云图"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z" stroke-dasharray="2 2"/>
-                            <path d="M12 3v18" stroke-dasharray="2 2"/>
-                            <path d="M12 12L4 7.5" stroke-dasharray="2 2"/>
-                            <path d="M12 12l8-4.5" stroke-dasharray="2 2"/>
-                            <circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/>
-                            <circle cx="4" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
-                            <circle cx="20" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
-                            <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-                            <circle cx="4" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
-                            <circle cx="20" cy="16.5" r="1.5" fill="currentColor" stroke="none"/>
-                            <circle cx="12" cy="21" r="1.5" fill="currentColor" stroke="none"/>
-                          </svg>
-                        </button>
-                        <button 
-                          class="view-switch-btn" 
-                          :class="{ active: navViewType === 'grid' }" 
-                          @click.stop="navViewType = 'grid'"
-                          title="栅格图"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="3" width="18" height="18" rx="1.5"/>
-                            <path d="M9 3v18"/>
-                            <path d="M15 3v18"/>
-                            <path d="M3 9h18"/>
-                            <path d="M3 15h18"/>
-                            <rect x="3.5" y="3.5" width="5" height="5" fill="currentColor" stroke="none"/>
-                            <rect x="15.5" y="9.5" width="5" height="5" fill="currentColor" stroke="none"/>
-                            <rect x="9.5" y="15.5" width="5" height="5" fill="currentColor" stroke="none"/>
-                          </svg>
-                        </button>
-                        <button 
-                          v-if="hasRobotRtk"
-                          class="view-switch-btn" 
-                          :class="{ active: navViewType === 'map' }" 
-                          @click.stop="navViewType = 'map'"
-                          title="卫星图"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"/>
-                            <rect x="2" y="10" width="4" height="4" rx="0.5"/>
-                            <rect x="18" y="10" width="4" height="4" rx="0.5"/>
-                            <line x1="6" y1="12" x2="9" y2="12"/>
-                            <line x1="15" y1="12" x2="18" y2="12"/>
-                            <path d="M12 15v3"/>
-                            <path d="M9 18h6"/>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
+                    <RobotMapViewer
+                      ref="navMapViewerRef"
+                      :map-name="selectedNavMap"
+                      :robot-pose="robotStore.pose"
+                      :robot-type="selectedVehicleType"
+                      :has-robot-rtk="hasRobotRtk"
+                      :active-track-name="robotStore.cmdStatus?.track === 1 || robotStore.isTracking ? (robotStore.cmdStatus?.track_info?.track_name || activeNavOverlayTrackName) : ''"
+                      :realtime-scan="robotStore.currentScan"
+                      :initial-view-type="navViewType"
+                      @view-type-change="navViewType = $event"
+                    />
                   </div>
                 </div>
               </div>
@@ -859,27 +715,16 @@
               </div>
               <div class="track-record-map">
                 <div class="nav-map-canvas">
-                  <div class="pointcloud-wrapper">
-                    <div class="pointcloud-view">
-                      <ThreePointCloudPreview
-                        ref="navPointCloudPreviewRef"
-                        :points="navPointCloudData"
-                        :loading="navPointCloudLoading"
-                        :loading-text="navPointCloudLoadingText"
-                        :error="navPointCloudError"
-                        :auto-fit-on-data-change="false"
-                        :normalization-params="navPointCloudNormalizationParams"
-                        :navigation-origin="navPointCloudNavigationOrigin"
-                        :robot-pose="robotStore.pose"
-                        :robot-mesh="arrowMesh"
-                        :robot-type="selectedVehicleType"
-                        :density-mode="selectedNavPcdDensity"
-                        :color-mode="selectedNavPcdColorMode"
-                        @switch-density="switchNavPcdDensity"
-                        @color-mode-change="selectedNavPcdColorMode = $event"
-                      />
-                    </div>
-                  </div>
+                  <RobotMapViewer
+                    ref="trackRecordMapViewerRef"
+                    :map-name="trackRecordMap"
+                    :robot-pose="robotStore.pose"
+                    :robot-type="selectedVehicleType"
+                    :has-robot-rtk="hasRobotRtk"
+                    :active-track-name="robotStore.cmdStatus?.track === 1 || robotStore.isTracking ? trackRecordLine : ''"
+                    :realtime-scan="robotStore.currentScan"
+                    initial-view-type="pointcloud"
+                  />
                 </div>
               </div>
             </div>
@@ -1804,6 +1649,7 @@ import { ref, onMounted, onActivated, onDeactivated, onUnmounted, nextTick, watc
 import AMapLoader from '@amap/amap-jsapi-loader'
 import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
 import ThreePointCloudPreview from '../components/ThreePointCloudPreview.vue'
+import RobotMapViewer from '../components/RobotMapViewer.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SuccessMessage from '@/components/SuccessMessage.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'
@@ -5514,6 +5360,8 @@ const navPointCloudError = ref('')
 const navPointCloudNavigationOrigin = ref<{ x: number; y: number; z: number } | null>(null)
 const arrowMesh = ref<MeshData | null>(null)
 const navPointCloudPreviewRef = ref<InstanceType<typeof ThreePointCloudPreview> | null>(null)
+const navMapViewerRef = ref<InstanceType<typeof RobotMapViewer> | null>(null)
+const trackRecordMapViewerRef = ref<InstanceType<typeof RobotMapViewer> | null>(null)
 const lastLoadedNavPointCloudMap = ref('')
 let navPointCloudLoadToken = 0
 const selectedNavPcdDensity = ref<'sparse' | 'fine'>('sparse')
@@ -7791,7 +7639,7 @@ watch(hasRobotRtk, (hasRtk) => {
 })
 
 watch(selectedNavMap, async (newMap) => {
-  if (newMap) {
+  if (newMap && currentTab.value === 'track_edit') {
     if (navViewType.value === 'grid') {
       await loadAndDrawNavGridMap()
     } else if (navViewType.value === 'map') {
@@ -7820,30 +7668,19 @@ watch(selectedNavMap, async (newMap) => {
 const initNavPointCloud = async () => {
   navPointCloudInitialized = true
   const targetMap = selectedNavMap.value
-  if (targetMap) {
+  if (targetMap && currentTab.value === 'track_edit') {
     await refreshNavPointCloud(targetMap, { silent: true })
   }
 }
 
-watch(navPointCloudData, () => {
-  scheduleNavPointCloudRender()
-})
-
-watch(navPointCloudCanvas, (canvas) => {
-  if (canvas && navPointCloudData.value.length > 0) {
-    scheduleNavPointCloudRender()
-  }
-})
-
 watch(() => robotStore.pose, () => {
-  if (navPointCloudData.value.length > 0) {
-    scheduleNavPointCloudRender()
-  }
-  if (navViewType.value === 'grid' && navGridMapCanvasRef.value) {
-    drawNavGridMapCanvas()
-  }
-  if (navViewType.value === 'map') {
-    updateNavRobotMapMarker(false)
+  if (currentTab.value === 'track_edit') {
+    if (navViewType.value === 'grid' && navGridMapCanvasRef.value) {
+      drawNavGridMapCanvas()
+    }
+    if (navViewType.value === 'map') {
+      updateNavRobotMapMarker(false)
+    }
   }
 }, { deep: true })
 
@@ -7856,7 +7693,7 @@ watch(
     () => robotStore.effectiveTheta
   ],
   () => {
-    if (navViewType.value === 'map') {
+    if (currentTab.value === 'track_edit' && navViewType.value === 'map') {
       updateNavRobotMapMarker(false)
     }
   },
@@ -7867,19 +7704,20 @@ watch(
 watch(
   () => robotStore.currentScan,
   () => {
-    if (navViewType.value === 'grid' && showRealtimeScan.value) {
+    if (currentTab.value === 'track_edit' && navViewType.value === 'grid' && showRealtimeScan.value) {
       drawNavGridMapCanvas()
     }
   }
 )
 
 watch(showRealtimeScan, () => {
-  if (navViewType.value === 'grid') {
+  if (currentTab.value === 'track_edit' && navViewType.value === 'grid') {
     drawNavGridMapCanvas()
   }
 })
 
 watch(() => robotStore.cmdStatus?.track, (val) => {
+  if (currentTab.value !== 'track_edit') return
   // 预览模式下不响应任务状态变化，保持用户预览的轨迹
   if (isNavPreviewMode.value) return
   if (val === 1) {
@@ -7893,10 +7731,6 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
     lastNavTrackOverlayKey.value = ''
     activeNavOverlayTrackName.value = ''
     clearNavRobotTrajectoryOnMap()
-    if (baseNavPointCloudData.value.length > 0) {
-      navPointCloudData.value = [...baseNavPointCloudData.value]
-      scheduleNavPointCloudRender()
-    }
   }
 })
 
@@ -7904,6 +7738,7 @@ watch(() => robotStore.cmdStatus?.track, (val) => {
 watch(
   [() => robotStore.cmdStatus?.ins, () => robotStore.insOriginCoordinates],
   () => {
+    if (currentTab.value !== 'track_edit') return
     if (isNavPreviewMode.value) return
     if (robotStore.cmdStatus?.track === 1) {
       const trackNameFromStatus = normalizeTrackName(robotStore.cmdStatus?.track_info?.track_name || '')

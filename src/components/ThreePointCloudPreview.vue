@@ -1408,6 +1408,10 @@ const projectPlaneClick = (clientX: number, clientY: number) => {
 }
 
 const handlePointerMove = (event: PointerEvent) => {
+  if (event.buttons !== 0) {
+    if (tooltip.value.visible) tooltip.value.visible = false
+    return
+  }
   if (!props.showFeatureAreas || !props.featureAreas?.length) {
     tooltip.value.visible = false
     return
