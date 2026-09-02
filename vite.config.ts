@@ -7,12 +7,12 @@ import * as httpModule from 'node:http'
 // @ts-expect-error env.config.js is JS configuration file
 import envConfig from './env.config.js'
 
-// 璇诲彇鐜閰嶇疆鏂囦欢
+// 读取环境配置文件
 function loadEnvConfig() {
   try {
-    // ????????
-    // 1) ???????????cwd=?????env.local ?? ./env.local
-    // 2) ?? vite.config.ts ???????
+    // 候选配置文件路径
+    // 1) 当前工作目录 env.local 或 ./env.local
+    // 2) 与 vite.config.ts 同级目录
     const configDir = fileURLToPath(new URL('.', import.meta.url))
     const candidates = [
       resolve(process.cwd(), 'env.local'),
@@ -48,8 +48,8 @@ function loadEnvConfig() {
   }
 }
 
-// 鍔ㄦ€佹満鍣ㄤ汉浠ｇ悊涓棿浠讹細鎷︽埅甯?robot_ip 鍙傛暟鐨勮姹傦紝杞彂鍒板搴旀満鍣ㄤ�?
-// 鍚屾椂鎸傝浇�?dev server �?preview server锛岀‘淇濆紑鍙戜笌鐢熶骇琛屼负涓€鑷?
+// 动态机器人代理中间件：拦截带 robot_ip 参数的请求，转发到对应机器人
+// 同时挂载在 dev server 和 preview server，确保开发与生产行为一致
 function dynamicRobotMiddleware(
   req: import('http').IncomingMessage,
   res: import('http').ServerResponse,
@@ -75,7 +75,7 @@ function dynamicRobotMiddleware(
   const isRobot81Req = urlObj.pathname.startsWith('/robot81/')
   const targetPort = (isDxrApiReq || isRobot81Req) ? 81 : 5000
 
-  // /robot81/ 鏄満鍣ㄤ�?:81 闈欐€佹枃浠朵唬鐞嗭紝闇€鍓ユ帀璇ュ墠缂€鍚庤浆�?
+  // /robot81/ 是机器人 :81 静态文件代理，需剥掉该前缀后转发
   if (isRobot81Req) {
     urlObj.pathname = urlObj.pathname.replace(/^\/robot81/, '')
   }
@@ -110,7 +110,7 @@ function dynamicRobotMiddleware(
     }
   })
 
-  // GET/HEAD 娌℃湁璇锋眰浣擄紝鐩存帴缁撴潫锛涘叾浠栨柟娉曞皢璇锋眰浣撴祦寮忚浆鍙?
+  // GET/HEAD 没有请求体，直接结束；其他方法将请求体流式转发
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === undefined) {
     proxyReq.end()
   } else {
@@ -126,8 +126,8 @@ function dynamicRobotMiddleware(
   }
 }
 
-// SRS WebRTC 淇′护浠ｇ悊涓棿浠讹細澶勭悊 /rtc-proxy/{host}/rtc/v1/play/ -> http://{host}:1985/rtc/v1/play/
-// �?nginx location ~ ^/rtc-proxy/([^/]+)/rtc/v1/play/ 琛屼负涓€鑷达紝瑙ｅ喅鏈湴寮€鍙?CORS 闂�?
+// SRS WebRTC 信令代理中间件：处理 /rtc-proxy/{host}/rtc/v1/play/ -> http://{host}:1985/rtc/v1/play/
+// 与 nginx location ~ ^/rtc-proxy/([^/]+)/rtc/v1/play/ 行为一致，解决本地开发 CORS 问题
 function rtcProxyMiddleware(
   req: import('http').IncomingMessage,
   res: import('http').ServerResponse,
@@ -197,14 +197,14 @@ function rtcProxyMiddleware(
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  // 鍔犺浇鐜鍙橀�?
+  // 加载环境变量
   const env = loadEnv(mode, process.cwd(), '')
   const localEnv = loadEnvConfig()
 
-  // 鍚堝苟鐜鍙橀噺锛屾湰鍦伴厤缃紭�?
+  // 合并环境变量，本地配置优先
   const mergedEnv = { ...env, ...localEnv }
 
-  // 鏍规嵁鐜鍙橀噺鍔ㄦ€侀厤缃唬�?
+  // 根据环境变量动态配置代理目标
   const getProxyTarget = () => {
     const environment = mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'
     console.log('Vite config - current environment:', environment)
@@ -230,7 +230,7 @@ export default defineConfig(({ mode }) => {
     base: './',
     plugins: [
       vue(),
-      // 鍔ㄦ€佹満鍣ㄤ汉浠ｇ悊鎻掍欢锛氭嫤鎴�?robot_ip 鍙傛暟鐨勮姹傦紝杞彂鍒板搴旀満鍣ㄤ�?
+      // 动态机器人代理插件：拦截带 robot_ip 参数的请求，转发到对应机器人
       {
         name: 'dynamic-robot-proxy',
         configureServer(server) {
@@ -249,7 +249,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
-      host: '127.0.0.1', // 缁戝畾鍒?27.0.0.1鑰屼笉鏄痩ocalhost
+      host: '127.0.0.1', // 绑定到 127.0.0.1 而不是 localhost
       proxy: {
         '/v1': {
           target: getProxyTarget(),
@@ -296,7 +296,37 @@ export default defineConfig(({ mode }) => {
         },
       }
     },
-    // 瀹氫箟鐜鍙橀�?
+    build: {
+      target: 'es2020',
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('three')) {
+                return 'vendor-three'
+              }
+              if (id.includes('echarts') || id.includes('zrender')) {
+                return 'vendor-echarts'
+              }
+              if (id.includes('jszip')) {
+                return 'vendor-jszip'
+              }
+              if (id.includes('flv.js')) {
+                return 'vendor-flv'
+              }
+              if (id.includes('@amap')) {
+                return 'vendor-amap'
+              }
+              if (id.includes('vue') || id.includes('pinia') || id.includes('@vue')) {
+                return 'vendor-vue'
+              }
+            }
+          }
+        }
+      }
+    },
+    // 定义环境变量
     define: {
       __APP_ENVIRONMENT__: JSON.stringify(mergedEnv.VITE_APP_ENVIRONMENT || 'intranet'),
       __AMAP_KEY__: JSON.stringify(mergedEnv.VITE_AMAP_KEY || ''),
@@ -304,7 +334,3 @@ export default defineConfig(({ mode }) => {
     }
   }
 })
-
-
-
-

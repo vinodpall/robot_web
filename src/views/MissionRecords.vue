@@ -664,6 +664,7 @@ import editIcon from '@/assets/source_data/svg_data/robot_source/edit.png'
 import deleteIcon from '@/assets/source_data/svg_data/robot_source/delete.png'
 import arriveIcon from '@/assets/source_data/svg_data/robot_source/arrive.png'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
+import { useWebRTCVideo } from '../composables/useWebRTCVideo'
 import { waylineApi, navigationApi, dogApi } from '../api/services'
 import { getErrorMessage } from '@/utils/errorCodes'
 import { mediaApi } from '../api/services'
@@ -2425,94 +2426,16 @@ const selectPreset = (p: {id: string, name: string}) => {
 
 // Video Playback Logic
 const videoElement = ref<HTMLVideoElement | null>(null)
-let pc: RTCPeerConnection | null = null
-const isPlaying = ref(false)
-const videoStreamUrl = ref('')
 
-const buildApiUrl = (webrtcUrl: string) => {
-  try {
-    // 通过 nginx 代理，解决 CORS 问题
-    const url = new URL(webrtcUrl)
-    return `/rtc-proxy/${url.hostname}`
-  } catch (error) {
-    const match = webrtcUrl.replace('webrtc://', '').split('/')[0].split(':')[0]
-    return `/rtc-proxy/${match}`
-  }
-}
+const {
+  isPlaying,
+  streamUrl: videoStreamUrl,
+  startPlayback: startWebRTCPlaybackCore,
+  stopPlayback: stopWebRTCPlayback
+} = useWebRTCVideo()
 
 const startWebRTCPlayback = async (url: string) => {
-  if (pc) {
-    pc.close()
-    pc = null
-  }
-  
-  videoStreamUrl.value = url
-  
-  try {
-    pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    })
-    
-    pc.ontrack = (e) => {
-      if (videoElement.value && e.streams && e.streams[0]) {
-        videoElement.value.srcObject = e.streams[0]
-        videoElement.value.play().then(() => {
-          isPlaying.value = true
-        }).catch(e => console.error('Video play failed', e))
-      }
-    }
-    
-    pc.oniceconnectionstatechange = () => {
-      console.log('ICE Connection State:', pc?.iceConnectionState)
-      if (pc?.iceConnectionState === 'connected') {
-        isPlaying.value = true
-      }
-    }
-
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true
-    })
-    
-    await pc.setLocalDescription(offer)
-    
-    const apiUrl = buildApiUrl(url)
-    console.log('Requesting stream from:', apiUrl)
-    
-    const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sdp: offer.sdp, streamurl: url })
-    })
-    
-    if (!response.ok) {
-        throw new Error(`Server response error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    if (data.code === 0 && data.sdp) {
-       await pc.setRemoteDescription({
-         type: 'answer',
-         sdp: data.sdp
-       })
-    } else {
-        console.error('SRS Error:', data)
-    }
-  } catch (e) {
-    console.error('WebRTC setup error', e)
-    isPlaying.value = false
-  }
-}
-
-const stopWebRTCPlayback = () => {
-  if (pc) {
-    pc.close()
-    pc = null
-  }
-  if (videoElement.value) {
-    videoElement.value.srcObject = null
-  }
-  isPlaying.value = false
+  await startWebRTCPlaybackCore(url, videoElement)
 }
 
 const fetchPresetList = async () => {

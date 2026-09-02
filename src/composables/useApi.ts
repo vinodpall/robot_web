@@ -1,8 +1,8 @@
 import { ref, reactive, readonly } from 'vue'
-import { authApi, userApi, dockApi, droneApi, missionApi, alertApi, systemApi, deviceApi, roleApi, hmsApi, livestreamApi, waylineApi, permissionApi } from '../api/services'
+import { authApi, userApi, missionApi, alertApi, systemApi, deviceApi, roleApi, hmsApi, livestreamApi, waylineApi, permissionApi } from '../api/services'
 import { apiClient } from '../api/config'
 import { config, refreshEnvironmentConfig } from '../config/environment'
-import type { User, Dock, Drone, Mission, Alert, Device, Role, HmsAlert, Permission } from '../types'
+import type { User, Mission, Alert, Device, Role, HmsAlert, Permission } from '../types'
 import { useDeviceStore } from '../stores/device'
 import { usePermissionStore } from '../stores/permission'
 import { setVideoStreams, setDefaultVideoType, cleanupOldVideoCache } from '../utils/videoCache'
@@ -304,122 +304,6 @@ export function useAuth() {
     logout,
     getCurrentUser,
     initAuth
-  }
-}
-
-export function useDocks() {
-  const docks = ref<Dock[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-  const pagination = reactive({
-    page: 1,
-    pageSize: 10,
-    total: 0
-  })
-
-  const fetchDocks = async (params?: { page?: number; pageSize?: number; status?: string }) => {
-    loading.value = true
-    error.value = null
-    
-    try {
-      const response = await dockApi.getDocks(params)
-      docks.value = response.data.items
-      pagination.total = response.data.total
-      pagination.page = response.data.page
-      pagination.pageSize = response.data.pageSize
-      
-      return response.data
-    } catch (err: any) {
-      error.value = err.message || 'Failed to update current user'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const fetchDock = async (id: string) => {
-    loading.value = true
-    error.value = null
-    
-    try {
-      const response = await dockApi.getDock(id)
-      return response.data
-    } catch (err: any) {
-      error.value = err.message || 'Failed to fetch all users'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  return {
-    docks: readonly(docks),
-    loading: readonly(loading),
-    error: readonly(error),
-    pagination: readonly(pagination),
-    fetchDocks,
-    fetchDock
-  }
-}
-
-export function useDrones() {
-  const drones = ref<Drone[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-  const pagination = reactive({
-    page: 1,
-    pageSize: 10,
-    total: 0
-  })
-
-  const fetchDrones = async (params?: { page?: number; pageSize?: number; status?: string; dockId?: string }) => {
-    loading.value = true
-    error.value = null
-    
-    try {
-      const response = await droneApi.getDrones(params)
-      drones.value = response.data.items
-      pagination.total = response.data.total
-      pagination.page = response.data.page
-      pagination.pageSize = response.data.pageSize
-      
-      return response.data
-    } catch (err: any) {
-      error.value = err.message || 'Failed to fetch data list'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  const takeoff = async (droneId: string) => {
-    try {
-      const response = await droneApi.takeoff(droneId)
-      return response.data
-    } catch (err: any) {
-      error.value = err.message || 'Failed to create data'
-      throw err
-    }
-  }
-
-  const land = async (droneId: string) => {
-    try {
-      const response = await droneApi.land(droneId)
-      return response.data
-    } catch (err: any) {
-      error.value = err.message || 'Failed to update data'
-      throw err
-    }
-  }
-
-  return {
-    drones: readonly(drones),
-    loading: readonly(loading),
-    error: readonly(error),
-    pagination: readonly(pagination),
-    fetchDrones,
-    takeoff,
-    land
   }
 }
 

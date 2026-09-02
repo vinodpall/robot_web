@@ -83,7 +83,7 @@
               <div ref="trackTaskTableBodyRef" class="file-table-body">
                 <!-- 显示实际数据行 -->
                 <template v-if="waypointsData.length > 0">
-                <div class="file-table-row" :class="{ 'task-last-row-active': isLastTaskRow(waypoint) }" v-for="waypoint in waypointsData" :key="waypoint.index">
+                <div class="file-table-row" :class="{ 'task-last-row-active': isLastTaskRow(waypoint) }" v-for="(waypoint, index) in waypointsData" :key="'wp-' + waypoint.index + '-' + index">
                   <div class="file-table-cell" style="min-width: 80px; width: 80px; text-align: center;">
                     <span class="ms-seq-num">{{ waypoint.index + 1 }}</span>
                   </div>
@@ -925,6 +925,7 @@ import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.s
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
 import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
+import { useWebRTCVideo } from '../composables/useWebRTCVideo'
 import { waylineApi, navigationApi, dogApi, cameraApi } from '@/api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import icon360Photo from '@/assets/source_data/svg_data/task_line_svg/360_photo.svg'
@@ -3292,6 +3293,7 @@ onActivated(async () => {
 })
 
 onUnmounted(() => {
+  stopWebRTCPlayback()
   window.removeEventListener('click', closeDropdown)
   window.removeEventListener('robot-context-refreshed', handleRobotContextRefreshed)
   window.removeEventListener('navigation-origin-updated', handlePreviewNavigationOriginUpdated)
@@ -4081,11 +4083,19 @@ watch(isPresetDropdownOpen, (isOpen) => {
 // Video Playback Logic
 const videoElement = ref<HTMLVideoElement | null>(null)
 const presetVideoWrapper = ref<HTMLElement | null>(null)
-let pc: RTCPeerConnection | null = null
-const isPlaying = ref(false)
-const videoStreamUrl = ref('')
 const isPresetStreamSwitching = ref(false)
 const presetVideoType = ref<'drone_visible' | 'drone_infrared'>('drone_visible')
+
+const {
+  isPlaying,
+  streamUrl: videoStreamUrl,
+  startPlayback: startWebRTCPlaybackCore,
+  stopPlayback: stopWebRTCPlayback
+} = useWebRTCVideo()
+
+const startWebRTCPlayback = async (url: string) => {
+  await startWebRTCPlaybackCore(url, videoElement)
+}
 
 const getRobotCameraListCacheKey = (robotId: string) => `camera_list_${robotId}`
 const getRobotVideoStreamsCacheKey = (robotId: string) => `video_streams_${robotId}`
@@ -4249,93 +4259,6 @@ const togglePresetVideoPanelFullscreen = async () => {
   } catch (error) {
     console.error('预置点视频全屏切换失败:', error)
   }
-}
-
-const buildApiUrl = (webrtcUrl: string) => {
-  try {
-    // 通过 nginx 代理，解决 CORS 问题
-    const url = new URL(webrtcUrl)
-    return `/rtc-proxy/${url.hostname}`
-  } catch (error) {
-    const match = webrtcUrl.replace('webrtc://', '').split('/')[0].split(':')[0]
-    return `/rtc-proxy/${match}`
-  }
-}
-
-const startWebRTCPlayback = async (url: string) => {
-  if (pc) {
-    pc.close()
-    pc = null
-  }
-  
-  videoStreamUrl.value = url
-  
-  try {
-    pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    })
-    
-    pc.ontrack = (e) => {
-      if (videoElement.value && e.streams && e.streams[0]) {
-        videoElement.value.srcObject = e.streams[0]
-        videoElement.value.play().then(() => {
-          isPlaying.value = true
-        }).catch(e => console.error('Video play failed', e))
-      }
-    }
-    
-    // ICE连接状态监听
-    pc.oniceconnectionstatechange = () => {
-      console.log('ICE Connection State:', pc?.iceConnectionState)
-      if (pc?.iceConnectionState === 'connected') {
-        isPlaying.value = true
-      }
-    }
-
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true
-    })
-    
-    await pc.setLocalDescription(offer)
-    
-    const apiUrl = buildApiUrl(url)
-    console.log('Requesting stream from:', apiUrl)
-    
-    const response = await fetch(`${apiUrl}/rtc/v1/play/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sdp: offer.sdp, streamurl: url })
-    })
-    
-    if (!response.ok) {
-        throw new Error(`Server response error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    if (data.code === 0 && data.sdp) {
-       await pc.setRemoteDescription({
-         type: 'answer',
-         sdp: data.sdp
-       })
-    } else {
-        console.error('SRS Error:', data)
-    }
-  } catch (e) {
-    console.error('WebRTC setup error', e)
-    isPlaying.value = false
-  }
-}
-
-const stopWebRTCPlayback = () => {
-  if (pc) {
-    pc.close()
-    pc = null
-  }
-  if (videoElement.value) {
-    videoElement.value.srcObject = null
-  }
-  isPlaying.value = false
 }
 
 const fetchPresetList = async () => {

@@ -1,5 +1,5 @@
 import { apiClient, API_BASE_URL, type ApiResponse, type PaginatedResponse } from './config'
-import type { User, Dock, Drone, Mission, MissionRecord, Alert, Role, Device, HmsAlert, VisionAlert, VisionAlertsResponse, Permission, Robot, RobotsResponse } from '../types'
+import type { User, Mission, MissionRecord, Alert, Role, Device, HmsAlert, VisionAlert, VisionAlertsResponse, Permission, Robot, RobotsResponse } from '../types'
 import { getCurrentConfig } from '../config/environment'
 
 // 前端接口服务定义
@@ -80,74 +80,6 @@ export const userApi = {
   // 批量同步用户机器人
   syncUserRobots: (userId: number, robotIds: number[]) => {
     return apiClient.post(`/users/${userId}/robots`, { robot_ids: robotIds })
-  }
-}
-
-export const remoteDebugApi = {
-  execute: (workspaceId: string, deviceSn: string, method: string, params: any = {}) => {
-    return apiClient.post(`/workspaces/${workspaceId}/remote-debug/${deviceSn}/execute`, {
-      method,
-      params
-    })
-  }
-}
-
-export const dockApi = {
-  getDocks: (params?: { page?: number; pageSize?: number; status?: string }) => {
-    return apiClient.get<ApiResponse<PaginatedResponse<Dock>>>('/docks', params)
-  },
-
-  getDock: (id: string) => {
-    return apiClient.get<ApiResponse<Dock>>(`/docks/${id}`)
-  },
-
-  createDock: (dockData: Partial<Dock>) => {
-    return apiClient.post<ApiResponse<Dock>>('/docks', dockData)
-  },
-
-  updateDock: (id: string, dockData: Partial<Dock>) => {
-    return apiClient.put<ApiResponse<Dock>>(`/docks/${id}`, dockData)
-  },
-  deleteDock: (id: string) => {
-    return apiClient.delete<ApiResponse>(`/docks/${id}`)
-  }
-}
-
-export const droneApi = {
-  getDrones: (params?: { page?: number; pageSize?: number; status?: string; dockId?: string }) => {
-    return apiClient.get<ApiResponse<PaginatedResponse<Drone>>>('/drones', params)
-  },
-
-  getDrone: (id: string) => {
-    return apiClient.get<ApiResponse<Drone>>(`/drones/${id}`)
-  },
-
-  createDrone: (droneData: Partial<Drone>) => {
-    return apiClient.post<ApiResponse<Drone>>('/drones', droneData)
-  },
-
-  updateDrone: (id: string, droneData: Partial<Drone>) => {
-    return apiClient.put<ApiResponse<Drone>>(`/drones/${id}`, droneData)
-  },
-
-  deleteDrone: (id: string) => {
-    return apiClient.delete<ApiResponse>(`/drones/${id}`)
-  },
-
-  getDroneStatus: (id: string) => {
-    return apiClient.get<ApiResponse<{ status: string; battery: number; location?: any }>>(`/drones/${id}/status`)
-  },
-
-  takeoff: (id: string) => {
-    return apiClient.post<ApiResponse>(`/drones/${id}/takeoff`)
-  },
-
-  land: (id: string) => {
-    return apiClient.post<ApiResponse>(`/drones/${id}/land`)
-  },
-
-  returnToHome: (id: string) => {
-    return apiClient.post<ApiResponse>(`/drones/${id}/return-home`)
   }
 }
 
@@ -389,66 +321,9 @@ export const permissionApi = {
   deletePermission: (permissionId: string | number) => {
     return apiClient.delete(`/permissions/${permissionId}`)
   },
-  // ??????
+  // 获取用户权限
   getUserPermissions: (userId: number) => {
     return apiClient.get<string[]>(`/users/${userId}/permissions/`)
-  }
-}
-export const drcApi = {
-  checkDrcReady: (deviceSn: string) => {
-    return apiClient.get<{
-      code: number
-      message: string
-      data: {
-        ready: boolean
-        reason?: string
-      }
-    }>(`/drc/devices/${deviceSn}/drc/ready`)
-  },
-
-  getDrcStatus: (deviceSn: string) => {
-    return apiClient.get<{
-      code: number
-      message: string
-      data: {
-        drc_mode: 'active' | 'inactive'
-        session: string | null
-      }
-    }>(`/drc/devices/${deviceSn}/drc/status`)
-  },
-
-  enterDrcMode: (deviceSn: string) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/drc/devices/${deviceSn}/drc/enter`, {
-      osd_frequency: 10,
-      hsi_frequency: 4
-    })
-  },
-
-  exitDrcMode: (deviceSn: string) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/drc/devices/${deviceSn}/drc/exit`)
-  },
-
-  simpleControl: (deviceSn: string, control: {
-    forward?: number
-    right?: number
-    up?: number
-    turn_right?: number
-  }) => {
-    return apiClient.post<{
-      message: string
-      code: number
-    }>(`/drc/devices/${deviceSn}/drc/control/simple`, {
-      forward: control.forward || 0,
-      right: control.right || 0,
-      up: control.up || 0,
-      turn_right: control.turn_right || 0
-    })
   }
 }
 

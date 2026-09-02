@@ -1648,6 +1648,7 @@
 import { ref, onMounted, onActivated, onDeactivated, onUnmounted, nextTick, watch, computed, shallowRef } from 'vue'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import { usePointCloudRenderer } from '../composables/usePointCloudRenderer'
+import { parsePGM, convertImageDataToPGM } from '../composables/useGridMapLoader'
 import ThreePointCloudPreview from '../components/ThreePointCloudPreview.vue'
 import RobotMapViewer from '../components/RobotMapViewer.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -6938,112 +6939,10 @@ const loadAndDrawNavGridMap = async (mapName?: string) => {
     }
     
     const buffer = await pgmBlob.arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-    
-    // 解析PGM头部
-    let ptr = 0
-    let tokenCount = 0
-    let inComment = false
-    let headerTokens: string[] = []
-    
-    while (ptr < bytes.length && tokenCount < 4) {
-        const char = String.fromCharCode(bytes[ptr])
-        if (inComment) {
-            if (char === '\n') inComment = false
-            ptr++
-            continue
-        }
-        if (char === '#') {
-            inComment = true
-            ptr++
-            continue
-        }
-        if (/\s/.test(char)) {
-            ptr++
-            continue
-        }
-        let tokenStart = ptr
-        while (ptr < bytes.length && !/\s/.test(String.fromCharCode(bytes[ptr]))) {
-            ptr++
-        }
-        let token = String.fromCharCode(...bytes.subarray(tokenStart, ptr))
-        headerTokens.push(token)
-        tokenCount++
-    }
-    
-    if (ptr < bytes.length && /\s/.test(String.fromCharCode(bytes[ptr]))) {
-        ptr++
-    }
-    let dataStart = ptr
-    
-    const magic = headerTokens[0]
-    const width = parseInt(headerTokens[1])
-    const height = parseInt(headerTokens[2])
-    const maxVal = parseInt(headerTokens[3]) || 255
-    
-    navGridMapWidth.value = width
-    navGridMapHeight.value = height
-    
-    const offscreen = document.createElement('canvas')
-    offscreen.width = width
-    offscreen.height = height
-    const offscreenCtx = offscreen.getContext('2d')
-    if (!offscreenCtx) return
-    
-    const imageData = offscreenCtx.createImageData(width, height)
-    
-    if (magic === 'P5') {
-      let p = dataStart
-      for (let idx = 0; idx < width * height; idx++) {
-        if (p >= bytes.length) break
-        const v = bytes[p++]
-        const c = v
-        const off = idx * 4
-        imageData.data[off] = c
-        imageData.data[off + 1] = c
-        imageData.data[off + 2] = c
-        imageData.data[off + 3] = 255
-      }
-    } else if (magic === 'P2') {
-      const textDecoder = new TextDecoder()
-      const asciiData = textDecoder.decode(bytes.subarray(dataStart))
-      const tokens = asciiData.trim().split(/\s+/)
-      
-      for (let idx = 0; idx < width * height; idx++) {
-        if (idx >= tokens.length) break
-        const v = parseInt(tokens[idx], 10)
-        const c = Math.floor((v / maxVal) * 255)
-        
-        const off = idx * 4
-        imageData.data[off] = c
-        imageData.data[off + 1] = c
-        imageData.data[off + 2] = c
-        imageData.data[off + 3] = 255
-      }
-    } else {
-      throw new Error('不支持的PGM格式: ' + magic)
-    }
-    
-    // 黑白映射优化显示
-    for (let k = 0; k < imageData.data.length; k += 4) {
-      const g = imageData.data[k]
-      if (g === 205) {
-        imageData.data[k] = 205
-        imageData.data[k + 1] = 205
-        imageData.data[k + 2] = 205
-      } else if (g < 128) {
-        imageData.data[k] = 0
-        imageData.data[k + 1] = 0
-        imageData.data[k + 2] = 0
-      } else {
-        imageData.data[k] = 255
-        imageData.data[k + 1] = 255
-        imageData.data[k + 2] = 255
-      }
-    }
-    
-    offscreenCtx.putImageData(imageData, 0, 0)
-    navGridMapOffscreenCanvas.value = offscreen
+    const parsed = parsePGM(buffer, true)
+    navGridMapWidth.value = parsed.width
+    navGridMapHeight.value = parsed.height
+    navGridMapOffscreenCanvas.value = parsed.offscreenCanvas
     navGridMapLoading.value = false
     drawNavGridMapCanvas()
   } catch (err) {
@@ -9924,109 +9823,10 @@ const loadReloGridMap = async (mapName: string) => {
     }
 
     const buffer = await pgmBlob.arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-
-    // PGM 头部解析
-    let ptr = 0
-    let tokenCount = 0
-    let inComment = false
-    let headerTokens: string[] = []
-
-    while (ptr < bytes.length && tokenCount < 4) {
-      const char = String.fromCharCode(bytes[ptr])
-      if (inComment) {
-        if (char === '\n') inComment = false
-        ptr++
-        continue
-      }
-      if (char === '#') {
-        inComment = true
-        ptr++
-        continue
-      }
-      if (/\s/.test(char)) {
-        ptr++
-        continue
-      }
-      let tokenStart = ptr
-      while (ptr < bytes.length && !/\s/.test(String.fromCharCode(bytes[ptr]))) {
-        ptr++
-      }
-      let token = String.fromCharCode(...bytes.subarray(tokenStart, ptr))
-      headerTokens.push(token)
-      tokenCount++
-    }
-
-    if (ptr < bytes.length && /\s/.test(String.fromCharCode(bytes[ptr]))) {
-      ptr++
-    }
-    let dataStart = ptr
-
-    const magic = headerTokens[0]
-    const width = parseInt(headerTokens[1])
-    const height = parseInt(headerTokens[2])
-    const maxVal = parseInt(headerTokens[3]) || 255
-
-    canvas.width = width
-    canvas.height = height
-
-    // 创建离屏 canvas 用于缓存静态地图
-    reloOffscreenCanvas = document.createElement('canvas')
-    reloOffscreenCanvas.width = width
-    reloOffscreenCanvas.height = height
-    const offscreenCtx = reloOffscreenCanvas.getContext('2d')
-    if (!offscreenCtx) return
-
-    const imageData = offscreenCtx.createImageData(width, height)
-
-    if (magic === 'P5') {
-      let p = dataStart
-      for (let idx = 0; idx < width * height; idx++) {
-        if (p >= bytes.length) break
-        const v = bytes[p++]
-        const off = idx * 4
-        imageData.data[off] = v
-        imageData.data[off + 1] = v
-        imageData.data[off + 2] = v
-        imageData.data[off + 3] = 255
-      }
-    } else if (magic === 'P2') {
-      const textDecoder = new TextDecoder()
-      const asciiData = textDecoder.decode(bytes.subarray(dataStart))
-      const tokens = asciiData.trim().split(/\s+/)
-      for (let idx = 0; idx < width * height; idx++) {
-        if (idx >= tokens.length) break
-        const v = parseInt(tokens[idx], 10)
-        const c = Math.floor((v / maxVal) * 255)
-        const off = idx * 4
-        imageData.data[off] = c
-        imageData.data[off + 1] = c
-        imageData.data[off + 2] = c
-        imageData.data[off + 3] = 255
-      }
-    } else {
-      throw new Error('不支持的PGM格式: ' + magic)
-    }
-
-    // 黑白优化映射
-    for (let k = 0; k < imageData.data.length; k += 4) {
-      const g = imageData.data[k]
-      if (g === 205) {
-        imageData.data[k] = 205
-        imageData.data[k + 1] = 205
-        imageData.data[k + 2] = 205
-      } else if (g < 128) {
-        imageData.data[k] = 0
-        imageData.data[k + 1] = 0
-        imageData.data[k + 2] = 0
-      } else {
-        imageData.data[k] = 255
-        imageData.data[k + 1] = 255
-        imageData.data[k + 2] = 255
-      }
-    }
-
-    offscreenCtx.putImageData(imageData, 0, 0)
+    const parsed = parsePGM(buffer, true)
+    canvas.width = parsed.width
+    canvas.height = parsed.height
+    reloOffscreenCanvas = parsed.offscreenCanvas
 
     reloScale = 1
     reloOffsetX = 0
@@ -10267,123 +10067,16 @@ const loadGridMap = async (mapName: string) => {
     }
     
     const buffer = await blob.arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-    
-    // 解析PGM头部
-    // 重新定位数据开始位置，更健壮的方式
-    let ptr = 0
-    let tokenCount = 0
-    let inComment = false
-    let headerTokens: string[] = []
-    
-    // 读取头部 tokens (magic, width, height, maxVal)
-    while (ptr < bytes.length && tokenCount < 4) {
-        const char = String.fromCharCode(bytes[ptr])
-        if (inComment) {
-            if (char === '\n') inComment = false
-            ptr++
-            continue
-        }
-        if (char === '#') {
-            inComment = true
-            ptr++
-            continue
-        }
-        if (/\s/.test(char)) {
-            ptr++
-            continue
-        }
-        // 找到token
-        let tokenStart = ptr
-        while (ptr < bytes.length && !/\s/.test(String.fromCharCode(bytes[ptr]))) {
-            ptr++
-        }
-        let token = String.fromCharCode(...bytes.subarray(tokenStart, ptr))
-        headerTokens.push(token)
-        tokenCount++
-    }
-    
-    // 跳过最后一个token后的空白字符
-    if (ptr < bytes.length && /\s/.test(String.fromCharCode(bytes[ptr]))) {
-        ptr++
-    }
-    let dataStart = ptr
-    
-    const magic = headerTokens[0]
-    const width = parseInt(headerTokens[1])
-    const height = parseInt(headerTokens[2])
-    const maxVal = parseInt(headerTokens[3]) || 255
-    
-    canvas.width = width
-    canvas.height = height
+    const parsed = parsePGM(buffer, true)
+    canvas.width = parsed.width
+    canvas.height = parsed.height
     await loadGridMapMeta(mapName)
     
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     
-    const imageData = ctx.createImageData(width, height)
-    
-    // 解析图像数据
-    if (magic === 'P5') {
-      // 二进制格式
-      let p = dataStart
-      for (let idx = 0; idx < width * height; idx++) {
-        if (p >= bytes.length) break
-        const v = bytes[p++]
-        // 简单的灰度映射
-        const c = v
-        const off = idx * 4
-        imageData.data[off] = c
-        imageData.data[off + 1] = c
-        imageData.data[off + 2] = c
-        imageData.data[off + 3] = 255
-      }
-    } else if (magic === 'P2') {
-      // ASCII格式
-      // 将剩余的字节转换为字符串
-      const textDecoder = new TextDecoder()
-      const asciiData = textDecoder.decode(bytes.subarray(dataStart))
-      // 使用正则分割空白字符
-      const tokens = asciiData.trim().split(/\s+/)
-      
-      for (let idx = 0; idx < width * height; idx++) {
-        if (idx >= tokens.length) break
-        const v = parseInt(tokens[idx], 10)
-        // 归一化到 0-255
-        const c = Math.floor((v / maxVal) * 255)
-        const off = idx * 4
-        imageData.data[off] = c
-        imageData.data[off + 1] = c
-        imageData.data[off + 2] = c
-        imageData.data[off + 3] = 255
-      }
-    } else {
-      throw new Error('不支持的PGM格式: ' + magic)
-    }
-    
-    // 黑白映射优化显示
-    for (let k = 0; k < imageData.data.length; k += 4) {
-      const g = imageData.data[k]
-      // 205是未知区域，显示为灰色
-      // 0是障碍，显示为黑色
-      // 254/255是空闲，显示为白色
-      if (g === 205) {
-        imageData.data[k] = 205
-        imageData.data[k + 1] = 205
-        imageData.data[k + 2] = 205
-      } else if (g < 128) {
-        imageData.data[k] = 0
-        imageData.data[k + 1] = 0
-        imageData.data[k + 2] = 0
-      } else {
-        imageData.data[k] = 255
-        imageData.data[k + 1] = 255
-        imageData.data[k + 2] = 255
-      }
-    }
-    
-    ctx.putImageData(imageData, 0, 0)
-    missionGridImageData = imageData
+    ctx.putImageData(parsed.imageData, 0, 0)
+    missionGridImageData = parsed.imageData
     gridImageData = null // 清除编辑缓存
     editHistory.value = [] // 清除历史记录
     
@@ -10745,33 +10438,6 @@ const undoEdit = () => {
   }
 }
 
-// 将ImageData转换为PGM格式
-const convertImageDataToPGM = (imageData: ImageData) => {
-  const width = imageData.width
-  const height = imageData.height
-  
-  // 构建PGM文件头 (P5格式 = 二进制)
-  const header = `P5\n${width} ${height}\n255\n`
-  const headerBytes = new TextEncoder().encode(header)
-  
-  // 创建像素数据数组（灰度值）
-  const pixels = new Uint8Array(width * height)
-  
-  // 从ImageData提取灰度值
-  for (let i = 0; i < width * height; i++) {
-    const idx = i * 4
-    // 使用R通道的值（因为是黑白图，RGB值相同）
-    pixels[i] = imageData.data[idx]
-  }
-  
-  // 合并头部和像素数据
-  const pgmData = new Uint8Array(headerBytes.length + pixels.length)
-  pgmData.set(headerBytes, 0)
-  pgmData.set(pixels, headerBytes.length)
-  
-  return pgmData
-}
-
 // 清除编辑
 const clearGridEdit = () => {
   const canvas = gridMapCanvas.value
@@ -10882,134 +10548,7 @@ const handleSaveGridMap = async () => {
   })
 }
 
-// 加载并渲染PGM文件
-const loadAndRenderGridMap = async () => {
-  try {
-    gridMapLoading.value = true
-    gridMapError.value = ''
-    
-    await nextTick()
-    
-    const canvas = gridMapCanvas.value
-    if (!canvas) {
-      console.warn('Canvas element not found')
-      gridMapLoading.value = false
-      return
-    }
-    
-    // 加载PGM文件
-    const url = new URL('../../public/gridMap.pgm', import.meta.url).href
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error('无法加载地图文件')
-    }
-    
-    const buffer = await response.arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-    
-    // 解析PGM头部
-    let header = ''
-    let i = 0
-    let newlines = 0
-    while (i < bytes.length && newlines < 3) {
-      const ch = String.fromCharCode(bytes[i++])
-      header += ch
-      if (ch === '\n') newlines++
-    }
-    
-    const headerClean = header.split('\n').filter(l => l.trim() && !l.startsWith('#')).join('\n')
-    const parts = headerClean.split(/\s+/).filter(Boolean)
-    const magic = parts[0]
-    const width = parseInt(parts[1])
-    const height = parseInt(parts[2])
-    const maxVal = parseInt(parts[3]) || 255
-    const pixelStart = i
-    
-    canvas.width = width
-    canvas.height = height
-    
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    
-    const imageData = ctx.createImageData(width, height)
-    
-    // 解析图像数据
-    if (magic === 'P5') {
-      // 二进制格式
-      const bytesPerSample = maxVal > 255 ? 2 : 1
-      let p = pixelStart
-      for (let idx = 0; idx < width * height; idx++) {
-        let v = 0
-        if (bytesPerSample === 1) {
-          v = bytes[p++]
-        } else {
-          v = (bytes[p] << 8) | bytes[p + 1]
-          p += 2
-        }
-        const c = Math.max(0, Math.min(255, Math.round((v / maxVal) * 255)))
-        const off = idx * 4
-        imageData.data[off] = c
-        imageData.data[off + 1] = c
-        imageData.data[off + 2] = c
-        imageData.data[off + 3] = 255
-      }
-    } else {
-      // ASCII格式
-      const text = new TextDecoder().decode(bytes)
-      const tokens = text.replace(/#.*\n/g, '').trim().split(/\s+/)
-      const pixelTokens = tokens.slice(4)
-      for (let idx = 0; idx < width * height; idx++) {
-        const v = parseInt(pixelTokens[idx] || `${maxVal}`)
-        const c = Math.max(0, Math.min(255, Math.round((v / maxVal) * 255)))
-        const off = idx * 4
-        imageData.data[off] = c
-        imageData.data[off + 1] = c
-        imageData.data[off + 2] = c
-        imageData.data[off + 3] = 255
-      }
-    }
-    
-    // 黑白映射
-    for (let k = 0; k < imageData.data.length; k += 4) {
-      const g = imageData.data[k]
-      if (g < 128) {
-        imageData.data[k] = 0
-        imageData.data[k + 1] = 0
-        imageData.data[k + 2] = 0
-      } else {
-        imageData.data[k] = 255
-        imageData.data[k + 1] = 255
-        imageData.data[k + 2] = 255
-      }
-    }
-    
-    ctx.putImageData(imageData, 0, 0)
-    
-    // 保存原始图像数据
-    missionGridImageData = ctx.createImageData(width, height)
-    missionGridImageData.data.set(imageData.data)
-    
-    // 重置编辑数据
-    gridImageData = null
-    
-    // 重置缩放和偏移
-    currentScale = 1
-    currentOffsetX = 0
-    currentOffsetY = 0
-    
-    // 应用居中变换
-    applyTransform()
-    
-    // 添加鼠标事件监听
-    setupCanvasEvents()
-    
-    gridMapLoading.value = false
-  } catch (error) {
-    console.error('加载地图失败:', error)
-    gridMapError.value = '加载地图失败，请检查文件是否存在'
-    gridMapLoading.value = false
-  }
-}
+
 
 // 设置Canvas事件
 const setupCanvasEvents = () => {

@@ -12,8 +12,6 @@ export const useTaskProgressStore = defineStore('taskProgress', () => {
   // 轮询状态
   const isPolling = ref(false)
   
-  // 轮询频率配置
-  
   // 任务完成弹窗状态
   const showTaskCompletionDialog = ref(false)
   const taskCompletionData = ref<{
@@ -201,19 +199,17 @@ export const useTaskProgressStore = defineStore('taskProgress', () => {
   
   // 跳转到任务日志页面
   const goToMissionLogs = () => {
+    const jobId = taskCompletionData.value?.jobId
     closeTaskCompletionDialog()
     // 使用延迟跳转，确保弹窗完全关闭后再跳转
-    const jobId = taskCompletionData.value?.jobId
     setTimeout(() => {
       if (jobId) {
-        window.location.href = `/#/dashboard/mission-logs?job_id=${jobId}`
+        window.location.href = `/#/dashboard/mission-logs?job_id=${encodeURIComponent(jobId)}`
       } else {
         window.location.href = '/#/dashboard/mission-logs'
       }
     }, 100)
   }
-  
-
   
   return {
     // 状态
