@@ -5385,9 +5385,25 @@ const switchNavPcdDensity = async (densityKey: 'sparse' | 'fine') => {
   const label = densityKey === 'fine' ? '精细' : '稀疏'
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
 
-  if (selectedNavPcdDensity.value === densityKey && navPointCloudData.value.length > 0 && currentLoadedNavPcdFileName.value === fileName) {
+  // 1. 无错误且已是当前激活渲染的文件时，无需重复加载
+  if (!navPointCloudError.value && selectedNavPcdDensity.value === densityKey && navPointCloudData.value.length > 0 && currentLoadedNavPcdFileName.value === fileName) {
     return
   }
+
+  // 2. 内存命中快速恢复：若已有目标文件数据（如精细失败后切回稀疏），秒级恢复已有渲染并清除报错
+  if (currentLoadedNavPcdFileName.value === fileName && baseNavPointCloudData.value.length > 0) {
+    selectedNavPcdDensity.value = densityKey
+    navPointCloudError.value = ''
+    navPointCloudLoading.value = false
+    navPointCloudData.value = [...baseNavPointCloudData.value]
+    nextTick(() => {
+      navPointCloudPreviewRef.value?.fitCameraToScene?.()
+    })
+    return
+  }
+
+  const prevDensity = selectedNavPcdDensity.value
+  const prevFileName = currentLoadedNavPcdFileName.value
 
   selectedNavPcdDensity.value = densityKey
   navPointCloudLoading.value = true
@@ -5399,10 +5415,7 @@ const switchNavPcdDensity = async (densityKey: 'sparse' | 'fine') => {
 
     if (!pcdBlob || pcdBlob.size === 0) {
       if (!robotId) {
-        navPointCloudError.value = '未选择机器人，无法下载地图'
-        showErrorMessage('未选择机器人，无法下载地图')
-        navPointCloudLoading.value = false
-        return
+        throw new Error('未选择机器人，无法下载地图')
       }
       navPointCloudLoadingText.value = `正在下载${label}点云地图(${fileName})...`
       pcdBlob = await mapFileApi.downloadMapFile(robotId, mapName, fileName)
@@ -5412,9 +5425,7 @@ const switchNavPcdDensity = async (densityKey: 'sparse' | 'fine') => {
     }
 
     if (!pcdBlob || pcdBlob.size === 0) {
-      navPointCloudError.value = `未找到${label}点云地图文件(${fileName})`
-      navPointCloudLoading.value = false
-      return
+      throw new Error(`未找到${label}点云地图文件(${fileName})`)
     }
 
     navPointCloudLoadingText.value = `正在解析${label}点云地图...`
@@ -5450,7 +5461,16 @@ const switchNavPcdDensity = async (densityKey: 'sparse' | 'fine') => {
     })
   } catch (err: any) {
     console.error(`[导航点云] 切换到${label}地图失败:`, err)
-    navPointCloudError.value = `加载${label}点云地图失败: ` + (err?.message || String(err))
+    const errText = err?.message || String(err)
+    if (baseNavPointCloudData.value.length > 0 && prevFileName === currentLoadedNavPcdFileName.value) {
+      selectedNavPcdDensity.value = prevDensity
+      navPointCloudError.value = ''
+      navPointCloudData.value = [...baseNavPointCloudData.value]
+      showErrorMessage(`${errText}，已保留当前地图`)
+    } else {
+      navPointCloudError.value = `加载${label}点云地图失败: ` + errText
+      showErrorMessage(`加载${label}点云地图失败: ` + errText)
+    }
     navPointCloudLoading.value = false
   }
 }

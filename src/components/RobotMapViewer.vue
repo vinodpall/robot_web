@@ -349,6 +349,7 @@ const pointCloudLoading = ref(false)
 const pointCloudLoadingText = ref('点云加载中...')
 const pointCloudError = ref('')
 const selectedPcdDensity = ref<PcdDensityKey>('sparse')
+const currentLoadedPcdFileName = ref('tinyMap.pcd')
 const selectedPcdColorMode = ref<'gradient' | 'classic'>(
   (localStorage.getItem('pcd_color_mode') as 'gradient' | 'classic') || 'classic'
 )
@@ -423,7 +424,12 @@ const loadNavigationOrigin = async (mapName: string) => {
   }
 }
 
-const loadPointCloudData = async (mapName: string, density: PcdDensityKey = selectedPcdDensity.value) => {
+const loadPointCloudData = async (
+  mapName: string,
+  density: PcdDensityKey = selectedPcdDensity.value,
+  prevDensity: PcdDensityKey = selectedPcdDensity.value,
+  prevFileName: string = currentLoadedPcdFileName.value
+) => {
   if (!mapName) {
     pointCloudData.value = []
     basePointCloudData.value = []
@@ -448,7 +454,12 @@ const loadPointCloudData = async (mapName: string, density: PcdDensityKey = sele
     }
 
     if (!pcdBlob || pcdBlob.size === 0) {
-      pointCloudError.value = `未找到点云地图文件(${fileName})`
+      if (basePointCloudData.value.length > 0 && prevFileName === currentLoadedPcdFileName.value) {
+        selectedPcdDensity.value = prevDensity
+        pointCloudError.value = ''
+      } else {
+        pointCloudError.value = `未找到点云地图文件(${fileName})`
+      }
       pointCloudLoading.value = false
       return
     }
@@ -456,6 +467,7 @@ const loadPointCloudData = async (mapName: string, density: PcdDensityKey = sele
     const arrayBuffer = await pcdBlob.arrayBuffer()
     const result = await parsePcdBufferInWorker(arrayBuffer)
     basePointCloudData.value = result.points
+    currentLoadedPcdFileName.value = fileName
     pointCloudNormalizationParams.value = result.normParams
     pointCloudLoading.value = false
 
@@ -467,15 +479,40 @@ const loadPointCloudData = async (mapName: string, density: PcdDensityKey = sele
     })
   } catch (err: any) {
     console.error('[地图组件] 加载点云失败:', err)
-    pointCloudError.value = '点云地图解析失败'
+    if (basePointCloudData.value.length > 0 && prevFileName === currentLoadedPcdFileName.value) {
+      selectedPcdDensity.value = prevDensity
+      pointCloudError.value = ''
+    } else {
+      pointCloudError.value = '点云地图解析失败'
+    }
     pointCloudLoading.value = false
   }
 }
 
 const switchPcdDensity = async (densityKey: PcdDensityKey) => {
   if (!props.mapName) return
+  const fileName = densityKey === 'fine' ? 'finalCloud.pcd' : 'tinyMap.pcd'
+
+  // 1. 无错误且已是当前激活渲染的文件时，无需重复加载
+  if (!pointCloudError.value && selectedPcdDensity.value === densityKey && basePointCloudData.value.length > 0 && currentLoadedPcdFileName.value === fileName) {
+    return
+  }
+
+  // 2. 内存命中快速恢复：若已有目标文件数据（如精细失败后切回稀疏），秒级恢复已有渲染并清除报错
+  if (currentLoadedPcdFileName.value === fileName && basePointCloudData.value.length > 0) {
+    selectedPcdDensity.value = densityKey
+    pointCloudError.value = ''
+    pointCloudLoading.value = false
+    nextTick(() => {
+      threePointCloudRef.value?.fitCameraToScene?.()
+    })
+    return
+  }
+
+  const prevDensity = selectedPcdDensity.value
+  const prevFileName = currentLoadedPcdFileName.value
   selectedPcdDensity.value = densityKey
-  await loadPointCloudData(props.mapName, densityKey)
+  await loadPointCloudData(props.mapName, densityKey, prevDensity, prevFileName)
 }
 
 // ----------------- 循迹轨迹与任务点逻辑 -----------------

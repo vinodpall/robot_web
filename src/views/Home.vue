@@ -14,8 +14,6 @@
             <video 
               ref="videoElement"
               :class="['video-only-element', { 'video-hidden': !hasVisibleVideoFrame }]"
-              :controls="hasVisibleVideoFrame"
-              controlsList="noremoteplayback nodownload"
               disablePictureInPicture
               muted
               autoplay
@@ -124,6 +122,65 @@
                 </div>
               </div>
             </div>
+
+            <!-- 实时检测内容底部 HUD 悬浮胶囊面板 (契合参考图与高科技毛玻璃质感) -->
+            <div
+              v-if="hasVisibleVideoFrame && !webrtcReconnecting && showVisibleVisionBoxes && showVisibleBottomHud"
+              class="vision-bottom-hud-pill"
+              :class="{ 'is-fullscreen': currentFullscreenPanel === 'visible' }"
+            >
+              <!-- 实时状态呼吸绿点 -->
+              <div class="hud-pill-status-dot" title="实时视频算法分析中">
+                <span class="hud-dot-core"></span>
+                <span class="hud-dot-ping"></span>
+              </div>
+
+              <!-- 中间内容区域：双行自适应呈现 -->
+              <div class="hud-pill-content">
+                <!-- 第一行：状态/来源标签与类别（淡化弱化，降低权重） -->
+                <div class="hud-pill-line-secondary">
+                  <span class="hud-pill-live-tag">[LIVE]</span>
+                  <span class="hud-pill-meta-text">{{ visibleDetectionMetaText }}</span>
+                </div>
+                <!-- 第二行：实际识别内容（强化主体，自适应多行折行） -->
+                <div class="hud-pill-line-primary" :class="{ 'is-abnormal': isVisibleDetectionAbnormal }" :title="visibleDetectionMainContent">
+                  <svg v-if="isVisibleDetectionAbnormal" class="hud-warn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  <span class="hud-main-content-text">{{ visibleDetectionMainContent }}</span>
+                </div>
+              </div>
+
+              <!-- 右侧快捷操作区（仅保留关闭按钮） -->
+              <div class="hud-pill-actions">
+                <!-- 关闭/收起按钮 -->
+                <button
+                  class="hud-pill-btn hud-pill-close-btn"
+                  title="收起底部检测面板"
+                  @click.stop="showVisibleBottomHud = false"
+                >
+                  <svg class="hud-pill-btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 当底部栏收起时的微型恢复按钮（浮动在底部中间） -->
+            <div
+              v-if="hasVisibleVideoFrame && !webrtcReconnecting && showVisibleVisionBoxes && !showVisibleBottomHud"
+              class="vision-bottom-hud-reopen"
+              :class="{ 'is-fullscreen': currentFullscreenPanel === 'visible' }"
+              title="展开底部实时检测栏"
+              @click.stop="showVisibleBottomHud = true"
+            >
+              <span class="reopen-dot"></span>
+              <span class="reopen-text">展开检测信息</span>
+            </div>
+
             <!-- 重连 overlay：保留最后一帧，叠加半透明提示 -->
             <div v-if="webrtcReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
@@ -140,8 +197,8 @@
               <button
                 class="video-action-btn stream-mode-btn vision-toggle-btn"
                 :class="{ 'active': showVisibleVisionBoxes }"
-                :title="`算法画框：${showVisibleVisionBoxes ? '开启中（点击关闭）' : '已关闭（点击开启）'}`"
-                @click.stop="showVisibleVisionBoxes = !showVisibleVisionBoxes"
+                :title="`算法画面叠加(画框/AI)：${showVisibleVisionBoxes ? '开启中（点击关闭）' : '已关闭（点击开启）'}`"
+                @click.stop="toggleVisibleVisionBoxes"
               >
                 算
               </button>
@@ -180,8 +237,6 @@
             <video 
               ref="infraredVideoElement"
               :class="['video-only-element', { 'video-hidden': !hasInfraredVideoFrame }]"
-              :controls="hasInfraredVideoFrame"
-              controlsList="noremoteplayback nodownload"
               disablePictureInPicture
               muted
               autoplay
@@ -290,6 +345,7 @@
                 </div>
               </div>
             </div>
+
             <!-- 红外重连 overlay -->
             <div v-if="infraredReconnecting" class="video-reconnect-overlay">
               <div class="video-reconnect-spinner"></div>
@@ -306,7 +362,7 @@
               <button
                 class="video-action-btn stream-mode-btn vision-toggle-btn"
                 :class="{ 'active': showInfraredVisionBoxes }"
-                :title="`算法画框：${showInfraredVisionBoxes ? '开启中（点击关闭）' : '已关闭（点击开启）'}`"
+                :title="`算法画面叠加(画框/AI)：${showInfraredVisionBoxes ? '开启中（点击关闭）' : '已关闭（点击开启）'}`"
                 @click.stop="showInfraredVisionBoxes = !showInfraredVisionBoxes"
               >
                 算
@@ -2547,11 +2603,31 @@ const switchPcdDensity = async (densityKey: PcdDensityKey) => {
   const option = PCD_DENSITY_OPTIONS.find(o => o.key === densityKey)
   if (!option) return
 
-  selectedPcdDensity.value = densityKey
-
-  // 点击当前已被激活的密度，且数据非空时，仅关闭下拉菜单
-  if (selectedPcdDensity.value === densityKey && basePointCloudData.value.length > 0 && currentLoadedPcdFileName.value === option.fileName) {
+  // 1. 如果当前没有报错，且目标清晰度正是当前已加载渲染的文件，且点云数据非空，直接关闭菜单返回
+  if (
+    !pointCloudError.value &&
+    selectedPcdDensity.value === densityKey &&
+    currentLoadedPcdFileName.value === option.fileName &&
+    basePointCloudData.value.length > 0
+  ) {
     showPcdSettingsMenu.value = false
+    return
+  }
+
+  // 2. 内存命中与故障快速恢复：若内存中已有目标文件的数据（典型场景：精细地图下载失败报错后，用户点击切回稀疏地图）
+  //    无需重新走网络下载或 Worker 解析，直接清除错误并秒级恢复已有渲染
+  if (
+    currentLoadedPcdFileName.value === option.fileName &&
+    basePointCloudData.value.length > 0
+  ) {
+    showPcdSettingsMenu.value = false
+    selectedPcdDensity.value = densityKey
+    pointCloudError.value = ''
+    pointCloudLoading.value = false
+    pointCloudData.value = [...basePointCloudData.value]
+    await syncPointCloudOverlayByRuntimeState()
+    await nextTick()
+    threePointCloudRef.value?.fitCameraToScene?.()
     return
   }
 
@@ -2560,6 +2636,11 @@ const switchPcdDensity = async (densityKey: PcdDensityKey) => {
   const fileName = option.fileName
   const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
 
+  // 记录操作前的模式和加载文件，以便加载失败时安全回滚状态
+  const prevDensity = selectedPcdDensity.value
+  const prevFileName = currentLoadedPcdFileName.value
+
+  selectedPcdDensity.value = densityKey
   pointCloudLoading.value = true
   pointCloudLoadingText.value = `正在加载${option.label}地图...`
   pointCloudError.value = ''
@@ -2571,9 +2652,7 @@ const switchPcdDensity = async (densityKey: PcdDensityKey) => {
     // 2. 若本地缓存不存在，从服务端按需下载
     if (!pcdBlob || pcdBlob.size === 0) {
       if (!robotId) {
-        pointCloudError.value = '未选择机器人，无法下载地图'
-        showError('未选择机器人，无法下载地图')
-        return
+        throw new Error('未选择机器人，无法下载地图')
       }
       pointCloudLoadingText.value = `正在下载${option.label}地图(${fileName})...`
       pcdBlob = await mapFileApi.downloadMapFile(robotId, mapName, fileName)
@@ -2581,9 +2660,7 @@ const switchPcdDensity = async (densityKey: PcdDensityKey) => {
         await saveMapFile(mapName, fileName, pcdBlob)
         showSuccess(`${option.label}地图下载成功`)
       } else {
-        pointCloudError.value = `${option.label}地图（${fileName}）不存在`
-        showError(`${option.label}地图（${fileName}）不存在`)
-        return
+        throw new Error(`${option.label}地图（${fileName}）不存在`)
       }
     }
 
@@ -2592,9 +2669,7 @@ const switchPcdDensity = async (densityKey: PcdDensityKey) => {
     const ab = await pcdBlob.arrayBuffer()
     const { points, normParams } = await parsePcdBufferInWorker(ab)
     if (points.length === 0) {
-      pointCloudError.value = '点云数据为空'
-      showError('点云数据为空')
-      return
+      throw new Error('点云数据为空')
     }
 
     selectedPcdDensity.value = densityKey
@@ -2606,10 +2681,21 @@ const switchPcdDensity = async (densityKey: PcdDensityKey) => {
     await syncPointCloudOverlayByRuntimeState()
     await nextTick()
     threePointCloudRef.value?.fitCameraToScene?.()
-  } catch (err) {
+  } catch (err: any) {
     console.error(`[点云] 切换至${option.label}地图失败:`, err)
-    pointCloudError.value = '地图加载失败'
-    showError('地图加载失败')
+    const errorMsg = err?.message || '地图加载失败'
+
+    // 优雅降级：若内存中已有之前有效加载的点云（如原本显示着稀疏地图，尝试精细地图失败）
+    // 则保留当前已有地图，不遮挡画面，并将清晰度状态安全回滚为之前有效的档位
+    if (basePointCloudData.value.length > 0 && prevFileName === currentLoadedPcdFileName.value) {
+      selectedPcdDensity.value = prevDensity
+      pointCloudError.value = ''
+      pointCloudData.value = [...basePointCloudData.value]
+      showError(`${errorMsg}，已保留当前地图`)
+    } else {
+      pointCloudError.value = errorMsg
+      showError(errorMsg)
+    }
   } finally {
     pointCloudLoading.value = false
   }
@@ -5479,9 +5565,9 @@ const infraredError = ref('')
 let infraredPc: RTCPeerConnection | null = null
 let infraredSessionId = 0
 
-// 算法画框显示开关（默认关闭）
-const showVisibleVisionBoxes = ref(false)
-const showInfraredVisionBoxes = ref(false)
+// 算法画框/AI识别叠加显示开关（默认开启）
+const showVisibleVisionBoxes = ref(true)
+const showInfraredVisionBoxes = ref(true)
 
 // ===== 全屏模式云台 (PTZ) 操控逻辑 =====
 const ptzSpeed = ref<number>(3) // 转速档位 1~7，默认 3
@@ -5748,6 +5834,17 @@ interface VisionBoxItem {
   displayValue?: string
 }
 
+// ===== AI 智能识别结果数据接口 =====
+interface VisionAiItem {
+  id: string
+  algoKey: string
+  cnType: string
+  status: string
+  summary: string
+  isAbnormal: boolean
+  timestamp?: number
+}
+
 const parseVisionBoxes = (camKeys: string[]): VisionBoxItem[] => {
   const visionMap = robotStore.visionRealTimeMap
   if (!visionMap) return []
@@ -5821,6 +5918,94 @@ const parseVisionBoxes = (camKeys: string[]): VisionBoxItem[] => {
   return result
 }
 
+// ===== 解析 AI 智能识别结果 (如大模型识别 VLM 的 status 与 summary) =====
+const parseVisionAiInfo = (camKeys: string[]): VisionAiItem[] => {
+  const visionMap = robotStore.visionRealTimeMap
+  if (!visionMap) return []
+
+  let matchedPayload: any = null
+  for (const key of camKeys) {
+    const item = visionMap[key]
+    if (item && item.timestamp && Date.now() - item.timestamp < 8000) {
+      matchedPayload = item
+      break
+    }
+  }
+
+  // 若无完全匹配 key，尝试按包含关系模糊匹配（如含有 visible 或 left）
+  if (!matchedPayload) {
+    const allKeys = Object.keys(visionMap)
+    for (const k of allKeys) {
+      const lower = k.toLowerCase()
+      const isCandidate = camKeys.some(ck => {
+        const ckl = ck.toLowerCase()
+        return lower.includes(ckl) || ckl.includes(lower)
+      })
+      if (isCandidate) {
+        const item = visionMap[k]
+        if (item && item.timestamp && Date.now() - item.timestamp < 8000) {
+          matchedPayload = item
+          break
+        }
+      }
+    }
+  }
+
+  if (!matchedPayload || !matchedPayload.data) return []
+
+  const result: VisionAiItem[] = []
+  const dataObj = matchedPayload.data
+
+  Object.keys(dataObj).forEach(algoKey => {
+    const algoItem = dataObj[algoKey]
+    if (!algoItem) return
+
+    const lResults = algoItem.lResults || algoItem.results || {}
+    const vlm = lResults.vlm || algoItem.vlm || lResults.ai || {}
+
+    // 提取 status 与 summary 字段（优先取 vlm 内字段，兼容平铺结构）
+    const rawStatus = vlm.status !== undefined ? vlm.status : (algoItem.status !== undefined ? algoItem.status : '')
+    const rawSummary = vlm.summary !== undefined ? vlm.summary : (algoItem.summary !== undefined ? algoItem.summary : algoItem.sValue)
+
+    const status = String(rawStatus ?? '').trim()
+    const summary = String(rawSummary ?? '').trim()
+
+    // 仅当 status 或 summary 包含有效信息时才呈现
+    if (status || summary) {
+      const cnType = String(algoItem.cnType || algoItem.cn_type || algoItem.sType || '大模型识别').trim()
+      const isAbnormal = Boolean(
+        vlm.is_abnormal === true ||
+        algoItem.is_abnormal === true ||
+        algoItem.error === true ||
+        (typeof status === 'string' && (
+          status.includes('异常') ||
+          status.includes('告警') ||
+          status.includes('报警') ||
+          status.includes('故障') ||
+          status.includes('危险') ||
+          status.toLowerCase().includes('abnormal') ||
+          status.toLowerCase().includes('warning') ||
+          status.toLowerCase().includes('alarm') ||
+          status.toLowerCase().includes('danger') ||
+          status.toLowerCase().includes('error')
+        ))
+      )
+
+      result.push({
+        id: `${algoKey}_ai`,
+        algoKey,
+        cnType,
+        status: status || (isAbnormal ? '异常' : '正常'),
+        summary: summary || '暂无识别摘要',
+        isAbnormal,
+        timestamp: matchedPayload.timestamp
+      })
+    }
+  })
+
+  return result
+}
+
 const visibleVisionBoxes = computed(() => {
   if (!showVisibleVisionBoxes.value) return []
   // 当画面未真正播放出来、处于加载中、正在重连中或视频地址为空时，绝对不渲染画框
@@ -5830,6 +6015,15 @@ const visibleVisionBoxes = computed(() => {
   return parseVisionBoxes(['cam_rtsp_left', 'visible', 'cam_visible', 'cam_left'])
 })
 
+const visibleVisionAiInfo = computed(() => {
+  if (!showVisibleVisionBoxes.value) return []
+  // 当画面未真正播放出来、处于加载中、正在重连中或视频地址为空时，不渲染 AI 悬浮卡片
+  if (!hasVisibleVideoFrame.value || visibleLoading.value || webrtcReconnecting.value || !videoStreamUrl.value) {
+    return []
+  }
+  return parseVisionAiInfo(['cam_rtsp_left', 'visible', 'cam_visible', 'cam_left'])
+})
+
 const infraredVisionBoxes = computed(() => {
   if (!showInfraredVisionBoxes.value) return []
   // 当画面未真正播放出来、处于加载中、正在重连中或视频地址为空时，绝对不渲染画框
@@ -5837,6 +6031,115 @@ const infraredVisionBoxes = computed(() => {
     return []
   }
   return parseVisionBoxes(['cam_rtsp_right', 'infrared', 'cam_infrared', 'cam_right'])
+})
+
+const infraredVisionAiInfo = computed(() => {
+  if (!showInfraredVisionBoxes.value) return []
+  // 当画面未真正播放出来、处于加载中、正在重连中或视频地址为空时，不渲染 AI 悬浮卡片
+  if (!hasInfraredVideoFrame.value || infraredLoading.value || infraredReconnecting.value || !infraredStreamUrl.value) {
+    return []
+  }
+  return parseVisionAiInfo(['cam_rtsp_right', 'infrared', 'cam_infrared', 'cam_right'])
+})
+
+// ===== 底部实时检测 HUD 胶囊面板数据与状态 =====
+// ===== 底部实时检测 HUD 胶囊面板数据与状态 =====
+const showVisibleBottomHud = ref(true)
+
+// 切换可见光算法画框开关（开启时自动重新展开底部 HUD）
+const toggleVisibleVisionBoxes = () => {
+  showVisibleVisionBoxes.value = !showVisibleVisionBoxes.value
+  if (showVisibleVisionBoxes.value) {
+    showVisibleBottomHud.value = true
+  }
+}
+
+// 是否处于异常/告警状态（用于触发第二行警示高亮效果）
+const isVisibleDetectionAbnormal = computed(() => {
+  if (robotStore.globalObstacleAlertActive) return true
+  if (visibleVisionAiInfo.value.some(i => i.isAbnormal)) return true
+  return false
+})
+
+// 格式化第一行次要元信息（淡化展示：类别/来源，如 [LIVE] AI识别: 大模型识别 或 [LIVE] 目标检测）
+const visibleDetectionMetaText = computed(() => {
+  if (visibleVisionBoxes.value.length > 0) {
+    return `目标检测 (${visibleVisionBoxes.value.length}个目标)`
+  }
+  if (visibleVisionAiInfo.value.length > 0) {
+    const titles = visibleVisionAiInfo.value.map(item => item.cnType || 'AI识别').slice(0, 3)
+    return `AI识别: ${titles.join('、')}`
+  }
+  return '视觉感知运行中'
+})
+
+// 格式化第二行主体内容（重点强化展示：突出实际识别结果主体）
+const visibleDetectionMainContent = computed(() => {
+  // 1. 如果有检测框目标，格式化检测框中的目标及置信度/数值
+  let targetSummary = ''
+  if (visibleVisionBoxes.value.length > 0) {
+    const formattedItems: string[] = []
+    visibleVisionBoxes.value.forEach(box => {
+      const name = box.cnType || '目标'
+      let scoreStr = ''
+      if (box.displayValue) {
+        const val = box.displayValue.trim()
+        if (val.endsWith('%') || val.endsWith('°C')) {
+          scoreStr = ` (${val})`
+        } else {
+          const num = parseFloat(val)
+          if (!isNaN(num)) {
+            scoreStr = num <= 1 ? ` (${(num * 100).toFixed(1)}%)` : ` (${num.toFixed(1)}%)`
+          }
+        }
+      }
+      formattedItems.push(`${name}${scoreStr}`)
+    })
+    const uniqueItems = Array.from(new Set(formattedItems))
+    const displayList = uniqueItems.slice(0, 4)
+    const moreCount = uniqueItems.length - displayList.length
+    targetSummary = `检测到目标: ${displayList.join('，')}${moreCount > 0 ? ` 等共${uniqueItems.length}项` : ''}。`
+  }
+
+  // 2. 如果有 VLM/大模型识别摘要
+  let aiSummary = ''
+  if (visibleVisionAiInfo.value.length > 0) {
+    const aiItem = visibleVisionAiInfo.value.find(i => i.summary && i.summary !== '暂无识别摘要')
+    if (aiItem && aiItem.summary) {
+      aiSummary = aiItem.summary.endsWith('。') ? aiItem.summary : `${aiItem.summary}。`
+    }
+  }
+
+  // 3. 优先级呈现：
+  // 若大模型摘要存在且处于异常状态，或仅有识别摘要，优先展示摘要内容
+  if (aiSummary && (isVisibleDetectionAbnormal.value || !targetSummary)) {
+    return aiSummary
+  }
+  if (targetSummary) {
+    return targetSummary
+  }
+  if (aiSummary) {
+    return aiSummary
+  }
+
+  // 4. 障碍物报警状态
+  if (robotStore.globalObstacleAlertActive) {
+    return '前方检测到障碍物，已自动触发安全避障。'
+  }
+
+  // 5. 当前有点位任务正在执行
+  if (robotStore.taskStatus?.task_name) {
+    return `前方道路畅通，导航至 ${robotStore.taskStatus.task_name}。`
+  }
+
+  // 6. 机器人处于运动中
+  const isMoving = robotStore.motionState && (Math.abs(robotStore.motionState.vx || 0) > 0.05 || Math.abs(robotStore.motionState.wz || 0) > 0.05)
+  if (isMoving) {
+    return '巡检行驶中，前方视线良好，道路通畅。'
+  }
+
+  // 7. 默认状态
+  return '前方道路畅通，导航感知正常。'
 })
 
 // ===== WebRTC 自动重连配置 =====
@@ -14884,6 +15187,7 @@ const handlePageShow = () => {
   border-radius: 12px;
   overflow: hidden;
   position: relative;
+  container-type: inline-size;
   background: linear-gradient(180deg, #0e2b40 0%, #0b2235 100%);
   display: flex;
   flex: 1;
@@ -14958,6 +15262,13 @@ const handlePageShow = () => {
 }
 
 
+:deep(.video-only-element::-webkit-media-controls),
+:deep(.video-only-element::-webkit-media-controls-enclosure),
+:deep(.video-only-element::-webkit-media-controls-panel),
+:deep(.video-only-element::-webkit-media-controls-play-button),
+:deep(.video-only-element::-webkit-media-controls-timeline),
+:deep(.video-only-element::-webkit-media-controls-current-time-display),
+:deep(.video-only-element::-webkit-media-controls-time-remaining-display),
 :deep(.video-only-element::-webkit-media-controls-mute-button),
 :deep(.video-only-element::-webkit-media-controls-volume-control-container),
 :deep(.video-only-element::-webkit-media-controls-volume-slider),
@@ -14965,7 +15276,10 @@ const handlePageShow = () => {
 :deep(.video-only-element::-webkit-media-controls-toggle-closed-captions-button),
 :deep(.video-only-element::-webkit-media-controls-fullscreen-button) {
   display: none !important;
-  -webkit-appearance: none;
+  opacity: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  -webkit-appearance: none !important;
 }
 
 /* 视频重连 overlay：保留最后一帧，叠加半透明提示 */
@@ -16926,6 +17240,396 @@ const handlePageShow = () => {
   text-align: center;
   transition: all 0.2s ease;
   font-weight: bold;
+}
+
+/* ============================================================
+   可见光底部实时检测 HUD 胶囊悬浮条 (契合参考图与高科技毛玻璃质感)
+   ============================================================ */
+.vision-bottom-hud-pill {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: clamp(10px, 3.8%, 30px);
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(6px, 1.2cqw, 14px);
+
+  /* 默认常规模式下宽度紧凑，高度自适应折行 */
+  width: clamp(200px, 60%, 360px);
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  padding: clamp(6px, 0.8cqw + 3px, 10px) clamp(10px, 1.4cqw + 4px, 16px);
+  border-radius: clamp(16px, 2cqw, 20px);
+
+  /* 毛玻璃质感背景与微蓝边缘发光 */
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.76) 0%, rgba(26, 45, 72, 0.70) 100%);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1.2px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.22),
+    0 0 18px rgba(56, 189, 248, 0.12);
+
+  pointer-events: auto;
+  user-select: none;
+  animation: hudPillSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vision-bottom-hud-pill:hover {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 54, 86, 0.80) 100%);
+  border-color: rgba(56, 189, 248, 0.58);
+  box-shadow: 
+    0 10px 36px rgba(0, 0, 0, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3),
+    0 0 24px rgba(56, 189, 248, 0.22);
+}
+
+/* 呼吸绿点状态指示器 */
+.hud-pill-status-dot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: clamp(8px, 1.2cqw, 14px);
+  height: clamp(8px, 1.2cqw, 14px);
+}
+
+.hud-dot-core {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e, 0 0 14px rgba(34, 197, 94, 0.6);
+}
+
+.hud-dot-ping {
+  position: absolute;
+  width: 180%;
+  height: 180%;
+  border-radius: 50%;
+  border: 1.5px solid #22c55e;
+  opacity: 0.8;
+  animation: hudDotPulse 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes hudDotPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  70%, 100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* 中间文本内容 */
+.hud-pill-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+/* 第一行：状态/类别等次要元信息（淡化弱化，降低视觉权重） */
+.hud-pill-line-secondary {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 0.8cqw, 8px);
+  font-size: clamp(10px, 0.7cqw + 6.5px, 11.5px);
+  color: #94a3b8;
+  opacity: 0.82;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+}
+
+.hud-pill-live-tag {
+  color: #38bdf8;
+  font-family: 'Consolas', 'Menlo', monospace;
+  font-weight: 600;
+  font-size: clamp(10px, 0.7cqw + 6.5px, 11px);
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.hud-pill-meta-text {
+  color: #94a3b8;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 第二行：实际识别内容（高对比强化，支持智能多行折行自适应） */
+.hud-pill-line-primary {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: clamp(12.5px, 0.9cqw + 7.5px, 14.5px);
+  line-height: 1.35;
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.hud-pill-line-primary .hud-main-content-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2; /* 默认最多展示2行，超出以省略号截断 */
+  line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.hud-pill-line-primary.is-abnormal {
+  color: #f87171;
+  text-shadow: 0 0 10px rgba(248, 113, 113, 0.35);
+}
+
+.hud-warn-icon {
+  flex-shrink: 0;
+  color: #f87171;
+  margin-top: 2px;
+  filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.6));
+}
+
+/* 右侧按钮组 */
+.hud-pill-actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 0.8cqw, 10px);
+  flex-shrink: 0;
+}
+
+.hud-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(20px, 1.8cqw + 14px, 28px);
+  height: clamp(20px, 1.8cqw + 14px, 28px);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e2e8f0;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.hud-pill-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+  transform: scale(1.08);
+}
+
+.hud-pill-btn:active {
+  transform: scale(0.95);
+}
+
+.hud-pill-btn.is-active {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: rgba(34, 197, 94, 0.6);
+  color: #4ade80;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.35);
+}
+
+.hud-pill-close-btn:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #f87171;
+}
+
+/* 展开微型恢复按钮 */
+.vision-bottom-hud-reopen {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 12px;
+  z-index: 11;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.vision-bottom-hud-reopen:hover {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.vision-bottom-hud-reopen .reopen-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+@keyframes hudPillSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+/* ============================================================
+   全屏与大容器模式自适应响应式（大幅面视觉强化与间距舒展）
+   ============================================================ */
+.vision-bottom-hud-pill.is-fullscreen,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill {
+  width: clamp(520px, 62%, 880px);
+  bottom: clamp(24px, 4.5%, 48px);
+  padding: 13px 26px;
+  gap: 18px;
+  border-width: 1.5px;
+  box-shadow: 
+    0 12px 42px rgba(0, 0, 0, 0.55),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.25),
+    0 0 24px rgba(56, 189, 248, 0.18);
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-status-dot,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-status-dot,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-status-dot {
+  width: 12px;
+  height: 12px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-content,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-content,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-content {
+  gap: 4px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-line-primary,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-line-primary,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-line-primary {
+  font-size: 17px;
+  gap: 8px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-main-content-text,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-main-content-text,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-main-content-text {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-live-tag,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-live-tag,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-live-tag {
+  font-size: 12.5px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-line-secondary,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-line-secondary,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-line-secondary {
+  font-size: 12.5px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-actions,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-actions,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-actions {
+  gap: 10px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-btn,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-btn,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-btn-icon,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-btn-icon,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-btn-icon {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+@container (min-width: 800px) {
+  .vision-bottom-hud-pill {
+    width: clamp(520px, 62%, 880px);
+    bottom: clamp(24px, 4.5%, 48px);
+    padding: 13px 26px;
+    gap: 18px;
+    border-width: 1.5px;
+  }
+  .vision-bottom-hud-pill .hud-pill-status-dot {
+    width: 12px;
+    height: 12px;
+  }
+  .vision-bottom-hud-pill .hud-pill-content {
+    gap: 4px;
+  }
+  .vision-bottom-hud-pill .hud-pill-line-primary {
+    font-size: 17px;
+    gap: 8px;
+  }
+  .vision-bottom-hud-pill .hud-main-content-text {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+  .vision-bottom-hud-pill .hud-pill-live-tag {
+    font-size: 12.5px;
+  }
+  .vision-bottom-hud-pill .hud-pill-line-secondary {
+    font-size: 12.5px;
+  }
+  .vision-bottom-hud-pill .hud-pill-actions {
+    gap: 10px;
+  }
+  .vision-bottom-hud-pill .hud-pill-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .vision-bottom-hud-pill .hud-pill-btn-icon {
+    width: 16px !important;
+    height: 16px !important;
+  }
+}
+
+.vision-bottom-hud-reopen.is-fullscreen,
+.video-only-wrapper:fullscreen .vision-bottom-hud-reopen,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-reopen {
+  bottom: 24px;
+  padding: 6px 16px;
+  font-size: 13px;
 }
 
 .video-action-btn.vision-toggle-btn.active {
