@@ -29,7 +29,7 @@ fi
 
 # 定义默认值
 DEFAULT_HOST_PORT="5173"
-DEFAULT_BACKEND_URL="http://127.0.0.1:8000"
+DEFAULT_BACKEND_URL="http://127.0.0.1:18000"
 
 # 检查 dist 文件夹是否存在
 if [ ! -d "dist" ]; then

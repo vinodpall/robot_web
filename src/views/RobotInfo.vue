@@ -6,6 +6,7 @@
           v-for="tab in sidebarTabs"
           :key="tab.key"
           :class="['sidebar-tab', { active: currentTab === tab.key }]"
+          :title="tab.label"
           v-permission-click-dialog="tab.permission"
           @click="handleTabClick(tab)"
         >
@@ -58,8 +59,8 @@
                 <span class="status-text" style="font-size: 13px; font-weight: bold; color: #EAF7FF;">{{ getStatusLabel(robotData.status) }}</span>
               </div>
               <img 
-                :src="getRobotImage(robotData.robot_type, robotData.robot_id)" 
-                :class="['model-img', getRobotModelClass(robotData.robot_type, robotData.robot_id)]" 
+                :src="getRobotImage(robotData.robot_type, robotData.robot_id, form.name || robotData.name)" 
+                :class="['model-img', getRobotModelClass(robotData.robot_type, robotData.robot_id, form.name || robotData.name)]" 
                 alt="Robot Model" 
               />
             </div>
@@ -815,22 +816,27 @@ onUnmounted(() => {
 }
 
 .model-img.is-dog {
-  transform: scale(1.22);
+  transform: scale(0.72);
+  filter: drop-shadow(0 8px 20px rgba(0, 210, 255, 0.3));
 }
 
 .model-img.is-apollo {
-  transform: scale(1.18);
+  transform: scale(0.85);
   filter: drop-shadow(0 8px 20px rgba(0, 210, 255, 0.3));
 }
 
 .model-img.is-pudu-d5 {
-  transform: scale(1.15);
+  transform: scale(0.95) translateY(-6px);
   filter: drop-shadow(0 8px 20px rgba(0, 210, 255, 0.3));
 }
 
 .model-img.is-car {
   transform: scale(1.22);
   filter: drop-shadow(0 8px 20px rgba(0, 210, 255, 0.3));
+}
+
+.model-img:hover {
+  filter: drop-shadow(0 10px 24px rgba(0, 210, 255, 0.5));
 }
 .model-info {
   display: flex;

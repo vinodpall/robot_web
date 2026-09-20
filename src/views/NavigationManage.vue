@@ -722,6 +722,8 @@
                     :robot-type="selectedVehicleType"
                     :has-robot-rtk="hasRobotRtk"
                     :active-track-name="robotStore.cmdStatus?.track === 1 || robotStore.isTracking ? trackRecordLine : ''"
+                    :preview-track-name="previewTrackRecordLine"
+                    :preview-task-point-name="previewTrackRecordTask"
                     :realtime-scan="robotStore.currentScan"
                     initial-view-type="pointcloud"
                   />
@@ -2407,6 +2409,8 @@ const trackRecordMap = computed({
 const trackMapList = ref<string[]>([]) // 路线录制页面的地图列表
 const trackRecordLine = ref('')
 const trackRecordTask = ref('')
+const previewTrackRecordLine = ref('')
+const previewTrackRecordTask = ref('')
 
 // 所有循迹任务列表（从API获取）
 const allTrackList = ref<string[]>([])
@@ -2513,6 +2517,10 @@ watch(trackTaskList, (newTasks) => {
 })
 
 const clearTrackPreviewFromPointCloud = async () => {
+  previewTrackRecordLine.value = ''
+  previewTrackRecordTask.value = ''
+  trackRecordMapViewerRef.value?.clearTrackOverlay()
+
   if (!isNavPreviewMode.value) return
 
   isNavPreviewMode.value = false
@@ -2538,6 +2546,15 @@ const clearTrackPreviewFromPointCloud = async () => {
   await nextTick()
   scheduleNavPointCloudRender()
 }
+
+watch(trackRecordTask, async (newTask) => {
+  if (previewTrackRecordLine.value && previewTrackRecordLine.value === trackRecordLine.value) {
+    previewTrackRecordTask.value = newTask
+    if (trackRecordMapViewerRef.value) {
+      await trackRecordMapViewerRef.value.overlayTrackTrajectory(previewTrackRecordLine.value, newTask)
+    }
+  }
+})
 
 // 监听路线录制地图选择变化 - 同步更新路线和任务组列表
 watch(trackRecordMap, async (newMap) => {
@@ -2840,7 +2857,21 @@ const previewTrackRoute = async (options?: { silentSuccess?: boolean }) => {
   }
   
   try {
-    const blob = await getTrajectoryFile(trackRecordLine.value)
+    let blob = await getTrajectoryFile(trackRecordLine.value)
+    if (!blob) {
+      const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+      if (robotId) {
+        try {
+          blob = await mapFileApi.downloadTrajectoryFile(robotId, trackRecordLine.value)
+          if (blob) {
+            await saveTrajectoryFile(trackRecordLine.value, blob)
+          }
+        } catch (downloadErr) {
+          console.warn('下载轨迹文件失败:', downloadErr)
+        }
+      }
+    }
+
     if (!blob) {
       showErrorMessage('未找到轨迹文件，请确认路线是否存在')
       return
@@ -2879,30 +2910,26 @@ const previewTrackRoute = async (options?: { silentSuccess?: boolean }) => {
       return
     }
 
-    const { centerX, centerY, centerZ, maxRange } = navPointCloudNormalizationParams.value
-    const normalizedTrajectoryPoints = trajectoryPoints.map(p => ({
-      x: (p.x - centerX) / maxRange,
-      y: (p.y - centerY) / maxRange,
-      z: (p.z - centerZ) / maxRange,
-      intensity: 2.0
-    }))
-
-    const previewTaskPoints: Array<{ x: number; y: number; z: number; name: string; intensity: number }> = []
+    const previewTaskPoints: Array<{ x: number; y: number; z: number; name: string }> = []
     try {
       const cachedData = localStorage.getItem('all_track_task_list')
       if (cachedData) {
         const allTaskList = extractTrackTaskList(JSON.parse(cachedData))
         const previewTrackName = normalizeTrackName(trackRecordLine.value)
+        const currentTaskGroupName = normalizeTaskPointName(trackRecordTask.value)
         allTaskList
-          .filter((task: any) => normalizeTrackName(String(task.track_name || '')) === previewTrackName)
+          .filter((task: any) => {
+            const taskTrackName = normalizeTrackName(String(task.track_name || ''))
+            const taskPointName = normalizeTaskPointName(String(task.task_pointname || task.taskpoint_name || task.task_point_name || task.group_name || task.task_group_name || ''))
+            return taskTrackName === previewTrackName && (!currentTaskGroupName || taskPointName === currentTaskGroupName)
+          })
           .forEach((task: any, idx: number) => {
             const tx = parseFloat(task.x), ty = parseFloat(task.y), tz = parseFloat(task.z ?? '0')
             if (!isNaN(tx) && !isNaN(ty) && !isNaN(tz)) {
               previewTaskPoints.push({
-                x: (tx - centerX) / maxRange,
-                y: (ty - centerY) / maxRange,
-                z: (tz - centerZ) / maxRange,
-                intensity: 3.0,
+                x: tx,
+                y: ty,
+                z: tz,
                 name: task.type_text || task.preset || `任务点${idx + 1}`
               })
             }
@@ -2912,12 +2939,14 @@ const previewTrackRoute = async (options?: { silentSuccess?: boolean }) => {
       console.warn('加载预览任务点失败:', e)
     }
 
-    const base = baseNavPointCloudData.value.length > 0 ? baseNavPointCloudData.value : []
-    navPointCloudData.value = [...base, ...normalizedTrajectoryPoints, ...previewTaskPoints]
-    lastNavTrackOverlayKey.value = ''
+    // 设置预览路线和任务组，驱动 RobotMapViewer 保持渲染
+    previewTrackRecordLine.value = trackRecordLine.value
+    previewTrackRecordTask.value = trackRecordTask.value
     isNavPreviewMode.value = true
-    await nextTick()
-    scheduleNavPointCloudRender()
+
+    if (trackRecordMapViewerRef.value) {
+      await trackRecordMapViewerRef.value.overlayTrackTrajectory(trackRecordLine.value, trackRecordTask.value)
+    }
 
     if (!silentSuccess) {
       showSuccessMessage(`轨迹预览加载成功 (${trajectoryPoints.length} 个点，${previewTaskPoints.length} 个任务点)`)
@@ -4035,6 +4064,18 @@ const confirmRouteEditCreate = async () => {
     const downloadedBlob = await mapFileApi.downloadTrajectoryFile(robotId, fullTrackName, true)
     if (!downloadedBlob) {
       throw new Error('从服务器下载验证失败')
+    }
+
+    // 同步新增 寻迹中_关键点0.txt 空文件
+    const emptyKeypointBlob = new Blob([''], { type: 'text/plain;charset=utf-8' })
+    const uploadKeypointSuccess = await mapFileApi.uploadTrajectoryCustomFile(
+      robotId,
+      fullTrackName,
+      '寻迹中_关键点0.txt',
+      emptyKeypointBlob
+    )
+    if (!uploadKeypointSuccess) {
+      throw new Error('同步创建关键点文件(寻迹中_关键点0.txt)失败')
     }
 
     await saveTrajectoryFile(fullTrackName, downloadedBlob)
@@ -7373,7 +7414,7 @@ const drawRouteEditOnGrid = (
   if (points.length > 0 && (routeEditMode.value === 'draw' || routeEditCreateMode.value)) {
     const sp = toCanvas(points[points.length - 1])
     ctx.beginPath()
-    ctx.arc(sp.x, sp.y, Math.max(2.5, 4 / zoom), 0, Math.PI * 2)
+    ctx.arc(sp.x, sp.y, 4 / zoom, 0, Math.PI * 2)
     ctx.fillStyle = '#ff9500'
     ctx.fill()
   }
@@ -7382,7 +7423,7 @@ const drawRouteEditOnGrid = (
   if (draftPoints.length > 0) {
     const sp = toCanvas(draftPoints[draftPoints.length - 1])
     ctx.beginPath()
-    ctx.arc(sp.x, sp.y, Math.max(2.0, 3 / zoom), 0, Math.PI * 2)
+    ctx.arc(sp.x, sp.y, 3 / zoom, 0, Math.PI * 2)
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = '#ff9500'
     ctx.lineWidth = 1 / zoom
@@ -7396,7 +7437,7 @@ const drawRouteEditOnGrid = (
       if (isValidRouteEditIndex(idx) && idx < points.length) {
         const sp = toCanvas(points[idx])
         ctx.beginPath()
-        ctx.arc(sp.x, sp.y, Math.max(2.5, 4.5 / zoom), 0, Math.PI * 2)
+        ctx.arc(sp.x, sp.y, 4.5 / zoom, 0, Math.PI * 2)
         ctx.fillStyle = '#ff9500'
         ctx.strokeStyle = '#ffffff'
         ctx.lineWidth = 1.0 / zoom

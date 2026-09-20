@@ -10,7 +10,7 @@
           可见光视频
         </div>
         <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
-          <div ref="visibleVideoWrapper" class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
+          <div id="visible-video-wrapper" ref="visibleVideoWrapper" class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
             <video 
               ref="videoElement"
               :class="['video-only-element', { 'video-hidden': !hasVisibleVideoFrame }]"
@@ -125,60 +125,44 @@
 
             <!-- 实时检测内容底部 HUD 悬浮胶囊面板 (契合参考图与高科技毛玻璃质感) -->
             <div
-              v-if="hasVisibleVideoFrame && !webrtcReconnecting && showVisibleVisionBoxes && showVisibleBottomHud"
+              v-if="showVisibleBottomHud"
               class="vision-bottom-hud-pill"
-              :class="{ 'is-fullscreen': currentFullscreenPanel === 'visible' }"
+              :class="{ 'is-fullscreen': currentFullscreenPanel === 'visible', 'is-abnormal': isVisibleDetectionAbnormal }"
             >
-              <!-- 实时状态呼吸绿点 -->
-              <div class="hud-pill-status-dot" title="实时视频算法分析中">
+              <!-- 实时状态呼吸指示灯（正常时绿光，bState为true异常时红光） -->
+              <div
+                class="hud-pill-status-dot"
+                :class="{ 'is-abnormal': isVisibleDetectionAbnormal }"
+                :title="isVisibleDetectionAbnormal ? '算法检测到异常状态 (bState: 异常)' : '实时视频算法分析中 (bState: 正常)'"
+              >
                 <span class="hud-dot-core"></span>
                 <span class="hud-dot-ping"></span>
               </div>
 
-              <!-- 中间内容区域：双行自适应呈现 -->
+              <!-- 中间内容区域：双行自适应呈现（文字严格在设置按钮左侧，最右侧不超过设置按钮） -->
               <div class="hud-pill-content">
-                <!-- 第一行：状态/来源标签与类别（淡化弱化，降低权重） -->
+                <!-- 第一行：状态/来源标签与类别 -->
                 <div class="hud-pill-line-secondary">
                   <span class="hud-pill-live-tag">[LIVE]</span>
                   <span class="hud-pill-meta-text">{{ visibleDetectionMetaText }}</span>
                 </div>
                 <!-- 第二行：实际识别内容（强化主体，自适应多行折行） -->
                 <div class="hud-pill-line-primary" :class="{ 'is-abnormal': isVisibleDetectionAbnormal }" :title="visibleDetectionMainContent">
-                  <svg v-if="isVisibleDetectionAbnormal" class="hud-warn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/>
-                    <line x1="12" y1="17" x2="12.01" y2="17"/>
-                  </svg>
                   <span class="hud-main-content-text">{{ visibleDetectionMainContent }}</span>
                 </div>
               </div>
 
-              <!-- 右侧快捷操作区（仅保留关闭按钮） -->
-              <div class="hud-pill-actions">
-                <!-- 关闭/收起按钮 -->
-                <button
-                  class="hud-pill-btn hud-pill-close-btn"
-                  title="收起底部检测面板"
-                  @click.stop="showVisibleBottomHud = false"
-                >
-                  <svg class="hud-pill-btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- 当底部栏收起时的微型恢复按钮（浮动在底部中间） -->
-            <div
-              v-if="hasVisibleVideoFrame && !webrtcReconnecting && showVisibleVisionBoxes && !showVisibleBottomHud"
-              class="vision-bottom-hud-reopen"
-              :class="{ 'is-fullscreen': currentFullscreenPanel === 'visible' }"
-              title="展开底部实时检测栏"
-              @click.stop="showVisibleBottomHud = true"
-            >
-              <span class="reopen-dot"></span>
-              <span class="reopen-text">展开检测信息</span>
+              <!-- 右侧微型配置按钮：位于第一行右侧并作为内容右边界，与第一行保持对齐 -->
+              <button
+                class="hud-pill-setting-btn"
+                title="配置AI识别提示词 (可见光)"
+                @click.stop="openLlmPromptModal('visible')"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </button>
             </div>
 
             <!-- 重连 overlay：保留最后一帧，叠加半透明提示 -->
@@ -193,6 +177,19 @@
             <div v-else-if="!hasVisibleVideoFrame" class="video-empty-state">
               暂无视频流
             </div>
+
+            <!-- 视频左下角 AI 检测面板切换按钮（样式和右侧的算、主等按钮一致） -->
+            <div class="video-action-group-left">
+              <button
+                class="video-action-btn stream-mode-btn ai-toggle-btn"
+                :class="{ active: showVisibleBottomHud }"
+                :title="`AI检测信息面板：${showVisibleBottomHud ? '开启中（点击关闭）' : '已关闭（点击开启）'}`"
+                @click.stop="toggleVisibleAiHud"
+              >
+                AI
+              </button>
+            </div>
+
             <div class="video-action-group">
               <button
                 class="video-action-btn stream-mode-btn vision-toggle-btn"
@@ -233,7 +230,7 @@
           红外视频
         </div>
         <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
-          <div ref="infraredVideoWrapper" class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
+          <div id="infrared-video-wrapper" ref="infraredVideoWrapper" class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
             <video 
               ref="infraredVideoElement"
               :class="['video-only-element', { 'video-hidden': !hasInfraredVideoFrame }]"
@@ -1700,6 +1697,206 @@
       </transition>
     </Teleport>
 
+    <!-- AI 识别提示词配置弹窗（全屏时动态挂载到全屏容器内部，保证可见） -->
+    <Teleport :to="modalTeleportTarget">
+      <transition name="llm-modal-fade">
+        <div v-if="showLlmPromptModal" class="llm-prompt-modal-mask">
+          <div class="llm-prompt-modal-dialog">
+            <!-- 弹窗头部 -->
+            <div class="llm-prompt-modal-header">
+              <div class="llm-prompt-modal-title">
+                <span class="llm-prompt-title-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  </svg>
+                </span>
+                <span>AI 视频识别提示词配置</span>
+              </div>
+              <button class="llm-prompt-close-btn" @click="closeLlmPromptModal" title="关闭">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- 弹窗主体 -->
+            <div class="llm-prompt-modal-body">
+              <!-- 加载中遮罩 -->
+              <div v-if="isLoadingPrompts" class="llm-prompt-loading-mask">
+                <div class="llm-prompt-loading-spinner"></div>
+                <span>加载提示词中...</span>
+              </div>
+
+              <!-- 相机通道选择 (cam_key) -->
+              <div class="llm-prompt-field-group">
+                <div class="llm-prompt-label-row">
+                  <label class="llm-prompt-label">
+                    适用相机 (cam_key) <span class="required-star">*</span>
+                  </label>
+                </div>
+                <div class="llm-cam-selector">
+                  <button
+                    type="button"
+                    class="llm-cam-chip"
+                    :class="{ active: llmPromptForm.cam_key === 'cam_rtsp_left' }"
+                    @click="llmPromptForm.cam_key = 'cam_rtsp_left'"
+                  >
+                    <span class="llm-cam-chip-radio"></span>
+                    <span>可见光相机 (cam_rtsp_left)</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="llm-cam-chip"
+                    :class="{ active: llmPromptForm.cam_key === 'cam_rtsp_right' }"
+                    @click="llmPromptForm.cam_key = 'cam_rtsp_right'"
+                  >
+                    <span class="llm-cam-chip-radio"></span>
+                    <span>红外相机 (cam_rtsp_right)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 第一行：名称下拉/输入 + 新增/取消按钮 + 删除按钮 -->
+              <div class="llm-prompt-field-group">
+                <div class="llm-prompt-label-row">
+                  <label class="llm-prompt-label">
+                    提示词名称 (cn_name) <span class="required-star">*</span>
+                  </label>
+                </div>
+                <div class="llm-prompt-row-action">
+                  <!-- 常规模式：下拉列表 -->
+                  <div v-if="!isAddingNewPrompt" class="llm-prompt-select-wrap">
+                    <select
+                      v-model="selectedPromptKey"
+                      class="llm-prompt-select"
+                      @change="handlePromptSelectChange"
+                    >
+                      <option
+                        v-for="p in llmPromptsList"
+                        :key="p.prompt_key"
+                        :value="p.prompt_key"
+                      >
+                        {{ p.cn_name || p.prompt_key }}
+                      </option>
+                    </select>
+                    <span class="llm-select-arrow">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </span>
+                  </div>
+                  <!-- 新增模式：输入框 -->
+                  <div v-else class="llm-prompt-input-wrap">
+                    <input
+                      v-model="llmPromptForm.cn_name"
+                      class="llm-prompt-input"
+                      placeholder="请输入提示词名称（如：异物卫生质检）"
+                      maxlength="50"
+                    />
+                  </div>
+
+                  <!-- 操作按钮组：新增 / 取消新增 / 删除 -->
+                  <div class="llm-prompt-actions-bar">
+                    <!-- 新增按钮 -->
+                    <button
+                      v-if="!isAddingNewPrompt"
+                      class="llm-action-btn llm-btn-new"
+                      title="手动新增提示词"
+                      @click="startAddNewPrompt"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                      新增
+                    </button>
+                    <!-- 取消新增按钮 -->
+                    <button
+                      v-else
+                      class="llm-action-btn llm-btn-cancel-add"
+                      title="取消新增并返回已有列表"
+                      @click="cancelAddNewPrompt"
+                    >
+                      返回列表
+                    </button>
+
+                    <!-- 删除按钮：如果 prompt_key 以 normal 开头则可删除，否则禁用 -->
+                    <button
+                      class="llm-action-btn llm-btn-delete"
+                      :disabled="!canDeleteCurrentPrompt"
+                      :title="canDeleteCurrentPrompt ? '删除此自定义提示词' : '系统预设提示词不可删除，仅以 normal_ 开头的自定义提示词可删除'"
+                      @click="handleDeletePrompt"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      </svg>
+                      删除
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 第二行：prompt_key -->
+              <div class="llm-prompt-field-group">
+                <div class="llm-prompt-label-row">
+                  <label class="llm-prompt-label">
+                    提示词标识 (prompt_key)
+                  </label>
+                  <span v-if="isAddingNewPrompt" class="llm-prompt-tip">
+                    选填，如填写须以 "normal_" 开头，不能与已有重复
+                  </span>
+                </div>
+                <div class="llm-prompt-input-wrap">
+                  <input
+                    v-model="llmPromptForm.prompt_key"
+                    class="llm-prompt-input"
+                    :class="{ 'is-invalid': isPromptKeyInvalid }"
+                    :disabled="!isAddingNewPrompt"
+                    :placeholder="isAddingNewPrompt ? '例如：normal_floor_check（选填）' : ''"
+                  />
+                </div>
+                <div v-if="isAddingNewPrompt && promptKeyValidationMsg" class="llm-prompt-error-msg">
+                  {{ promptKeyValidationMsg }}
+                </div>
+              </div>
+
+              <!-- 第三行：prompt 提示词正文 -->
+              <div class="llm-prompt-field-group">
+                <div class="llm-prompt-label-row">
+                  <label class="llm-prompt-label">
+                    提示词内容 (prompt)
+                  </label>
+                  <span class="llm-prompt-char-count">{{ llmPromptForm.prompt.length }} 字符</span>
+                </div>
+                <textarea
+                  v-model="llmPromptForm.prompt"
+                  class="llm-prompt-textarea"
+                  rows="11"
+                  placeholder="请输入用于视频大模型实时检测与判定的详细规则提示词（选填）..."
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- 弹窗底部操作栏 -->
+            <div class="llm-prompt-modal-footer">
+              <button class="llm-btn llm-btn-cancel" @click="closeLlmPromptModal">取消</button>
+              <button
+                class="llm-btn llm-btn-submit"
+                :disabled="isSubmittingPrompt || (isAddingNewPrompt && isPromptKeyInvalid)"
+                @click="handleSubmitPrompt"
+              >
+                <span v-if="isSubmittingPrompt" class="llm-spinner"></span>
+                <span>{{ isSubmittingPrompt ? '提交中...' : '提交生效' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
+
   </div>
 </template>
 
@@ -1763,6 +1960,8 @@ import {
   livestreamApi,
   dogApi,
   robotApi,
+  visionApi,
+  type LlmPromptItem,
 } from '../api/services'
 import type { CameraInfo } from '../api/services'
 import SuccessMessage from '../components/SuccessMessage.vue'
@@ -3043,6 +3242,47 @@ const overlayTrackTrajectory = async (trackName: string) => {
         ...normalizedTaskPoints
       ]
       isOverlayApplied = true
+    } else if (trajectoryPoints.length > 0) {
+      let minX = Infinity, maxX = -Infinity
+      let minY = Infinity, maxY = -Infinity
+      let minZ = Infinity, maxZ = -Infinity
+      for (const p of trajectoryPoints) {
+        if (p.x < minX) minX = p.x
+        if (p.x > maxX) maxX = p.x
+        if (p.y < minY) minY = p.y
+        if (p.y > maxY) maxY = p.y
+        if (p.z < minZ) minZ = p.z
+        if (p.z > maxZ) maxZ = p.z
+      }
+      const centerX = (minX + maxX) / 2
+      const centerY = (minY + maxY) / 2
+      const centerZ = (minZ + maxZ) / 2
+      const maxRange = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1)
+      if (!pointCloudNormalizationParams.value || !pointCloudNormalizationParams.value.maxRange) {
+        pointCloudNormalizationParams.value = {
+          minX, maxX, minY, maxY, minZ, maxZ,
+          centerX, centerY, centerZ, maxRange
+        }
+      }
+      const norm = pointCloudNormalizationParams.value
+      const normalizedTrajectory = trajectoryPoints.map(p => ({
+        x: (p.x - norm.centerX) / norm.maxRange,
+        y: (p.y - norm.centerY) / norm.maxRange,
+        z: (p.z - norm.centerZ) / norm.maxRange,
+        intensity: 2.0
+      }))
+      const normalizedTaskPoints = taskPointsData.map(p => ({
+        x: (p.x - norm.centerX) / norm.maxRange,
+        y: (p.y - norm.centerY) / norm.maxRange,
+        z: (p.z - norm.centerZ) / norm.maxRange,
+        intensity: 3.0,
+        name: p.name
+      }))
+      pointCloudData.value = [
+        ...normalizedTrajectory,
+        ...normalizedTaskPoints
+      ]
+      isOverlayApplied = true
     }
 
     // 如果地图已初始化，也在地图上渲染轨迹和任务点
@@ -3889,11 +4129,13 @@ const selectedVehicleType = computed(() => {
 })
 const currentRobotDisplayImage = computed(() => {
   const robotId = deviceStore.selectedRobotId || deviceStore.selectedRobot?.robot_id || localStorage.getItem('selected_robot_id') || ''
-  return getRobotImage(selectedVehicleType.value, robotId)
+  const robotName = deviceStore.selectedRobot?.name || currentRobotDetail.value?.name || ''
+  return getRobotImage(selectedVehicleType.value, robotId, robotName)
 })
 const currentRobotModelClass = computed(() => {
   const robotId = deviceStore.selectedRobotId || deviceStore.selectedRobot?.robot_id || localStorage.getItem('selected_robot_id') || ''
-  return getRobotModelClass(selectedVehicleType.value, robotId)
+  const robotName = deviceStore.selectedRobot?.name || currentRobotDetail.value?.name || ''
+  return getRobotModelClass(selectedVehicleType.value, robotId, robotName)
 })
 const sensorChartRef = ref<HTMLElement | null>(null)
 let sensorChart: echarts.ECharts | null = null
@@ -5832,6 +6074,7 @@ interface VisionBoxItem {
   height: number
   cnType: string
   displayValue?: string
+  bState?: boolean
 }
 
 // ===== AI 智能识别结果数据接口 =====
@@ -5842,22 +6085,76 @@ interface VisionAiItem {
   status: string
   summary: string
   isAbnormal: boolean
+  bState?: boolean
   timestamp?: number
 }
 
-const parseVisionBoxes = (camKeys: string[]): VisionBoxItem[] => {
-  const visionMap = robotStore.visionRealTimeMap
-  if (!visionMap) return []
+// ===== 可见光 HUD 5秒超时数据清空机制与常用相机键名 =====
+const VISIBLE_HUD_TIMEOUT_MS = 5000
+const isVisibleHudExpired = ref(true)
+let visibleHudExpireTimer: ReturnType<typeof setTimeout> | null = null
+const VISIBLE_CAM_KEYS = ['cam_rtsp_left', 'visible', 'cam_visible', 'cam_left']
 
-  let matchedPayload: any = null
+// 解析 bState/bstate 字段值：false -> 正常 (false), true -> 异常 (true)
+const resolveBStateValue = (val: any): boolean | null => {
+  if (val === undefined || val === null) return null
+  if (typeof val === 'boolean') return val
+  if (typeof val === 'number') return val !== 0
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase()
+    if (s === 'false' || s === '0' || s === 'normal' || s === 'ok' || s === 'success' || s === '正常') return false
+    if (s === 'true' || s === '1' || s === 'abnormal' || s === 'error' || s === 'warn' || s === 'warning' || s === '异常') return true
+  }
+  return null
+}
+
+// 深度匹配对象中的 bState / bstate / b_state
+const findBStateInObjects = (...objects: any[]): boolean | null => {
+  const keys = ['bState', 'bstate', 'b_state', 'bStateDetection', 'bstate_detection', 'b_State', 'BState', 'Bstate']
+  for (const obj of objects) {
+    if (!obj || typeof obj !== 'object') continue
+    for (const k of keys) {
+      if (k in obj) {
+        const val = resolveBStateValue(obj[k])
+        if (val !== null) return val
+      }
+    }
+  }
+  return null
+}
+
+// 统一根据相机键名从 visionRealTimeMap 检索有效 Payload
+const getVisionPayloadByCamKeys = (camKeys: string[]): any => {
+  const visionMap = robotStore.visionRealTimeMap
+  if (!visionMap) return null
+
   for (const key of camKeys) {
     const item = visionMap[key]
-    if (item && item.timestamp && Date.now() - item.timestamp < 4000) {
-      matchedPayload = item
-      break
+    if (item && item.timestamp && Date.now() - item.timestamp < VISIBLE_HUD_TIMEOUT_MS) {
+      return item
     }
   }
 
+  const allKeys = Object.keys(visionMap)
+  for (const k of allKeys) {
+    const lower = k.toLowerCase()
+    const isCandidate = camKeys.some(ck => {
+      const ckl = ck.toLowerCase()
+      return lower.includes(ckl) || ckl.includes(lower)
+    })
+    if (isCandidate) {
+      const item = visionMap[k]
+      if (item && item.timestamp && Date.now() - item.timestamp < VISIBLE_HUD_TIMEOUT_MS) {
+        return item
+      }
+    }
+  }
+
+  return null
+}
+
+const parseVisionBoxes = (camKeys: string[]): VisionBoxItem[] => {
+  const matchedPayload = getVisionPayloadByCamKeys(camKeys)
   if (!matchedPayload || !matchedPayload.data) return []
 
   const result: VisionBoxItem[] = []
@@ -5870,6 +6167,7 @@ const parseVisionBoxes = (camKeys: string[]): VisionBoxItem[] => {
     const cnType = String(algoItem.cnType || algoItem.cn_type || algoItem.sType || 'AI检测').trim()
     const rectList = Array.isArray(lResults.rect) ? lResults.rect : []
     const textList = Array.isArray(lResults.text) ? lResults.text : []
+    const algoBState = findBStateInObjects(lResults, algoItem)
 
     rectList.forEach((rect: number[], idx: number) => {
       if (!Array.isArray(rect) || rect.length < 4) return
@@ -5910,7 +6208,8 @@ const parseVisionBoxes = (camKeys: string[]): VisionBoxItem[] => {
         width: Number(w.toFixed(2)),
         height: Number(h.toFixed(2)),
         cnType: finalCnType,
-        displayValue
+        displayValue,
+        bState: algoBState ?? undefined
       })
     })
   })
@@ -5918,109 +6217,160 @@ const parseVisionBoxes = (camKeys: string[]): VisionBoxItem[] => {
   return result
 }
 
-// ===== 解析 AI 智能识别结果 (如大模型识别 VLM 的 status 与 summary) =====
+// ===== 解析 AI 智能识别结果 (如大模型识别 VLM 的 status 与 summary，并支持 bstate 检测) =====
 const parseVisionAiInfo = (camKeys: string[]): VisionAiItem[] => {
-  const visionMap = robotStore.visionRealTimeMap
-  if (!visionMap) return []
-
-  let matchedPayload: any = null
-  for (const key of camKeys) {
-    const item = visionMap[key]
-    if (item && item.timestamp && Date.now() - item.timestamp < 8000) {
-      matchedPayload = item
-      break
-    }
-  }
-
-  // 若无完全匹配 key，尝试按包含关系模糊匹配（如含有 visible 或 left）
-  if (!matchedPayload) {
-    const allKeys = Object.keys(visionMap)
-    for (const k of allKeys) {
-      const lower = k.toLowerCase()
-      const isCandidate = camKeys.some(ck => {
-        const ckl = ck.toLowerCase()
-        return lower.includes(ckl) || ckl.includes(lower)
-      })
-      if (isCandidate) {
-        const item = visionMap[k]
-        if (item && item.timestamp && Date.now() - item.timestamp < 8000) {
-          matchedPayload = item
-          break
-        }
-      }
-    }
-  }
-
-  if (!matchedPayload || !matchedPayload.data) return []
+  const matchedPayload = getVisionPayloadByCamKeys(camKeys)
+  if (!matchedPayload) return []
 
   const result: VisionAiItem[] = []
+
+  // 兼顾根级附带 sValue 的结构
+  const rootSValue = matchedPayload.sValue ?? matchedPayload.svalue ?? matchedPayload.s_value
+  if (rootSValue !== undefined && rootSValue !== null && String(rootSValue).trim()) {
+    result.push({
+      id: 'root_ai',
+      algoKey: 'root',
+      cnType: String(matchedPayload.cnType || matchedPayload.cn_type || 'AI识别').trim(),
+      status: String(matchedPayload.status || '').trim(),
+      summary: String(rootSValue).trim(),
+      isAbnormal: Boolean(matchedPayload.is_abnormal || matchedPayload.bState === true || matchedPayload.bstate === true),
+      bState: resolveBStateValue(matchedPayload.bState ?? matchedPayload.bstate) ?? undefined,
+      timestamp: matchedPayload.timestamp
+    })
+  }
+
   const dataObj = matchedPayload.data
+  if (dataObj && typeof dataObj === 'object') {
+    Object.keys(dataObj).forEach(algoKey => {
+      const algoItem = dataObj[algoKey]
+      if (!algoItem || typeof algoItem !== 'object') return
 
-  Object.keys(dataObj).forEach(algoKey => {
-    const algoItem = dataObj[algoKey]
-    if (!algoItem) return
+      const lResults = (algoItem.lResults && typeof algoItem.lResults === 'object') ? algoItem.lResults : (algoItem.results || {})
+      const vlm = (lResults.vlm && typeof lResults.vlm === 'object') ? lResults.vlm : (algoItem.vlm || lResults.ai || {})
 
-    const lResults = algoItem.lResults || algoItem.results || {}
-    const vlm = lResults.vlm || algoItem.vlm || lResults.ai || {}
+      // 提取 status 字段与 sValue 文本内容
+      const rawStatus = vlm.status !== undefined ? vlm.status : (algoItem.status !== undefined ? algoItem.status : '')
+      const rawSValue = algoItem.sValue !== undefined 
+        ? algoItem.sValue 
+        : (algoItem.svalue !== undefined 
+          ? algoItem.svalue 
+          : (algoItem.s_value !== undefined 
+            ? algoItem.s_value 
+            : (vlm.sValue !== undefined 
+              ? vlm.sValue 
+              : (vlm.svalue !== undefined 
+                ? vlm.svalue 
+                : (lResults.sValue !== undefined ? lResults.sValue : (lResults.svalue !== undefined ? lResults.svalue : ''))))))
 
-    // 提取 status 与 summary 字段（优先取 vlm 内字段，兼容平铺结构）
-    const rawStatus = vlm.status !== undefined ? vlm.status : (algoItem.status !== undefined ? algoItem.status : '')
-    const rawSummary = vlm.summary !== undefined ? vlm.summary : (algoItem.summary !== undefined ? algoItem.summary : algoItem.sValue)
+      const status = String(rawStatus ?? '').trim()
+      const sValue = typeof rawSValue === 'string' ? rawSValue.trim() : (rawSValue !== null && rawSValue !== undefined ? String(rawSValue).trim() : '')
 
-    const status = String(rawStatus ?? '').trim()
-    const summary = String(rawSummary ?? '').trim()
+      // 检查 bstate / bState 状态字段（false 表示正常，true 表示异常）
+      const itemBState = findBStateInObjects(vlm, lResults, algoItem)
 
-    // 仅当 status 或 summary 包含有效信息时才呈现
-    if (status || summary) {
-      const cnType = String(algoItem.cnType || algoItem.cn_type || algoItem.sType || '大模型识别').trim()
-      const isAbnormal = Boolean(
-        vlm.is_abnormal === true ||
-        algoItem.is_abnormal === true ||
-        algoItem.error === true ||
-        (typeof status === 'string' && (
-          status.includes('异常') ||
-          status.includes('告警') ||
-          status.includes('报警') ||
-          status.includes('故障') ||
-          status.includes('危险') ||
-          status.toLowerCase().includes('abnormal') ||
-          status.toLowerCase().includes('warning') ||
-          status.toLowerCase().includes('alarm') ||
-          status.toLowerCase().includes('danger') ||
-          status.toLowerCase().includes('error')
-        ))
-      )
+      // 仅当包含有效 sValue 内容、状态或带有显式 bstate 检测时才计入
+      if (sValue || status || itemBState !== null) {
+        const cnType = String(algoItem.cnType || algoItem.cn_type || algoItem.sType || (itemBState !== null ? '算法检测' : '大模型识别')).trim()
+        let isAbnormal = false
+        if (itemBState !== null) {
+          isAbnormal = itemBState === true
+        } else {
+          isAbnormal = Boolean(
+            vlm.is_abnormal === true ||
+            algoItem.is_abnormal === true ||
+            algoItem.error === true ||
+            (typeof status === 'string' && (
+              status.includes('异常') ||
+              status.includes('告警') ||
+              status.includes('报警') ||
+              status.includes('故障') ||
+              status.includes('危险') ||
+              status.toLowerCase().includes('abnormal') ||
+              status.toLowerCase().includes('warning') ||
+              status.toLowerCase().includes('alarm') ||
+              status.toLowerCase().includes('danger') ||
+              status.toLowerCase().includes('error')
+            ))
+          )
+        }
 
-      result.push({
-        id: `${algoKey}_ai`,
-        algoKey,
-        cnType,
-        status: status || (isAbnormal ? '异常' : '正常'),
-        summary: summary || '暂无识别摘要',
-        isAbnormal,
-        timestamp: matchedPayload.timestamp
-      })
-    }
-  })
+        result.push({
+          id: `${algoKey}_ai`,
+          algoKey,
+          cnType,
+          status: status || (itemBState !== null ? (itemBState ? '异常' : '正常') : (isAbnormal ? '异常' : '正常')),
+          summary: sValue, // 仅使用 sValue 的内容
+          isAbnormal,
+          bState: itemBState ?? undefined,
+          timestamp: matchedPayload.timestamp
+        })
+      }
+    })
+  }
 
   return result
 }
 
-const visibleVisionBoxes = computed(() => {
-  if (!showVisibleVisionBoxes.value) return []
-  // 当画面未真正播放出来、处于加载中、正在重连中或视频地址为空时，绝对不渲染画框
-  if (!hasVisibleVideoFrame.value || visibleLoading.value || webrtcReconnecting.value || !videoStreamUrl.value) {
-    return []
+const resetVisibleHudTimeout = (delay = VISIBLE_HUD_TIMEOUT_MS) => {
+  if (visibleHudExpireTimer) {
+    clearTimeout(visibleHudExpireTimer)
+    visibleHudExpireTimer = null
   }
+  isVisibleHudExpired.value = false
+  visibleHudExpireTimer = setTimeout(() => {
+    isVisibleHudExpired.value = true
+  }, delay)
+}
+
+const clearVisibleHudTimeout = () => {
+  if (visibleHudExpireTimer) {
+    clearTimeout(visibleHudExpireTimer)
+    visibleHudExpireTimer = null
+  }
+  isVisibleHudExpired.value = true
+}
+
+// 监听实时算法数据，若超过 5s 没有数据更新则自动标记超时并清空
+watch(
+  () => robotStore.visionRealTimeMap,
+  (map) => {
+    if (!map) {
+      clearVisibleHudTimeout()
+      return
+    }
+    const now = Date.now()
+    let latestTs = 0
+    for (const key of Object.keys(map)) {
+      const lower = key.toLowerCase()
+      const isVisible = VISIBLE_CAM_KEYS.some(vk => lower.includes(vk.toLowerCase()) || vk.toLowerCase().includes(lower))
+      if (isVisible && map[key]?.timestamp) {
+        if (map[key].timestamp > latestTs) {
+          latestTs = map[key].timestamp
+        }
+      }
+    }
+    if (latestTs > 0 && now - latestTs < VISIBLE_HUD_TIMEOUT_MS) {
+      const remaining = Math.max(100, VISIBLE_HUD_TIMEOUT_MS - (now - latestTs))
+      resetVisibleHudTimeout(remaining)
+    } else {
+      clearVisibleHudTimeout()
+    }
+  },
+  { deep: true, immediate: true }
+)
+
+watch(() => deviceStore.selectedRobotId, () => {
+  clearVisibleHudTimeout()
+})
+
+const visibleVisionBoxes = computed(() => {
+  if (isVisibleHudExpired.value) return []
+  // 画框 overlay 自身已有视频帧与开关判定，此处放宽条件保证底部 HUD 在无视频画面时也能正常解析并展示算法检测结果
   return parseVisionBoxes(['cam_rtsp_left', 'visible', 'cam_visible', 'cam_left'])
 })
 
 const visibleVisionAiInfo = computed(() => {
-  if (!showVisibleVisionBoxes.value) return []
-  // 当画面未真正播放出来、处于加载中、正在重连中或视频地址为空时，不渲染 AI 悬浮卡片
-  if (!hasVisibleVideoFrame.value || visibleLoading.value || webrtcReconnecting.value || !videoStreamUrl.value) {
-    return []
-  }
+  if (isVisibleHudExpired.value) return []
   return parseVisionAiInfo(['cam_rtsp_left', 'visible', 'cam_visible', 'cam_left'])
 })
 
@@ -6042,11 +6392,245 @@ const infraredVisionAiInfo = computed(() => {
   return parseVisionAiInfo(['cam_rtsp_right', 'infrared', 'cam_infrared', 'cam_right'])
 })
 
-// ===== 底部实时检测 HUD 胶囊面板数据与状态 =====
-// ===== 底部实时检测 HUD 胶囊面板数据与状态 =====
-const showVisibleBottomHud = ref(true)
+// ===== 底部实时检测 HUD 胶囊面板数据与状态（登录后默认关闭，由用户按需点击 AI 按钮开启） =====
+const showVisibleBottomHud = ref(false)
+
+// ===== AI 识别提示词配置弹窗相关状态与业务逻辑 =====
+const showLlmPromptModal = ref(false)
+
+// 弹窗挂载目标：全屏模式下挂载到全屏容器内部，避免被浏览器顶层遮挡
+const modalTeleportTarget = computed<string>(() => {
+  if (currentFullscreenPanel.value === 'visible') {
+    return '#visible-video-wrapper'
+  }
+  if (currentFullscreenPanel.value === 'infrared') {
+    return '#infrared-video-wrapper'
+  }
+  return 'body'
+})
+const llmPromptsList = ref<LlmPromptItem[]>([])
+const selectedPromptKey = ref('')
+const isAddingNewPrompt = ref(false)
+const isSubmittingPrompt = ref(false)
+const isLoadingPrompts = ref(false)
+
+const llmPromptForm = reactive({
+  cn_name: '',
+  prompt_key: '',
+  prompt: '',
+  cam_key: 'cam_rtsp_left'
+})
+
+// 判断当前选中的 prompt_key 是否以 normal 开头（用于判断是否允许删除）
+const currentPromptKeyStartsWithNormal = computed(() => {
+  const k = (llmPromptForm.prompt_key || '').trim()
+  return k.startsWith('normal_') || k.startsWith('normal')
+})
+
+// 删除按钮是否可用：新增模式下禁用；非新增模式且是以 normal 开头的自定义提示词才可删除
+const canDeleteCurrentPrompt = computed(() => {
+  if (isAddingNewPrompt.value) return false
+  if (!llmPromptForm.prompt_key) return false
+  return currentPromptKeyStartsWithNormal.value
+})
+
+// prompt_key 校验提示（仅在新增模式下，且仅在填写时校验）
+const promptKeyValidationMsg = computed(() => {
+  if (!isAddingNewPrompt.value) return ''
+  const k = (llmPromptForm.prompt_key || '').trim()
+  if (!k) return ''
+  if (!k.startsWith('normal_')) return '提示词标识必须以 "normal_" 开头'
+  const suffix = k.slice(7)
+  if (!suffix) return '请在 "normal_" 后输入英文或数字标识（如 normal_01）'
+  if (!/^[a-zA-Z0-9_]+$/.test(suffix)) return '后续标识仅支持英文字母、数字或下划线'
+  if (llmPromptsList.value.some(p => p.prompt_key === k)) return '该 prompt_key 已存在，不可重复'
+  return ''
+})
+
+const isPromptKeyInvalid = computed(() => {
+  return isAddingNewPrompt.value && !!promptKeyValidationMsg.value
+})
+
+// 获取当前机器人 ID
+const getCurrentRobotIdForVision = () => {
+  return deviceStore.selectedRobotId || deviceStore.selectedRobot?.robot_id || localStorage.getItem('selected_robot_id') || ''
+}
+
+// 打开提示词弹窗（支持传入通道：'visible' 或 'cam_rtsp_left'，'infrared' 或 'cam_rtsp_right'）
+const openLlmPromptModal = async (cameraType: 'visible' | 'infrared' | string = 'visible') => {
+  showLlmPromptModal.value = true
+  isAddingNewPrompt.value = false
+  llmPromptForm.cam_key = (cameraType === 'infrared' || cameraType === 'cam_rtsp_right') ? 'cam_rtsp_right' : 'cam_rtsp_left'
+  await fetchLlmPromptsList()
+}
+
+// 关闭提示词弹窗
+const closeLlmPromptModal = () => {
+  showLlmPromptModal.value = false
+  isAddingNewPrompt.value = false
+}
+
+// 将提示词对象填充到表单
+const applyPromptToForm = (item: LlmPromptItem) => {
+  llmPromptForm.cn_name = item.cn_name || ''
+  llmPromptForm.prompt_key = item.prompt_key || ''
+  llmPromptForm.prompt = item.prompt || ''
+}
+
+// 获取提示词列表
+const fetchLlmPromptsList = async (targetKeyToSelect?: string) => {
+  const robotId = getCurrentRobotIdForVision()
+  if (!robotId) {
+    showError('未检测到当前选择的机器人，无法获取提示词')
+    return
+  }
+  try {
+    isLoadingPrompts.value = true
+    const res = await visionApi.getLlmPrompts(robotId)
+    const prompts = res?.data?.prompts || []
+    llmPromptsList.value = prompts
+
+    if (prompts.length > 0) {
+      // 若指定了目标 key 且存在，选中目标 key；否则默认显示第一个
+      const target = targetKeyToSelect && prompts.find(p => p.prompt_key === targetKeyToSelect)
+        ? targetKeyToSelect
+        : (selectedPromptKey.value && prompts.find(p => p.prompt_key === selectedPromptKey.value) ? selectedPromptKey.value : prompts[0].prompt_key)
+
+      selectedPromptKey.value = target
+      const current = prompts.find(p => p.prompt_key === target) || prompts[0]
+      applyPromptToForm(current)
+    } else {
+      selectedPromptKey.value = ''
+      llmPromptForm.cn_name = ''
+      llmPromptForm.prompt_key = ''
+      llmPromptForm.prompt = ''
+    }
+  } catch (err: any) {
+    console.error('获取提示词列表失败:', err)
+    showError(err?.message || '获取AI提示词列表失败')
+  } finally {
+    isLoadingPrompts.value = false
+  }
+}
+
+// 下拉列表切换选择
+const handlePromptSelectChange = () => {
+  const item = llmPromptsList.value.find(p => p.prompt_key === selectedPromptKey.value)
+  if (item) {
+    applyPromptToForm(item)
+    isAddingNewPrompt.value = false
+  }
+}
+
+// 点击“新增”按钮：清空表单项，prompt_key 初始化为空
+const startAddNewPrompt = () => {
+  isAddingNewPrompt.value = true
+  llmPromptForm.cn_name = ''
+  llmPromptForm.prompt_key = ''
+  llmPromptForm.prompt = ''
+}
+
+// 取消新增
+const cancelAddNewPrompt = () => {
+  isAddingNewPrompt.value = false
+  if (llmPromptsList.value.length > 0) {
+    const item = llmPromptsList.value.find(p => p.prompt_key === selectedPromptKey.value) || llmPromptsList.value[0]
+    selectedPromptKey.value = item.prompt_key
+    applyPromptToForm(item)
+  }
+}
+
+// 删除当前提示词
+const handleDeletePrompt = async () => {
+  if (!canDeleteCurrentPrompt.value) return
+  const robotId = getCurrentRobotIdForVision()
+  if (!robotId) {
+    showError('未检测到机器人ID')
+    return
+  }
+
+  const promptKey = llmPromptForm.prompt_key
+  const cnName = llmPromptForm.cn_name || promptKey
+  if (!confirm(`确定要删除提示词「${cnName}」(${promptKey}) 吗？删除后不可恢复。`)) {
+    return
+  }
+
+  try {
+    await visionApi.deleteLlmPrompt(robotId, promptKey)
+    showSuccess(`提示词「${cnName}」已成功删除`)
+    selectedPromptKey.value = ''
+    await fetchLlmPromptsList()
+  } catch (err: any) {
+    console.error('删除提示词失败:', err)
+    showError(err?.error_msg || err?.message || '删除提示词失败')
+  }
+}
+
+// 提交保存提示词（POST /v1/vision/{robot_id}/llm_prompts）
+const handleSubmitPrompt = async () => {
+  const robotId = getCurrentRobotIdForVision()
+  if (!robotId) {
+    showError('未检测到机器人ID，无法提交')
+    return
+  }
+
+  const cnName = llmPromptForm.cn_name.trim()
+  const promptKey = llmPromptForm.prompt_key.trim()
+  const promptContent = llmPromptForm.prompt.trim()
+  const camKey = llmPromptForm.cam_key || 'cam_rtsp_left'
+
+  if (!cnName) {
+    showError('请输入提示词名称 (cn_name)')
+    return
+  }
+  // prompt_key 选填；若填写则校验格式和唯一性
+  if (isAddingNewPrompt.value && promptKey) {
+    if (!promptKey.startsWith('normal_')) {
+      showError('新增提示词标识必须以 "normal_" 开头')
+      return
+    }
+    const suffix = promptKey.slice(7)
+    if (!suffix || !/^[a-zA-Z0-9_]+$/.test(suffix)) {
+      showError('提示词标识后续部分必须为英文、数字或下划线')
+      return
+    }
+    if (llmPromptsList.value.some(p => p.prompt_key === promptKey)) {
+      showError(`提示词标识「${promptKey}」已存在，不能重复`)
+      return
+    }
+  }
+
+  try {
+    isSubmittingPrompt.value = true
+    const res = await visionApi.setLlmPrompt(robotId, {
+      prompt_key: promptKey,
+      prompt: promptContent,
+      cn_name: cnName,
+      cam_key: camKey
+    })
+
+    showSuccess(`提示词已实时更新并下发至${camKey === 'cam_rtsp_right' ? '红外' : '可见光'}相机AI识别！`)
+    isAddingNewPrompt.value = false
+    const returnKey = (res as any)?.msg?.prompt_key || (res as any)?.data?.prompt_key || promptKey
+    await fetchLlmPromptsList(returnKey)
+    showLlmPromptModal.value = false
+  } catch (err: any) {
+    console.error('保存提示词失败:', err)
+    showError(err?.error_msg || err?.message || '更新提示词失败')
+  } finally {
+    isSubmittingPrompt.value = false
+  }
+}
 
 // 切换可见光算法画框开关（开启时自动重新展开底部 HUD）
+// 切换左下角 AI 检测面板显示/隐藏（无论视频是否拉到流，点击直接切换显示）
+const toggleVisibleAiHud = () => {
+  showVisibleBottomHud.value = !showVisibleBottomHud.value
+  if (showVisibleBottomHud.value && !showVisibleVisionBoxes.value) {
+    showVisibleVisionBoxes.value = true
+  }
+}
+
 const toggleVisibleVisionBoxes = () => {
   showVisibleVisionBoxes.value = !showVisibleVisionBoxes.value
   if (showVisibleVisionBoxes.value) {
@@ -6054,92 +6638,110 @@ const toggleVisibleVisionBoxes = () => {
   }
 }
 
-// 是否处于异常/告警状态（用于触发第二行警示高亮效果）
+// 从可见光实时算法数据中解析整体 bState 状态判定（false: 正常, true: 异常, null: 未指定）
+const visibleBState = computed<boolean | null>(() => {
+  if (isVisibleHudExpired.value) return null
+  const payload = getVisionPayloadByCamKeys(VISIBLE_CAM_KEYS)
+  if (!payload) return null
+
+  let hasAbnormal = false
+  let hasNormal = false
+
+  const checkVal = (val: any) => {
+    const parsed = resolveBStateValue(val)
+    if (parsed === true) hasAbnormal = true
+    else if (parsed === false) hasNormal = true
+  }
+
+  const checkObj = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return
+    const keys = ['bState', 'bstate', 'b_state', 'bStateDetection', 'bstate_detection', 'b_State', 'BState', 'Bstate']
+    for (const k of keys) {
+      if (k in obj) {
+        checkVal(obj[k])
+      }
+    }
+  }
+
+  // 1. 检查根级对象
+  checkObj(payload)
+
+  // 2. 检查 payload.data 及子级算法对象
+  const data = payload.data
+  if (data && typeof data === 'object') {
+    checkObj(data)
+    for (const k of Object.keys(data)) {
+      const item = data[k]
+      if (!item || typeof item !== 'object') continue
+      checkObj(item)
+      checkObj(item.lResults)
+      checkObj(item.results)
+      checkObj(item.vlm)
+      if (item.lResults && typeof item.lResults === 'object') {
+        checkObj(item.lResults.vlm)
+        checkObj(item.lResults.ai)
+        if (Array.isArray(item.lResults.items)) {
+          item.lResults.items.forEach((it: any) => checkObj(it))
+        }
+      }
+    }
+  }
+
+  if (hasAbnormal) return true
+  if (hasNormal) return false
+  return null
+})
+
+// 是否处于异常/告警状态（严格响应 bstate 检测：false 表示正常，true 表示异常；异常时前面的呼吸灯要显示红色，第二行也高亮警示）
 const isVisibleDetectionAbnormal = computed(() => {
-  if (robotStore.globalObstacleAlertActive) return true
+  // 1. 超时未更新时重置为非异常状态（呼吸灯恢复绿色）
+  if (isVisibleHudExpired.value) return false
+
+  // 2. 严格响应 bstate 检测判定：false 表示正常，true 表示异常
+  if (visibleBState.value !== null) {
+    return visibleBState.value === true
+  }
+
+  // 3. 若未附带显式 bstate 字段，兼容兜底历史 AI 识别异常判定
   if (visibleVisionAiInfo.value.some(i => i.isAbnormal)) return true
+  if (visibleVisionBoxes.value.some(b => b.bState === true)) return true
+
   return false
 })
 
-// 格式化第一行次要元信息（淡化展示：类别/来源，如 [LIVE] AI识别: 大模型识别 或 [LIVE] 目标检测）
+// 格式化第一行次要元信息（淡化展示：类别/来源，如 [LIVE] AI识别: 算法名称）
 const visibleDetectionMetaText = computed(() => {
-  if (visibleVisionBoxes.value.length > 0) {
-    return `目标检测 (${visibleVisionBoxes.value.length}个目标)`
+  if (isVisibleHudExpired.value) {
+    return '暂无实时算法数据'
+  }
+  const aiWithSummary = visibleVisionAiInfo.value.find(i => i.summary && i.summary.trim() !== '')
+  if (aiWithSummary) {
+    return `AI识别: ${aiWithSummary.cnType || '大模型识别'}`
   }
   if (visibleVisionAiInfo.value.length > 0) {
     const titles = visibleVisionAiInfo.value.map(item => item.cnType || 'AI识别').slice(0, 3)
     return `AI识别: ${titles.join('、')}`
   }
-  return '视觉感知运行中'
+  return '暂无实时算法数据'
 })
 
-// 格式化第二行主体内容（重点强化展示：突出实际识别结果主体）
+// 格式化第二行主体内容（仅展示 websocket 返回的 sValue 内容，若无则显示“暂未检测到目标”）
 const visibleDetectionMainContent = computed(() => {
-  // 1. 如果有检测框目标，格式化检测框中的目标及置信度/数值
-  let targetSummary = ''
-  if (visibleVisionBoxes.value.length > 0) {
-    const formattedItems: string[] = []
-    visibleVisionBoxes.value.forEach(box => {
-      const name = box.cnType || '目标'
-      let scoreStr = ''
-      if (box.displayValue) {
-        const val = box.displayValue.trim()
-        if (val.endsWith('%') || val.endsWith('°C')) {
-          scoreStr = ` (${val})`
-        } else {
-          const num = parseFloat(val)
-          if (!isNaN(num)) {
-            scoreStr = num <= 1 ? ` (${(num * 100).toFixed(1)}%)` : ` (${num.toFixed(1)}%)`
-          }
-        }
-      }
-      formattedItems.push(`${name}${scoreStr}`)
-    })
-    const uniqueItems = Array.from(new Set(formattedItems))
-    const displayList = uniqueItems.slice(0, 4)
-    const moreCount = uniqueItems.length - displayList.length
-    targetSummary = `检测到目标: ${displayList.join('，')}${moreCount > 0 ? ` 等共${uniqueItems.length}项` : ''}。`
+  // 超过5s没有数据更新或处于超时状态时，清空当前值，显示“暂未检测到目标”
+  if (isVisibleHudExpired.value) {
+    return '暂未检测到目标'
   }
 
-  // 2. 如果有 VLM/大模型识别摘要
-  let aiSummary = ''
+  // 仅使用 sValue 的内容
   if (visibleVisionAiInfo.value.length > 0) {
-    const aiItem = visibleVisionAiInfo.value.find(i => i.summary && i.summary !== '暂无识别摘要')
-    if (aiItem && aiItem.summary) {
-      aiSummary = aiItem.summary.endsWith('。') ? aiItem.summary : `${aiItem.summary}。`
+    const aiItem = visibleVisionAiInfo.value.find(i => i.summary && i.summary.trim() !== '')
+    if (aiItem && aiItem.summary.trim()) {
+      return aiItem.summary.trim()
     }
   }
 
-  // 3. 优先级呈现：
-  // 若大模型摘要存在且处于异常状态，或仅有识别摘要，优先展示摘要内容
-  if (aiSummary && (isVisibleDetectionAbnormal.value || !targetSummary)) {
-    return aiSummary
-  }
-  if (targetSummary) {
-    return targetSummary
-  }
-  if (aiSummary) {
-    return aiSummary
-  }
-
-  // 4. 障碍物报警状态
-  if (robotStore.globalObstacleAlertActive) {
-    return '前方检测到障碍物，已自动触发安全避障。'
-  }
-
-  // 5. 当前有点位任务正在执行
-  if (robotStore.taskStatus?.task_name) {
-    return `前方道路畅通，导航至 ${robotStore.taskStatus.task_name}。`
-  }
-
-  // 6. 机器人处于运动中
-  const isMoving = robotStore.motionState && (Math.abs(robotStore.motionState.vx || 0) > 0.05 || Math.abs(robotStore.motionState.wz || 0) > 0.05)
-  if (isMoving) {
-    return '巡检行驶中，前方视线良好，道路通畅。'
-  }
-
-  // 7. 默认状态
-  return '前方道路畅通，导航感知正常。'
+  // 无 sValue 数据时显示“暂未检测到目标”
+  return '暂未检测到目标'
 })
 
 // ===== WebRTC 自动重连配置 =====
@@ -6739,7 +7341,7 @@ let webrtcSessionId = 0
 // 构建SRS API地址（通过 nginx 代理，解决 CORS 问题）
 const buildApiUrl = (webrtcUrl: string) => {
   try {
-    // webrtc://server:8000/app/stream -> /rtc-proxy/server
+    // webrtc://server:18000/app/stream -> /rtc-proxy/server
     const url = new URL(webrtcUrl)
     return `/rtc-proxy/${url.hostname}`
   } catch (error) {
@@ -11146,6 +11748,10 @@ onUnmounted(() => {
     clearTimeout(foregroundRecoverTimer)
     foregroundRecoverTimer = null
   }
+  if (visibleHudExpireTimer) {
+    clearTimeout(visibleHudExpireTimer)
+    visibleHudExpireTimer = null
+  }
 
   // robotInfoTimer 已废弃，无需清理
 
@@ -13530,24 +14136,29 @@ const handlePageShow = () => {
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.5));
 }
 
-/* 各产品 PNG 图标视觉比例与尺寸归一化微调 */
+/* 各产品 PNG 图标视觉比例与尺寸归一化微调（消除素材透明留白差异） */
 .img.is-dog img {
-  transform: scale(1.36);
+  transform: scale(1.06);
+  filter: drop-shadow(0 6px 16px rgba(0, 210, 255, 0.35));
 }
 
 .img.is-apollo img {
-  transform: scale(1.3);
+  transform: scale(1.15);
   filter: drop-shadow(0 6px 16px rgba(0, 210, 255, 0.35));
 }
 
 .img.is-pudu-d5 img {
-  transform: scale(1.28);
+  transform: scale(1.18);
   filter: drop-shadow(0 6px 16px rgba(0, 210, 255, 0.35));
 }
 
 .img.is-car img {
   transform: scale(1.42);
   filter: drop-shadow(0 6px 16px rgba(0, 210, 255, 0.35));
+}
+
+.img:hover img {
+  filter: drop-shadow(0 8px 22px rgba(0, 210, 255, 0.55));
 }
 
 .b-top-rightCard {
@@ -15202,6 +15813,38 @@ const handlePageShow = () => {
 
 .video-hidden {
   display: none !important;
+}
+
+.video-action-group-left {
+  position: absolute;
+  left: 10px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 12;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.video-only-wrapper:hover .video-action-group-left {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.video-action-btn.ai-toggle-btn {
+  min-width: 28px;
+  padding: 0 6px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.video-action-btn.ai-toggle-btn.active {
+  background: rgba(0, 225, 255, 0.22);
+  border-color: #00e1ff;
+  color: #00e1ff;
+  box-shadow: 0 0 8px rgba(0, 225, 255, 0.4);
 }
 
 .video-action-group {
@@ -17249,18 +17892,18 @@ const handlePageShow = () => {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: clamp(10px, 3.8%, 30px);
+  bottom: clamp(10px, 3.8%, 24px);
   z-index: 11;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: clamp(6px, 1.2cqw, 14px);
+  justify-content: center;
+  gap: clamp(9px, 1.3cqw + 2px, 12px);
 
-  /* 默认常规模式下宽度紧凑，高度自适应折行 */
-  width: clamp(200px, 60%, 360px);
+  /* 默认常规模式下宽度更小更紧凑，底部居中显示 */
+  width: clamp(160px, 48%, 230px);
   max-width: calc(100% - 24px);
   box-sizing: border-box;
-  padding: clamp(6px, 0.8cqw + 3px, 10px) clamp(10px, 1.4cqw + 4px, 16px);
+  padding: clamp(5px, 0.7cqw + 2px, 8px) clamp(10px, 1.4cqw + 3px, 13px);
   border-radius: clamp(16px, 2cqw, 20px);
 
   /* 毛玻璃质感背景与微蓝边缘发光 */
@@ -17288,7 +17931,16 @@ const handlePageShow = () => {
     0 0 24px rgba(56, 189, 248, 0.22);
 }
 
-/* 呼吸绿点状态指示器 */
+/* 异常状态下的底栏高亮微光 */
+.vision-bottom-hud-pill.is-abnormal {
+  border-color: rgba(239, 68, 68, 0.52);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.22),
+    0 0 22px rgba(239, 68, 68, 0.22);
+}
+
+/* 呼吸指示灯状态指示器（正常绿光 / 异常红光） */
 .hud-pill-status-dot {
   position: relative;
   display: flex;
@@ -17305,6 +17957,7 @@ const handlePageShow = () => {
   border-radius: 50%;
   background: #22c55e;
   box-shadow: 0 0 8px #22c55e, 0 0 14px rgba(34, 197, 94, 0.6);
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .hud-dot-ping {
@@ -17315,6 +17968,18 @@ const handlePageShow = () => {
   border: 1.5px solid #22c55e;
   opacity: 0.8;
   animation: hudDotPulse 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  transition: border-color 0.25s ease;
+}
+
+/* 异常时前面的呼吸灯显示红色，并加快波纹脉冲 */
+.hud-pill-status-dot.is-abnormal .hud-dot-core {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444, 0 0 16px rgba(239, 68, 68, 0.85);
+}
+
+.hud-pill-status-dot.is-abnormal .hud-dot-ping {
+  border-color: #ef4444;
+  animation: hudDotPulseAbnormal 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 @keyframes hudDotPulse {
@@ -17324,6 +17989,17 @@ const handlePageShow = () => {
   }
   70%, 100% {
     transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes hudDotPulseAbnormal {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.95;
+  }
+  70%, 100% {
+    transform: scale(2.5);
     opacity: 0;
   }
 }
@@ -17343,22 +18019,24 @@ const handlePageShow = () => {
   display: flex;
   align-items: center;
   gap: clamp(4px, 0.8cqw, 8px);
-  font-size: clamp(10px, 0.7cqw + 6.5px, 11.5px);
+  font-size: clamp(9.5px, 0.6cqw + 6px, 11px);
   color: #94a3b8;
-  opacity: 0.82;
-  line-height: 1.25;
+  opacity: 0.85;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 400;
   letter-spacing: 0.2px;
+  min-width: 0;
+  width: 100%;
+  line-height: 1.25;
 }
 
 .hud-pill-live-tag {
   color: #38bdf8;
   font-family: 'Consolas', 'Menlo', monospace;
   font-weight: 600;
-  font-size: clamp(10px, 0.7cqw + 6.5px, 11px);
+  font-size: clamp(9.5px, 0.6cqw + 6px, 10.5px);
   letter-spacing: 0.5px;
   flex-shrink: 0;
   opacity: 0.9;
@@ -17370,6 +18048,51 @@ const handlePageShow = () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+/* 微型轻量设置齿轮按钮：位于最右侧，与第一行对齐，作为文字右边界 */
+.hud-pill-setting-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  opacity: 0.75;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 0px;
+  transform: translateY(-1px);
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.hud-pill-setting-btn svg {
+  display: block;
+  pointer-events: none;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hud-pill-setting-btn:hover {
+  opacity: 1;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.35);
+  transform: translateY(-1px);
+}
+
+.hud-pill-setting-btn:hover svg {
+  transform: rotate(45deg);
+}
+
+.hud-pill-setting-btn:active {
+  transform: translateY(-1px) scale(0.92);
 }
 
 /* 第二行：实际识别内容（高对比强化，支持智能多行折行自适应） */
@@ -17377,7 +18100,7 @@ const handlePageShow = () => {
   display: flex;
   align-items: flex-start;
   gap: 5px;
-  font-size: clamp(12.5px, 0.9cqw + 7.5px, 14.5px);
+  font-size: clamp(11.5px, 0.8cqw + 6.5px, 13px);
   line-height: 1.35;
   color: #ffffff;
   font-weight: 600;
@@ -17560,6 +18283,20 @@ const handlePageShow = () => {
 .video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-line-secondary,
 .video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-line-secondary {
   font-size: 12.5px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-setting-btn,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-setting-btn,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-setting-btn {
+  width: 20px;
+  height: 20px;
+}
+
+.vision-bottom-hud-pill.is-fullscreen .hud-pill-setting-btn svg,
+.video-only-wrapper:fullscreen .vision-bottom-hud-pill .hud-pill-setting-btn svg,
+.video-only-wrapper:-webkit-full-screen .vision-bottom-hud-pill .hud-pill-setting-btn svg {
+  width: 13px;
+  height: 13px;
 }
 
 .vision-bottom-hud-pill.is-fullscreen .hud-pill-actions,
@@ -18000,5 +18737,545 @@ const handlePageShow = () => {
 
 .pcd-option-text {
   user-select: none;
+}
+
+
+/* ============================================================
+   AI 提示词配置弹窗
+   ============================================================ */
+
+/* 提示词配置弹窗遮罩 */
+.llm-prompt-modal-mask {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 10, 20, 0.76);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+/* 全屏模式下挂载于视频容器内部的弹窗遮罩适配 */
+.video-only-wrapper:fullscreen .llm-prompt-modal-mask,
+.video-only-wrapper:-webkit-full-screen .llm-prompt-modal-mask {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 99999;
+}
+
+/* 提示词配置弹窗主体 */
+.llm-prompt-modal-dialog {
+  position: relative;
+  width: min(720px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(145deg, #0d1e34 0%, #091526 100%);
+  border: 1.5px solid rgba(56, 189, 248, 0.45);
+  border-radius: 12px;
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.65),
+    0 0 30px rgba(56, 189, 248, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  color: #f1f5f9;
+  overflow: hidden;
+  animation: llmModalZoomIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes llmModalZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 头部 */
+.llm-prompt-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(90deg, rgba(14, 38, 68, 0.8) 0%, rgba(13, 27, 46, 0.6) 100%);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.llm-prompt-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+}
+
+.llm-prompt-title-icon {
+  display: flex;
+  align-items: center;
+  color: #38bdf8;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.5));
+}
+
+.llm-prompt-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.llm-prompt-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #f87171;
+}
+
+/* 弹窗内容 */
+.llm-prompt-modal-body {
+  position: relative;
+  flex: 1;
+  padding: 18px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.35) transparent;
+}
+
+.llm-prompt-loading-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(9, 21, 38, 0.82);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #38bdf8;
+  font-size: 14px;
+}
+
+.llm-prompt-loading-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(56, 189, 248, 0.2);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: llmSpin 0.8s linear infinite;
+}
+
+@keyframes llmSpin {
+  to { transform: rotate(360deg); }
+}
+
+.llm-prompt-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.llm-prompt-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.llm-prompt-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #cbd5e1;
+}
+
+.required-star {
+  color: #f87171;
+  margin-left: 2px;
+}
+
+.builtin-prompt-badge {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+.custom-prompt-badge {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+}
+
+.llm-prompt-tip {
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.llm-prompt-char-count {
+  font-size: 12px;
+  color: #64748b;
+  font-family: monospace;
+}
+
+/* 目标相机选择器 */
+.llm-cam-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.llm-cam-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(15, 30, 50, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #94a3b8;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.llm-cam-chip:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #e2e8f0;
+}
+
+.llm-cam-chip.active {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  font-weight: 500;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
+.llm-cam-chip-radio {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.llm-cam-chip.active .llm-cam-chip-radio::after {
+  content: '';
+  position: absolute;
+  inset: 1.5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* 操作行：下拉 + 按钮组 */
+.llm-prompt-row-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.llm-prompt-select-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.llm-prompt-select {
+  width: 100%;
+  height: 36px;
+  padding: 0 32px 0 12px;
+  background: rgba(15, 30, 50, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  border-radius: 6px;
+  color: #f1f5f9;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: all 0.2s ease;
+}
+
+.llm-prompt-select:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.llm-prompt-select option {
+  background: #0d1e34;
+  color: #f1f5f9;
+}
+
+.llm-select-arrow {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.llm-prompt-input-wrap {
+  flex: 1;
+}
+
+.llm-prompt-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  background: rgba(15, 30, 50, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  border-radius: 6px;
+  color: #f1f5f9;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.llm-prompt-input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.llm-prompt-input:disabled {
+  background: rgba(10, 20, 35, 0.6);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.llm-prompt-input.is-invalid {
+  border-color: #f87171 !important;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.3) !important;
+}
+
+.llm-prompt-error-msg {
+  font-size: 12px;
+  color: #f87171;
+  margin-top: 3px;
+}
+
+/* 操作按钮条 */
+.llm-prompt-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.llm-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.llm-btn-new {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.llm-btn-new:hover {
+  background: rgba(56, 189, 248, 0.28);
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+  transform: translateY(-1px);
+}
+
+.llm-btn-cancel-add {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #cbd5e1;
+}
+
+.llm-btn-cancel-add:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #f1f5f9;
+}
+
+.llm-btn-delete {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.llm-btn-delete:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #f87171;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
+  transform: translateY(-1px);
+}
+
+.llm-btn-delete:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* 提示词多行文本框 */
+.llm-prompt-textarea {
+  width: 100%;
+  padding: 12px;
+  background: rgba(11, 23, 38, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  font-family: 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace;
+  outline: none;
+  resize: vertical;
+  min-height: 180px;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.35) transparent;
+}
+
+.llm-prompt-textarea:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+
+/* 滚动条定制：去掉背景色、更细更精致 */
+.llm-prompt-textarea::-webkit-scrollbar,
+.llm-prompt-modal-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.llm-prompt-textarea::-webkit-scrollbar-track,
+.llm-prompt-modal-body::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.llm-prompt-textarea::-webkit-scrollbar-thumb,
+.llm-prompt-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.32);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.llm-prompt-textarea::-webkit-scrollbar-thumb:hover,
+.llm-prompt-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.65);
+}
+
+.llm-prompt-textarea::-webkit-scrollbar-corner,
+.llm-prompt-modal-body::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+/* 底部操作 */
+.llm-prompt-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 22px;
+  background: rgba(10, 22, 38, 0.7);
+  border-top: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.llm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 20px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.llm-btn-cancel {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #cbd5e1;
+}
+
+.llm-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.llm-btn-submit {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border: 1px solid #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+}
+
+.llm-btn-submit:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  box-shadow: 0 6px 18px rgba(14, 165, 233, 0.5);
+  transform: translateY(-1px);
+}
+
+.llm-btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.llm-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: llmSpin 0.7s linear infinite;
+}
+
+.llm-modal-fade-enter-active,
+.llm-modal-fade-leave-active {
+  transition: opacity 0.22s ease;
+}
+
+.llm-modal-fade-enter-from,
+.llm-modal-fade-leave-to {
+  opacity: 0;
 }
 </style>

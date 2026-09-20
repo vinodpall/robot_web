@@ -770,7 +770,73 @@ export const visionApi = {
     type: 'all'
   }) => {
     return apiClient.post(`/vision/${robotId}/delete_logs`, data)
+  },
+
+  // 获取 LLM 提示词列表
+  getLlmPrompts: (robotId: string, refresh = false) => {
+    return apiClient.get<LlmPromptsResponse>(`/vision/${robotId}/llm_prompts`, { refresh })
+  },
+
+  // 设置/新增/修改 LLM 提示词
+  setLlmPrompt: async (robotId: string, data: {
+    prompt_key?: string
+    prompt?: string
+    cn_name: string
+    cam_key?: string
+  }) => {
+    try {
+      return await apiClient.post<{
+        msg?: {
+          result: number
+          error_msg?: string
+          prompt_key?: string
+          repushed_cams?: string[]
+        }
+        data?: any
+        request_id?: string
+      }>(`/vision/${robotId}/llm_prompt`, data)
+    } catch (err: any) {
+      if (err?.status === 404 || (typeof err === 'string' && err.includes('404'))) {
+        return await apiClient.post(`/vision/${robotId}/llm_prompts`, data)
+      }
+      throw err
+    }
+  },
+
+  // 删除自定义 LLM 提示词
+  deleteLlmPrompt: async (robotId: string, promptKey: string) => {
+    try {
+      return await apiClient.delete<{
+        msg?: {
+          result: number
+          error_msg?: string
+          prompt_key?: string
+        }
+        data?: any
+        request_id?: string
+      }>(`/vision/${robotId}/llm_prompt`, { prompt_key: promptKey })
+    } catch (err: any) {
+      if (err?.status === 404 || (typeof err === 'string' && err.includes('404'))) {
+        return await apiClient.delete(`/vision/${robotId}/llm_prompts`, { prompt_key: promptKey })
+      }
+      throw err
+    }
   }
+}
+
+export interface LlmPromptItem {
+  prompt_key: string
+  cn_name: string
+  prompt: string
+}
+
+export interface LlmPromptsResponse {
+  data: {
+    llm_itypes: number[]
+    refreshed: boolean
+    prompts: LlmPromptItem[]
+  }
+  request_id: string
 }
 
 export const robotApi = {
@@ -1651,6 +1717,51 @@ export const mapFileApi = {
     }
   },
 
+  uploadTrajectoryCustomFile: async (
+    robotId: string,
+    trajectoryName: string,
+    fileName: string,
+    file: Blob
+  ): Promise<boolean> => {
+    const trackName = trajectoryName.replace(/\.txt$/i, '')
+    const remotePath = `/root/dxr_data/trajectory/${trackName}`
+    const url = buildRobotHttpUrl(robotId, 5000, 'upload_single_file')
+
+    const formData = new FormData()
+    formData.append('file', file, fileName)
+    formData.append('remote_path', remotePath)
+
+    console.log('[轨迹自定义文件上传] 开始上传文件:', {
+      url,
+      remotePath,
+      fileName,
+      fileSize: file.size
+    })
+
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        body: formData,
+        headers: buildAuthHeaders()
+      })
+
+      if (!response.ok) {
+        console.error(`[轨迹自定义文件上传] 文件上传失败: ${fileName}, HTTP ${response.status}`)
+        const responseText = await response.text()
+        console.error('[轨迹自定义文件上传] 服务端响应内容:', responseText)
+        return false
+      }
+      console.log(`[轨迹自定义文件上传] 上传成功: ${fileName}`)
+      return true
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.error(`[轨迹自定义文件上传] 文件上传超时(${ROBOT_HTTP_FETCH_TIMEOUT_MS}ms): ${fileName}`)
+        return false
+      }
+      console.error(`[轨迹自定义文件上传] 文件上传异常: ${fileName}`, error)
+      return false
+    }
+  },
 
   downloadTrajectoryFile: async (
     robotId: string,

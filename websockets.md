@@ -4,7 +4,7 @@
 
 ### WebSocket 端点
 ```
-ws://your-server:8000/api/v1/ws
+ws://your-server:18000/api/v1/ws
 ```
 
 ### 连接参数
@@ -14,12 +14,12 @@ ws://your-server:8000/api/v1/ws
 
 **订阅特定机器人**:
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/api/v1/ws?robot_id=robot_001');
+const ws = new WebSocket('ws://localhost:18000/api/v1/ws?robot_id=robot_001');
 ```
 
 **订阅所有机器人**:
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/api/v1/ws');
+const ws = new WebSocket('ws://localhost:18000/api/v1/ws');
 ```
 
 ---
@@ -313,7 +313,7 @@ const ws = new WebSocket('ws://localhost:8000/api/v1/ws');
 
 ### 连接建立
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/api/v1/ws?robot_id=robot_001');
+const ws = new WebSocket('ws://localhost:18000/api/v1/ws?robot_id=robot_001');
 
 ws.onopen = () => {
   console.log('WebSocket 连接已建立');
@@ -370,7 +370,7 @@ ws.onclose = (event) => {
 WebSocket 连接当前不需要 JWT token 认证。如需认证，可以通过查询参数传递 token：
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/api/v1/ws?robot_id=robot_001&token=YOUR_JWT_TOKEN');
+const ws = new WebSocket('ws://localhost:18000/api/v1/ws?robot_id=robot_001&token=YOUR_JWT_TOKEN');
 ```
 
 ---
@@ -397,7 +397,7 @@ class RobotWebSocketClient {
   }
 
   connect() {
-    const url = `ws://localhost:8000/api/v1/ws?robot_id=${this.robotId}`;
+    const url = `ws://localhost:18000/api/v1/ws?robot_id=${this.robotId}`;
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {

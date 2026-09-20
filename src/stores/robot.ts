@@ -124,7 +124,7 @@ export const useRobotStore = defineStore('robot', () => {
   const realtimeSensorUnits = ref<Record<string, string>>({})
 
   // ===== 算法画框实时数据（vision_real_time） =====
-  const visionRealTimeMap = ref<Record<string, { cam_key: string; robot_id: string; filtered?: boolean; data: any; timestamp: number }>>({})
+  const visionRealTimeMap = ref<Record<string, { cam_key: string; robot_id: string; filtered?: boolean; data: any; timestamp: number; [key: string]: any }>>({})
 
   // ===== mutations =====
 
@@ -132,6 +132,7 @@ export const useRobotStore = defineStore('robot', () => {
     if (!payload || !payload.cam_key) return
     const camKey = String(payload.cam_key).trim()
     visionRealTimeMap.value[camKey] = {
+      ...(typeof payload === 'object' ? payload : {}),
       cam_key: camKey,
       robot_id: String(payload.robot_id || ''),
       filtered: Boolean(payload.filtered),

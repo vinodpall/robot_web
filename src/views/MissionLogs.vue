@@ -7,6 +7,7 @@
           v-for="tab in sidebarTabs"
           :key="tab.key"
           :class="['sidebar-tab', { active: route.path === tab.path }]"
+          :title="tab.label"
           v-permission-click-dialog="tab.permission"
           @click="handleTabClick(tab)"
         >

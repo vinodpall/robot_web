@@ -108,7 +108,7 @@ chmod +x deploy.sh
 
 ```bash
 # 指定端口并后台启动
-HOST_PORT=5173 BACKEND_URL=http://127.0.0.1:8000 docker compose up -d --build
+HOST_PORT=5173 BACKEND_URL=http://127.0.0.1:18000 docker compose up -d --build
 ```
 
 ---

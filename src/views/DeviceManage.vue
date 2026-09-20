@@ -7,6 +7,7 @@
           v-for="tab in sidebarTabs"
           :key="tab.key"
           :class="['sidebar-tab', { active: currentTab === tab.key }]"
+          :title="tab.label"
           @click="handleTabClick(tab.key)"
         >
           <img :src="tab.icon" :alt="tab.label" />

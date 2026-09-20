@@ -51,7 +51,7 @@
                   v-if="selectedRobot"
                   class="robot-type-icon" 
                   :class="[
-                    isVehicleType(selectedRobot.robot_type, selectedRobot.robot_id) ? 'is-car' : 'is-dog',
+                    isVehicleType(selectedRobot.robot_type, selectedRobot.robot_id, selectedRobot.name) ? 'is-car' : 'is-dog',
                     isSelectedRobotOnline ? 'is-online' : 'is-offline'
                   ]"
                 ></span>
@@ -79,7 +79,7 @@
                 <span 
                   class="robot-type-icon" 
                   :class="[
-                    isVehicleType(robot.robot_type, robot.robot_id) ? 'is-car' : 'is-dog',
+                    isVehicleType(robot.robot_type, robot.robot_id, robot.name) ? 'is-car' : 'is-dog',
                     isRobotItemOnline(robot) ? 'is-online' : 'is-offline'
                   ]"
                 ></span>

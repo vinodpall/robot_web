@@ -847,14 +847,24 @@
    </Teleport>
 
     <!-- 额外配置弹窗 -->
+    <!-- 额外配置弹窗 -->
     <Teleport to="body">
-      <div v-if="extraConfigDialog.visible" class="custom-dialog-mask" style="z-index: 10001;">
-        <div class="simple-modal-card" style="width: 500px; max-width: 95vw;" @click.stop>
+      <div
+        v-if="extraConfigDialog.visible"
+        class="custom-dialog-mask"
+        style="z-index: 10001;"
+        @click="handleExtraConfigMaskClick"
+      >
+        <div
+          class="simple-modal-card extra-config-modal-card"
+          style="width: 500px; max-width: 95vw;"
+          @click.stop
+        >
           <div class="simple-modal-header">
             <span>参数配置</span>
             <span class="simple-close-icon" @click="closeExtraConfigDialog">×</span>
           </div>
-          <div class="simple-modal-body" style="padding: 30px;">
+          <div class="simple-modal-body extra-config-modal-body" style="padding: 30px;">
             <div v-if="activeExtraConfigFields.length === 0" class="simple-form-item">
               <label class="simple-label">额外事务</label>
               <input
@@ -863,21 +873,68 @@
                 placeholder="请输入额外事务"
               />
             </div>
-            <div v-for="field in activeExtraConfigFields" :key="field.field" class="simple-form-item">
+            <div v-for="field in activeExtraConfigFields" :key="field.field" class="simple-form-item extra-field-container">
               <label class="simple-label">
                 <span v-if="field.required" class="required-star">*</span>{{ field.title }}
               </label>
+              <select
+                v-if="isListExtraField(field)"
+                v-model="extraConfigDialog.formValues[field.field]"
+                class="simple-select extra-config-select"
+                :class="{ 'input-error-border': !!extraConfigDialog.errors[field.field] }"
+                @change="handleExtraConfigFieldSelectChange(field)"
+              >
+                <option v-if="!field.required" value="">请选择（可选）</option>
+                <option
+                  v-for="opt in getExtraFieldOptions(field)"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </select>
               <input
+                v-else
                 :value="extraConfigDialog.formValues[field.field]"
                 class="simple-input extra-config-input"
                 :class="{ 'input-error-border': !!extraConfigDialog.errors[field.field] }"
                 :inputmode="isNumericExtraField(field) ? 'decimal' : undefined"
-                :placeholder="field.default !== undefined && field.default !== null ? `默认值：${field.default}` : '请输入'"
+                :placeholder="field.default !== undefined && field.default !== null && !Array.isArray(field.default) ? `默认值：${field.default}` : '请输入'"
                 @input="handleExtraConfigFieldInput(field, $event)"
                 @compositionstart="handleExtraConfigCompositionStart(field)"
                 @compositionend="handleExtraConfigCompositionEnd(field, $event)"
               />
               <div v-if="extraConfigDialog.errors[field.field]" class="input-error-text">{{ extraConfigDialog.errors[field.field] }}</div>
+
+              <!-- 如果是大模型提示词，在列表下方增加“提示词详情”下划线文字链接与悬浮气泡（当前按需求先隐藏） -->
+              <div v-if="showPromptDetail && isPromptExtraField(field)" class="prompt-detail-wrap">
+                <div class="prompt-detail-trigger">
+                  <span
+                    class="prompt-detail-link"
+                    :class="{ 'is-active': promptDetailPopover.visible }"
+                    @click.stop="handleShowPromptDetail(field)"
+                  >
+                    <svg class="prompt-detail-icon" viewBox="0 0 1024 1024" width="13" height="13">
+                      <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64z m0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z" fill="currentColor"/>
+                      <path d="M464 336a48 48 0 1 0 96 0 48 48 0 1 0-96 0zM472 464h80v272h-80z" fill="currentColor"/>
+                    </svg>
+                    提示词详情
+                  </span>
+                </div>
+
+                <!-- 提示词详情气泡浮层（悬浮在弹窗上一层，不撑大弹窗，不被截断） -->
+                <div v-if="promptDetailPopover.visible" class="prompt-popover-box" @click.stop>
+                  <div class="prompt-popover-arrow"></div>
+                  <span class="prompt-popover-close" title="关闭" @click.stop="promptDetailPopover.visible = false">×</span>
+                  <div v-if="promptDetailPopover.loading" class="prompt-popover-loading">
+                    <span class="prompt-spinner"></span>
+                    正在获取提示词内容...
+                  </div>
+                  <div v-else class="prompt-popover-content">
+                    {{ promptDetailPopover.promptContent }}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="simple-modal-footer">
@@ -926,7 +983,8 @@ import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.s
 import taskMultiIcon from '@/assets/source_data/svg_data/robot_source/task_multi.svg'
 import { useWaylineJobs, useDevices } from '../composables/useApi'
 import { useWebRTCVideo } from '../composables/useWebRTCVideo'
-import { waylineApi, navigationApi, dogApi, cameraApi } from '@/api/services'
+import { waylineApi, navigationApi, dogApi, cameraApi, visionApi } from '@/api/services'
+import type { LlmPromptItem } from '@/api/services'
 import { useDeviceStatus } from '../composables/useDeviceStatus'
 import icon360Photo from '@/assets/source_data/svg_data/task_line_svg/360_photo.svg'
 import iconAbsPhoto from '@/assets/source_data/svg_data/task_line_svg/abs_photo.svg'
@@ -3841,6 +3899,41 @@ const confirmAddTask = async () => {
     }
   }
 
+  let finalExtra = form.extraConfig || ''
+  if (finalExtra) {
+    try {
+      const extraObj = JSON.parse(finalExtra)
+      if (extraObj && typeof extraObj === 'object' && !Array.isArray(extraObj)) {
+        const pKey = String(extraObj.prompt_key || '').trim()
+        if (pKey && !extraObj.prompt) {
+          let targetPrompt = llmPromptsList.value.find(p => p.prompt_key === pKey)
+          if (!targetPrompt || !targetPrompt.prompt) {
+            await fetchLlmPrompts(true)
+            targetPrompt = llmPromptsList.value.find(p => p.prompt_key === pKey)
+          }
+          if (targetPrompt?.prompt) {
+            extraObj.prompt = targetPrompt.prompt
+            finalExtra = JSON.stringify(extraObj)
+          }
+        }
+      }
+    } catch (_) {}
+  } else if (isAnomalyDetectionTaskType.value) {
+    const promptFields = activeExtraConfigFields.value.filter(f => isPromptExtraField(f))
+    const defaultKey = promptFields[0]?.options?.[0]?.value || llmPromptsList.value[0]?.prompt_key || ''
+    if (defaultKey) {
+      let targetPrompt = llmPromptsList.value.find(p => p.prompt_key === defaultKey)
+      if (!targetPrompt || !targetPrompt.prompt) {
+        await fetchLlmPrompts(true)
+        targetPrompt = llmPromptsList.value.find(p => p.prompt_key === defaultKey)
+      }
+      finalExtra = JSON.stringify({
+        prompt_key: defaultKey,
+        prompt: targetPrompt?.prompt ?? ''
+      })
+    }
+  }
+
   const taskData: any = {
     task_id: isEditMode.value ? (editingTaskItem.value?.rawData?.task_id || `track_${timestamp}`) : `track_${timestamp}`,
     ...resolveTaskTypeSubmitPayload(form.typeInput || ''),
@@ -3855,7 +3948,7 @@ const confirmAddTask = async () => {
     cam_key: 'cam_rtsp_left',
     track_name: selectedRouteName.value,
     track_point_name: selectedTaskGroupName.value,
-    extra: form.extraConfig || '',
+    extra: finalExtra,
     obs_mode: form.obsMode || '停障模式',
     nostop: form.nostop,
     no_switch: form.no_switch,
@@ -4698,12 +4791,18 @@ const handleGotoPreset = async () => {
 // const handleSpeed = () => { console.log('Set Speed') }
 
 // ========== 额外配置相关 ==========
+interface ExtraFieldOption {
+  label: string
+  value: string
+}
+
 interface ExtraConfigFieldDef {
   type?: string
   title: string
   field: string
   required?: boolean
-  default?: string | number | boolean | null
+  default?: string | number | boolean | null | any[]
+  options?: ExtraFieldOption[]
 }
 
 const extraConfigDialog = ref({
@@ -4715,6 +4814,121 @@ const extraConfigDialog = ref({
   composingFields: {} as Record<string, boolean>
 })
 
+const llmPromptsList = ref<LlmPromptItem[]>([])
+const llmPromptNameMap = ref<Record<string, string>>({})
+const isFetchingPrompts = ref(false)
+const showPromptDetail = ref(false) // 提示词详情展示开关（按需求先隐藏）
+
+const promptDetailPopover = ref({
+  visible: false,
+  promptKey: '',
+  cnName: '',
+  promptContent: '',
+  loading: false
+})
+
+const fetchLlmPrompts = async (force = false) => {
+  const robotId = resolveSelectedRobotId()
+  if (!robotId) return
+  if (isFetchingPrompts.value) return
+  if (!force && llmPromptsList.value.length > 0) return
+
+  try {
+    isFetchingPrompts.value = true
+    const res = await visionApi.getLlmPrompts(robotId, force)
+    const prompts = res?.data?.prompts || []
+    llmPromptsList.value = prompts
+    const map: Record<string, string> = {}
+    prompts.forEach((p: any) => {
+      if (p?.prompt_key) {
+        map[p.prompt_key] = p.cn_name || p.prompt_key
+      }
+    })
+    llmPromptNameMap.value = map
+  } catch (_) {
+    // 忽略获取提示词失败，降级显示原始 key
+  } finally {
+    isFetchingPrompts.value = false
+  }
+}
+
+const handleShowPromptDetail = async (field: ExtraConfigFieldDef) => {
+  const selectedKey = String(extraConfigDialog.value.formValues[field.field] || '').trim()
+  const options = getExtraFieldOptions(field)
+  const currentKey = selectedKey || (options[0]?.value ?? '')
+
+  if (!selectedKey && currentKey) {
+    extraConfigDialog.value.formValues[field.field] = currentKey
+  }
+
+  // 若当前已打开同一个 key 的详情，再次点击则关闭
+  if (promptDetailPopover.value.visible && promptDetailPopover.value.promptKey === currentKey) {
+    promptDetailPopover.value.visible = false
+    return
+  }
+
+  promptDetailPopover.value.visible = true
+  promptDetailPopover.value.promptKey = currentKey
+
+  // 如果提示词列表为空或找不到当前选中的 prompt，主动触发接口
+  let targetPrompt = llmPromptsList.value.find(p => p.prompt_key === currentKey)
+  if (!targetPrompt || llmPromptsList.value.length === 0) {
+    promptDetailPopover.value.loading = true
+    await fetchLlmPrompts(true)
+    targetPrompt = llmPromptsList.value.find(p => p.prompt_key === currentKey)
+    promptDetailPopover.value.loading = false
+  }
+
+  if (targetPrompt) {
+    promptDetailPopover.value.cnName = targetPrompt.cn_name || targetPrompt.prompt_key
+    promptDetailPopover.value.promptContent = targetPrompt.prompt || '（该提示词内容为空）'
+  } else {
+    promptDetailPopover.value.cnName = currentKey || '未选择提示词'
+    promptDetailPopover.value.promptContent = currentKey ? '未查询到该提示词的详细内容' : '请先在上方下拉列表选择提示词'
+  }
+}
+
+const isPromptExtraField = (field: ExtraConfigFieldDef) => {
+  const f = String(field.field || '').trim().toLowerCase()
+  const t = String(field.title || '').trim()
+  return f === 'prompt_key' || t.includes('提示词') || t.includes('提示器') || /prompt(_?key)?/i.test(f)
+}
+
+const isAnomalyDetectionTaskType = computed(() => {
+  const candidates = [
+    addTaskDialog.value.form.actionType,
+    addTaskDialog.value.form.typeInput,
+    currentActionTypeMeta.value?.cn_name,
+    currentActionTypeMeta.value?.type_text,
+    currentActionTypeMeta.value?.type,
+    currentActionTypeMeta.value?.en_name
+  ]
+    .map(item => String(item ?? '').trim())
+    .filter(Boolean)
+
+  return candidates.some(name =>
+    name.includes('异常识别') ||
+    name.includes('异常') ||
+    /abnormal|anomaly/i.test(name)
+  )
+})
+
+const handleExtraConfigFieldSelectChange = (field: ExtraConfigFieldDef) => {
+  extraConfigDialog.value.errors[field.field] = ''
+  if (promptDetailPopover.value.visible && isPromptExtraField(field)) {
+    const currentKey = String(extraConfigDialog.value.formValues[field.field] || '').trim()
+    promptDetailPopover.value.promptKey = currentKey
+    const targetPrompt = llmPromptsList.value.find(p => p.prompt_key === currentKey)
+    if (targetPrompt) {
+      promptDetailPopover.value.cnName = targetPrompt.cn_name || targetPrompt.prompt_key
+      promptDetailPopover.value.promptContent = targetPrompt.prompt || '（该提示词内容为空）'
+    } else {
+      promptDetailPopover.value.cnName = currentKey || '未选择提示词'
+      promptDetailPopover.value.promptContent = currentKey ? '未查询到该提示词的详细内容' : '请选择提示词'
+    }
+  }
+}
+
 const parseTaskTypeFieldname = (raw: unknown): ExtraConfigFieldDef[] => {
   if (!raw) return []
   const text = String(raw).trim()
@@ -4722,18 +4936,79 @@ const parseTaskTypeFieldname = (raw: unknown): ExtraConfigFieldDef[] => {
   try {
     const parsed = JSON.parse(text)
     if (!Array.isArray(parsed)) return []
-    return parsed
-      .map(item => ({
-        type: String(item?.type ?? ''),
-        title: String(item?.title ?? item?.field ?? ''),
-        field: String(item?.field ?? ''),
-        required: Boolean(item?.required),
-        default: item?.default
-      }))
-      .filter(item => !!item.field && !!item.title)
+    return (parsed as any[])
+      .map((item: any) => {
+        const type = String(item?.type ?? '')
+        const rawOptions = Array.isArray(item?.options)
+          ? item.options
+          : (type === 'list' && Array.isArray(item?.default) ? item.default : [])
+        const options: ExtraFieldOption[] = (rawOptions as any[])
+          .map((opt: any): ExtraFieldOption => {
+            if (opt && typeof opt === 'object') {
+              const val = String(opt.value ?? opt.key ?? opt.id ?? '').trim()
+              const lbl = String(opt.label ?? opt.title ?? opt.name ?? val).trim()
+              return { label: lbl || val, value: val }
+            }
+            const val = String(opt ?? '').trim()
+            return { label: val, value: val }
+          })
+          .filter((opt: ExtraFieldOption) => !!opt.value)
+
+        return {
+          type,
+          title: String(item?.title ?? item?.field ?? ''),
+          field: String(item?.field ?? ''),
+          required: Boolean(item?.required),
+          default: item?.default,
+          options
+        }
+      })
+      .filter((item: any) => !!item.field && !!item.title)
   } catch (_) {
     return []
   }
+}
+
+const isListExtraField = (field: ExtraConfigFieldDef) => {
+  return field.type === 'list'
+    || (Array.isArray(field.options) && field.options.length > 0)
+    || isPromptExtraField(field)
+}
+
+const getExtraFieldOptions = (field: ExtraConfigFieldDef): ExtraFieldOption[] => {
+  let baseOptions = field.options && field.options.length > 0
+    ? [...field.options]
+    : (Array.isArray(field.default) ? field.default.map((opt: any) => ({ label: String(opt ?? '').trim(), value: String(opt ?? '').trim() })) : [])
+
+  if (isPromptExtraField(field) && llmPromptsList.value.length > 0) {
+    if (baseOptions.length === 0) {
+      baseOptions = llmPromptsList.value.map(p => ({
+        label: p.cn_name ? `${p.cn_name} (${p.prompt_key})` : p.prompt_key,
+        value: p.prompt_key
+      }))
+    } else {
+      const existingValues = new Set(baseOptions.map(o => o.value))
+      llmPromptsList.value.forEach(p => {
+        if (!existingValues.has(p.prompt_key)) {
+          baseOptions.push({
+            label: p.cn_name ? `${p.cn_name} (${p.prompt_key})` : p.prompt_key,
+            value: p.prompt_key
+          })
+        }
+      })
+    }
+  }
+
+  return baseOptions.map(opt => {
+    let label = opt.label
+    if (isPromptExtraField(field) && llmPromptNameMap.value[opt.value]) {
+      label = `${llmPromptNameMap.value[opt.value]} (${opt.value})`
+    }
+    return {
+      label,
+      value: opt.value
+    }
+  })
 }
 
 const currentActionTypeMeta = computed(() => {
@@ -4742,7 +5017,36 @@ const currentActionTypeMeta = computed(() => {
 })
 
 const activeExtraConfigFields = computed<ExtraConfigFieldDef[]>(() => {
-  return parseTaskTypeFieldname(currentActionTypeMeta.value?.fieldname)
+  const parsed = parseTaskTypeFieldname(currentActionTypeMeta.value?.fieldname)
+  if (parsed.length > 0) {
+    if (isAnomalyDetectionTaskType.value && !parsed.some(f => isPromptExtraField(f))) {
+      return [
+        ...parsed,
+        {
+          type: 'list',
+          title: '提示器',
+          field: 'prompt_key',
+          required: true,
+          default: '',
+          options: []
+        }
+      ]
+    }
+    return parsed
+  }
+  if (isAnomalyDetectionTaskType.value) {
+    return [
+      {
+        type: 'list',
+        title: '提示器',
+        field: 'prompt_key',
+        required: true,
+        default: '',
+        options: []
+      }
+    ]
+  }
+  return []
 })
 
 const isChargeTargetTaskType = computed(() => {
@@ -4778,6 +5082,7 @@ const isSpeedExtraField = (field: ExtraConfigFieldDef) => {
 }
 
 const isNumericExtraField = (field: ExtraConfigFieldDef) => {
+  if (isListExtraField(field)) return false
   return isTimeExtraField(field) || isSpeedExtraField(field)
 }
 
@@ -4855,8 +5160,12 @@ const extraConfigDisplayValue = computed(() => {
   if (fields.length === 0) {
     try {
       const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'extra' in parsed) {
-        return String((parsed as Record<string, unknown>).extra ?? '')
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        if ('extra' in parsed) return String((parsed as Record<string, unknown>).extra ?? '')
+        if ('prompt_key' in parsed) {
+          const pk = String(parsed.prompt_key ?? '')
+          return llmPromptNameMap.value[pk] ? `${llmPromptNameMap.value[pk]} (${pk})` : pk
+        }
       }
     } catch (_) {}
     return raw
@@ -4866,7 +5175,19 @@ const extraConfigDisplayValue = computed(() => {
   return fields
     .map(field => {
       const value = payload[field.field]
-      const resolved = value !== undefined && value !== '' ? value : (field.default ?? '')
+      let resolved = ''
+      if (value !== undefined && value !== '') {
+        if (isPromptExtraField(field) && llmPromptNameMap.value[value]) {
+          resolved = `${llmPromptNameMap.value[value]} (${value})`
+        } else {
+          resolved = value
+        }
+      } else if (isListExtraField(field)) {
+        const options = getExtraFieldOptions(field)
+        resolved = options[0]?.label ?? ''
+      } else if (field.default !== undefined && field.default !== null) {
+        resolved = Array.isArray(field.default) ? (field.default[0] ? String(field.default[0]) : '') : String(field.default)
+      }
       return `${field.title}: ${resolved}`
     })
     .join('，')
@@ -4898,16 +5219,28 @@ const openExtraConfigDialog = () => {
     return
   }
 
+  promptDetailPopover.value.visible = false
+  if (fields.some(f => isListExtraField(f) || isPromptExtraField(f)) || isAnomalyDetectionTaskType.value) {
+    void fetchLlmPrompts()
+  }
+
   const existingPayload = parseExtraConfigPayload(addTaskDialog.value.form.extraConfig || '')
   const nextFormValues: Record<string, string> = {}
   const nextErrors: Record<string, string> = {}
 
   fields.forEach(field => {
     const existingValue = existingPayload[field.field]
-    if (existingValue !== undefined) {
+    if (existingValue !== undefined && existingValue !== '') {
       nextFormValues[field.field] = existingValue
+    } else if (isListExtraField(field)) {
+      const options = getExtraFieldOptions(field)
+      nextFormValues[field.field] = options[0]?.value ?? ''
     } else if (field.default !== undefined && field.default !== null) {
-      nextFormValues[field.field] = String(field.default)
+      if (Array.isArray(field.default)) {
+        nextFormValues[field.field] = field.default[0] ? String(field.default[0]) : ''
+      } else {
+        nextFormValues[field.field] = String(field.default)
+      }
     } else {
       nextFormValues[field.field] = ''
     }
@@ -4922,10 +5255,29 @@ const openExtraConfigDialog = () => {
 }
 
 const closeExtraConfigDialog = () => {
+  promptDetailPopover.value.visible = false
   extraConfigDialog.value.visible = false
 }
 
-const confirmExtraConfig = () => {
+const handleExtraConfigMaskClick = () => {
+  if (promptDetailPopover.value.visible) {
+    promptDetailPopover.value.visible = false
+  }
+}
+
+watch(llmPromptsList, (prompts) => {
+  if (!extraConfigDialog.value.visible || prompts.length === 0) return
+  activeExtraConfigFields.value.forEach(field => {
+    if (isPromptExtraField(field) && !extraConfigDialog.value.formValues[field.field]) {
+      const opts = getExtraFieldOptions(field)
+      if (opts.length > 0) {
+        extraConfigDialog.value.formValues[field.field] = opts[0].value
+      }
+    }
+  })
+})
+
+const confirmExtraConfig = async () => {
   const fields = activeExtraConfigFields.value
   if (fields.length === 0) {
     addTaskDialog.value.form.extraConfig = JSON.stringify({
@@ -4941,8 +5293,11 @@ const confirmExtraConfig = () => {
   for (const field of fields) {
     const rawValue = extraConfigDialog.value.formValues[field.field]
     const inputValue = String(rawValue ?? '').trim()
-    const hasDefault = field.default !== undefined && field.default !== null
-    const finalValue = inputValue || (hasDefault ? String(field.default) : '')
+    const options = isListExtraField(field) ? getExtraFieldOptions(field) : []
+    const defaultVal = isListExtraField(field)
+      ? (options[0]?.value ?? '')
+      : (field.default !== undefined && field.default !== null && !Array.isArray(field.default) ? String(field.default) : '')
+    const finalValue = inputValue || defaultVal
 
     if (field.required && !finalValue) {
       nextErrors[field.field] = `${field.title}不能为空`
@@ -4977,6 +5332,24 @@ const confirmExtraConfig = () => {
   extraConfigDialog.value.errors = nextErrors
   if (Object.values(nextErrors).some(Boolean)) return
 
+  // ===== 追加提示词 prompt 内容 =====
+  const promptKeyField = fields.find(f => isPromptExtraField(f))
+  const promptKeyVal = String(
+    (promptKeyField ? payload[promptKeyField.field] : '') ||
+    payload.prompt_key ||
+    ''
+  ).trim()
+
+  if (promptKeyVal) {
+    payload.prompt_key = promptKeyVal
+    let targetPrompt = llmPromptsList.value.find(p => p.prompt_key === promptKeyVal)
+    if (!targetPrompt || !targetPrompt.prompt) {
+      await fetchLlmPrompts(true)
+      targetPrompt = llmPromptsList.value.find(p => p.prompt_key === promptKeyVal)
+    }
+    payload.prompt = targetPrompt?.prompt ?? ''
+  }
+
   addTaskDialog.value.form.extraConfig = JSON.stringify(payload)
   closeExtraConfigDialog()
 }
@@ -4990,6 +5363,194 @@ const confirmExtraConfig = () => {
 .extra-config-input {
   height: 34px;
   line-height: 34px;
+}
+
+.extra-config-modal-card {
+  position: relative;
+  overflow: visible !important;
+}
+
+.extra-config-modal-card .simple-modal-header {
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+}
+
+.extra-config-modal-card .simple-modal-footer {
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
+}
+
+.extra-config-modal-body {
+  overflow: visible !important;
+}
+
+.extra-config-select {
+  height: 34px;
+  line-height: 34px;
+  cursor: pointer;
+}
+
+.extra-config-select option {
+  background-color: #102a43;
+  color: #fff;
+}
+
+.extra-field-container {
+  position: relative;
+}
+
+.prompt-detail-wrap {
+  position: relative;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.prompt-detail-trigger {
+  display: flex;
+  align-items: center;
+}
+
+.prompt-detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #409eff;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.prompt-detail-link:hover,
+.prompt-detail-link.is-active {
+  color: #79bbff;
+  text-decoration: underline;
+  filter: drop-shadow(0 0 5px rgba(64, 158, 255, 0.45));
+}
+
+.prompt-detail-icon {
+  flex-shrink: 0;
+}
+
+/* 提示词详情气泡浮层（悬浮在弹窗上一层，不撑大弹窗，不被截断） */
+.prompt-popover-box {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 0;
+  width: 100%;
+  background: #091a2a;
+  border: 1px solid #235889;
+  border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.8), 0 0 20px rgba(35, 88, 137, 0.5);
+  z-index: 10020;
+  padding: 12px 34px 12px 14px;
+  box-sizing: border-box;
+  animation: promptPopoverFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes promptPopoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 指向上方“提示词详情”的小箭头 */
+.prompt-popover-arrow {
+  position: absolute;
+  top: -6px;
+  left: 18px;
+  width: 10px;
+  height: 10px;
+  background: #091a2a;
+  border-top: 1px solid #235889;
+  border-left: 1px solid #235889;
+  transform: rotate(45deg);
+}
+
+.prompt-popover-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  cursor: pointer;
+  color: #7b9bb9;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.prompt-popover-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.prompt-popover-content {
+  font-size: 12px;
+  line-height: 1.65;
+  color: #d0e4f7;
+  max-height: 200px;
+  overflow-y: auto;
+  word-break: break-all;
+  white-space: pre-wrap;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(64, 158, 255, 0.4) transparent;
+}
+
+/* 滚动条美化：无背景透明轨道、调细到 4px、移除原生上下箭头、半透明淡蓝滑块 */
+.prompt-popover-content::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.prompt-popover-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.prompt-popover-content::-webkit-scrollbar-thumb {
+  background: rgba(64, 158, 255, 0.4);
+  border-radius: 4px;
+}
+
+.prompt-popover-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(64, 158, 255, 0.75);
+}
+
+.prompt-popover-content::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.prompt-popover-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8faec8;
+  font-size: 12px;
+  padding: 6px 0;
+}
+
+.prompt-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(64, 158, 255, 0.3);
+  border-top-color: #409eff;
+  border-radius: 50%;
+  animation: promptSpin 0.8s linear infinite;
+}
+
+@keyframes promptSpin {
+  to { transform: rotate(360deg); }
 }
 
 .extra-config-display-row {

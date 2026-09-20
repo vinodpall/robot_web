@@ -15,7 +15,7 @@ EXPOSE 4173
 # 设置默认环境变量
 ENV PORT=4173
 ENV NODE_ENV=production
-ENV BACKEND_URL=http://127.0.0.1:8000
+ENV BACKEND_URL=http://127.0.0.1:18000
 
 # 启动 Node 生产服务器
 CMD ["node", "server.js"]

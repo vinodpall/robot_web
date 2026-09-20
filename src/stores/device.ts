@@ -34,7 +34,7 @@ export const useDeviceStore = defineStore('device', () => {
     const robot = selectedRobot.value
     const type = robot?.robot_type || localStorage.getItem('selected_vehicle_type') || ''
     const id = robot?.robot_id || selectedRobotId.value || localStorage.getItem('selected_robot_id') || ''
-    return isVehicleType(type, id)
+    return isVehicleType(type, id, robot?.name)
   })
 
   // 计算属性：当前选中的车辆类型 ('four_wheel' | 'dog')
@@ -55,7 +55,7 @@ export const useDeviceStore = defineStore('device', () => {
       const robot = robotList.find(r => String(r.robot_id) === String(selectedRobotId.value))
       if (robot) {
         localStorage.setItem('selected_robot_info', JSON.stringify(robot))
-        const vehicle = isVehicleType(robot.robot_type, robot.robot_id)
+        const vehicle = isVehicleType(robot.robot_type, robot.robot_id, robot.name)
         localStorage.setItem('selected_vehicle_type', vehicle ? 'four_wheel' : (robot.robot_type || 'dog'))
       }
     }
@@ -74,7 +74,7 @@ export const useDeviceStore = defineStore('device', () => {
     const robot = robots.value.find(r => String(r.robot_id) === String(robotId))
     if (robot) {
       localStorage.setItem('selected_robot_info', JSON.stringify(robot))
-      const vehicle = isVehicleType(robot.robot_type, robot.robot_id)
+      const vehicle = isVehicleType(robot.robot_type, robot.robot_id, robot.name)
       localStorage.setItem('selected_vehicle_type', vehicle ? 'four_wheel' : (robot.robot_type || 'dog'))
     } else if (robotId) {
       const vehicle = isVehicleType('', robotId)

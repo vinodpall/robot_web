@@ -17,12 +17,12 @@
     <main class="main-content">
       <div class="main-flex">
         <section class="right-panel">
-          <div class="mission-top-card card">
-            <div class="mission-top-header mission-top-header-left">
-              <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
-              <span class="mission-top-title">循迹记录</span>
+            <div class="mission-top-card card">
+              <div class="mission-top-header mission-top-header-left">
+                <img class="mission-top-logo" src="@/assets/source_data/bg_data/card_logo.png" alt="logo" />
+                <span class="mission-top-title">日志管理</span>
+              </div>
             </div>
-          </div>
           <div class="mission-content-wrapper">
             <div class="mission-toolbar track-toolbar-row">
               <div class="track-toolbar-group">
@@ -234,6 +234,40 @@
               </div>
             </div>
             <div class="mission-toolbar track-toolbar-row track-toolbar-row-bottom">
+              <div class="track-toolbar-group">
+                <span class="mission-toolbar-label">日志类型：</span>
+                <div class="custom-select-container track-filter-input" ref="logTypeDropdownRef" style="padding: 0; border: none; background: transparent; position: relative;">
+                  <div
+                    class="custom-select-trigger"
+                    :class="{ 'is-active': isLogTypeDropdownOpen }"
+                    style="height: 32px; width: 160px; min-width: 100px; border-radius: 4px; border: 1px solid #164159; background-color: #0c2a3e; color: #fff; padding: 0 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;"
+                    @click.stop="isLogTypeDropdownOpen = !isLogTypeDropdownOpen"
+                  >
+                    <span class="custom-select-value" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ currentLogTypeLabel }}</span>
+                    <span
+                      class="custom-select-arrow"
+                      :style="{ transform: isLogTypeDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }"
+                      style="position: absolute; right: 10px; top: 50%; width: 10px; height: 6px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s ease; pointer-events: none; z-index: 2;"
+                    >
+                      <svg width="10" height="6" viewBox="0 0 10 6" style="width: 10px; height: 6px; display: block;">
+                        <polygon points="0,0 10,0 5,6" fill="#67d5fd"/>
+                      </svg>
+                    </span>
+                  </div>
+                  <div v-show="isLogTypeDropdownOpen" class="custom-select-dropdown" style="position: absolute; top: 100%; left: 0; right: 0; background: #0c2a3e; border: 1px solid #164159; border-radius: 4px; max-height: 200px; overflow-y: auto; z-index: 1000; margin-top: 4px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); box-sizing: border-box;">
+                    <div
+                      v-for="opt in logTypeOptions"
+                      :key="opt.value"
+                      class="custom-select-option"
+                      :class="{ selected: filterLogType === opt.value }"
+                      style="padding: 8px 12px; font-size: 13px; color: #67d5fd; cursor: pointer; transition: background 0.2s, color 0.2s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;"
+                      @click="selectLogType(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div class="track-toolbar-group">
                 <span class="mission-toolbar-label">循迹路线：</span>
                 <div class="custom-select-container track-filter-input" ref="trackRouteDropdownRef" style="padding: 0; border: none; background: transparent; position: relative;">
@@ -698,6 +732,28 @@ const loadFilterOptions = async () => {
   }
 }
 
+// 日志类型筛选：全部、发布点任务、循迹任务、日常巡检
+const filterLogType = ref('')
+const isLogTypeDropdownOpen = ref(false)
+const logTypeDropdownRef = ref<HTMLElement | null>(null)
+
+const logTypeOptions = [
+  { value: '', label: '全部' },
+  { value: 'task', label: '发布点任务' },
+  { value: 'track', label: '循迹任务' },
+  { value: 'normal', label: '日常巡检' }
+]
+
+const currentLogTypeLabel = computed(() => {
+  const matched = logTypeOptions.find(opt => opt.value === filterLogType.value)
+  return matched ? matched.label : '全部'
+})
+
+const selectLogType = (typeVal: string) => {
+  filterLogType.value = typeVal
+  isLogTypeDropdownOpen.value = false
+}
+
 const filterMapName = ref('')
 const isMapDropdownOpen = ref(false)
 const mapDropdownRef = ref<HTMLElement | null>(null)
@@ -933,6 +989,9 @@ const handleGlobalMouseDown = (event: MouseEvent) => {
   if (!target.closest('.track-time-picker-wrap')) {
     activeTimePicker.value = null
   }
+  if (logTypeDropdownRef.value && !logTypeDropdownRef.value.contains(target)) {
+    isLogTypeDropdownOpen.value = false
+  }
   if (mapDropdownRef.value && !mapDropdownRef.value.contains(target)) {
     isMapDropdownOpen.value = false
   }
@@ -1003,7 +1062,7 @@ const fetchRecords = async (page = 1) => {
     const params: {
       page: number
       page_size: number
-      type: 'track'
+      type?: string
       map_name?: string
       content?: string
       tracking_route?: string
@@ -1012,9 +1071,9 @@ const fetchRecords = async (page = 1) => {
       end_create_time?: string
     } = {
       page,
-      page_size: pagination.value.perPage,
-      type: 'track'
+      page_size: pagination.value.perPage
     }
+    if (filterLogType.value) params.type = filterLogType.value
     if (filterMapName.value) params.map_name = filterMapName.value
     if (filterContent.value) params.content = filterContent.value
     if (filterTrackRoute.value) params.tracking_route = filterTrackRoute.value
@@ -1051,6 +1110,7 @@ const handleJump = () => {
 
 const handleSearch = () => fetchRecords(1)
 const handleReset = () => {
+  filterLogType.value = ''
   filterMapName.value = ''
   filterContent.value = ''
   filterTrackRoute.value = ''
@@ -1200,7 +1260,7 @@ const handleExport = async () => {
 
   exportGenerating.value.show = true
   try {
-    const payload = {
+    const payload: Record<string, any> = {
       map_name: filterMapName.value || '',
       content: filterContent.value || '',
       task_group: filterTaskGroup.value || '',
@@ -1210,6 +1270,9 @@ const handleExport = async () => {
       relinfo: '',
       page_size: 10000,
       page: 1
+    }
+    if (filterLogType.value) {
+      payload.type = filterLogType.value
     }
 
     const response = await navigationApi.exportTrackLog(robotId, payload)

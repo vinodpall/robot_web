@@ -117,7 +117,7 @@ echo -e "${GREEN}离线镜像载入成功！${NC}\n"
 
 # 5. 读取默认值与环境变量配置
 DEFAULT_HOST_PORT="5173"
-DEFAULT_BACKEND_URL="http://127.0.0.1:8000"
+DEFAULT_BACKEND_URL="http://127.0.0.1:18000"
 
 if [ -f .env ]; then
   echo -e "${YELLOW}检测到已存在 .env 配置文件，将读取默认值:${NC}"

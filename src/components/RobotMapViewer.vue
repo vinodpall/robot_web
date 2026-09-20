@@ -267,6 +267,8 @@ const props = withDefaults(
     robotType?: string
     hasRobotRtk?: boolean
     activeTrackName?: string
+    previewTrackName?: string
+    previewTaskPointName?: string
     trajectoryPoints?: Array<{ x: number; y: number; z?: number }>
     taskPoints?: TaskPointItem[]
     realtimeScan?: { data?: Array<[number, number]> } | null
@@ -585,12 +587,17 @@ const fetchTrackTaskListForCurrentRobot = async (): Promise<any[]> => {
   }
 }
 
-const overlayTrackTrajectory = async (trackName: string) => {
+const overlayTrackTrajectory = async (trackName: string, taskPointName?: string) => {
   const normalizedTrackName = normalizeTrackName(trackName)
   if (!normalizedTrackName) return
 
-  const currentTaskPointName = normalizeTaskPointName(robotStore.cmdStatus?.track_info?.taskpoint_name || '')
+  const currentTaskPointName = normalizeTaskPointName(
+    taskPointName || robotStore.cmdStatus?.track_info?.taskpoint_name || ''
+  )
   const overlayKey = `${normalizedTrackName}::${currentTaskPointName}`
+  if (lastOverlayTrackKey.value === overlayKey && (basePointCloudData.value.length === 0 || pointCloudData.value.length > basePointCloudData.value.length)) {
+    return
+  }
 
   try {
     // 1. 读取轨迹路线数据
@@ -692,6 +699,46 @@ const overlayTrackTrajectory = async (trackName: string) => {
 
       pointCloudData.value = [
         ...basePointCloudData.value,
+        ...normalizedTrajectory,
+        ...normalizedTaskPoints
+      ]
+    } else if (trajectoryPoints.length > 0) {
+      let minX = Infinity, maxX = -Infinity
+      let minY = Infinity, maxY = -Infinity
+      let minZ = Infinity, maxZ = -Infinity
+      for (const p of trajectoryPoints) {
+        if (p.x < minX) minX = p.x
+        if (p.x > maxX) maxX = p.x
+        if (p.y < minY) minY = p.y
+        if (p.y > maxY) maxY = p.y
+        if (p.z < minZ) minZ = p.z
+        if (p.z > maxZ) maxZ = p.z
+      }
+      const centerX = (minX + maxX) / 2
+      const centerY = (minY + maxY) / 2
+      const centerZ = (minZ + maxZ) / 2
+      const maxRange = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1)
+      if (!pointCloudNormalizationParams.value || !pointCloudNormalizationParams.value.maxRange) {
+        pointCloudNormalizationParams.value = {
+          minX, maxX, minY, maxY, minZ, maxZ,
+          centerX, centerY, centerZ, maxRange
+        }
+      }
+      const norm = pointCloudNormalizationParams.value
+      const normalizedTrajectory = trajectoryPoints.map(p => ({
+        x: (p.x - norm.centerX) / norm.maxRange,
+        y: (p.y - norm.centerY) / norm.maxRange,
+        z: (p.z - norm.centerZ) / norm.maxRange,
+        intensity: 2.0
+      }))
+      const normalizedTaskPoints = taskPointsData.map(p => ({
+        x: (p.x - norm.centerX) / norm.maxRange,
+        y: (p.y - norm.centerY) / norm.maxRange,
+        z: (p.z - norm.centerZ) / norm.maxRange,
+        intensity: 3.0,
+        name: p.name
+      }))
+      pointCloudData.value = [
         ...normalizedTrajectory,
         ...normalizedTaskPoints
       ]
@@ -806,9 +853,13 @@ const syncRuntimeTrajectoryOverlay = async () => {
     || (isTracking ? props.activeTrackName : '')
     || ''
   )
+  const previewTrack = normalizeTrackName(props.previewTrackName || '')
+  const previewTask = props.previewTaskPointName || ''
 
   if (isTracking && runningTrackName) {
     await overlayTrackTrajectory(runningTrackName)
+  } else if (previewTrack) {
+    await overlayTrackTrajectory(previewTrack, previewTask)
   } else if (props.trajectoryPoints && props.trajectoryPoints.length > 0) {
     currentTrajectoryPoints.value = props.trajectoryPoints
     currentTaskPoints.value = (props.taskPoints as any) || []
@@ -2071,6 +2122,8 @@ watch(
     () => robotStore.cmdStatus?.track_info,
     () => robotStore.isTracking,
     () => props.activeTrackName,
+    () => props.previewTrackName,
+    () => props.previewTaskPointName,
     () => props.trajectoryPoints,
     () => props.taskPoints,
   ],

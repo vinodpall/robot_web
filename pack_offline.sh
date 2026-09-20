@@ -18,6 +18,23 @@ fi
 
 mkdir -p deploy
 
+# 同步部署脚本与配置文件至 deploy 目录
+[ -f "deploy_offline.sh" ] && cp -f deploy_offline.sh deploy/deploy_offline.sh
+[ -f "deploy.sh" ] && cp -f deploy.sh deploy/deploy.sh
+[ -f "docker-compose.yml" ] && cp -f docker-compose.yml deploy/docker-compose.yml
+[ -f "Dockerfile" ] && cp -f Dockerfile deploy/Dockerfile
+[ -f "server.js" ] && cp -f server.js deploy/server.js
+[ -f "package.json" ] && cp -f package.json deploy/package.json
+
+# 强制转换所有 shell 脚本为 Linux LF 格式并赋予执行权限，杜绝 bad interpreter 报错
+for f in deploy/*.sh *.sh; do
+  if [ -f "$f" ]; then
+    sed -i 's/\r$//' "$f" 2>/dev/null || true
+    chmod +x "$f" 2>/dev/null || true
+  fi
+done
+
+
 # 检查是否支持 docker buildx
 USE_BUILDX=false
 if docker buildx version >/dev/null 2>&1; then
