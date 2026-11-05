@@ -15,13 +15,12 @@ export interface UseWebRTCVideoOptions {
  * 统一走 /rtc-proxy/{hostname}/rtc/v1/play/
  */
 export function buildWebRtcApiUrl(webrtcUrl: string): string {
-  try {
-    const url = new URL(webrtcUrl)
-    return `/rtc-proxy/${url.hostname}`
-  } catch (_) {
-    const match = webrtcUrl.replace('webrtc://', '').split('/')[0].split(':')[0]
-    return `/rtc-proxy/${match}`
+  const hostPort = webrtcUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
+  const [hostname, port] = hostPort.split(':')
+  if (port && port !== '8000' && port !== '18000') {
+    return `/rtc-proxy/${hostname}:${port}`
   }
+  return `/rtc-proxy/${hostname}`
 }
 
 /**

@@ -138,14 +138,16 @@ function rtcProxyMiddleware(
   const match = req.url.match(/^\/rtc-proxy\/([^/]+)(\/.*)$/)
   if (!match) return next()
 
-  const targetHost = match[1]
+  const hostSpec = match[1]
   const targetPath = match[2]  // /rtc/v1/play/ ...
+  const [targetHost, portStr] = hostSpec.split(':')
+  const targetPort = portStr ? parseInt(portStr, 10) : 1985
 
   const headers: Record<string, string | string[] | undefined> = { ...req.headers }
-  headers['host'] = `${targetHost}:1985`
+  headers['host'] = `${targetHost}:${targetPort}`
 
   const proxyReq = httpModule.request(
-    { hostname: targetHost, port: 1985, path: targetPath, method: req.method, headers },
+    { hostname: targetHost, port: targetPort, path: targetPath, method: req.method, headers },
     (proxyRes) => {
       const responseHeaders: Record<string, string | string[]> = {
         ...(proxyRes.headers as Record<string, string | string[]>),
@@ -164,7 +166,7 @@ function rtcProxyMiddleware(
   )
 
   proxyReq.on('error', (err) => {
-    console.error('[rtc-proxy] forward failed:', err.message, `-> ${targetHost}:1985${targetPath}`)
+    console.error('[rtc-proxy] forward failed:', err.message, `-> ${targetHost}:${targetPort}${targetPath}`)
     if (!res.headersSent) {
       res.writeHead(502)
       res.end('Bad Gateway')
@@ -172,7 +174,7 @@ function rtcProxyMiddleware(
   })
 
   proxyReq.setTimeout(10000, () => {
-    console.error('[rtc-proxy] request timeout:', `${targetHost}:1985${targetPath}`)
+    console.error('[rtc-proxy] request timeout:', `${targetHost}:${targetPort}${targetPath}`)
     proxyReq.destroy()
     if (!res.headersSent) {
       res.writeHead(504)

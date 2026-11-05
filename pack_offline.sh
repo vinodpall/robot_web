@@ -7,6 +7,7 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo -e "${GREEN}=== 正在构建 robot_web 多架构 Docker 离线镜像 ===${NC}\n"
@@ -34,6 +35,44 @@ for f in deploy/*.sh *.sh; do
   fi
 done
 
+# 将包含 blobs/ 的 OCI/新版 Docker 镜像包转换为兼容旧版 Docker 的平铺格式
+convert_to_legacy_tar() {
+  local tar_file="$1"
+  [ ! -f "$tar_file" ] && return 0
+  if ! tar -tf "$tar_file" 2>/dev/null | grep -q "^blobs/"; then
+    return 0
+  fi
+  echo -e "${CYAN}正在转换 $tar_file 为兼容旧版 Docker 的镜像包格式...${NC}"
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+  if tar -xf "$tar_file" -C "$tmp_dir"; then
+    if [ ! -f "$tmp_dir/manifest.json" ] && [ -f "$tmp_dir/index.json" ] && command -v python3 >/dev/null 2>&1; then
+      python3 - "$tmp_dir" << 'PYEOF'
+import json, os, sys
+d = sys.argv[1]
+idx = json.load(open(os.path.join(d, 'index.json')))
+m_digest = idx['manifests'][0]['digest'].replace('sha256:', '')
+m_data = json.load(open(os.path.join(d, 'blobs', 'sha256', m_digest)))
+cfg = m_data['config']['digest'].replace('sha256:', '')
+layers = [l['digest'].replace('sha256:', '') for l in m_data['layers']]
+json.dump([{'Config': cfg, 'RepoTags': ['robot-web:latest'], 'Layers': layers}], open(os.path.join(d, 'manifest.json'), 'w'))
+PYEOF
+    elif [ -f "$tmp_dir/manifest.json" ]; then
+      sed -i 's|blobs/sha256/||g' "$tmp_dir/manifest.json"
+    fi
+
+    if [ -d "$tmp_dir/blobs/sha256" ]; then
+      for bf in "$tmp_dir"/blobs/sha256/*; do
+        [ -f "$bf" ] && mv "$bf" "$tmp_dir/$(basename "$bf")"
+      done
+    fi
+    rm -rf "$tmp_dir/blobs" "$tmp_dir/index.json" "$tmp_dir/oci-layout"
+    local abs_tar
+    abs_tar=$(cd "$(dirname "$tar_file")" && pwd)/$(basename "$tar_file")
+    (cd "$tmp_dir" && tar -cf "$abs_tar" manifest.json $(ls | grep -v '^manifest\.json$'))
+  fi
+  rm -rf "$tmp_dir"
+}
 
 # 检查是否支持 docker buildx
 USE_BUILDX=false
@@ -51,24 +90,30 @@ pack_choice=${pack_choice:-1}
 build_x86() {
   echo -e "\n${YELLOW}正在构建 x86_64 (amd64) 架构镜像...${NC}"
   if [ "$USE_BUILDX" = true ]; then
-    docker buildx build --platform linux/amd64 -t robot-web:latest --output type=docker,dest=deploy/robot-web-x86_64.tar .
+    docker buildx build --platform linux/amd64 -t robot-web:latest --output type=docker,oci-mediatypes=false,dest=deploy/robot-web-x86_64.tar .
   else
     docker build -t robot-web:latest .
     docker save -o deploy/robot-web-x86_64.tar robot-web:latest
   fi
-  [ $? -eq 0 ] && echo -e "${GREEN}✔ x86_64 镜像导出成功 -> deploy/robot-web-x86_64.tar${NC}"
+  if [ $? -eq 0 ]; then
+    convert_to_legacy_tar "deploy/robot-web-x86_64.tar"
+    echo -e "${GREEN}✔ x86_64 镜像导出成功 -> deploy/robot-web-x86_64.tar${NC}"
+  fi
 }
 
 build_arm() {
   echo -e "\n${YELLOW}正在构建 ARM64 (aarch64) 架构镜像...${NC}"
   if [ "$USE_BUILDX" = true ]; then
-    docker buildx build --platform linux/arm64 -t robot-web:latest --output type=docker,dest=deploy/robot-web-arm64.tar .
+    docker buildx build --platform linux/arm64 -t robot-web:latest --output type=docker,oci-mediatypes=false,dest=deploy/robot-web-arm64.tar .
   else
     echo -e "${YELLOW}注意: 当前未检测到 docker buildx，将使用本机环境构建。请确保本机为 ARM 架构！${NC}"
     docker build -t robot-web:latest .
     docker save -o deploy/robot-web-arm64.tar robot-web:latest
   fi
-  [ $? -eq 0 ] && echo -e "${GREEN}✔ ARM64 镜像导出成功 -> deploy/robot-web-arm64.tar${NC}"
+  if [ $? -eq 0 ]; then
+    convert_to_legacy_tar "deploy/robot-web-arm64.tar"
+    echo -e "${GREEN}✔ ARM64 镜像导出成功 -> deploy/robot-web-arm64.tar${NC}"
+  fi
 }
 
 case $pack_choice in

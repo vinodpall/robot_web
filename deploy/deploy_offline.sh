@@ -108,8 +108,124 @@ fi
 
 # 4. 载入离线镜像包
 echo -e "\n${YELLOW}正在载入离线 Docker 镜像包 ($OFFLINE_TAR)...${NC}"
-docker load -i "$OFFLINE_TAR"
-if [ $? -ne 0 ]; then
+
+# 校验 tar 文件完整性（防止文件未传输完成导致缺失末尾的 manifest.json）
+if ! tar -tf "$OFFLINE_TAR" >/dev/null 2>&1; then
+  echo -e "${RED}错误: 离线镜像包 ($OFFLINE_TAR) 损坏或未传输完整！${NC}"
+  echo -e "${YELLOW}请核对服务器上的文件大小与本地是否一致，并重新上传该镜像包。${NC}"
+  exit 1
+fi
+
+LOAD_OUT=$(docker load -i "$OFFLINE_TAR" 2>&1)
+LOAD_RET=$?
+echo "$LOAD_OUT"
+
+# 兼容旧版 Docker 引擎：当遇到 OCI blobs 目录结构报错 (blobs/json: no such file or directory) 时自动转换重试
+if [ $LOAD_RET -ne 0 ] && echo "$LOAD_OUT" | grep -q "blobs/json"; then
+  echo -e "${YELLOW}检测到当前 Docker 版本不支持 OCI blobs 目录结构，正在自动转换为兼容格式...${NC}"
+  TMP_TAR_DIR=$(mktemp -d)
+  if tar -xf "$OFFLINE_TAR" -C "$TMP_TAR_DIR"; then
+    if [ ! -f "$TMP_TAR_DIR/manifest.json" ] && [ -f "$TMP_TAR_DIR/index.json" ] && command -v python3 >/dev/null 2>&1; then
+      python3 - "$TMP_TAR_DIR" << 'PYEOF'
+import json, os, sys
+d = sys.argv[1]
+idx = json.load(open(os.path.join(d, 'index.json')))
+m_digest = idx['manifests'][0]['digest'].replace('sha256:', '')
+m_data = json.load(open(os.path.join(d, 'blobs', 'sha256', m_digest)))
+cfg = m_data['config']['digest'].replace('sha256:', '')
+layers = [l['digest'].replace('sha256:', '') for l in m_data['layers']]
+json.dump([{'Config': cfg, 'RepoTags': ['robot-web:latest'], 'Layers': layers}], open(os.path.join(d, 'manifest.json'), 'w'))
+PYEOF
+    elif [ -f "$TMP_TAR_DIR/manifest.json" ]; then
+      sed -i 's|blobs/sha256/||g' "$TMP_TAR_DIR/manifest.json"
+    fi
+
+    if [ -d "$TMP_TAR_DIR/blobs/sha256" ] && [ -f "$TMP_TAR_DIR/manifest.json" ]; then
+      for bf in "$TMP_TAR_DIR"/blobs/sha256/*; do
+        [ -f "$bf" ] && mv "$bf" "$TMP_TAR_DIR/$(basename "$bf")"
+      done
+      rm -rf "$TMP_TAR_DIR/blobs" "$TMP_TAR_DIR/index.json" "$TMP_TAR_DIR/oci-layout"
+      (cd "$TMP_TAR_DIR" && tar -cf "$TMP_TAR_DIR/compat.tar" manifest.json $(ls | grep -v '^manifest\.json
+
+# 5. 读取默认值与环境变量配置
+DEFAULT_HOST_PORT="5173"
+DEFAULT_BACKEND_URL="http://127.0.0.1:18000"
+
+if [ -f .env ]; then
+  echo -e "${YELLOW}检测到已存在 .env 配置文件，将读取默认值:${NC}"
+  eval "$(cat .env | grep -v '^#')"
+  DEFAULT_HOST_PORT=${HOST_PORT:-$DEFAULT_HOST_PORT}
+  DEFAULT_BACKEND_URL=${BACKEND_URL:-$DEFAULT_BACKEND_URL}
+  echo "- 宿主机端口 (HOST_PORT): $DEFAULT_HOST_PORT"
+  echo "- 后端 API 地址 (BACKEND_URL): $DEFAULT_BACKEND_URL"
+  echo ""
+fi
+
+# 6. 引导输入配置
+echo -e "${YELLOW}1. 请输入 FastAPI 后端 API 地址 (同机部署保持默认即可):${NC}"
+read -p "后端 API 地址 (回车默认: $DEFAULT_BACKEND_URL): " input_backend_url
+BACKEND_URL=${input_backend_url:-$DEFAULT_BACKEND_URL}
+echo -e "已设定后端 API 地址: ${GREEN}$BACKEND_URL${NC}\n"
+
+echo -e "${YELLOW}2. 请输入 Web 平台对外暴露的端口:${NC}"
+read -p "对外端口 (回车默认: $DEFAULT_HOST_PORT): " input_host_port
+HOST_PORT=${input_host_port:-$DEFAULT_HOST_PORT}
+echo -e "已设定对外端口: ${GREEN}$HOST_PORT${NC}\n"
+
+# 7. 生成或更新 .env 文件
+echo -e "${YELLOW}3. 正在生成配置文件 .env ...${NC}"
+cat << EOF > .env
+# robot_web 部署环境变量配置
+HOST_PORT=$HOST_PORT
+BACKEND_URL=$BACKEND_URL
+EOF
+echo -e "${GREEN}配置文件 .env 生成成功!${NC}\n"
+
+# 8. 执行离线部署
+echo -e "${YELLOW}4. 正在启动 Docker 容器 (使用离线镜像)...${NC}"
+
+if [ -n "$COMPOSE_CMD" ]; then
+  $COMPOSE_CMD down
+  $COMPOSE_CMD up -d
+else
+  # Compose 未安装时，自动降级为标准 docker 命令运行
+  docker rm -f robot-web >/dev/null 2>&1
+  docker run -d \
+    --name robot-web \
+    --restart always \
+    --network host \
+    -e PORT="$HOST_PORT" \
+    -e BACKEND_URL="$BACKEND_URL" \
+    -e NODE_ENV=production \
+    --log-opt max-size=10m \
+    --log-opt max-file=3 \
+    robot-web:latest
+fi
+
+if [ $? -eq 0 ]; then
+  echo -e "\n${GREEN}==============================================${NC}"
+  echo -e "${GREEN}🎉 robot_web 离线部署成功！${NC}"
+  echo -e "${GREEN}==============================================${NC}"
+  echo -e "你可以访问以下地址打开平台:"
+  echo -e "👉 ${YELLOW}http://<服务器IP>:$HOST_PORT${NC}"
+  echo ""
+  echo -e "使用以下命令查看运行状态和日志:"
+  echo -e "- 查看容器状态: ${YELLOW}docker ps -f name=robot-web${NC}"
+  echo -e "- 查看实时日志: ${YELLOW}docker logs -f robot-web${NC}"
+  echo -e "=============================================="
+else
+  echo -e "\n${RED}❌ 部署过程中出现错误，请检查控制台输出日志！${NC}"
+  exit 1
+fi
+))
+      docker load -i "$TMP_TAR_DIR/compat.tar"
+      LOAD_RET=$?
+    fi
+  fi
+  rm -rf "$TMP_TAR_DIR"
+fi
+
+if [ $LOAD_RET -ne 0 ]; then
   echo -e "${RED}错误: 离线镜像导入失败，请检查文件完整性或 Docker 服务运行状态！${NC}"
   exit 1
 fi

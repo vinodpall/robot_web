@@ -7340,15 +7340,12 @@ let webrtcSessionId = 0
 
 // 构建SRS API地址（通过 nginx 代理，解决 CORS 问题）
 const buildApiUrl = (webrtcUrl: string) => {
-  try {
-    // webrtc://server:18000/app/stream -> /rtc-proxy/server
-    const url = new URL(webrtcUrl)
-    return `/rtc-proxy/${url.hostname}`
-  } catch (error) {
-    // 后备方案：提取主机名
-    const match = webrtcUrl.replace('webrtc://', '').split('/')[0].split(':')[0]
-    return `/rtc-proxy/${match}`
+  const hostPort = webrtcUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
+  const [hostname, port] = hostPort.split(':')
+  if (port && port !== '8000' && port !== '18000') {
+    return `/rtc-proxy/${hostname}:${port}`
   }
+  return `/rtc-proxy/${hostname}`
 }
 
 // 开始WebRTC播放
