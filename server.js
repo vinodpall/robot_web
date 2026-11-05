@@ -102,12 +102,14 @@ function rtcProxy(req, res, next) {
   const match = req.url.match(/^\/rtc-proxy\/([^/]+)(\/.*)$/)
   if (!match) return next()
 
-  const targetHost = match[1]
+  const hostSpec = match[1]
   const targetPath = match[2]
-  const headers = { ...req.headers, host: `${targetHost}:1985` }
+  const [targetHost, portStr] = hostSpec.split(':')
+  const targetPort = portStr ? parseInt(portStr, 10) : 1985
+  const headers = { ...req.headers, host: `${targetHost}:${targetPort}` }
 
   const proxyReq = http.request(
-    { hostname: targetHost, port: 1985, path: targetPath, method: req.method, headers },
+    { hostname: targetHost, port: targetPort, path: targetPath, method: req.method, headers },
     (proxyRes) => {
       const respHeaders = {
         ...proxyRes.headers,

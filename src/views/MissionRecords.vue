@@ -2397,14 +2397,12 @@ const isPlaying = ref(false)
 const videoStreamUrl = ref('')
 
 const buildApiUrl = (webrtcUrl: string) => {
-  try {
-    // 通过 nginx 代理，解决 CORS 问题
-    const url = new URL(webrtcUrl)
-    return `/rtc-proxy/${url.hostname}`
-  } catch (error) {
-    const match = webrtcUrl.replace('webrtc://', '').split('/')[0].split(':')[0]
-    return `/rtc-proxy/${match}`
+  const hostPort = webrtcUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
+  const [hostname, port] = hostPort.split(':')
+  if (port && port !== '8000') {
+    return `/rtc-proxy/${hostname}:${port}`
   }
+  return `/rtc-proxy/${hostname}`
 }
 
 const startWebRTCPlayback = async (url: string) => {
