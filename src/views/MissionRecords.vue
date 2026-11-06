@@ -654,6 +654,7 @@
 import { ref, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
+import { adaptStreamUrl, adaptSdpToCurrentHost } from '@/utils/videoCache'
 import trackListIcon from '@/assets/source_data/svg_data/track_list.svg'
 import taskAutoIcon from '@/assets/source_data/svg_data/robot_source/task_auto.svg'
 import taskTimeIcon from '@/assets/source_data/svg_data/robot_source/task_time.svg'
@@ -2397,7 +2398,8 @@ const isPlaying = ref(false)
 const videoStreamUrl = ref('')
 
 const buildApiUrl = (webrtcUrl: string) => {
-  const hostPort = webrtcUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
+  const adaptedUrl = adaptStreamUrl(webrtcUrl)
+  const hostPort = adaptedUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
   const [hostname, port] = hostPort.split(':')
   if (port && port !== '8000') {
     return `/rtc-proxy/${hostname}:${port}`
@@ -2405,7 +2407,8 @@ const buildApiUrl = (webrtcUrl: string) => {
   return `/rtc-proxy/${hostname}`
 }
 
-const startWebRTCPlayback = async (url: string) => {
+const startWebRTCPlayback = async (rawUrl: string) => {
+  const url = adaptStreamUrl(rawUrl)
   if (pc) {
     pc.close()
     pc = null
@@ -2458,7 +2461,7 @@ const startWebRTCPlayback = async (url: string) => {
     if (data.code === 0 && data.sdp) {
        await pc.setRemoteDescription({
          type: 'answer',
-         sdp: data.sdp
+         sdp: adaptSdpToCurrentHost(data.sdp)
        })
     } else {
         console.error('SRS Error:', data)

@@ -956,7 +956,7 @@ import { getTrajectoryFile } from '@/utils/trajectoryDB'
 import { load3MF } from '@/utils/threemfParser'
 import { usePermissionStore } from '@/stores/permission'
 import { getRobotMapCacheKeys, getRobotContextCacheKeys } from '@/utils/robotBootstrap'
-import { getVideoStream, getVideoStreams, setVideoStreams } from '@/utils/videoCache'
+import { getVideoStream, getVideoStreams, setVideoStreams , adaptStreamUrl, adaptSdpToCurrentHost } from '@/utils/videoCache'
 import type { VideoStream } from '@/utils/videoCache'
 
 const router = useRouter()
@@ -4094,7 +4094,10 @@ const getCurrentRobotId = (): string => deviceStore.selectedRobotId || resolveSe
 const getRobotVideoStreams = (robotId: string): VideoStream[] => {
   try {
     const cached = localStorage.getItem(getRobotVideoStreamsCacheKey(robotId))
-    if (cached) return JSON.parse(cached)
+    if (cached) {
+      const parsed = JSON.parse(cached) as VideoStream[]
+      return Array.isArray(parsed) ? parsed.map(item => ({ ...item, url: adaptStreamUrl(item.url) })) : []
+    }
   } catch {}
   return getVideoStreams()
 }
@@ -4252,7 +4255,8 @@ const togglePresetVideoPanelFullscreen = async () => {
 }
 
 const buildApiUrl = (webrtcUrl: string) => {
-  const hostPort = webrtcUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
+  const adaptedUrl = adaptStreamUrl(webrtcUrl)
+  const hostPort = adaptedUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
   const [hostname, port] = hostPort.split(':')
   if (port && port !== '8000') {
     return `/rtc-proxy/${hostname}:${port}`
@@ -4260,7 +4264,8 @@ const buildApiUrl = (webrtcUrl: string) => {
   return `/rtc-proxy/${hostname}`
 }
 
-const startWebRTCPlayback = async (url: string) => {
+const startWebRTCPlayback = async (rawUrl: string) => {
+  const url = adaptStreamUrl(rawUrl)
   if (pc) {
     pc.close()
     pc = null
@@ -4314,7 +4319,7 @@ const startWebRTCPlayback = async (url: string) => {
     if (data.code === 0 && data.sdp) {
        await pc.setRemoteDescription({
          type: 'answer',
-         sdp: data.sdp
+         sdp: adaptSdpToCurrentHost(data.sdp)
        })
     } else {
         console.error('SRS Error:', data)

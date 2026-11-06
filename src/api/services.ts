@@ -1,3 +1,4 @@
+import { adaptStreamUrl } from '../utils/videoCache'
 import { apiClient, API_BASE_URL, type ApiResponse, type PaginatedResponse } from './config'
 import type { User, Dock, Drone, Mission, MissionRecord, Alert, Role, Device, HmsAlert, VisionAlert, VisionAlertsResponse, Permission, Robot, RobotsResponse } from '../types'
 import { getCurrentConfig } from '../config/environment'
@@ -1430,12 +1431,16 @@ export const cameraApi = {
   getCameraList: (robotId: string, signal?: AbortSignal) => {
     return apiClient.get<{ data: CameraInfo[]; request_id: string }>(`/cameras/${robotId}/list`, undefined, { signal })
   },
-  startCameraStream: (robotId: string, camKey: string, useSubStream = false, signal?: AbortSignal) => {
-    return apiClient.post<{ message: string; cam_key: string; stream_url: string; rtmp_push_url: string }>(
+  startCameraStream: async (robotId: string, camKey: string, useSubStream = false, signal?: AbortSignal) => {
+    const res = await apiClient.post<{ message: string; cam_key: string; stream_url: string; rtmp_push_url: string }>(
       `/cameras/${robotId}/stream/start`,
       { cam_key: camKey, use_sub_stream: useSubStream },
       { signal }
     )
+    if (res && res.stream_url) {
+      res.stream_url = adaptStreamUrl(res.stream_url)
+    }
+    return res
   },
   stopCameraStream: (robotId: string, camKey: string) => {
     return apiClient.post<{ message: string }>(

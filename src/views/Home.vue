@@ -1452,7 +1452,7 @@ import { config, getCurrentEnvironment } from '../config/environment'
 import { useDeviceStore } from '../stores/device'
 import { useRobotStore } from '../stores/robot'
 import { useTaskExecutionStore } from '../stores/taskExecution'
-import { getVideoStreams, getVideoStream, setVideoStreams } from '../utils/videoCache'
+import { getVideoStreams, getVideoStream, setVideoStreams, adaptStreamUrl, adaptSdpToCurrentHost } from '../utils/videoCache'
 import type { VideoStream } from '../utils/videoCache'
 import { buildRobotHttpAssetUrl } from '../utils/robotHttpProxy'
 import AMapLoader from '@amap/amap-jsapi-loader'
@@ -5585,7 +5585,8 @@ let webrtcSessionId = 0
 
 // 构建SRS API地址（通过 nginx 代理，解决 CORS 问题）
 const buildApiUrl = (webrtcUrl: string) => {
-  const hostPort = webrtcUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
+  const adaptedUrl = adaptStreamUrl(webrtcUrl)
+  const hostPort = adaptedUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
   const [hostname, port] = hostPort.split(':')
   if (port && port !== '8000') {
     return `/rtc-proxy/${hostname}:${port}`
@@ -5599,7 +5600,7 @@ const startWebRTCPlayback = async () => {
     stopWebRTCPlayback()
   }
 
-  const serverUrl = videoStreamUrl.value
+  const serverUrl = adaptStreamUrl(videoStreamUrl.value)
   if (!serverUrl) {
     console.warn('[WebRTC播放] serverUrl 为空，跳过播放')
     return
@@ -5765,7 +5766,7 @@ const startWebRTCPlayback = async () => {
     }
     await currentPc.setRemoteDescription({
       type: 'answer',
-      sdp: data.sdp
+      sdp: adaptSdpToCurrentHost(data.sdp)
     })
 
   } catch (error) {
@@ -5987,7 +5988,7 @@ const startInfraredPlayback = (keepFrame = false) => {
 }
 
 const startInfraredWebRTCPlayback = async (keepFrame = false) => {
-  const serverUrl = infraredStreamUrl.value
+  const serverUrl = adaptStreamUrl(infraredStreamUrl.value)
   if (!serverUrl || !infraredVideoElement.value) {
     infraredLoading.value = false
     return
@@ -6121,7 +6122,7 @@ const startInfraredWebRTCPlayback = async (keepFrame = false) => {
     }
     await currentInfraredPc.setRemoteDescription({
       type: 'answer',
-      sdp: data.sdp
+      sdp: adaptSdpToCurrentHost(data.sdp)
     })
     // loading 由 ontrack 回调负责关闭
   } catch (error) {
@@ -6397,7 +6398,8 @@ const getRobotVideoStreams = (robotId: string): VideoStream[] => {
   try {
     const cached = localStorage.getItem(getRobotVideoStreamsCacheKey(robotId))
     if (cached) {
-      return JSON.parse(cached)
+      const parsed = JSON.parse(cached) as VideoStream[]
+      return Array.isArray(parsed) ? parsed.map(item => ({ ...item, url: adaptStreamUrl(item.url) })) : []
     }
   } catch {}
   return getVideoStreams()
@@ -6413,8 +6415,9 @@ const hasCameraStreamUrl = (robotId: string, type: 'drone_visible' | 'drone_infr
 const hasBothCameraStreamUrls = (robotId: string) =>
   hasCameraStreamUrl(robotId, 'drone_visible') && hasCameraStreamUrl(robotId, 'drone_infrared')
 const setRobotVideoStreams = (robotId: string, streams: VideoStream[]) => {
-  localStorage.setItem(getRobotVideoStreamsCacheKey(robotId), JSON.stringify(streams))
-  setVideoStreams(streams)
+  const adapted = Array.isArray(streams) ? streams.map(item => ({ ...item, url: adaptStreamUrl(item.url) })) : []
+  localStorage.setItem(getRobotVideoStreamsCacheKey(robotId), JSON.stringify(adapted))
+  setVideoStreams(adapted)
 }
 const getRobotDefaultVideoType = (robotId: string): VideoStream['type'] | null => {
   return localStorage.getItem(getRobotDefaultVideoTypeKey(robotId)) as VideoStream['type'] | null

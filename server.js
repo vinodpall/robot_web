@@ -106,38 +106,56 @@ function rtcProxy(req, res, next) {
   const targetPath = match[2]
   const [targetHost, portStr] = hostSpec.split(':')
   const targetPort = portStr ? parseInt(portStr, 10) : 1985
-  const headers = { ...req.headers, host: `${targetHost}:${targetPort}` }
 
-  const proxyReq = http.request(
-    { hostname: targetHost, port: targetPort, path: targetPath, method: req.method, headers },
-    (proxyRes) => {
-      const respHeaders = {
-        ...proxyRes.headers,
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      }
-      if (req.method === 'OPTIONS') { res.writeHead(204, respHeaders); res.end(); return }
-      res.writeHead(proxyRes.statusCode, respHeaders)
-      proxyRes.pipe(res)
-    }
-  )
-
-  proxyReq.on('error', (err) => {
-    console.error('[RTC代理] 转发失败:', err.message)
-    if (!res.headersSent) { res.writeHead(502); res.end('Bad Gateway') }
-  })
-
-  proxyReq.setTimeout(10000, () => {
-    proxyReq.destroy()
-    if (!res.headersSent) { res.writeHead(504); res.end('Gateway Timeout') }
-  })
-
-  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS' || !req.method) {
-    proxyReq.end()
-  } else {
-    req.pipe(proxyReq)
+  const respCorsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
   }
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, respCorsHeaders)
+    res.end()
+    return
+  }
+
+  const chunks = []
+  req.on('data', chunk => chunks.push(chunk))
+  req.on('end', () => {
+    const bodyBuf = Buffer.concat(chunks)
+
+    const forwardTo = (hostname, isFallback) => {
+      const headers = { ...req.headers, host: `${hostname}:${targetPort}` }
+      if (bodyBuf.length > 0) headers["content-length"] = String(bodyBuf.length)
+
+      const proxyReq = http.request(
+        { hostname, port: targetPort, path: targetPath, method: req.method, headers },
+        (proxyRes) => {
+          const respHeaders = { ...proxyRes.headers, ...respCorsHeaders }
+          res.writeHead(proxyRes.statusCode, respHeaders)
+          proxyRes.pipe(res)
+        }
+      )
+
+      const handleFail = (reason) => {
+        proxyReq.destroy()
+        if (!isFallback && hostname !== '127.0.0.1' && hostname !== 'localhost') {
+          console.warn(`[RTC代理] 连接映射地址 ${hostname}:${targetPort} 失败 (${reason})，自动回退至本机 127.0.0.1:${targetPort}`)
+          forwardTo('127.0.0.1', true)
+          return
+        }
+        console.error(`[RTC代理] 转发失败 (${hostname}:${targetPort}):`, reason)
+        if (!res.headersSent) { res.writeHead(502); res.end('Bad Gateway') }
+      }
+
+      proxyReq.on('error', (err) => handleFail(err.message))
+      proxyReq.setTimeout(isFallback ? 8000 : 3000, () => handleFail("timeout"))
+
+      if (bodyBuf.length > 0) proxyReq.write(bodyBuf)
+      proxyReq.end()
+    }
+
+    forwardTo(targetHost, false)
+  })
 }
 
 // ---- 后端 API 代理中间件 ----

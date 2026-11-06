@@ -691,7 +691,7 @@ import { useVisionWebSocket } from '../composables/useVisionWebSocket'
 import { visionConfig, logVisionConfig } from '@/config/vision'
 import { parseErrorMessage } from '../utils/errorCodes'
 import { config, refreshEnvironmentConfig } from '@/config/environment'
-import { getVideoStream, updateVideoStream } from '../utils/videoCache'
+import { getVideoStream, updateVideoStream , adaptStreamUrl, adaptSdpToCurrentHost } from '../utils/videoCache'
 import planeIcon from '@/assets/source_data/svg_data/plane.svg'
 import stockIcon from '@/assets/source_data/svg_data/stock3.svg'
 import sheetIcon from '@/assets/source_data/svg_data/sheet.svg'
@@ -2492,7 +2492,8 @@ let isPlaying = false
 
 // 构建SRS API地址
 const buildApiUrl = (webrtcUrl: string) => {
-  const hostPort = webrtcUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
+  const adaptedUrl = adaptStreamUrl(webrtcUrl)
+  const hostPort = adaptedUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
   const [hostname, port] = hostPort.split(':')
   if (port && port !== '8000') {
     return `/rtc-proxy/${hostname}:${port}`
@@ -2607,7 +2608,7 @@ const startWebRTCPlayback = async () => {
     try {
       await pc.setRemoteDescription({
         type: 'answer',
-        sdp: data.sdp
+        sdp: adaptSdpToCurrentHost(data.sdp)
       })
     } catch (sdpError: any) {
       throw new Error(`SDP协商失败: ${sdpError.message}`)

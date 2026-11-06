@@ -220,7 +220,7 @@ import { useDevicePolling } from '../composables/useDevicePolling'
 import { useDeviceStore } from '../stores/device'
 import { useWaylineJobs } from '../composables/useApi'
 import { useDevices } from '../composables/useApi'
-import { getVideoStream } from '../utils/videoCache'
+import { getVideoStream , adaptStreamUrl, adaptSdpToCurrentHost } from '../utils/videoCache'
 import { StatusMaps } from '../api/deviceStatus'
 import { remoteDebugApi } from '../api/services'
 import planeIcon from '@/assets/source_data/svg_data/plane.svg'
@@ -1623,7 +1623,7 @@ const startWebRTCPlayback = async () => {
     if (data.code !== 0) return
     if (!data.sdp) return
     try {
-      await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp })
+      await pc.setRemoteDescription({ type: 'answer', sdp: adaptSdpToCurrentHost(data.sdp) })
     } catch (sdpError: any) {
       return
     }
@@ -1633,7 +1633,8 @@ const startWebRTCPlayback = async () => {
 }
 
 const buildApiUrl = (webrtcUrl: string) => {
-  const hostPort = webrtcUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
+  const adaptedUrl = adaptStreamUrl(webrtcUrl)
+  const hostPort = adaptedUrl.replace(/^webrtc:\/\//i, '').split('/')[0]
   const [hostname, port] = hostPort.split(':')
   if (port && port !== '8000') {
     return `/rtc-proxy/${hostname}:${port}`

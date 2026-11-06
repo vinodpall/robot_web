@@ -17,11 +17,48 @@ export interface VideoStream {
 /**
  * 获取所有视频流信息
  */
+/**
+ * 根据当前浏览器访问地址动态替换视频流 URL 中的主机 IP
+ * 例如访问 172.16.10.249:5173 时，将 webrtc://172.16.1.251:51985/live/... 替换为 webrtc://172.16.10.249:51985/live/...
+ */
+export const adaptStreamUrl = (rawUrl: string): string => {
+  if (!rawUrl || typeof window === 'undefined') return rawUrl
+  const currentHost = window.location.hostname
+  if (!currentHost || currentHost === 'localhost' || currentHost === '127.0.0.1') {
+    return rawUrl
+  }
+  return rawUrl.replace(/^(webrtc:\/\/)([^/:]+)(:\d+)?(\/.*)?$/i, `$1${currentHost}$3$4`)
+}
+
+/**
+ * 当通过映射 IP 访问时，确保 SRS 返回的 SDP answer 中包含当前访问主机 IP 的 ICE candidate
+ */
+export const adaptSdpToCurrentHost = (sdp: string): string => {
+  if (!sdp || typeof window === 'undefined') return sdp
+  const currentHost = window.location.hostname
+  if (!currentHost || currentHost === 'localhost' || currentHost === '127.0.0.1') {
+    return sdp
+  }
+  if (sdp.includes(` ${currentHost} `)) return sdp
+  const eol = sdp.includes("\r\n") ? "\r\n" : "\n"
+  const lines = sdp.split(/\r?\n/)
+  const result: string[] = []
+  for (const line of lines) {
+    result.push(line)
+    const match = line.match(/^(a=candidate:\S+\s+\d+\s+\S+\s+\d+\s+)(\d+\.\d+\.\d+\.\d+)(\s+\d+\s+typ\s+host.*)$/i)
+    if (match && match[2] !== currentHost) {
+      result.push(`${match[1]}${currentHost}${match[3]}`)
+    }
+  }
+  return result.join(eol)
+}
+
 export const getVideoStreams = (): VideoStream[] => {
   try {
     const videoStreamsStr = localStorage.getItem('video_streams')
     if (videoStreamsStr) {
-      return JSON.parse(videoStreamsStr)
+      const parsed = JSON.parse(videoStreamsStr) as VideoStream[]
+      return Array.isArray(parsed) ? parsed.map(item => ({ ...item, url: adaptStreamUrl(item.url) })) : []
     }
   } catch (error) {
     console.error('解析video_streams缓存失败:', error)
@@ -33,7 +70,8 @@ export const getVideoStreams = (): VideoStream[] => {
  * 设置视频流信息
  */
 export const setVideoStreams = (streams: VideoStream[]): void => {
-  localStorage.setItem('video_streams', JSON.stringify(streams))
+  const adapted = Array.isArray(streams) ? streams.map(item => ({ ...item, url: adaptStreamUrl(item.url) })) : []
+  localStorage.setItem('video_streams', JSON.stringify(adapted))
 }
 
 /**
