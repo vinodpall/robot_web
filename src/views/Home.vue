@@ -7,7 +7,7 @@
       <div class="left-video-card visible-video-card" @click="closeMenus" style="border-radius: 0; overflow: hidden;">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          可见光视频
+          {{ getPanelCardTitle('visible', '可见光视频') }}
         </div>
         <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
           <div ref="visibleVideoWrapper" class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
@@ -37,16 +37,46 @@
             <div v-else-if="!hasVisibleVideoFrame" class="video-empty-state">
               暂无视频流
             </div>
-            <div class="video-action-group">
+            <div class="video-action-group" :class="{ 'menu-open': cameraMenuVisible.visible }">
+              <div v-if="availableCameras.length > 0" class="camera-switch-wrapper" @click.stop>
+                <button
+                  class="video-action-btn icon-only camera-switch-btn"
+                  :disabled="isCameraSwitching.visible || isStreamSwitching.visible"
+                  :title="`切换相机（当前：${getCurrentPanelCameraLabel('visible', '可见光')}）`"
+                  @click.stop="toggleCameraMenu('visible')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <div v-if="cameraMenuVisible.visible" class="camera-switch-menu">
+                  <div
+                    v-for="(cam, idx) in availableCameras"
+                    :key="cam.CamKey || idx"
+                    class="camera-switch-item"
+                    :class="{
+                      active: isCameraActiveOnPanel('visible', cam.CamKey),
+                      occupied: isCameraActiveOnPanel('infrared', cam.CamKey),
+                      disabled: isCameraSwitching.visible || isCameraActiveOnPanel('infrared', cam.CamKey)
+                    }"
+                    @click.stop="handleSwitchPanelCamera('visible', cam)"
+                  >
+                    <span class="camera-switch-item-name" :title="getCameraDisplayName(cam, idx)">{{ getCameraDisplayName(cam, idx) }}</span>
+                    <span v-if="isCameraActiveOnPanel('visible', cam.CamKey)" class="camera-switch-item-badge current">当前</span>
+                    <span v-else-if="isCameraActiveOnPanel('infrared', cam.CamKey)" class="camera-switch-item-badge occupied">占用</span>
+                  </div>
+                </div>
+              </div>
               <button
                 class="video-action-btn stream-mode-btn"
-                :disabled="isStreamSwitching.visible || !canSwitchVideoStream('visible')"
+                :disabled="isCameraSwitching.visible || isStreamSwitching.visible || !canSwitchVideoStream('visible')"
                 :title="`切换到${getVideoStreamModeLabel('visible') === '主' ? '子码流' : '主码流'}`"
                 @click.stop="handleToggleVideoStream('visible')"
               >
                 {{ getVideoStreamModeLabel('visible') }}
               </button>
-              <button class="video-action-btn icon-only" title="手动重连" @click.stop="handleManualReconnect('visible')">
+              <button class="video-action-btn icon-only" :disabled="isCameraSwitching.visible" title="手动重连" @click.stop="handleManualReconnect('visible')">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M20 12A8 8 0 1 1 17.66 6.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                   <path d="M20 4V9H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -63,10 +93,10 @@
       </div>
 
       <!-- 红外视频 -->
-      <div class="left-video-card infrared-card" style="border-radius: 0; overflow: hidden;">
+      <div class="left-video-card infrared-card" @click="closeMenus" style="border-radius: 0; overflow: hidden;">
         <div class="cardTitle">
           <img src="@/assets/source_data/bg_data/card_logo.png" alt="card logo" />
-          红外视频
+          {{ getPanelCardTitle('infrared', '红外视频') }}
         </div>
         <div class="video-card-body video-only-body" style="border-radius: 0; overflow: hidden;">
           <div ref="infraredVideoWrapper" class="video-only-wrapper" style="border-radius: 0; overflow: hidden; position: relative;">
@@ -96,16 +126,46 @@
             <div v-else-if="!hasInfraredVideoFrame" class="video-empty-state">
               暂无视频流
             </div>
-            <div class="video-action-group">
+            <div class="video-action-group" :class="{ 'menu-open': cameraMenuVisible.infrared }">
+              <div v-if="availableCameras.length > 0" class="camera-switch-wrapper" @click.stop>
+                <button
+                  class="video-action-btn icon-only camera-switch-btn"
+                  :disabled="isCameraSwitching.infrared || isStreamSwitching.infrared"
+                  :title="`切换相机（当前：${getCurrentPanelCameraLabel('infrared', '红外')}）`"
+                  @click.stop="toggleCameraMenu('infrared')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <div v-if="cameraMenuVisible.infrared" class="camera-switch-menu">
+                  <div
+                    v-for="(cam, idx) in availableCameras"
+                    :key="cam.CamKey || idx"
+                    class="camera-switch-item"
+                    :class="{
+                      active: isCameraActiveOnPanel('infrared', cam.CamKey),
+                      occupied: isCameraActiveOnPanel('visible', cam.CamKey),
+                      disabled: isCameraSwitching.infrared || isCameraActiveOnPanel('visible', cam.CamKey)
+                    }"
+                    @click.stop="handleSwitchPanelCamera('infrared', cam)"
+                  >
+                    <span class="camera-switch-item-name" :title="getCameraDisplayName(cam, idx)">{{ getCameraDisplayName(cam, idx) }}</span>
+                    <span v-if="isCameraActiveOnPanel('infrared', cam.CamKey)" class="camera-switch-item-badge current">当前</span>
+                    <span v-else-if="isCameraActiveOnPanel('visible', cam.CamKey)" class="camera-switch-item-badge occupied">占用</span>
+                  </div>
+                </div>
+              </div>
               <button
                 class="video-action-btn stream-mode-btn"
-                :disabled="isStreamSwitching.infrared || !canSwitchVideoStream('infrared')"
+                :disabled="isCameraSwitching.infrared || isStreamSwitching.infrared || !canSwitchVideoStream('infrared')"
                 :title="`切换到${getVideoStreamModeLabel('infrared') === '主' ? '子码流' : '主码流'}`"
                 @click.stop="handleToggleVideoStream('infrared')"
               >
                 {{ getVideoStreamModeLabel('infrared') }}
               </button>
-              <button class="video-action-btn icon-only" title="手动重连" @click.stop="handleManualReconnect('infrared')">
+              <button class="video-action-btn icon-only" :disabled="isCameraSwitching.infrared" title="手动重连" @click.stop="handleManualReconnect('infrared')">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M20 12A8 8 0 1 1 17.66 6.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                   <path d="M20 4V9H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -3298,6 +3358,8 @@ const selectScreenMode = (mode: string) => {
 const closeMenus = () => {
   showScreenMenu.value = false
   gimbalMenuVisible.value = false
+  cameraMenuVisible.value.visible = false
+  cameraMenuVisible.value.infrared = false
 }
 
 // 全局点击事件处理函数
@@ -3314,6 +3376,11 @@ const handleGlobalClick = (event: Event) => {
   // 点击非清晰度菜单区域时关闭清晰度菜单
   if (!target.closest('.quality-btn') && !target.closest('.quality-menu')) {
     showQualityMenu.value = false
+  }
+  // 点击非相机切换菜单区域时关闭相机切换菜单
+  if (!target.closest('.camera-switch-wrapper')) {
+    cameraMenuVisible.value.visible = false
+    cameraMenuVisible.value.infrared = false
   }
 }
 
@@ -5062,7 +5129,7 @@ const scheduleVisibleStreamBootstrapRetry = (robotId: string) => {
     }
 
     if (!hasCameraStreamUrl(robotId, 'drone_visible')) {
-      await initCameraStreams()
+      await initCameraStreams(undefined, { targetTypes: ['drone_visible'] })
     }
     if (!deviceStore.selectedRobotId || deviceStore.selectedRobotId !== robotId) {
       webrtcReconnecting.value = false
@@ -5113,7 +5180,7 @@ const scheduleWebRTCReconnect = () => {
         visibleReconnectRefreshRunning = true
         try {
           if (!hasCameraStreamUrl(robotId, 'drone_visible')) {
-            await initCameraStreams()
+            await initCameraStreams(undefined, { targetTypes: ['drone_visible'] })
           }
           if (robotId === deviceStore.selectedRobotId) {
             initVideoPlayer()
@@ -5184,7 +5251,7 @@ const scheduleInfraredStreamBootstrapRetry = (robotId: string) => {
     }
 
     if (!hasCameraStreamUrl(robotId, 'drone_infrared')) {
-      await initCameraStreams()
+      await initCameraStreams(undefined, { targetTypes: ['drone_infrared'] })
     }
     if (!deviceStore.selectedRobotId || deviceStore.selectedRobotId !== robotId) {
       infraredReconnecting.value = false
@@ -5234,7 +5301,7 @@ const scheduleInfraredReconnect = () => {
         infraredReconnectRefreshRunning = true
         try {
           if (!hasCameraStreamUrl(robotId, 'drone_infrared')) {
-            await initCameraStreams()
+            await initCameraStreams(undefined, { targetTypes: ['drone_infrared'] })
           }
           if (robotId === deviceStore.selectedRobotId) {
             initInfraredVideo()
@@ -5262,6 +5329,21 @@ const startInfraredFreezeDetection = () => {
     infraredLastVideoTime = t
   }, WEBRTC_FREEZE_CHECK_INTERVAL)
 }
+
+// ---------- 多路相机列表与两窗口动态切换管理 ----------
+const availableCameras = ref<CameraInfo[]>([])
+const selectedPanelCamKey = ref<{ visible: string; infrared: string }>({
+  visible: '',
+  infrared: ''
+})
+const cameraMenuVisible = ref<{ visible: boolean; infrared: boolean }>({
+  visible: false,
+  infrared: false
+})
+const isCameraSwitching = ref<{ visible: boolean; infrared: boolean }>({
+  visible: false,
+  infrared: false
+})
 
 const getCameraIdentityText = (camera: Partial<CameraInfo>) => {
   return [
@@ -5293,30 +5375,99 @@ const getCameraStreamType = (camera: Partial<CameraInfo>): VideoStream['type'] |
   return null
 }
 
-const buildCameraBindings = (cameraData: CameraInfo[]) => {
-  const candidates = cameraData.slice(0, 2)
+const getCameraDisplayName = (camera?: Partial<CameraInfo> | null, index?: number) => {
+  if (!camera) return index !== undefined ? `相机${index + 1}` : '相机'
+  const name = String(camera.CamName || '').trim()
+  if (name) return name
+  const key = String(camera.CamKey || '').trim()
+  if (key) return key
+  return index !== undefined ? `相机${index + 1}` : '相机'
+}
+
+const buildCameraBindings = (
+  cameraData: CameraInfo[],
+  options?: { resetToDefault?: boolean; robotId?: string }
+) => {
   const bindings: Array<{ camera: CameraInfo; type: Extract<VideoStream['type'], 'drone_visible' | 'drone_infrared'> }> = []
+  if (!Array.isArray(cameraData) || cameraData.length === 0) return bindings
 
-  candidates.forEach((camera, index) => {
-    const inferredType = getCameraStreamType(camera)
-    const fallbackType: Extract<VideoStream['type'], 'drone_visible' | 'drone_infrared'> =
-      index === 0 ? 'drone_visible' : 'drone_infrared'
-    const type = inferredType === 'drone_infrared' || inferredType === 'drone_visible'
-      ? inferredType
-      : fallbackType
+  const usedKeys = new Set<string>()
+  let visibleCamera: CameraInfo | undefined
+  let infraredCamera: CameraInfo | undefined
 
-    if (!bindings.some(item => item.type === type)) {
-      bindings.push({ camera, type })
+  // 非重置模式下，优先沿用当前窗口已选中的相机（例如重连或切回前台时保持用户切换后的相机）
+  if (!options?.resetToDefault) {
+    const robotId = options?.robotId || deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+    const existingVisibleKey =
+      selectedPanelCamKey.value.visible
+      || (robotId ? getRobotVideoStreamByType(robotId, 'drone_visible')?.camera_index : '')
+      || ''
+    const existingInfraredKey =
+      selectedPanelCamKey.value.infrared
+      || (robotId ? getRobotVideoStreamByType(robotId, 'drone_infrared')?.camera_index : '')
+      || ''
+
+    if (existingVisibleKey) {
+      const found = cameraData.find(cam => String(cam.CamKey) === String(existingVisibleKey))
+      if (found) {
+        visibleCamera = found
+        usedKeys.add(String(found.CamKey))
+      }
     }
-  })
-
-  if (!bindings.some(item => item.type === 'drone_visible') && candidates[0]) {
-    bindings.unshift({ camera: candidates[0], type: 'drone_visible' })
+    if (existingInfraredKey) {
+      const found = cameraData.find(
+        cam => String(cam.CamKey) === String(existingInfraredKey) && !usedKeys.has(String(cam.CamKey))
+      )
+      if (found) {
+        infraredCamera = found
+        usedKeys.add(String(found.CamKey))
+      }
+    }
   }
 
-  if (!bindings.some(item => item.type === 'drone_infrared') && candidates[1]) {
-    bindings.push({ camera: candidates[1], type: 'drone_infrared' })
+  // 从全部相机列表中按语义匹配默认可见光和默认红外相机（最多只选两路）
+  if (!visibleCamera) {
+    visibleCamera = cameraData.find(
+      cam => !usedKeys.has(String(cam.CamKey)) && getCameraStreamType(cam) === 'drone_visible'
+    )
+    if (visibleCamera) {
+      usedKeys.add(String(visibleCamera.CamKey))
+    }
   }
+
+  if (!infraredCamera) {
+    infraredCamera = cameraData.find(
+      cam => !usedKeys.has(String(cam.CamKey)) && getCameraStreamType(cam) === 'drone_infrared'
+    )
+    if (infraredCamera) {
+      usedKeys.add(String(infraredCamera.CamKey))
+    }
+  }
+
+  // 兜底：若未匹配上关键字，按顺序从剩余相机中补齐，确保最多只取 2 路
+  if (!visibleCamera) {
+    visibleCamera = cameraData.find(cam => !usedKeys.has(String(cam.CamKey)))
+    if (visibleCamera) {
+      usedKeys.add(String(visibleCamera.CamKey))
+    }
+  }
+
+  if (!infraredCamera) {
+    infraredCamera = cameraData.find(cam => !usedKeys.has(String(cam.CamKey)))
+    if (infraredCamera) {
+      usedKeys.add(String(infraredCamera.CamKey))
+    }
+  }
+
+  if (visibleCamera) {
+    bindings.push({ camera: visibleCamera, type: 'drone_visible' })
+  }
+  if (infraredCamera) {
+    bindings.push({ camera: infraredCamera, type: 'drone_infrared' })
+  }
+
+  selectedPanelCamKey.value.visible = visibleCamera?.CamKey ? String(visibleCamera.CamKey) : ''
+  selectedPanelCamKey.value.infrared = infraredCamera?.CamKey ? String(infraredCamera.CamKey) : ''
 
   return bindings
 }
@@ -5366,6 +5517,9 @@ const initVideoPlayer = () => {
     || null
 
   if (visibleStream) {
+    if (visibleStream.camera_index) {
+      selectedPanelCamKey.value.visible = String(visibleStream.camera_index)
+    }
     visibleLoading.value = true
     videoStreamUrl.value = visibleStream.url
     currentVideoType.value = 'drone_visible'
@@ -5384,13 +5538,20 @@ let cameraInitRunningRobotId = ''
 let lastCameraInitSuccessAt = 0
 const CAMERA_STREAM_REFRESH_COOLDOWN_MS = 15000
 
-// 初始化摄像头流
-const initCameraStreams = async (signal?: AbortSignal) => {
+// 初始化摄像头流（保证最多仅启动两个窗口对应的 2 路相机流）
+const initCameraStreams = async (
+  signal?: AbortSignal,
+  options?: {
+    resetToDefault?: boolean
+    targetTypes?: Array<'drone_visible' | 'drone_infrared'>
+  }
+) => {
   let robotId = deviceStore.selectedRobotId
   if (!robotId) {
     robotId = localStorage.getItem('selected_robot_id') || ''
   }
   if (!robotId) {
+    availableCameras.value = []
     setVideoStreams([])
     return
   }
@@ -5410,20 +5571,59 @@ const initCameraStreams = async (signal?: AbortSignal) => {
       const cameraListResponse = await cameraApi.getCameraList(robotId, signal)
       if (signal?.aborted) return
       if (!cameraListResponse?.data || !Array.isArray(cameraListResponse.data) || cameraListResponse.data.length === 0) {
+        availableCameras.value = []
         setRobotVideoStreams(robotId, [])
         return
       }
       cameraData = cameraListResponse.data
       localStorage.setItem(getRobotCameraListCacheKey(robotId), JSON.stringify(cameraData))
     } catch (_) {
+      availableCameras.value = []
       setRobotVideoStreams(robotId, [])
       return
     }
   }
 
+  availableCameras.value = cameraData as CameraInfo[]
+
   try {
-    const camerasToUse = buildCameraBindings(cameraData as CameraInfo[])
+    const allBindings = buildCameraBindings(cameraData as CameraInfo[], {
+      resetToDefault: options?.resetToDefault,
+      robotId
+    })
+    const activeBindingKeys = new Set(allBindings.map(item => String(item.camera.CamKey)))
+
+    // 若之前该机器人缓存过其它相机流（不在本次要保留/启动的两路中），先停止旧相机流，保证同时最多只有两路是 start 的
+    const previousStreams = getRobotVideoStreams(robotId)
+    if (options?.resetToDefault && previousStreams.length > 0) {
+      const staleCamKeys = previousStreams
+        .map(s => String(s.camera_index || ''))
+        .filter(key => key && !activeBindingKeys.has(key))
+      if (staleCamKeys.length > 0) {
+        await Promise.allSettled(
+          staleCamKeys.map(camKey => cameraApi.stopCameraStream(robotId, camKey))
+        )
+        if (signal?.aborted) return
+      }
+    }
+
     const streamByType: Partial<Record<'drone_visible' | 'drone_infrared', VideoStream>> = {}
+    if (options?.targetTypes && options.targetTypes.length > 0) {
+      // 仅针对单路重试时，保留另一路的已有流配置，避免重复 start 另一路
+      previousStreams.forEach(item => {
+        if (
+          (item.type === 'drone_visible' || item.type === 'drone_infrared')
+          && !options.targetTypes!.includes(item.type)
+        ) {
+          streamByType[item.type] = item
+        }
+      })
+    }
+
+    const camerasToUse = options?.targetTypes && options.targetTypes.length > 0
+      ? allBindings.filter(item => options.targetTypes!.includes(item.type))
+      : allBindings
+
     const startTasks = camerasToUse.map(async ({ camera, type }) => {
       const url = await startCameraStreamWithRetry(robotId, camera, signal)
       if (signal?.aborted) return
@@ -5908,6 +6108,9 @@ const initInfraredVideo = () => {
   const stream = robotId ? getRobotVideoStreamByType(robotId, 'drone_infrared') : getVideoStream('drone_infrared')
   
   if (stream) {
+    if (stream.camera_index) {
+      selectedPanelCamKey.value.infrared = String(stream.camera_index)
+    }
     infraredLoading.value = true
     infraredStreamUrl.value = stream.url
     infraredError.value = ''
@@ -6360,6 +6563,195 @@ const handleToggleVideoStream = async (panel: 'visible' | 'infrared') => {
     showError(`码流切换失败: ${parseErrorMessage(error)}`)
   } finally {
     isStreamSwitching.value[key] = false
+  }
+}
+
+const syncAvailableCamerasFromCache = (robotId?: string) => {
+  const targetRobotId = robotId || deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!targetRobotId) {
+    availableCameras.value = []
+    return
+  }
+  try {
+    const raw = localStorage.getItem(getRobotCameraListCacheKey(targetRobotId))
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        availableCameras.value = parsed as CameraInfo[]
+      }
+    }
+  } catch {}
+  const visStream = getRobotVideoStreamByType(targetRobotId, 'drone_visible')
+  if (visStream?.camera_index && !selectedPanelCamKey.value.visible) {
+    selectedPanelCamKey.value.visible = String(visStream.camera_index)
+  }
+  const irStream = getRobotVideoStreamByType(targetRobotId, 'drone_infrared')
+  if (irStream?.camera_index && !selectedPanelCamKey.value.infrared) {
+    selectedPanelCamKey.value.infrared = String(irStream.camera_index)
+  }
+}
+
+const getPanelActiveCamKey = (panel: 'visible' | 'infrared'): string => {
+  if (selectedPanelCamKey.value[panel]) {
+    return String(selectedPanelCamKey.value[panel])
+  }
+  const stream = getPanelVideoStream(panel)
+  return stream?.camera_index ? String(stream.camera_index) : ''
+}
+
+const getPanelActiveCamera = (panel: 'visible' | 'infrared'): CameraInfo | null => {
+  const activeKey = getPanelActiveCamKey(panel)
+  if (!activeKey) return null
+  return availableCameras.value.find(cam => String(cam.CamKey) === activeKey) || null
+}
+
+const getPanelCardTitle = (panel: 'visible' | 'infrared', defaultTitle: string): string => {
+  const activeCam = getPanelActiveCamera(panel)
+  if (!activeCam) return defaultTitle
+  const camName = String(activeCam.CamName || '').trim()
+  if (!camName) return defaultTitle
+  const inferred = getCameraStreamType(activeCam)
+  const expectedType = panel === 'visible' ? 'drone_visible' : 'drone_infrared'
+  // 当相机列表超过 2 路或当前窗口切换到了非默认类型的相机时，标题同步显示当前相机名称
+  if (availableCameras.value.length > 2 || (inferred && inferred !== expectedType)) {
+    return camName
+  }
+  return defaultTitle
+}
+
+const getCurrentPanelCameraLabel = (panel: 'visible' | 'infrared', fallbackLabel = '相机'): string => {
+  const activeCam = getPanelActiveCamera(panel)
+  if (activeCam) {
+    return getCameraDisplayName(activeCam)
+  }
+  return fallbackLabel
+}
+
+const isCameraActiveOnPanel = (panel: 'visible' | 'infrared', camKey?: string): boolean => {
+  if (!camKey) return false
+  return getPanelActiveCamKey(panel) === String(camKey)
+}
+
+const toggleCameraMenu = (panel: 'visible' | 'infrared') => {
+  const otherPanel = panel === 'visible' ? 'infrared' : 'visible'
+  cameraMenuVisible.value[otherPanel] = false
+  if (!cameraMenuVisible.value[panel]) {
+    syncAvailableCamerasFromCache()
+  }
+  cameraMenuVisible.value[panel] = !cameraMenuVisible.value[panel]
+}
+
+const handleSwitchPanelCamera = async (panel: 'visible' | 'infrared', targetCamera: CameraInfo) => {
+  if (!targetCamera || !targetCamera.CamKey) return
+  if (isCameraSwitching.value[panel] || isStreamSwitching.value[panel]) return
+
+  const otherPanel = panel === 'visible' ? 'infrared' : 'visible'
+  const targetCamKey = String(targetCamera.CamKey)
+
+  // 禁止选择另一窗口正在播放的相机，保证两个窗口各自独立、同时最多只有两路是 start 的
+  if (isCameraActiveOnPanel(otherPanel, targetCamKey)) {
+    return
+  }
+
+  // 若点击的是当前窗口已经在播放的相机，仅关闭菜单
+  if (isCameraActiveOnPanel(panel, targetCamKey)) {
+    cameraMenuVisible.value[panel] = false
+    return
+  }
+
+  cameraMenuVisible.value[panel] = false
+
+  const robotId = deviceStore.selectedRobotId || localStorage.getItem('selected_robot_id') || ''
+  if (!robotId) {
+    showError('未选择机器人，无法切换相机')
+    return
+  }
+
+  isCameraSwitching.value[panel] = true
+  const oldCamKey = getPanelActiveCamKey(panel)
+  const streamType: Extract<VideoStream['type'], 'drone_visible' | 'drone_infrared'> =
+    panel === 'visible' ? 'drone_visible' : 'drone_infrared'
+
+  // 先停止本地对应窗口的播放器并显示加载状态
+  if (panel === 'visible') {
+    clearWebRTCReconnectTimer()
+    clearWebRTCStartTimer()
+    clearWebRTCFreezeDetection()
+    clearVisibleBootstrapRetryTimer()
+    visibleBootstrapRetryCount = 0
+    webrtcReconnectCount = 0
+    stopVideoPlayback()
+    visibleLoading.value = true
+  } else {
+    clearInfraredReconnectTimer()
+    clearInfraredStartTimer()
+    clearInfraredFreezeDetection()
+    clearInfraredBootstrapRetryTimer()
+    infraredBootstrapRetryCount = 0
+    infraredReconnectCount = 0
+    stopInfraredPlayback()
+    infraredLoading.value = true
+  }
+
+  try {
+    // 1. 先将当前窗口旧相机 stop（确保不误停另一窗口正在使用的相机）
+    if (oldCamKey && oldCamKey !== targetCamKey && !isCameraActiveOnPanel(otherPanel, oldCamKey)) {
+      try {
+        await cameraApi.stopCameraStream(robotId, oldCamKey)
+      } catch (stopError) {
+        console.warn('切换相机前停止旧相机流失败，继续尝试启动新相机流:', stopError)
+      }
+    }
+
+    selectedPanelCamKey.value[panel] = targetCamKey
+
+    // 2. 再 start 新的目标相机
+    const newStreamUrl = await startCameraStreamWithRetry(robotId, targetCamera)
+
+    const updatedStream: VideoStream = {
+      type: streamType,
+      url: newStreamUrl,
+      switchable_video_types: targetCamera.MainUrl && targetCamera.SubUrl ? ['main', 'sub'] : [],
+      device_sn: robotId,
+      camera_index: targetCamKey,
+      video_index: targetCamKey,
+      use_sub_stream: false,
+    }
+
+    const otherStreams = getRobotVideoStreams(robotId).filter(item => item.type !== streamType)
+    setRobotVideoStreams(robotId, [...otherStreams, updatedStream])
+    if (panel === 'visible') {
+      setRobotDefaultVideoType(robotId, 'drone_visible')
+      await nextTick()
+      videoStreamUrl.value = newStreamUrl
+    } else {
+      await nextTick()
+      infraredStreamUrl.value = newStreamUrl
+    }
+
+    showSuccess(`已切换到 ${getCameraDisplayName(targetCamera)}`)
+  } catch (error) {
+    // 即使新流启动失败，也记录当前窗口选中的相机 key，方便后续点击手动重连
+    const fallbackStream: VideoStream = {
+      type: streamType,
+      url: '',
+      switchable_video_types: targetCamera.MainUrl && targetCamera.SubUrl ? ['main', 'sub'] : [],
+      device_sn: robotId,
+      camera_index: targetCamKey,
+      video_index: targetCamKey,
+      use_sub_stream: false,
+    }
+    const otherStreams = getRobotVideoStreams(robotId).filter(item => item.type !== streamType)
+    setRobotVideoStreams(robotId, [...otherStreams, fallbackStream])
+
+    if (panel === 'visible') {
+      visibleLoading.value = false
+    } else {
+      infraredLoading.value = false
+    }
+    showError(`相机切换失败: ${parseErrorMessage(error)}`)
+  } finally {
+    isCameraSwitching.value[panel] = false
   }
 }
 
@@ -9711,9 +10103,13 @@ const handleRobotCameraReady = async (event: Event) => {
   cameraInitRunningRobotId = targetRobotId
 
   try {
+    cameraMenuVisible.value.visible = false
+    cameraMenuVisible.value.infrared = false
+    selectedPanelCamKey.value.visible = ''
+    selectedPanelCamKey.value.infrared = ''
     stopVideoPlayback()
     stopInfraredPlayback()
-    await initCameraStreams(signal)
+    await initCameraStreams(signal, { resetToDefault: true })
     if (signal.aborted) return  // 已被新一轮取代
     lastCameraInitSuccessAt = Date.now()
     initVideoPlayer()
@@ -10981,15 +11377,21 @@ const recoverVideoStreamsOnForeground = async () => {
 
     if (!mainConnAlive || !infraredConnAlive) {
       const robotId = deviceStore.selectedRobot.robot_id
+      syncAvailableCamerasFromCache(robotId)
       const hasCachedStreamUrls = hasBothCameraStreamUrls(robotId)
       const shouldRefreshStreams =
         !isCameraInitRunning
         && !hasCachedStreamUrls
         && (Date.now() - lastCameraInitSuccessAt > CAMERA_STREAM_REFRESH_COOLDOWN_MS)
       if (shouldRefreshStreams) {
-        await initCameraStreams()
+        const missingTypes: Array<'drone_visible' | 'drone_infrared'> = []
+        if (!hasCameraStreamUrl(robotId, 'drone_visible')) missingTypes.push('drone_visible')
+        if (!hasCameraStreamUrl(robotId, 'drone_infrared')) missingTypes.push('drone_infrared')
+        await initCameraStreams(undefined, { targetTypes: missingTypes.length > 0 ? missingTypes : undefined })
         lastCameraInitSuccessAt = Date.now()
       }
+    } else {
+      syncAvailableCamerasFromCache(deviceStore.selectedRobot.robot_id)
     }
 
     if (!mainConnAlive) {
@@ -13881,9 +14283,106 @@ const handlePageShow = () => {
   transition: opacity 0.2s ease;
 }
 
-.video-only-wrapper:hover .video-action-group {
+.video-only-wrapper:hover .video-action-group,
+.video-action-group.menu-open {
   opacity: 1;
   pointer-events: auto;
+}
+
+.camera-switch-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.camera-switch-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  width: max-content;
+  min-width: 168px;
+  max-width: 240px;
+  max-height: 162px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(103, 213, 253, 0.38);
+  background: rgba(8, 26, 42, 0.94);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.camera-switch-menu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.camera-switch-menu::-webkit-scrollbar-thumb {
+  background: rgba(103, 213, 253, 0.35);
+  border-radius: 2px;
+}
+
+.camera-switch-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #d7f1ff;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.camera-switch-item:hover:not(.disabled) {
+  background: rgba(103, 213, 253, 0.18);
+  color: #ffffff;
+}
+
+.camera-switch-item.active {
+  background: rgba(0, 188, 212, 0.24);
+  color: #67d5fd;
+  font-weight: 600;
+}
+
+.camera-switch-item.occupied,
+.camera-switch-item.disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.camera-switch-item-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.camera-switch-item-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 14px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.camera-switch-item-badge.current {
+  background: rgba(0, 188, 212, 0.25);
+  border: 1px solid rgba(103, 213, 253, 0.45);
+  color: #67d5fd;
+}
+
+.camera-switch-item-badge.occupied {
+  background: rgba(255, 152, 0, 0.18);
+  border: 1px solid rgba(255, 152, 0, 0.35);
+  color: #ffb74d;
 }
 
 .video-action-btn {
